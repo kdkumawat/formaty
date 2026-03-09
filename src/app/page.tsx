@@ -149,6 +149,7 @@ export default function Home() {
   const [rightView, setRightView] = useState<RightView>("raw");
   const [typeLanguage, setTypeLanguage] = useState<TypeTargetLanguage>("typescript");
   const [isTypeMenuOpen, setIsTypeMenuOpen] = useState(false);
+  const [copyState, setCopyState] = useState<"idle" | "done" | "error">("idle");
   const [undoStack, setUndoStack] = useState<string[]>([SAMPLE_JSON]);
   const [undoIndex, setUndoIndex] = useState(0);
   const historyLock = useRef(false);
@@ -479,6 +480,17 @@ export default function Home() {
     URL.revokeObjectURL(url);
   };
 
+  const copyOutput = async () => {
+    if (!output.trim()) return;
+    try {
+      await navigator.clipboard.writeText(output);
+      setCopyState("done");
+    } catch {
+      setCopyState("error");
+    }
+    window.setTimeout(() => setCopyState("idle"), 1400);
+  };
+
   const importJsonFile = (file: File) => {
     const reader = new FileReader();
     reader.onload = () => {
@@ -623,6 +635,14 @@ export default function Home() {
                   </button>
                 ))}
               </div>
+              <button
+                type="button"
+                className={`${toolbarBtnActive} shrink-0 px-3 disabled:opacity-40`}
+                disabled={!canDownload}
+                onClick={copyOutput}
+              >
+                {copyState === "done" ? "Copied" : copyState === "error" ? "Copy Failed" : "Copy"}
+              </button>
               <button
                 type="button"
                 className={`${toolbarBtnActive} shrink-0 px-3 disabled:opacity-40`}
