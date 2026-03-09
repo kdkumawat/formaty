@@ -150,10 +150,12 @@ export default function Home() {
   const [typeLanguage, setTypeLanguage] = useState<TypeTargetLanguage>("typescript");
   const [isTypeMenuOpen, setIsTypeMenuOpen] = useState(false);
   const [copyState, setCopyState] = useState<"idle" | "done" | "error">("idle");
+  const [isInputMinimized, setIsInputMinimized] = useState(false);
   const [undoStack, setUndoStack] = useState<string[]>([SAMPLE_JSON]);
   const [undoIndex, setUndoIndex] = useState(0);
   const historyLock = useRef(false);
   const splitContainerRef = useRef<HTMLElement | null>(null);
+  const previousSplitRef = useRef(52);
   const typeMenuRef = useRef<HTMLDivElement | null>(null);
   const settingsRef = useRef<HTMLDivElement | null>(null);
 
@@ -491,6 +493,19 @@ export default function Home() {
     window.setTimeout(() => setCopyState("idle"), 1400);
   };
 
+
+
+  const toggleInputMinimized = () => {
+    if (!isInputMinimized) {
+      previousSplitRef.current = split;
+      setSplit(12);
+      setIsInputMinimized(true);
+      return;
+    }
+    setSplit(previousSplitRef.current);
+    setIsInputMinimized(false);
+  };
+
   const importJsonFile = (file: File) => {
     const reader = new FileReader();
     reader.onload = () => {
@@ -637,6 +652,13 @@ export default function Home() {
               </div>
               <button
                 type="button"
+                className={`${isInputMinimized ? toolbarBtnActive : toolbarBtnBase} shrink-0 px-3`}
+                onClick={toggleInputMinimized}
+              >
+                {isInputMinimized ? "Restore Input" : "Focus Output"}
+              </button>
+              <button
+                type="button"
                 className={`${toolbarBtnActive} shrink-0 px-3 disabled:opacity-40`}
                 disabled={!canDownload}
                 onClick={copyOutput}
@@ -661,7 +683,7 @@ export default function Home() {
           style={{ gridTemplateColumns: `${split}% ${100 - split}%` }}
         >
           <div
-            className="hidden xl:flex absolute top-0 bottom-0 z-20 items-center"
+            className={`absolute top-0 bottom-0 z-20 items-center ${isInputMinimized ? "hidden" : "hidden xl:flex"}`}
             style={{ left: `${split}%`, transform: "translateX(-50%)" }}
           >
             <div className="h-full w-px bg-base-300" />
@@ -671,12 +693,13 @@ export default function Home() {
               aria-label="Resize panels by dragging divider"
               onMouseDown={(event) => {
                 event.preventDefault();
+                if (isInputMinimized) setIsInputMinimized(false);
                 setIsResizing(true);
               }}
             />
           </div>
 
-          <div className="min-h-0">
+          <div className={`${isInputMinimized ? "hidden xl:block xl:opacity-80" : ""} min-h-0`}>
             <JsonEditor
               value={input}
               onChange={(next) => {
@@ -687,6 +710,7 @@ export default function Home() {
               language="json"
               monacoTheme={monacoTheme}
               placeholder="Paste or drop JSON here"
+              panelTone="input"
             />
           </div>
 
@@ -710,6 +734,7 @@ export default function Home() {
                     passiveReadOnly
                     language={outputLanguage}
                     monacoTheme={monacoTheme}
+                    panelTone="output"
                   />
                 ) : (
                   <div className="flex h-full min-h-[360px] items-center justify-center rounded-xl border border-base-300 bg-base-100 text-sm text-base-content/70">
