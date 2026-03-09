@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowPathIcon,
+  ArrowsPointingInIcon,
+  ArrowsPointingOutIcon,
   ArrowUturnLeftIcon,
   ArrowUturnRightIcon,
   ChevronDownIcon,
@@ -139,7 +141,7 @@ export default function Home() {
   const [themeMode, setThemeMode] = useState<ThemeMode>("system");
   const [systemDark, setSystemDark] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [split, setSplit] = useState(52);
+  const [split, setSplit] = useState(30);
   const [isResizing, setIsResizing] = useState(false);
   const [schemaInput, setSchemaInput] = useState("");
   const [compareInput, setCompareInput] = useState("");
@@ -149,10 +151,13 @@ export default function Home() {
   const [rightView, setRightView] = useState<RightView>("raw");
   const [typeLanguage, setTypeLanguage] = useState<TypeTargetLanguage>("typescript");
   const [isTypeMenuOpen, setIsTypeMenuOpen] = useState(false);
+  const [copyState, setCopyState] = useState<"idle" | "done" | "error">("idle");
+  const [isInputMinimized, setIsInputMinimized] = useState(false);
   const [undoStack, setUndoStack] = useState<string[]>([SAMPLE_JSON]);
   const [undoIndex, setUndoIndex] = useState(0);
   const historyLock = useRef(false);
   const splitContainerRef = useRef<HTMLElement | null>(null);
+  const previousSplitRef = useRef(30);
   const typeMenuRef = useRef<HTMLDivElement | null>(null);
   const settingsRef = useRef<HTMLDivElement | null>(null);
 
@@ -453,6 +458,7 @@ export default function Home() {
   };
 
   const runOperation = (action: OperationAction) => {
+    maximizeOutput();
     setActiveOperation(action);
     if (action === "validate") {
       setModalKind("validate");
@@ -477,6 +483,33 @@ export default function Home() {
     a.download = `jsonix-output.${outputExt}`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const copyOutput = async () => {
+    if (!output.trim()) return;
+    try {
+      await navigator.clipboard.writeText(output);
+      setCopyState("done");
+    } catch {
+      setCopyState("error");
+    }
+    window.setTimeout(() => setCopyState("idle"), 1400);
+  };
+
+  const maximizeOutput = () => {
+    if (isInputMinimized) return;
+    previousSplitRef.current = split;
+    setSplit(12);
+    setIsInputMinimized(true);
+  };
+
+  const toggleInputMinimized = () => {
+    if (!isInputMinimized) {
+      maximizeOutput();
+      return;
+    }
+    setSplit(previousSplitRef.current);
+    setIsInputMinimized(false);
   };
 
   const importJsonFile = (file: File) => {
@@ -595,6 +628,7 @@ export default function Home() {
                         }`}
                         onClick={() => {
                           setIsTypeMenuOpen(false);
+                          maximizeOutput();
                           setActiveOperation("generateTypes");
                           executeOperation("generateTypes", { typeLanguage: item.id });
                         }}
@@ -627,6 +661,14 @@ export default function Home() {
                 type="button"
                 className={`${toolbarBtnActive} shrink-0 px-3 disabled:opacity-40`}
                 disabled={!canDownload}
+                onClick={copyOutput}
+              >
+                {copyState === "done" ? "Copied" : copyState === "error" ? "Copy Failed" : "Copy"}
+              </button>
+              <button
+                type="button"
+                className={`${toolbarBtnActive} shrink-0 px-3 disabled:opacity-40`}
+                disabled={!canDownload}
                 onClick={downloadOutput}
               >
                 Download
@@ -641,7 +683,7 @@ export default function Home() {
           style={{ gridTemplateColumns: `${split}% ${100 - split}%` }}
         >
           <div
-            className="hidden xl:flex absolute top-0 bottom-0 z-20 items-center"
+            className={`absolute top-0 bottom-0 z-20 items-center ${isInputMinimized ? "hidden" : "hidden xl:flex"}`}
             style={{ left: `${split}%`, transform: "translateX(-50%)" }}
           >
             <div className="h-full w-px bg-base-300" />
@@ -651,12 +693,13 @@ export default function Home() {
               aria-label="Resize panels by dragging divider"
               onMouseDown={(event) => {
                 event.preventDefault();
+                if (isInputMinimized) setIsInputMinimized(false);
                 setIsResizing(true);
               }}
             />
           </div>
 
-          <div className="min-h-0">
+          <div className={`${isInputMinimized ? "hidden xl:block xl:opacity-80" : ""} min-h-0`}>
             <JsonEditor
               value={input}
               onChange={(next) => {
@@ -667,10 +710,24 @@ export default function Home() {
               language="json"
               monacoTheme={monacoTheme}
               placeholder="Paste or drop JSON here"
+              panelTone="input"
             />
           </div>
 
-          <div className="min-h-0 flex flex-col">
+          <div className="relative min-h-0 flex flex-col">
+            <button
+              type="button"
+              aria-label={isInputMinimized ? "Restore input panel" : "Maximize output panel"}
+              title={isInputMinimized ? "Restore input panel" : "Maximize output panel"}
+              className={`${toolbarBtnIcon} absolute right-2 top-2 z-20`}
+              onClick={toggleInputMinimized}
+            >
+              {isInputMinimized ? (
+                <ArrowsPointingInIcon className="h-4 w-4" aria-hidden="true" />
+              ) : (
+                <ArrowsPointingOutIcon className="h-4 w-4" aria-hidden="true" />
+              )}
+            </button>
             <div className="flex-1 min-h-0">
               {rightView === "raw" ? (
                 activeOperation === "diff" && diffPreview ? (
@@ -690,6 +747,7 @@ export default function Home() {
                     passiveReadOnly
                     language={outputLanguage}
                     monacoTheme={monacoTheme}
+                    panelTone="output"
                   />
                 ) : (
                   <div className="flex h-full min-h-[360px] items-center justify-center rounded-xl border border-base-300 bg-base-100 text-sm text-base-content/70">
