@@ -189,6 +189,7 @@ export default function Home() {
     "btn btn-sm h-9 min-h-9 rounded-md border border-primary bg-primary px-2.5 text-primary-content shadow-none hover:bg-primary/90";
   const toolbarBtnIcon =
     `btn btn-sm btn-square h-9 min-h-9 rounded-md border ${toolbarBorderClass} bg-base-100 text-base-content shadow-none hover:bg-base-200`;
+  const dropdownPanelClass = isDark ? "bg-[#252526] text-base-content" : "bg-base-100 text-base-content";
   const themeOptions = [
     { mode: "system" as const, ariaLabel: "Use system theme", title: "System theme", Icon: ComputerDesktopIcon },
     { mode: "light" as const, ariaLabel: "Use light theme", title: "Light theme", Icon: SunIcon },
@@ -619,7 +620,7 @@ export default function Home() {
                   <ChevronDownIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
                 </button>
                 <ul
-                  className={`dropdown menu z-30 mt-1 w-40 rounded-box border bg-base-100 p-1 shadow-xl ${toolbarBorderClass}`}
+                  className={`dropdown menu z-30 mt-1 w-40 rounded-box border p-1 shadow-xl ${toolbarBorderClass} ${dropdownPanelClass}`}
                   popover="auto"
                   id="type-language-popover"
                   style={{ positionAnchor: "--type-language-anchor" } as CSSProperties}
@@ -628,7 +629,7 @@ export default function Home() {
                     <li key={item.id}>
                       <button
                         type="button"
-                        className={typeLanguage === item.id ? "menu-active" : ""}
+                        className={`rounded-md ${typeLanguage === item.id ? "bg-primary text-primary-content" : "text-base-content hover:bg-base-200"}`}
                         onClick={(event) => {
                           (event.currentTarget.closest("ul") as (HTMLElement & { hidePopover?: () => void }) | null)
                             ?.hidePopover?.();
@@ -683,7 +684,7 @@ export default function Home() {
 
         <section
           ref={splitContainerRef}
-          className={`relative flex-1 min-h-0 grid ${isInputMinimized ? "grid-cols-1 gap-0" : "grid-cols-1 gap-3 xl:grid-cols-[1fr_1fr]"}`}
+          className={`relative flex-1 min-h-0 grid ${isInputMinimized ? "grid-cols-1 gap-0 min-h-[calc(100dvh-11rem)]" : "grid-cols-1 gap-3 xl:grid-cols-[1fr_1fr]"}`}
           style={isInputMinimized || !isDesktopLayout ? undefined : { gridTemplateColumns: `${split}% ${100 - split}%` }}
         >
           <div
@@ -715,7 +716,7 @@ export default function Home() {
                   pushHistory(next);
                   setFocusedPane("input");
                 }}
-                className="h-full min-h-0"
+                className="h-full min-h-0 p-1"
                 language="json"
                 monacoTheme={monacoTheme}
                 placeholder="Paste or drop JSON here"
@@ -725,7 +726,7 @@ export default function Home() {
           ) : null}
 
           <div
-            className="relative flex min-h-[45vh] flex-col xl:min-h-0"
+            className={`relative flex flex-col xl:min-h-0 ${isInputMinimized ? "min-h-full" : "min-h-[45vh]"}`}
             onMouseDown={() => setFocusedPane("output")}
           >
             <button
@@ -747,7 +748,7 @@ export default function Home() {
                   <JsonDiffEditor
                     original={diffPreview.original}
                     modified={diffPreview.modified}
-                    className="h-full min-h-0"
+                    className="h-full min-h-0 p-1"
                     language="json"
                     monacoTheme={monacoTheme}
                   />
@@ -755,7 +756,7 @@ export default function Home() {
                   <JsonEditor
                     value={output}
                     onChange={setOutput}
-                    className="h-full min-h-0"
+                    className="h-full min-h-0 p-1"
                     readOnly
                     passiveReadOnly
                     language={outputLanguage}
@@ -763,7 +764,7 @@ export default function Home() {
                     panelTone="output"
                   />
                 ) : (
-                  <div className={`flex h-full min-h-[360px] items-center justify-center rounded-xl border text-sm text-base-content/70 ${outputPanelClass}`}>
+                  <div className={`flex h-full min-h-0 items-center justify-center rounded-xl border text-sm text-base-content/70 ${outputPanelClass}`}>
                     Run any operation to see output here
                   </div>
                 )
@@ -772,10 +773,10 @@ export default function Home() {
                 parsedOutput ? (
                   <TreeView
                     data={parsedOutput}
-                    className={outputPanelClass}
+                    className={`${outputPanelClass} min-h-0 p-1`}
                   />
                 ) : (
-                  <div className={`flex h-full min-h-[360px] items-center justify-center rounded-xl border text-sm text-base-content/70 ${outputPanelClass}`}>
+                  <div className={`flex h-full min-h-0 items-center justify-center rounded-xl border text-sm text-base-content/70 ${outputPanelClass}`}>
                     Current output is not valid JSON.
                   </div>
                 )

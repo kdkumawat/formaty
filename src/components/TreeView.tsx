@@ -78,7 +78,7 @@ export function TreeView({ data, className }: TreeViewProps) {
   const rootLabel = useMemo(() => (Array.isArray(data) ? "root[]" : "root"), [data]);
 
   return (
-    <div className={`h-full min-h-[360px] overflow-auto rounded-xl border border-base-300 bg-base-100 p-3 ${className ?? ""}`}>
+    <div className={`h-full min-h-0 overflow-auto rounded-xl border border-base-300 bg-base-100 p-3 ${className ?? ""}`}>
       <Node nodeKey={rootLabel} value={data} depth={0} />
     </div>
   );

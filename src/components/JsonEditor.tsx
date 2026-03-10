@@ -86,6 +86,7 @@ export function JsonEditor({
           minimap: { enabled: false },
           fontSize: 13,
           automaticLayout: true,
+          padding: { top: 6, bottom: 6 },
           scrollBeyondLastLine: false,
           wordWrap: "on",
           readOnly,
