@@ -748,7 +748,7 @@ export default function Home() {
                   <JsonDiffEditor
                     original={diffPreview.original}
                     modified={diffPreview.modified}
-                    className="h-full min-h-0 p-1"
+                    className="h-full min-h-0"
                     language="json"
                     monacoTheme={monacoTheme}
                   />
@@ -756,7 +756,7 @@ export default function Home() {
                   <JsonEditor
                     value={output}
                     onChange={setOutput}
-                    className="h-full min-h-0 p-1"
+                    className="h-full min-h-0"
                     readOnly
                     passiveReadOnly
                     language={outputLanguage}
@@ -774,7 +774,7 @@ export default function Home() {
                   <TreeView
                     data={parsedOutput}
                     isDark={isDark}
-                    className={`${outputPanelClass} min-h-0 p-1`}
+                    className={`${outputPanelClass} min-h-0`}
                   />
                 ) : (
                   <div className={`flex h-full min-h-0 items-center justify-center rounded-xl border text-sm text-base-content/70 ${outputPanelClass}`}>
