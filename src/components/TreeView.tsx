@@ -6,6 +6,7 @@ import type { JsonValue } from "@/lib/json/core";
 interface TreeViewProps {
   data: JsonValue;
   className?: string;
+  isDark?: boolean;
 }
 
 const MAX_INITIAL_DEPTH = 2;
@@ -26,21 +27,25 @@ function Node({
   nodeKey,
   value,
   depth,
+  isDark,
 }: {
   nodeKey: string;
   value: JsonValue;
   depth: number;
+  isDark: boolean;
 }) {
   const canExpand = value && typeof value === "object";
   const [open, setOpen] = useState(depth < MAX_INITIAL_DEPTH);
 
+  const branchClass = isDark ? "border-[#6b7280]" : "border-[#7a7a7a]";
+
   return (
-    <div className={depth > 0 ? "ml-4 border-l pl-3" : ""}>
+    <div className={depth > 0 ? `ml-4 border-l pl-3 ${branchClass}` : ""}>
       <div className="flex items-center gap-2 py-0.5 text-sm">
         {canExpand ? (
           <button
             type="button"
-            className="btn btn-ghost btn-xs h-5 min-h-5 w-5 px-0"
+            className={`btn btn-ghost btn-xs h-5 min-h-5 w-5 px-0 ${isDark ? "text-[#d4d4d4] hover:bg-white/5" : "text-[#1f1f1f] hover:bg-black/5"}`}
             onClick={() => setOpen((s) => !s)}
           >
             {open ? "-" : "+"}
@@ -48,11 +53,13 @@ function Node({
         ) : (
           <span className="inline-block h-5 w-5" />
         )}
-        <span className="font-medium text-primary">{nodeKey}</span>
-        <span className="badge badge-ghost badge-xs">
+        <span className="font-medium text-[#646CFF]">{nodeKey}</span>
+        <span className={`badge badge-xs border-0 ${isDark ? "bg-white/10 text-white/85" : "bg-black/5 text-black/70"}`}>
           {valueType(value)}
         </span>
-        {!canExpand ? <span className="text-base-content/90">{prettyValue(value)}</span> : null}
+        {!canExpand ? (
+          <span className={isDark ? "text-[#d4d4d4]" : "text-[#1f1f1f]"}>{prettyValue(value)}</span>
+        ) : null}
       </div>
       {open && canExpand ? (
         <div>
@@ -63,10 +70,17 @@ function Node({
                   nodeKey={String(idx)}
                   value={item}
                   depth={depth + 1}
+                  isDark={isDark}
                 />
               ))
             : Object.entries(value).map(([k, v]) => (
-                <Node key={`${nodeKey}.${k}`} nodeKey={k} value={v} depth={depth + 1} />
+                <Node
+                  key={`${nodeKey}.${k}`}
+                  nodeKey={k}
+                  value={v}
+                  depth={depth + 1}
+                  isDark={isDark}
+                />
               ))}
         </div>
       ) : null}
@@ -74,12 +88,12 @@ function Node({
   );
 }
 
-export function TreeView({ data, className }: TreeViewProps) {
+export function TreeView({ data, className, isDark = false }: TreeViewProps) {
   const rootLabel = useMemo(() => (Array.isArray(data) ? "root[]" : "root"), [data]);
 
   return (
-    <div className={`h-full min-h-0 overflow-auto rounded-xl border border-base-300 bg-base-100 p-3 ${className ?? ""}`}>
-      <Node nodeKey={rootLabel} value={data} depth={0} />
+    <div className={`h-full min-h-0 overflow-auto rounded-xl border p-3 ${className ?? ""}`}>
+      <Node nodeKey={rootLabel} value={data} depth={0} isDark={isDark} />
     </div>
   );
 }

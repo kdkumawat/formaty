@@ -178,7 +178,7 @@ export default function Home() {
   const toolbarBorderClass = isDark ? "border-white/45" : "border-base-300";
   const toolbarDividerClass = isDark ? "bg-white/45" : "bg-base-300";
   const monacoTheme = isDark ? "vs-dark" : "vs";
-  const outputPanelClass = isDark ? "border-[#3c3c3c] bg-[#252526]" : "border-[#d4d4d4] bg-[#f3f3f3]";
+  const outputPanelClass = isDark ? "border-[#2d2d30] bg-[#1e1e1e]" : "border-[#e5e5e5] bg-[#ffffff]";
   const canUndo = undoIndex > 0;
   const canRedo = undoIndex < undoStack.length - 1;
   const selectedTypeLanguageLabel =
@@ -773,6 +773,7 @@ export default function Home() {
                 parsedOutput ? (
                   <TreeView
                     data={parsedOutput}
+                    isDark={isDark}
                     className={`${outputPanelClass} min-h-0 p-1`}
                   />
                 ) : (

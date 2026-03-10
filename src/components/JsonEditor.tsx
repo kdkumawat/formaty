@@ -35,11 +35,11 @@ export function JsonEditor({
       className={`relative h-[52vh] min-h-[360px] overflow-hidden rounded-box border ${
         panelTone === "output"
           ? isDarkTheme
-            ? "border-[#3c3c3c] bg-[#252526]"
-            : "border-[#d4d4d4] bg-[#f3f3f3]"
-          : isDarkTheme
             ? "border-[#2d2d30] bg-[#1e1e1e]"
             : "border-[#e5e5e5] bg-[#ffffff]"
+          : isDarkTheme
+            ? "border-[#3c3c3c] bg-[#252526]"
+            : "border-[#d4d4d4] bg-[#f3f3f3]"
       } ${className ?? ""}`}
     >
       <Editor
@@ -54,7 +54,7 @@ export function JsonEditor({
             inherit: true,
             rules: [],
             colors: {
-              "editor.background": "#1e1e1e",
+              "editor.background": "#252526",
             },
           });
           monaco.editor.defineTheme("vs-dark-output", {
@@ -62,7 +62,7 @@ export function JsonEditor({
             inherit: true,
             rules: [],
             colors: {
-              "editor.background": "#252526",
+              "editor.background": "#1e1e1e",
             },
           });
           monaco.editor.defineTheme("vs-input", {
@@ -70,7 +70,7 @@ export function JsonEditor({
             inherit: true,
             rules: [],
             colors: {
-              "editor.background": "#ffffff",
+              "editor.background": "#f3f3f3",
             },
           });
           monaco.editor.defineTheme("vs-output", {
@@ -78,7 +78,7 @@ export function JsonEditor({
             inherit: true,
             rules: [],
             colors: {
-              "editor.background": "#f3f3f3",
+              "editor.background": "#ffffff",
             },
           });
         }}
