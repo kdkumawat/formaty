@@ -178,7 +178,7 @@ export default function Home() {
   const toolbarBorderClass = isDark ? "border-white/45" : "border-base-300";
   const toolbarDividerClass = isDark ? "bg-white/45" : "bg-base-300";
   const monacoTheme = isDark ? "vs-dark" : "vs";
-  const outputPanelClass = isDark ? "border-[#3c3c3c] bg-[#252526]" : "border-[#d4d4d4] bg-[#f3f3f3]";
+  const outputPanelClass = isDark ? "border-[#2d2d30] bg-[#1e1e1e]" : "border-[#e5e5e5] bg-[#ffffff]";
   const canUndo = undoIndex > 0;
   const canRedo = undoIndex < undoStack.length - 1;
   const selectedTypeLanguageLabel =
@@ -748,7 +748,7 @@ export default function Home() {
                   <JsonDiffEditor
                     original={diffPreview.original}
                     modified={diffPreview.modified}
-                    className="h-full min-h-0 p-1"
+                    className="h-full min-h-0"
                     language="json"
                     monacoTheme={monacoTheme}
                   />
@@ -756,7 +756,7 @@ export default function Home() {
                   <JsonEditor
                     value={output}
                     onChange={setOutput}
-                    className="h-full min-h-0 p-1"
+                    className="h-full min-h-0"
                     readOnly
                     passiveReadOnly
                     language={outputLanguage}
@@ -773,7 +773,8 @@ export default function Home() {
                 parsedOutput ? (
                   <TreeView
                     data={parsedOutput}
-                    className={`${outputPanelClass} min-h-0 p-1`}
+                    isDark={isDark}
+                    className={`${outputPanelClass} min-h-0`}
                   />
                 ) : (
                   <div className={`flex h-full min-h-0 items-center justify-center rounded-xl border text-sm text-base-content/70 ${outputPanelClass}`}>
