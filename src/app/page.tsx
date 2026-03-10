@@ -704,7 +704,7 @@ export default function Home() {
 
           {!isInputMinimized ? (
             <div
-              className={`min-h-0 transition-all ${focusedPane === "input" ? "opacity-100" : "opacity-60 saturate-50"}`}
+              className={`min-h-[45vh] transition-all xl:min-h-0 ${focusedPane === "input" ? "opacity-100" : "opacity-60 saturate-50"}`}
               onMouseDown={() => setFocusedPane("input")}
             >
               <JsonEditor
@@ -724,7 +724,7 @@ export default function Home() {
           ) : null}
 
           <div
-            className="relative min-h-0 flex flex-col"
+            className="relative flex min-h-[45vh] flex-col xl:min-h-0"
             onMouseDown={() => setFocusedPane("output")}
           >
             <button
