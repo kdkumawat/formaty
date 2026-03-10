@@ -610,7 +610,7 @@ export default function Home() {
                   type="button"
                   className={`${
                     activeOperation === "generateTypes" ? toolbarBtnActive : toolbarBtnBase
-                  } inline-flex w-28 items-center justify-between gap-2 sm:w-32`}
+                  } inline-flex w-24 items-center justify-between gap-1.5 sm:w-28`}
                   popoverTarget="type-language-popover"
                   style={{ anchorName: "--type-language-anchor" } as CSSProperties}
                   aria-label="Select type language"
@@ -619,7 +619,7 @@ export default function Home() {
                   <ChevronDownIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
                 </button>
                 <ul
-                  className={`dropdown menu z-30 mt-1 w-44 rounded-box border bg-base-100 p-1 shadow-xl ${toolbarBorderClass}`}
+                  className={`dropdown menu z-30 mt-1 w-40 rounded-box border bg-base-100 p-1 shadow-xl ${toolbarBorderClass}`}
                   popover="auto"
                   id="type-language-popover"
                   style={{ positionAnchor: "--type-language-anchor" } as CSSProperties}
