@@ -526,9 +526,9 @@ export default function Home() {
   return (
     <main
       data-theme={resolvedTheme}
-      className="h-screen overflow-hidden bg-base-200 p-3 text-base-content md:p-4"
+      className="min-h-screen overflow-y-auto bg-base-200 p-3 text-base-content md:p-4 xl:h-screen xl:overflow-hidden"
     >
-      <div className="mx-auto h-full max-w-[1700px] flex flex-col gap-3">
+      <div className="mx-auto min-h-full max-w-[1700px] flex flex-col gap-3 xl:h-full">
         <section className="rounded-md border border-base-300 bg-base-100 p-2.5 shadow-sm">
           <div className="flex items-center gap-2 overflow-x-auto overflow-y-visible pb-1">
             <div className="flex shrink-0 items-center gap-2">
@@ -723,7 +723,7 @@ export default function Home() {
 
           {!isInputMinimized ? (
             <div
-              className={`min-h-0 transition-all ${focusedPane === "input" ? "opacity-100" : "opacity-60 saturate-50"}`}
+              className={`min-h-[45vh] transition-all xl:min-h-0 ${focusedPane === "input" ? "opacity-100" : "opacity-60 saturate-50"}`}
               onMouseDown={() => setFocusedPane("input")}
             >
               <JsonEditor
@@ -743,7 +743,7 @@ export default function Home() {
           ) : null}
 
           <div
-            className="relative min-h-0 flex flex-col"
+            className="relative flex min-h-[45vh] flex-col xl:min-h-0"
             onMouseDown={() => setFocusedPane("output")}
           >
             <button
