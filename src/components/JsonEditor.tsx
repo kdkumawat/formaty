@@ -27,7 +27,7 @@ export function JsonEditor({
   hideLineNumbers = false,
   panelTone = "input",
 }: JsonEditorProps) {
-  const resolvedTheme = `${monacoTheme}-${panelTone}`;
+  const resolvedTheme = monacoTheme === "vs-dark" ? "jsonix-dark" : "jsonix-light";
   const isDarkTheme = monacoTheme === "vs-dark";
 
   return (
@@ -49,36 +49,24 @@ export function JsonEditor({
         value={value}
         language={language}
         beforeMount={(monaco) => {
-          monaco.editor.defineTheme("vs-dark-input", {
+          monaco.editor.defineTheme("jsonix-dark", {
             base: "vs-dark",
             inherit: true,
             rules: [],
             colors: {
-              "editor.background": "#252526",
+              "editor.background": "#00000000",
+              "editorGutter.background": "#00000000",
+              "editor.lineHighlightBackground": "#ffffff10",
             },
           });
-          monaco.editor.defineTheme("vs-dark-output", {
-            base: "vs-dark",
-            inherit: true,
-            rules: [],
-            colors: {
-              "editor.background": "#1e1e1e",
-            },
-          });
-          monaco.editor.defineTheme("vs-input", {
+          monaco.editor.defineTheme("jsonix-light", {
             base: "vs",
             inherit: true,
             rules: [],
             colors: {
-              "editor.background": "#f3f3f3",
-            },
-          });
-          monaco.editor.defineTheme("vs-output", {
-            base: "vs",
-            inherit: true,
-            rules: [],
-            colors: {
-              "editor.background": "#ffffff",
+              "editor.background": "#00000000",
+              "editorGutter.background": "#00000000",
+              "editor.lineHighlightBackground": "#00000010",
             },
           });
         }}
