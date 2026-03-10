@@ -1,5 +1,6 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowPathIcon,
@@ -150,7 +151,6 @@ export default function Home() {
   const [diffPreview, setDiffPreview] = useState<{ original: string; modified: string } | null>(null);
   const [rightView, setRightView] = useState<RightView>("raw");
   const [typeLanguage, setTypeLanguage] = useState<TypeTargetLanguage>("typescript");
-  const [isTypeMenuOpen, setIsTypeMenuOpen] = useState(false);
   const [copyState, setCopyState] = useState<"idle" | "done" | "error">("idle");
   const [isInputMinimized, setIsInputMinimized] = useState(false);
   const [isDesktopLayout, setIsDesktopLayout] = useState(false);
@@ -159,7 +159,6 @@ export default function Home() {
   const [undoIndex, setUndoIndex] = useState(0);
   const historyLock = useRef(false);
   const splitContainerRef = useRef<HTMLElement | null>(null);
-  const typeMenuRef = useRef<HTMLDivElement | null>(null);
   const settingsRef = useRef<HTMLDivElement | null>(null);
 
   const canDownload = useMemo(() => output.trim().length > 0, [output]);
@@ -182,6 +181,8 @@ export default function Home() {
   const outputPanelClass = isDark ? "border-[#3c3c3c] bg-[#252526]" : "border-[#d4d4d4] bg-[#f3f3f3]";
   const canUndo = undoIndex > 0;
   const canRedo = undoIndex < undoStack.length - 1;
+  const selectedTypeLanguageLabel =
+    TYPE_LANGUAGES.find((item) => item.id === typeLanguage)?.label ?? "Language";
   const toolbarBtnBase =
     `btn btn-sm h-9 min-h-9 rounded-md border ${toolbarBorderClass} bg-base-100 px-2.5 text-base-content shadow-none hover:bg-base-200`;
   const toolbarBtnActive =
@@ -342,16 +343,13 @@ export default function Home() {
     const onMouseDown = (event: MouseEvent) => {
       const target = event.target as Node | null;
       if (!target) return;
-      if (isTypeMenuOpen && typeMenuRef.current && !typeMenuRef.current.contains(target)) {
-        setIsTypeMenuOpen(false);
-      }
       if (isSettingsOpen && settingsRef.current && !settingsRef.current.contains(target)) {
         setIsSettingsOpen(false);
       }
     };
     window.addEventListener("mousedown", onMouseDown);
     return () => window.removeEventListener("mousedown", onMouseDown);
-  }, [isTypeMenuOpen, isSettingsOpen]);
+  }, [isSettingsOpen]);
 
   const setOutputData = (
     value: string,
@@ -607,30 +605,33 @@ export default function Home() {
                   {label}
                 </button>
               ))}
-              <div className="relative hidden shrink-0 md:block" ref={typeMenuRef}>
+              <div className="dropdown dropdown-bottom dropdown-end shrink-0">
                 <button
                   type="button"
                   className={`${
                     activeOperation === "generateTypes" ? toolbarBtnActive : toolbarBtnBase
-                  } inline-flex shrink-0 items-center gap-2`}
-                  onClick={() => setIsTypeMenuOpen((s) => !s)}
+                  } inline-flex w-24 items-center justify-between gap-1.5 sm:w-28`}
+                  popoverTarget="type-language-popover"
+                  style={{ anchorName: "--type-language-anchor" } as CSSProperties}
+                  aria-label="Select type language"
                 >
-                  Language
-                  <ChevronDownIcon className="h-4 w-4" aria-hidden="true" />
+                  <span className="truncate">{selectedTypeLanguageLabel}</span>
+                  <ChevronDownIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
                 </button>
-                {isTypeMenuOpen ? (
-                  <div
-                    className={`absolute right-0 z-30 mt-1 min-w-[220px] rounded-box border bg-base-100 p-1 shadow-xl ${toolbarBorderClass}`}
-                  >
-                    {TYPE_LANGUAGES.map((item) => (
+                <ul
+                  className={`dropdown menu z-30 mt-1 w-40 rounded-box border bg-base-100 p-1 shadow-xl ${toolbarBorderClass}`}
+                  popover="auto"
+                  id="type-language-popover"
+                  style={{ positionAnchor: "--type-language-anchor" } as CSSProperties}
+                >
+                  {TYPE_LANGUAGES.map((item) => (
+                    <li key={item.id}>
                       <button
-                        key={item.id}
                         type="button"
-                        className={`btn btn-ghost btn-sm block w-full justify-start text-left ${
-                          typeLanguage === item.id ? "btn-active" : ""
-                        }`}
-                        onClick={() => {
-                          setIsTypeMenuOpen(false);
+                        className={typeLanguage === item.id ? "menu-active" : ""}
+                        onClick={(event) => {
+                          (event.currentTarget.closest("ul") as (HTMLElement & { hidePopover?: () => void }) | null)
+                            ?.hidePopover?.();
                           setFocusedPane("output");
                           setActiveOperation("generateTypes");
                           executeOperation("generateTypes", { typeLanguage: item.id });
@@ -638,29 +639,10 @@ export default function Home() {
                       >
                         {item.label}
                       </button>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-              <label className="form-control w-auto shrink-0 md:hidden">
-                <span className="sr-only">Select type language</span>
-                <select
-                  className={`select select-sm h-9 min-h-9 rounded-md border px-2.5 ${toolbarBorderClass}`}
-                  value={typeLanguage}
-                  onChange={(event) => {
-                    const selected = event.target.value as TypeTargetLanguage;
-                    setFocusedPane("output");
-                    setActiveOperation("generateTypes");
-                    executeOperation("generateTypes", { typeLanguage: selected });
-                  }}
-                >
-                  {TYPE_LANGUAGES.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.label}
-                    </option>
+                    </li>
                   ))}
-                </select>
-              </label>
+                </ul>
+              </div>
               <div aria-hidden="true" className={`h-6 w-px self-center ${toolbarDividerClass}`} />
               <div className={`join ml-auto h-9 shrink-0 overflow-hidden rounded-md border ${toolbarBorderClass}`}>
                 {(["raw", "tree"] as const).map((view) => (
