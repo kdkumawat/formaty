@@ -1,5 +1,6 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowPathIcon,
@@ -180,6 +181,8 @@ export default function Home() {
   const outputPanelClass = isDark ? "border-[#3c3c3c] bg-[#252526]" : "border-[#d4d4d4] bg-[#f3f3f3]";
   const canUndo = undoIndex > 0;
   const canRedo = undoIndex < undoStack.length - 1;
+  const selectedTypeLanguageLabel =
+    TYPE_LANGUAGES.find((item) => item.id === typeLanguage)?.label ?? "Language";
   const toolbarBtnBase =
     `btn btn-sm h-9 min-h-9 rounded-md border ${toolbarBorderClass} bg-base-100 px-2.5 text-base-content shadow-none hover:bg-base-200`;
   const toolbarBtnActive =
@@ -602,28 +605,44 @@ export default function Home() {
                   {label}
                 </button>
               ))}
-              <label className="form-control w-36 shrink-0 sm:w-44">
-                <span className="sr-only">Select type language</span>
-                <div className="relative">
-                  <select
-                    className={`select select-sm h-9 min-h-9 w-full rounded-md border px-2.5 pr-8 ${toolbarBorderClass}`}
-                    value={typeLanguage}
-                    onChange={(event) => {
-                      const selected = event.target.value as TypeTargetLanguage;
-                      setFocusedPane("output");
-                      setActiveOperation("generateTypes");
-                      executeOperation("generateTypes", { typeLanguage: selected });
-                    }}
-                  >
-                    {TYPE_LANGUAGES.map((item) => (
-                      <option key={item.id} value={item.id}>
+              <div className="dropdown dropdown-bottom dropdown-end shrink-0">
+                <button
+                  type="button"
+                  className={`${
+                    activeOperation === "generateTypes" ? toolbarBtnActive : toolbarBtnBase
+                  } inline-flex w-36 items-center justify-between gap-2 sm:w-44`}
+                  popoverTarget="type-language-popover"
+                  style={{ anchorName: "--type-language-anchor" } as CSSProperties}
+                  aria-label="Select type language"
+                >
+                  <span className="truncate">{selectedTypeLanguageLabel}</span>
+                  <ChevronDownIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                </button>
+                <ul
+                  className={`dropdown menu z-30 mt-1 w-52 rounded-box border bg-base-100 p-1 shadow-xl ${toolbarBorderClass}`}
+                  popover="auto"
+                  id="type-language-popover"
+                  style={{ positionAnchor: "--type-language-anchor" } as CSSProperties}
+                >
+                  {TYPE_LANGUAGES.map((item) => (
+                    <li key={item.id}>
+                      <button
+                        type="button"
+                        className={typeLanguage === item.id ? "menu-active" : ""}
+                        onClick={(event) => {
+                          (event.currentTarget.closest("ul") as (HTMLElement & { hidePopover?: () => void }) | null)
+                            ?.hidePopover?.();
+                          setFocusedPane("output");
+                          setActiveOperation("generateTypes");
+                          executeOperation("generateTypes", { typeLanguage: item.id });
+                        }}
+                      >
                         {item.label}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDownIcon className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 opacity-70" aria-hidden="true" />
-                </div>
-              </label>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
               <div aria-hidden="true" className={`h-6 w-px self-center ${toolbarDividerClass}`} />
               <div className={`join ml-auto h-9 shrink-0 overflow-hidden rounded-md border ${toolbarBorderClass}`}>
                 {(["raw", "tree"] as const).map((view) => (
