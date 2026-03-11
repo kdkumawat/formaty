@@ -33,8 +33,33 @@ export function parseJsonInput(input: string): JsonValue {
   return JSON.parse(input) as JsonValue;
 }
 
-export function formatJson(input: JsonValue): string {
-  return JSON.stringify(input, null, 2);
+export interface FormatJsonOptions {
+  indentation?: number;
+  quoteStyle?: "single" | "double";
+  sortKeys?: boolean;
+}
+
+function normalizeIndentation(indentation: number | undefined): number {
+  if (!Number.isFinite(indentation)) return 2;
+  return Math.max(0, Math.min(12, Math.floor(indentation ?? 2)));
+}
+
+function toSingleQuotedJsonString(input: string): string {
+  return input.replace(/"(?:\\.|[^"\\])*"/g, (token) => {
+    const content = token.slice(1, -1).replace(/\\"/g, '"').replace(/'/g, "\\'");
+    return `'${content.replace(/"/g, "\\\"")}'`;
+  });
+}
+
+export function formatJson(input: JsonValue, options?: FormatJsonOptions): string {
+  const quoteStyle = options?.quoteStyle ?? "double";
+  const indentation = normalizeIndentation(options?.indentation);
+  const normalizedInput = options?.sortKeys ? sortKeysDeep(input) : input;
+  const formatted = JSON.stringify(normalizedInput, null, indentation);
+  if (quoteStyle === "single") {
+    return toSingleQuotedJsonString(formatted);
+  }
+  return formatted;
 }
 
 export function minifyJson(input: JsonValue): string {

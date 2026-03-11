@@ -39,8 +39,6 @@ const SAMPLE_JSON = `{
 const OPERATION_ACTIONS = [
   ["Format", "format"],
   ["Minify", "minify"],
-  ["Sort", "sort"],
-  ["Remove Empty", "removeEmpty"],
   ["Flatten", "flatten"],
   ["Unflatten", "unflatten"],
   ["Schema", "schema"],
@@ -64,7 +62,7 @@ const TYPE_LANGUAGES: Array<{ id: TypeTargetLanguage; label: string; ext: string
   { id: "sql", label: "SQL", ext: "sql" },
 ];
 
-type OperationAction = (typeof OPERATION_ACTIONS)[number][1] | "generateTypes";
+type OperationAction = (typeof OPERATION_ACTIONS)[number][1] | "sort" | "removeEmpty" | "generateTypes";
 type OutputLanguage =
   | "json"
   | "yaml"
@@ -82,6 +80,13 @@ type OutputLanguage =
 type ThemeMode = "system" | "dark" | "light";
 type ModalKind = "validate" | "diff" | null;
 type RightView = "raw" | "tree";
+type QuoteStyle = "double" | "single";
+type FormatOptions = {
+  indentation: number;
+  quoteStyle: QuoteStyle;
+  sortKeys: boolean;
+  removeEmpty: boolean;
+};
 
 const EXT_BY_ACTION: Record<Exclude<OperationAction, "generateTypes"> | "parse", string> = {
   parse: "json",
@@ -129,6 +134,14 @@ const LANGUAGE_BY_TYPE_TARGET: Record<TypeTargetLanguage, OutputLanguage> = {
   rust: "rust",
 };
 
+const DEFAULT_FORMAT_OPTIONS: FormatOptions = {
+  indentation: 2,
+  quoteStyle: "double",
+  sortKeys: false,
+  removeEmpty: false,
+};
+
+
 export default function Home() {
   const { run } = useJsonWorker();
   const [input, setInput] = useState(SAMPLE_JSON);
@@ -155,6 +168,7 @@ export default function Home() {
   const [isInputMinimized, setIsInputMinimized] = useState(false);
   const [isDesktopLayout, setIsDesktopLayout] = useState(false);
   const [focusedPane, setFocusedPane] = useState<"input" | "output">("input");
+  const [formatOptions, setFormatOptions] = useState<FormatOptions>(DEFAULT_FORMAT_OPTIONS);
   const [undoStack, setUndoStack] = useState<string[]>([SAMPLE_JSON]);
   const [undoIndex, setUndoIndex] = useState(0);
   const historyLock = useRef(false);
@@ -190,6 +204,7 @@ export default function Home() {
   const toolbarBtnIcon =
     `btn btn-sm btn-square h-9 min-h-9 rounded-md border ${toolbarBorderClass} bg-base-100 text-base-content shadow-none hover:bg-base-200`;
   const dropdownPanelClass = isDark ? "bg-[#252526] text-base-content" : "bg-base-100 text-base-content";
+
   const themeOptions = [
     { mode: "system" as const, ariaLabel: "Use system theme", title: "System theme", Icon: ComputerDesktopIcon },
     { mode: "light" as const, ariaLabel: "Use light theme", title: "Light theme", Icon: SunIcon },
@@ -246,6 +261,7 @@ export default function Home() {
         themeMode?: ThemeMode;
         typeLanguage?: TypeTargetLanguage;
         rightView?: RightView;
+        formatOptions?: Partial<FormatOptions>;
       };
       if (data.input) setInput(data.input);
       if (data.output) setOutput(data.output);
@@ -253,6 +269,14 @@ export default function Home() {
       if (data.themeMode) setThemeMode(data.themeMode);
       if (data.typeLanguage) setTypeLanguage(data.typeLanguage);
       if (data.rightView) setRightView(data.rightView);
+      if (data.formatOptions) {
+        const nextIndentation = Number(data.formatOptions.indentation);
+        const indentation = Number.isFinite(nextIndentation) ? Math.max(1, Math.min(10, Math.floor(nextIndentation))) : DEFAULT_FORMAT_OPTIONS.indentation;
+        const quoteStyle = data.formatOptions.quoteStyle === "single" ? "single" : "double";
+        const sortKeys = Boolean(data.formatOptions.sortKeys);
+        const removeEmpty = Boolean(data.formatOptions.removeEmpty);
+        setFormatOptions({ indentation, quoteStyle, sortKeys, removeEmpty });
+      }
     } catch {
       // Ignore malformed persisted sessions.
     }
@@ -261,9 +285,9 @@ export default function Home() {
   useEffect(() => {
     localStorage.setItem(
       "jsonix-session",
-      JSON.stringify({ input, output, split, themeMode, typeLanguage, rightView }),
+      JSON.stringify({ input, output, split, themeMode, typeLanguage, rightView, formatOptions }),
     );
-  }, [input, output, split, themeMode, typeLanguage, rightView]);
+  }, [input, output, split, themeMode, typeLanguage, rightView, formatOptions]);
 
   useEffect(() => {
     if (!output.trim()) {
@@ -393,6 +417,7 @@ export default function Home() {
       schemaText?: string;
       compareText?: string;
       typeLanguage?: TypeTargetLanguage;
+      formatOptions?: FormatOptions;
     },
   ) => {
     setBusy(true);
@@ -453,6 +478,21 @@ export default function Home() {
           return;
         }
 
+        if (action === "format") {
+          const formatConfig = options?.formatOptions ?? formatOptions;
+          const preparedJson = formatConfig.removeEmpty
+            ? await run<JsonValue>("removeEmpty", { json: left })
+            : left;
+          const result = await run<string>("format", {
+            json: preparedJson,
+            indentation: formatConfig.indentation,
+            quoteStyle: formatConfig.quoteStyle,
+            sortKeys: formatConfig.sortKeys,
+          });
+          setOutputData(result, action);
+          return;
+        }
+
         const result = await run<unknown>(action as never, { json: left });
         setOutputData(
           typeof result === "string" ? result : JSON.stringify(result as JsonValue, null, 2),
@@ -508,6 +548,14 @@ export default function Home() {
   const toggleInputMinimized = () => {
     setIsInputMinimized((prev) => !prev);
     setFocusedPane((prev) => (prev === "input" ? "output" : prev));
+  };
+
+
+  const applyFormatWithOptions = (next: FormatOptions) => {
+    setFormatOptions(next);
+    setFocusedPane("output");
+    setActiveOperation("format");
+    executeOperation("format", { formatOptions: next });
   };
 
   const importJsonFile = (file: File) => {
@@ -595,17 +643,124 @@ export default function Home() {
             />
 
             <div className="flex min-w-0 flex-1 items-center gap-2">
-              {OPERATION_ACTIONS.map(([label, action]) => (
-                <button
-                  type="button"
-                  key={label}
-                  disabled={busy}
-                  className={`${activeOperation === action ? toolbarBtnActive : toolbarBtnBase} shrink-0 disabled:opacity-40`}
-                  onClick={() => runOperation(action)}
-                >
-                  {label}
-                </button>
-              ))}
+              {OPERATION_ACTIONS.map(([label, action]) =>
+                action === "format" ? (
+                  <div key={label} className="dropdown dropdown-bottom">
+                    <div className={`join h-9 overflow-hidden rounded-md border ${toolbarBorderClass}`}>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        className={`btn btn-sm join-item h-9 min-h-9 rounded-none border-0 px-3 shadow-none ${activeOperation === action ? "bg-primary text-primary-content hover:bg-primary/90" : "bg-base-100 text-base-content hover:bg-base-200"}`}
+                        onClick={() => runOperation(action)}
+                      >
+                        {label}
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Format options"
+                        popoverTarget="format-options-popover"
+                        style={{ anchorName: "--format-options-anchor" } as CSSProperties}
+                        className={`btn btn-sm join-item h-9 min-h-9 rounded-none border-0 px-2 shadow-none ${activeOperation === action ? "bg-primary text-primary-content hover:bg-primary/90" : "bg-base-100 text-base-content hover:bg-base-200"}`}
+                      >
+                        <ChevronDownIcon className="h-4 w-4" aria-hidden="true" />
+                      </button>
+                    </div>
+                    <div
+                      popover="auto"
+                      id="format-options-popover"
+                      style={{ positionAnchor: "--format-options-anchor" } as CSSProperties}
+                      className={`dropdown z-30 mt-1 w-72 rounded-box border p-3 shadow-xl ${toolbarBorderClass} ${dropdownPanelClass}`}
+                    >
+                      <div className="space-y-3">
+                        <div>
+                          <div className="mb-2 flex items-center justify-between">
+                            <p className="text-xs font-semibold opacity-70">Indentation</p>
+                            <span className="text-xs font-semibold opacity-80">{formatOptions.indentation}</span>
+                          </div>
+                          <div className="w-full">
+                            <input
+                              type="range"
+                              min={1}
+                              max={10}
+                              step={1}
+                              value={formatOptions.indentation}
+                              className="range range-primary range-xs"
+                              aria-label="Indentation level"
+                              onChange={(event) => {
+                                const parsed = Number(event.target.value);
+                                if (!Number.isFinite(parsed)) return;
+                                const indentation = Math.max(1, Math.min(10, Math.floor(parsed)));
+                                applyFormatWithOptions({ ...formatOptions, indentation });
+                              }}
+                            />
+                            <div className="mt-2 flex justify-between px-1 text-[10px] leading-none opacity-70">
+                              {Array.from({ length: 10 }, (_, index) => (
+                                <span key={`indent-mark-${index + 1}`}>|</span>
+                              ))}
+                            </div>
+                            <div className="mt-1 flex justify-between px-1 text-[10px] leading-none opacity-80">
+                              {Array.from({ length: 10 }, (_, index) => (
+                                <span key={`indent-label-${index + 1}`}>{index + 1}</span>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                        <div>
+                          <p className="mb-2 text-xs font-semibold opacity-70">Quote style</p>
+                          <div className={`join h-9 overflow-hidden rounded-md border ${toolbarBorderClass}`}>
+                            {(["double", "single"] as const).map((quote) => (
+                              <input
+                                key={quote}
+                                className="join-item btn btn-sm h-9 min-h-9 rounded-none border-0 px-3 shadow-none"
+                                type="radio"
+                                name="quote-style-options"
+                                aria-label={quote === "double" ? "Double" : "Single"}
+                                checked={formatOptions.quoteStyle === quote}
+                                onChange={() => applyFormatWithOptions({ ...formatOptions, quoteStyle: quote })}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-6 pt-1">
+                          <label className="flex cursor-pointer items-center gap-2 text-sm">
+                            <input
+                              type="checkbox"
+                              className="checkbox checkbox-sm"
+                              checked={formatOptions.sortKeys}
+                              onChange={(event) =>
+                                applyFormatWithOptions({ ...formatOptions, sortKeys: event.target.checked })
+                              }
+                            />
+                            <span>Sort</span>
+                          </label>
+                          <label className="flex cursor-pointer items-center gap-2 text-sm">
+                            <input
+                              type="checkbox"
+                              className="checkbox checkbox-sm"
+                              checked={formatOptions.removeEmpty}
+                              onChange={(event) =>
+                                applyFormatWithOptions({ ...formatOptions, removeEmpty: event.target.checked })
+                              }
+                            />
+                            <span>Remove Empty</span>
+                          </label>
+                        </div>
+
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    key={label}
+                    disabled={busy}
+                    className={`${activeOperation === action ? toolbarBtnActive : toolbarBtnBase} shrink-0 disabled:opacity-40`}
+                    onClick={() => runOperation(action)}
+                  >
+                    {label}
+                  </button>
+                ),
+              )}
               <div className="dropdown dropdown-bottom dropdown-end shrink-0">
                 <button
                   type="button"

@@ -106,7 +106,11 @@ ctx.onmessage = (event: MessageEvent<WorkerRequest>) => {
         break;
       }
       case "format":
-        result = formatJson(payload.json as JsonValue);
+        result = formatJson(payload.json as JsonValue, {
+          indentation: payload.indentation as number | undefined,
+          quoteStyle: payload.quoteStyle as "single" | "double" | undefined,
+          sortKeys: Boolean(payload.sortKeys),
+        });
         break;
       case "minify":
         result = minifyJson(payload.json as JsonValue);
