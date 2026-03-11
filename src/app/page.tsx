@@ -678,12 +678,11 @@ export default function Home() {
                       <div className="space-y-3">
                         <div>
                           <p className="mb-2 text-xs font-semibold opacity-70">Indentation</p>
-                          <div className="flex items-center gap-2">
-                            <div className="join">
+                          <div className="join">
                               {INDENTATION_OPTIONS.map((size) => (
                                 <input
                                   key={size}
-                                  className="join-item btn btn-square"
+                                  className="join-item btn btn-sm btn-square h-9 min-h-9 rounded-none border-0 px-0 shadow-none"
                                   type="radio"
                                   name="indentation-options"
                                   aria-label={String(size)}
@@ -691,24 +690,23 @@ export default function Home() {
                                   onChange={() => applyFormatWithOptions({ ...formatOptions, indentation: size })}
                                 />
                               ))}
-                            </div>
-                            <input
-                              type="number"
-                              min={0}
-                              max={12}
-                              value={customIndentation}
-                              onChange={(event) => {
-                                const nextValue = event.target.value;
-                                setCustomIndentation(nextValue);
-                                const parsed = Number(nextValue);
-                                if (!Number.isFinite(parsed)) return;
-                                const indentation = Math.max(0, Math.min(12, Math.floor(parsed)));
-                                applyFormatWithOptions({ ...formatOptions, indentation });
-                              }}
-                              className="input input-bordered input-sm w-16"
-                              aria-label="Custom indentation"
-                              placeholder="Custom"
-                            />
+                              <input
+                                type="number"
+                                min={0}
+                                max={12}
+                                value={customIndentation}
+                                onChange={(event) => {
+                                  const nextValue = event.target.value;
+                                  setCustomIndentation(nextValue);
+                                  const parsed = Number(nextValue);
+                                  if (!Number.isFinite(parsed)) return;
+                                  const indentation = Math.max(0, Math.min(12, Math.floor(parsed)));
+                                  applyFormatWithOptions({ ...formatOptions, indentation });
+                                }}
+                                className="join-item input input-bordered input-sm h-9 min-h-9 w-14 rounded-none border-0 px-2 text-center shadow-none"
+                                aria-label="Custom indentation"
+                                placeholder="Custom"
+                              />
                           </div>
                         </div>
                         <div>
@@ -717,7 +715,7 @@ export default function Home() {
                             {(["double", "single"] as const).map((quote) => (
                               <input
                                 key={quote}
-                                className="join-item btn"
+                                className="join-item btn btn-sm h-9 min-h-9 rounded-none border-0 px-3 shadow-none"
                                 type="radio"
                                 name="quote-style-options"
                                 aria-label={quote === "double" ? "Double" : "Single"}
