@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
 const SITE_URL = "https://jsonix.vercel.app";
@@ -87,6 +88,7 @@ export default function RootLayout({
       <body className="antialiased">
         {children}
         <SpeedInsights />
+        <Analytics />
       </body>
     </html>
   );
