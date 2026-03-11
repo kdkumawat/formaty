@@ -682,7 +682,7 @@ export default function Home() {
                             {INDENTATION_OPTIONS.map((size) => (
                               <input
                                 key={size}
-                                className="join-item btn btn-sm btn-square h-9 min-h-9 rounded-none border-0 px-0 shadow-none"
+                                className={`join-item btn btn-sm btn-square h-9 min-h-9 rounded-none border-0 border-r px-0 shadow-none ${toolbarBorderClass}`}
                                 type="radio"
                                 name="indentation-options"
                                 aria-label={String(size)}
@@ -706,7 +706,7 @@ export default function Home() {
                                 const indentation = Math.max(0, Math.min(12, Math.floor(parsed)));
                                 applyFormatWithOptions({ ...formatOptions, indentation });
                               }}
-                              className={`join-item input input-sm h-9 min-h-9 w-14 rounded-none border-0 border-l px-2 text-center shadow-none ${toolbarBorderClass}`}
+                              className="join-item input input-sm h-9 min-h-9 w-14 rounded-none border-0 px-2 text-center shadow-none"
                               aria-label="Custom indentation"
                               placeholder="Custom"
                             />
