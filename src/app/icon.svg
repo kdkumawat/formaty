@@ -1,6 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="14" fill="#0b0f1a"/>
-  <text x="50%" y="55%" text-anchor="middle" font-size="36" font-family="monospace" fill="#6C7CFF">
+  <rect width="64" height="64" rx="14" fill="#0b0f1a" />
+  <text
+    x="50%"
+    y="50%"
+    text-anchor="middle"
+    dominant-baseline="middle"
+    font-size="34"
+    font-family="monospace"
+    fill="#6C7CFF"
+  >
     {/}
   </text>
 </svg>
