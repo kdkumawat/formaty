@@ -678,40 +678,40 @@ export default function Home() {
                       <div className="space-y-3">
                         <div>
                           <p className="mb-2 text-xs font-semibold opacity-70">Indentation</p>
-                          <div className="join">
-                              {INDENTATION_OPTIONS.map((size) => (
-                                <input
-                                  key={size}
-                                  className="join-item btn btn-sm btn-square h-9 min-h-9 rounded-none border-0 px-0 shadow-none"
-                                  type="radio"
-                                  name="indentation-options"
-                                  aria-label={String(size)}
-                                  checked={formatOptions.indentation === size}
-                                  onChange={() => applyFormatWithOptions({ ...formatOptions, indentation: size })}
-                                />
-                              ))}
+                          <div className={`join h-9 overflow-hidden rounded-md border ${toolbarBorderClass}`}>
+                            {INDENTATION_OPTIONS.map((size) => (
                               <input
-                                type="number"
-                                min={0}
-                                max={12}
-                                value={customIndentation}
-                                onChange={(event) => {
-                                  const nextValue = event.target.value;
-                                  setCustomIndentation(nextValue);
-                                  const parsed = Number(nextValue);
-                                  if (!Number.isFinite(parsed)) return;
-                                  const indentation = Math.max(0, Math.min(12, Math.floor(parsed)));
-                                  applyFormatWithOptions({ ...formatOptions, indentation });
-                                }}
-                                className="join-item input input-bordered input-sm h-9 min-h-9 w-14 rounded-none border-0 px-2 text-center shadow-none"
-                                aria-label="Custom indentation"
-                                placeholder="Custom"
+                                key={size}
+                                className="join-item btn btn-sm btn-square h-9 min-h-9 rounded-none border-0 px-0 shadow-none"
+                                type="radio"
+                                name="indentation-options"
+                                aria-label={String(size)}
+                                checked={formatOptions.indentation === size}
+                                onChange={() => applyFormatWithOptions({ ...formatOptions, indentation: size })}
                               />
+                            ))}
+                            <input
+                              type="number"
+                              min={0}
+                              max={12}
+                              value={customIndentation}
+                              onChange={(event) => {
+                                const nextValue = event.target.value;
+                                setCustomIndentation(nextValue);
+                                const parsed = Number(nextValue);
+                                if (!Number.isFinite(parsed)) return;
+                                const indentation = Math.max(0, Math.min(12, Math.floor(parsed)));
+                                applyFormatWithOptions({ ...formatOptions, indentation });
+                              }}
+                              className={`join-item input input-sm h-9 min-h-9 w-14 rounded-none border-0 border-l px-2 text-center shadow-none ${toolbarBorderClass}`}
+                              aria-label="Custom indentation"
+                              placeholder="Custom"
+                            />
                           </div>
                         </div>
                         <div>
                           <p className="mb-2 text-xs font-semibold opacity-70">Quote style</p>
-                          <div className="join">
+                          <div className={`join h-9 overflow-hidden rounded-md border ${toolbarBorderClass}`}>
                             {(["double", "single"] as const).map((quote) => (
                               <input
                                 key={quote}
