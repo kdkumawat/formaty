@@ -7,6 +7,8 @@ import type { JsonValue } from "@/lib/json/core";
 
 interface GraphViewProps {
   data: JsonValue;
+  className?: string;
+  isDark?: boolean;
 }
 
 const MAX_NODES = 250;
@@ -18,7 +20,7 @@ function shortValue(value: JsonValue): string {
   return String(value).slice(0, 32);
 }
 
-export function GraphView({ data }: GraphViewProps) {
+export function GraphView({ data, className, isDark = false }: GraphViewProps) {
   const { nodes, edges } = useMemo(() => {
     const nextNodes: Node[] = [];
     const nextEdges: Edge[] = [];
@@ -30,9 +32,9 @@ export function GraphView({ data }: GraphViewProps) {
         position: { x: depth * 220, y: index * 72 },
         data: { label },
         style: {
-          background: "#111827",
-          color: "#e5e7eb",
-          border: "1px solid #374151",
+          background: isDark ? "#111827" : "#ffffff",
+          color: isDark ? "#e5e7eb" : "#1f2937",
+          border: isDark ? "1px solid #374151" : "1px solid #d4d4d8",
           borderRadius: 8,
           fontSize: 12,
           padding: 6,
@@ -59,12 +61,17 @@ export function GraphView({ data }: GraphViewProps) {
 
     visit(data, "$", 0);
     return { nodes: nextNodes, edges: nextEdges };
-  }, [data]);
+  }, [data, isDark]);
 
   return (
-    <div className="h-[52vh] rounded-xl border border-zinc-800 overflow-hidden">
-      <ReactFlow nodes={nodes} edges={edges} fitView>
-        <Background />
+    <div className={`h-full rounded-xl border overflow-hidden ${className ?? ""}`}>
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        fitView
+        defaultEdgeOptions={{ style: { stroke: isDark ? "#4b5563" : "#9ca3af" } }}
+      >
+        <Background color={isDark ? "#27272a" : "#e4e4e7"} gap={24} />
         <Controls />
       </ReactFlow>
     </div>

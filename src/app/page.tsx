@@ -16,6 +16,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { JsonDiffEditor } from "@/components/JsonDiffEditor";
 import { JsonEditor } from "@/components/JsonEditor";
+import { GraphView } from "@/components/GraphView";
 import { TreeView } from "@/components/TreeView";
 import { diffJson } from "@/lib/json/diff";
 import { useJsonWorker } from "@/hooks/useJsonWorker";
@@ -79,7 +80,7 @@ type OutputLanguage =
   | "plaintext";
 type ThemeMode = "system" | "dark" | "light";
 type ModalKind = "validate" | "diff" | null;
-type RightView = "raw" | "tree";
+type RightView = "raw" | "tree" | "graph";
 type QuoteStyle = "double" | "single";
 type FormatOptions = {
   indentation: number;
@@ -303,7 +304,7 @@ export default function Home() {
   }, [output]);
 
   useEffect(() => {
-    if (rightView === "tree" && !parsedOutput) {
+    if ((rightView === "tree" || rightView === "graph") && !parsedOutput) {
       setRightView("raw");
     }
   }, [rightView, parsedOutput]);
@@ -802,11 +803,11 @@ export default function Home() {
               </div>
               <div aria-hidden="true" className={`h-6 w-px self-center ${toolbarDividerClass}`} />
               <div className={`join ml-auto h-9 shrink-0 overflow-hidden rounded-md border ${toolbarBorderClass}`}>
-                {(["raw", "tree"] as const).map((view) => (
+                {(["raw", "tree", "graph"] as const).map((view) => (
                   <button
                     key={view}
                     type="button"
-                    disabled={view === "tree" && !parsedOutput}
+                    disabled={(view === "tree" || view === "graph") && !parsedOutput}
                     className={`btn btn-sm join-item h-9 min-h-9 rounded-none border-0 px-3 shadow-none disabled:opacity-40 ${
                       rightView === view
                         ? "bg-primary text-primary-content hover:bg-primary/90"
@@ -928,6 +929,19 @@ export default function Home() {
               {rightView === "tree" ? (
                 parsedOutput ? (
                   <TreeView
+                    data={parsedOutput}
+                    isDark={isDark}
+                    className={`${outputPanelClass} min-h-0`}
+                  />
+                ) : (
+                  <div className={`flex h-full min-h-0 items-center justify-center rounded-xl border text-sm text-base-content/70 ${outputPanelClass}`}>
+                    Current output is not valid JSON.
+                  </div>
+                )
+              ) : null}
+              {rightView === "graph" ? (
+                parsedOutput ? (
+                  <GraphView
                     data={parsedOutput}
                     isDark={isDark}
                     className={`${outputPanelClass} min-h-0`}
