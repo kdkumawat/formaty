@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import dynamic from "next/dynamic";
 import "jsoncrack-react/style.css";
 import type { JsonValue } from "@/lib/json/core";
@@ -16,10 +17,16 @@ interface GraphViewProps {
 }
 
 export function GraphView({ data, className, isDark = false }: GraphViewProps) {
+  const normalizedData = useMemo(() => {
+    if (Array.isArray(data)) return data;
+    if (data && typeof data === "object") return data;
+    return { value: data };
+  }, [data]);
+
   return (
     <div className={`relative h-full overflow-hidden rounded-xl border ${className ?? ""}`}>
       <JSONCrack
-        json={data}
+        json={normalizedData}
         theme={isDark ? "dark" : "light"}
         layoutDirection="LEFT"
         showControls
