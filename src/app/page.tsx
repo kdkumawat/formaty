@@ -1,25 +1,35 @@
 "use client";
 
 import type { CSSProperties } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ArrowDownTrayIcon,
   ArrowPathIcon,
   ArrowsPointingInIcon,
   ArrowsPointingOutIcon,
   ArrowUturnLeftIcon,
   ArrowUturnRightIcon,
+  CheckCircleIcon,
   ChevronDownIcon,
+  ChevronUpIcon,
+  ClipboardDocumentIcon,
   ComputerDesktopIcon,
   Cog6ToothIcon,
   MoonIcon,
+  ShareIcon,
   SunIcon,
+  XCircleIcon,
+  XMarkIcon,
 } from "@heroicons/react/24/outline";
+import { ArrowPathIcon as ArrowPathIconSolid, NoSymbolIcon } from "@heroicons/react/24/solid";
 import { JsonDiffEditor } from "@/components/JsonDiffEditor";
 import { JsonEditor } from "@/components/JsonEditor";
 import { GraphView, type GraphViewRef } from "@/components/GraphView";
 import { TreeView } from "@/components/TreeView";
 import { diffJson } from "@/lib/json/diff";
 import { useJsonWorker } from "@/hooks/useJsonWorker";
+import { detectFormat, FORMAT_LABELS, parseInput, type FormatKind } from "@/lib/formats";
+import { decodeState, encodeState } from "@/lib/shareState";
 import type { JsonValue, TypeTargetLanguage } from "@/lib/json/core";
 
 const SAMPLE_JSON = `{
@@ -45,10 +55,9 @@ const OPERATION_ACTIONS = [
   ["Schema", "schema"],
   ["Validate", "validate"],
   ["Diff", "diff"],
-  ["YAML", "yaml"],
-  ["XML", "xml"],
-  ["CSV", "csv"],
 ] as const;
+
+const FORMAT_KINDS: FormatKind[] = ["json", "xml", "yaml", "toml", "csv"];
 
 const TYPE_LANGUAGES: Array<{ id: TypeTargetLanguage; label: string; ext: string }> = [
   { id: "typescript", label: "TypeScript", ext: "ts" },
@@ -68,6 +77,8 @@ type OutputLanguage =
   | "json"
   | "yaml"
   | "xml"
+  | "toml"
+  | "csv"
   | "sql"
   | "typescript"
   | "python"
@@ -89,6 +100,14 @@ type FormatOptions = {
   removeEmpty: boolean;
 };
 
+const EXT_BY_FORMAT: Record<FormatKind, string> = {
+  json: "json",
+  xml: "xml",
+  yaml: "yaml",
+  toml: "toml",
+  csv: "csv",
+};
+
 const EXT_BY_ACTION: Record<Exclude<OperationAction, "generateTypes"> | "parse", string> = {
   parse: "json",
   format: "json",
@@ -100,9 +119,6 @@ const EXT_BY_ACTION: Record<Exclude<OperationAction, "generateTypes"> | "parse",
   schema: "json",
   validate: "json",
   diff: "json",
-  yaml: "yaml",
-  xml: "xml",
-  csv: "csv",
 };
 
 const LANGUAGE_BY_ACTION: Record<Exclude<OperationAction, "generateTypes"> | "parse", OutputLanguage> =
@@ -117,9 +133,6 @@ const LANGUAGE_BY_ACTION: Record<Exclude<OperationAction, "generateTypes"> | "pa
     schema: "json",
     validate: "json",
     diff: "json",
-    yaml: "yaml",
-    xml: "xml",
-    csv: "plaintext",
   };
 
 const LANGUAGE_BY_TYPE_TARGET: Record<TypeTargetLanguage, OutputLanguage> = {
@@ -166,10 +179,14 @@ export default function Home() {
   const [rightView, setRightView] = useState<RightView>("raw");
   const [typeLanguage, setTypeLanguage] = useState<TypeTargetLanguage>("typescript");
   const [copyState, setCopyState] = useState<"idle" | "done" | "error">("idle");
+  const [shareState, setShareState] = useState<"idle" | "done" | "error">("idle");
   const [isInputMinimized, setIsInputMinimized] = useState(false);
   const [isDesktopLayout, setIsDesktopLayout] = useState(false);
   const [focusedPane, setFocusedPane] = useState<"input" | "output">("input");
   const [formatOptions, setFormatOptions] = useState<FormatOptions>(DEFAULT_FORMAT_OPTIONS);
+  const [convertToFormat, setConvertToFormat] = useState<FormatKind>("json");
+  const [liveTransform, setLiveTransform] = useState(false);
+  const [inputValid, setInputValid] = useState<boolean | null>(null);
   const [undoStack, setUndoStack] = useState<string[]>([SAMPLE_JSON]);
   const [undoIndex, setUndoIndex] = useState(0);
   const historyLock = useRef(false);
@@ -182,16 +199,26 @@ export default function Home() {
     () => (isGraphView ? Boolean(parsedOutput) : output.trim().length > 0),
     [isGraphView, output, parsedOutput],
   );
+  const parseSchemaToObject = useCallback((text: string): object | null => {
+    if (!text.trim()) return null;
+    const fmt = detectFormat(text);
+    try {
+      if (fmt === "json" || fmt === "yaml") return parseInput(text, fmt) as object;
+      try {
+        return parseInput(text, "json") as object;
+      } catch {
+        return parseInput(text, "yaml") as object;
+      }
+    } catch {
+      return null;
+    }
+  }, []);
   const isModalInputValid = useMemo(() => {
     if (!modalKind) return false;
     if (!modalValue.trim()) return false;
-    try {
-      JSON.parse(modalValue);
-      return true;
-    } catch {
-      return false;
-    }
-  }, [modalKind, modalValue]);
+    if (modalKind === "validate") return parseSchemaToObject(modalValue) !== null;
+    return true;
+  }, [modalKind, modalValue, parseSchemaToObject]);
   const resolvedTheme: Exclude<ThemeMode, "system"> =
     themeMode === "system" ? (systemDark ? "dark" : "light") : themeMode;
   const isDark = resolvedTheme === "dark";
@@ -199,18 +226,29 @@ export default function Home() {
   const toolbarDividerClass = isDark ? "bg-white/45" : "bg-base-300";
   const monacoTheme = isDark ? "vs-dark" : "vs";
   const outputPanelClass = isDark ? "border-[#2d2d30] bg-[#1e1e1e]" : "border-[#e5e5e5] bg-[#ffffff]";
+  const inputEditorBgClass = isDark
+    ? "border border-[#3c3c3c] border-t-0 bg-[#252526]"
+    : "border border-[#d4d4d4] border-t-0 bg-[#f3f3f3]";
   const canUndo = undoIndex > 0;
   const canRedo = undoIndex < undoStack.length - 1;
   const copyLabel = copyState === "done" ? "Copied" : copyState === "error" ? "Failed" : "Copy";
+  const shareLabel = shareState === "done" ? "Copied" : shareState === "error" ? "Failed" : "Share";
   const selectedTypeLanguageLabel =
     TYPE_LANGUAGES.find((item) => item.id === typeLanguage)?.label ?? "Language";
+  const TOOLBAR_BTN_SIZE = "h-8 min-h-8";
+  const TOOLBAR_TEXT = "text-xs";
   const toolbarBtnBase =
-    `btn btn-sm h-9 min-h-9 rounded-md border ${toolbarBorderClass} bg-base-100 px-2.5 text-base-content shadow-none hover:bg-base-200`;
+    `btn btn-xs ${TOOLBAR_BTN_SIZE} rounded border ${toolbarBorderClass} bg-base-100 px-2 ${TOOLBAR_TEXT} text-base-content shadow-none hover:bg-base-200`;
   const toolbarBtnActive =
-    "btn btn-sm h-9 min-h-9 rounded-md border border-primary bg-primary px-2.5 text-primary-content shadow-none hover:bg-primary/90";
+    `btn btn-xs ${TOOLBAR_BTN_SIZE} rounded border border-primary bg-primary px-2 ${TOOLBAR_TEXT} text-primary-content shadow-none hover:bg-primary/90`;
   const toolbarBtnIcon =
-    `btn btn-sm btn-square h-9 min-h-9 rounded-md border ${toolbarBorderClass} bg-base-100 text-base-content shadow-none hover:bg-base-200`;
+    `btn btn-xs btn-square ${TOOLBAR_BTN_SIZE} min-w-8 rounded border ${toolbarBorderClass} bg-base-100 ${TOOLBAR_TEXT} text-base-content shadow-none hover:bg-base-200`;
+  const joinItemBorderClass = isDark
+    ? "[&>*:not(:last-child)]:border-r [&>*:not(:last-child)]:!border-white/40"
+    : "[&>*:not(:last-child)]:border-r [&>*:not(:last-child)]:!border-base-300";
   const dropdownPanelClass = isDark ? "bg-[#252526] text-base-content" : "bg-base-100 text-base-content";
+
+  const resolvedInputFormat = useMemo(() => detectFormat(input), [input]);
 
   const themeOptions = [
     { mode: "system" as const, ariaLabel: "Use system theme", title: "System theme", Icon: ComputerDesktopIcon },
@@ -258,6 +296,42 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    const hash = typeof window !== "undefined" ? window.location.hash.slice(1) : "";
+    const state = hash ? decodeState(hash) : null;
+    if (state) {
+      if (state.input) {
+        setInput(state.input);
+        setUndoStack([state.input]);
+        setUndoIndex(0);
+      }
+      if (state.convertToFormat && FORMAT_KINDS.includes(state.convertToFormat))
+        setConvertToFormat(state.convertToFormat);
+      if (typeof state.liveTransform === "boolean") setLiveTransform(state.liveTransform);
+      if (state.output) {
+        setOutput(state.output);
+        if (state.outputFormat) {
+          setOutputExt(EXT_BY_FORMAT[state.outputFormat]);
+          setOutputLanguage(state.outputFormat);
+        }
+        try {
+          if (state.outputFormat === "json" || !state.outputFormat) {
+            setParsedOutput(JSON.parse(state.output) as JsonValue);
+          } else if (state.outputFormat && state.output) {
+            const out = state.output;
+            const fmt = state.outputFormat;
+            void import("@/lib/formats").then(({ parseInput }) => {
+              setParsedOutput(parseInput(out, fmt));
+            });
+          }
+        } catch {
+          setParsedOutput(null);
+        }
+      }
+      if (state.typeLanguage) setTypeLanguage(state.typeLanguage);
+      if (state.viewMode) setRightView(state.viewMode);
+      if (typeof state.split === "number") setSplit(Math.max(20, Math.min(80, state.split)));
+      return;
+    }
     const raw = localStorage.getItem("jsonix-session");
     if (!raw) return;
     try {
@@ -269,6 +343,8 @@ export default function Home() {
         typeLanguage?: TypeTargetLanguage;
         rightView?: RightView;
         formatOptions?: Partial<FormatOptions>;
+        convertToFormat?: FormatKind;
+        liveTransform?: boolean;
       };
       if (data.input) setInput(data.input);
       if (data.output) setOutput(data.output);
@@ -276,6 +352,8 @@ export default function Home() {
       if (data.themeMode) setThemeMode(data.themeMode);
       if (data.typeLanguage) setTypeLanguage(data.typeLanguage);
       if (data.rightView) setRightView(data.rightView);
+      if (data.convertToFormat) setConvertToFormat(data.convertToFormat);
+      if (typeof data.liveTransform === "boolean") setLiveTransform(data.liveTransform);
       if (data.formatOptions) {
         const nextIndentation = Number(data.formatOptions.indentation);
         const indentation = Number.isFinite(nextIndentation) ? Math.max(1, Math.min(10, Math.floor(nextIndentation))) : DEFAULT_FORMAT_OPTIONS.indentation;
@@ -292,9 +370,9 @@ export default function Home() {
   useEffect(() => {
     localStorage.setItem(
       "jsonix-session",
-      JSON.stringify({ input, output, split, themeMode, typeLanguage, rightView, formatOptions }),
+      JSON.stringify({ input, output, split, themeMode, typeLanguage, rightView, formatOptions, convertToFormat, liveTransform }),
     );
-  }, [input, output, split, themeMode, typeLanguage, rightView, formatOptions]);
+  }, [input, output, split, themeMode, typeLanguage, rightView, formatOptions, convertToFormat, liveTransform]);
 
   useEffect(() => {
     if (!output.trim()) {
@@ -313,6 +391,54 @@ export default function Home() {
       setRightView("raw");
     }
   }, [rightView, parsedOutput]);
+
+  const validationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const liveTransformTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inputRef = useRef(input);
+  inputRef.current = input;
+
+  useEffect(() => {
+    if (!input.trim()) {
+      setInputValid(null);
+      return;
+    }
+    validationTimeoutRef.current = setTimeout(() => {
+      run("parseFormat", { input, format: resolvedInputFormat })
+        .then(() => setInputValid(true))
+        .catch(() => setInputValid(false));
+    }, 300);
+    return () => {
+      if (validationTimeoutRef.current) clearTimeout(validationTimeoutRef.current);
+    };
+  }, [input, resolvedInputFormat, run]);
+
+  useEffect(() => {
+    if (!liveTransform || !input.trim()) return;
+    liveTransformTimeoutRef.current = setTimeout(() => {
+      const currentInput = inputRef.current;
+      if (!currentInput.trim()) return;
+      setBusy(true);
+      setError(null);
+      setDiffPreview(null);
+      const fmt = detectFormat(currentInput);
+      void run<JsonValue>("parseFormat", { input: currentInput, format: fmt })
+        .then(async (json) => {
+          const out = convertToFormat === "json"
+            ? JSON.stringify(json, null, 2)
+            : await run<string>("convert", { json, toFormat: convertToFormat });
+          setOutput(out);
+          setOutputExt(EXT_BY_FORMAT[convertToFormat]);
+          setOutputLanguage(convertToFormat);
+          setParsedOutput(json);
+          setActiveOperation(null);
+        })
+        .catch(() => { /* validation shows invalid */ })
+        .finally(() => setBusy(false));
+    }, 400);
+    return () => {
+      if (liveTransformTimeoutRef.current) clearTimeout(liveTransformTimeoutRef.current);
+    };
+  }, [liveTransform, input, convertToFormat, run]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -397,8 +523,18 @@ export default function Home() {
       setOutputLanguage(lang ?? LANGUAGE_BY_TYPE_TARGET[target]);
       return;
     }
-    setOutputExt(EXT_BY_ACTION[action]);
-    setOutputLanguage(LANGUAGE_BY_ACTION[action]);
+    setOutputExt(EXT_BY_FORMAT[convertToFormat]);
+    setOutputLanguage(convertToFormat);
+  };
+
+  const convertJsonToOutput = async (
+    json: JsonValue,
+    opts?: { indentation?: number; quoteStyle?: QuoteStyle; sortKeys?: boolean },
+  ): Promise<string> => {
+    const formatOpts = opts
+      ? { indentation: opts.indentation ?? 2, quoteStyle: opts.quoteStyle ?? "double", sortKeys: opts.sortKeys ?? false }
+      : undefined;
+    return run<string>("convert", { json, toFormat: convertToFormat, formatOptions: formatOpts });
   };
 
   const parseOnly = () => {
@@ -407,11 +543,16 @@ export default function Home() {
     setDiffPreview(null);
     void (async () => {
       try {
-        const json = await run<JsonValue>("parse", { input });
-        setOutputData(JSON.stringify(json, null, 2), "parse");
+        const json = await run<JsonValue>("parseFormat", {
+          input,
+          format: resolvedInputFormat,
+        });
+        const result = await convertJsonToOutput(json);
+        setOutputData(result, "parse");
+        setParsedOutput(json);
         setActiveOperation(null);
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Invalid JSON");
+        setError(e instanceof Error ? e.message : `Invalid ${FORMAT_LABELS[resolvedInputFormat]}`);
       } finally {
         setBusy(false);
       }
@@ -432,31 +573,41 @@ export default function Home() {
     setDiffPreview(null);
     void (async () => {
       try {
-        const left = await run<JsonValue>("parse", { input });
+        const left = await run<JsonValue>("parseFormat", {
+          input,
+          format: resolvedInputFormat,
+        });
 
         if (action === "validate") {
           const schemaText = options?.schemaText ?? schemaInput;
           if (!schemaText.trim()) throw new Error("Schema is required for Validate.");
-          const schema = JSON.parse(schemaText);
+          const schema = parseSchemaToObject(schemaText);
+          if (!schema) throw new Error("Invalid schema. Use JSON or YAML format.");
           const result = await run<{ valid: boolean; errors: unknown[] }>("validate", {
             json: left,
             schema,
           });
-          setOutputData(JSON.stringify(result, null, 2), action);
+          const out = await convertJsonToOutput(result as JsonValue);
+          setOutputData(out, action);
+          setParsedOutput(result as JsonValue);
           return;
         }
 
         if (action === "diff") {
           const compareText = options?.compareText ?? compareInput;
           if (!compareText.trim()) throw new Error("Compare JSON is required for Diff.");
-          const right = await run<JsonValue>("parse", { input: compareText });
-          setDiffPreview({
-            original: JSON.stringify(left, null, 2),
-            modified: JSON.stringify(right, null, 2),
+          const right = await run<JsonValue>("parseFormat", {
+            input: compareText,
+            format: detectFormat(compareText),
           });
+          const leftStr = await convertJsonToOutput(left);
+          const rightStr = await convertJsonToOutput(right);
+          setDiffPreview({ original: leftStr, modified: rightStr });
           setRightView("raw");
           const result = diffJson(left, right);
-          setOutputData(JSON.stringify(result, null, 2), action);
+          const out = await convertJsonToOutput(result as unknown as JsonValue);
+          setOutputData(out, action);
+          setParsedOutput(result as unknown as JsonValue);
           return;
         }
 
@@ -473,40 +624,68 @@ export default function Home() {
 
         if (action === "schema") {
           const result = await run<JsonValue>("schema", { json: left });
-          const text = JSON.stringify(result, null, 2);
-          setSchemaInput(text);
-          setOutputData(text, action);
-          return;
-        }
-
-        if (action === "yaml" || action === "xml" || action === "csv") {
-          const result = await run<string>("convert", { json: left, kind: action });
-          setOutputData(result, action);
+          const schemaText = JSON.stringify(result, null, 2);
+          setSchemaInput(schemaText);
+          const out = await convertJsonToOutput(result);
+          setOutputData(out, action);
+          setParsedOutput(result);
           return;
         }
 
         if (action === "format") {
           const formatConfig = options?.formatOptions ?? formatOptions;
-          const preparedJson = formatConfig.removeEmpty
-            ? await run<JsonValue>("removeEmpty", { json: left })
-            : left;
-          const result = await run<string>("format", {
-            json: preparedJson,
+          let preparedJson = left;
+          if (formatConfig.removeEmpty) preparedJson = await run<JsonValue>("removeEmpty", { json: preparedJson });
+          if (formatConfig.sortKeys) preparedJson = await run<JsonValue>("sort", { json: preparedJson });
+          const out = await convertJsonToOutput(preparedJson, {
             indentation: formatConfig.indentation,
             quoteStyle: formatConfig.quoteStyle,
             sortKeys: formatConfig.sortKeys,
           });
-          setOutputData(result, action);
+          setOutputData(out, action);
+          setParsedOutput(preparedJson);
           return;
         }
 
         const result = await run<unknown>(action as never, { json: left });
-        setOutputData(
-          typeof result === "string" ? result : JSON.stringify(result as JsonValue, null, 2),
-          action,
-        );
+        if (action === "minify" && typeof result === "string" && convertToFormat === "json") {
+          setOutputData(result, action);
+          setParsedOutput(JSON.parse(result) as JsonValue);
+          return;
+        }
+        const jsonResult = (typeof result === "string" ? JSON.parse(result) : result) as JsonValue;
+        const out = await convertJsonToOutput(jsonResult);
+        setOutputData(out, action);
+        setParsedOutput(jsonResult);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Operation failed.");
+      } finally {
+        setBusy(false);
+      }
+    })();
+  };
+
+  const runConvert = (toFormat: FormatKind) => {
+    setConvertToFormat(toFormat);
+    setFocusedPane("output");
+    setBusy(true);
+    setError(null);
+    void (async () => {
+      try {
+        const json = await run<JsonValue>("parseFormat", {
+          input,
+          format: resolvedInputFormat,
+        });
+        const result = await run<string>("convert", {
+          json,
+          toFormat,
+        });
+        setOutput(result);
+        setOutputExt(EXT_BY_FORMAT[toFormat]);
+        setOutputLanguage(toFormat);
+        setParsedOutput(json);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Conversion failed");
       } finally {
         setBusy(false);
       }
@@ -553,6 +732,27 @@ export default function Home() {
     a.download = `jsonix-output.${outputExt}`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const shareWorkspace = async () => {
+    const state = encodeState({
+      input,
+      convertToFormat,
+      liveTransform,
+      output,
+      outputFormat: outputLanguage as FormatKind | undefined,
+      typeLanguage,
+      viewMode: rightView,
+      split,
+    });
+    const url = `${typeof window !== "undefined" ? window.location.origin + window.location.pathname : ""}#${state}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setShareState("done");
+    } catch {
+      setShareState("error");
+    }
+    window.setTimeout(() => setShareState("idle"), 1400);
   };
 
   const copyOutput = async () => {
@@ -610,16 +810,16 @@ export default function Home() {
       className="min-h-screen overflow-y-auto bg-base-200 p-3 text-base-content md:p-3 xl:h-screen xl:overflow-hidden"
     >
       <div className="mx-auto min-h-full max-w-[1700px] flex flex-col xl:h-full">
-        <section className="border border-base-300 bg-base-100 p-1 shadow-sm">
-          <div className="flex items-center gap-2 overflow-x-auto overflow-y-visible pb-1">
+        <section className="border border-base-300 bg-base-100 p-1.5 shadow-sm overflow-x-auto">
+          <div className="flex min-w-max flex-wrap items-center gap-1.5">
             <div className="flex shrink-0 items-center gap-2">
               <label
                 className={toolbarBtnBase}
               >
-                Import JSON
+                Import
                 <input
                   type="file"
-                  accept=".json,application/json,text/plain"
+                  accept=".json,.yaml,.yml,.xml,.toml,.csv,application/json,text/plain,text/yaml,text/xml,text/csv"
                   className="hidden"
                   onChange={(event) => {
                     const file = event.target.files?.[0];
@@ -673,28 +873,50 @@ export default function Home() {
 
             <div
               aria-hidden="true"
-              className={`hidden h-7 w-px self-center md:block ${toolbarDividerClass}`}
+              className={`h-6 w-px self-center ${toolbarDividerClass}`}
             />
 
-            <div className="flex min-w-0 flex-1 items-center gap-2">
+            <div className={`join h-8 shrink-0 overflow-hidden rounded border ${toolbarBorderClass} ${joinItemBorderClass}`}>
+              {FORMAT_KINDS.map((fmt) => (
+                <button
+                  key={fmt}
+                  type="button"
+                  className={`btn btn-xs join-item h-8 min-h-8 rounded-none border-0 px-2 text-xs shadow-none ${
+                    convertToFormat === fmt
+                      ? "bg-primary text-primary-content hover:bg-primary/90"
+                      : "bg-base-100 text-base-content hover:bg-base-200"
+                  }`}
+                  onClick={() => runConvert(fmt)}
+                >
+                  {FORMAT_LABELS[fmt]}
+                </button>
+              ))}
+            </div>
+
+            <div
+              aria-hidden="true"
+              className={`h-6 w-px self-center ${toolbarDividerClass}`}
+            />
+
+            <div className="flex min-w-0 flex-1 shrink-0 items-center gap-2">
               {OPERATION_ACTIONS.map(([label, action]) =>
                 action === "format" ? (
-                  <div key={label} className="dropdown dropdown-bottom">
-                    <div className={`join h-9 overflow-hidden rounded-md border ${toolbarBorderClass}`}>
+                  <div key={label} className="dropdown dropdown-bottom shrink-0">
+                    <div className={`join h-8 overflow-hidden rounded border ${toolbarBorderClass} ${joinItemBorderClass}`}>
                       <button
                         type="button"
                         disabled={busy}
-                        className={`btn btn-sm join-item h-9 min-h-9 rounded-none border-0 px-3 shadow-none ${activeOperation === action ? "bg-primary text-primary-content hover:bg-primary/90" : "bg-base-100 text-base-content hover:bg-base-200"}`}
+                        className={`btn btn-xs join-item h-8 min-h-8 shrink-0 rounded-none border-0 px-2 text-xs shadow-none ${activeOperation === action ? "bg-primary text-primary-content hover:bg-primary/90" : "bg-base-100 text-base-content hover:bg-base-200"}`}
                         onClick={() => runOperation(action)}
                       >
-                        {label}
+                        <span className="whitespace-nowrap">{label}</span>
                       </button>
                       <button
                         type="button"
                         aria-label="Format options"
                         popoverTarget="format-options-popover"
                         style={{ anchorName: "--format-options-anchor" } as CSSProperties}
-                        className={`btn btn-sm join-item h-9 min-h-9 rounded-none border-0 px-2 shadow-none ${activeOperation === action ? "bg-primary text-primary-content hover:bg-primary/90" : "bg-base-100 text-base-content hover:bg-base-200"}`}
+                        className={`btn btn-xs join-item h-8 min-h-8 min-w-8 rounded-none border-0 px-1.5 text-xs shadow-none ${activeOperation === action ? "bg-primary text-primary-content hover:bg-primary/90" : "bg-base-100 text-base-content hover:bg-base-200"}`}
                       >
                         <ChevronDownIcon className="h-4 w-4" aria-hidden="true" />
                       </button>
@@ -703,7 +925,7 @@ export default function Home() {
                       popover="auto"
                       id="format-options-popover"
                       style={{ positionAnchor: "--format-options-anchor" } as CSSProperties}
-                      className={`dropdown z-30 mt-1 w-72 border p-3 shadow-xl ${toolbarBorderClass} ${dropdownPanelClass}`}
+                      className={`dropdown rounded-md z-30 mt-1 w-72 border p-3 shadow-xl ${toolbarBorderClass} ${dropdownPanelClass}`}
                     >
                       <div className="space-y-3">
                         <div>
@@ -741,17 +963,20 @@ export default function Home() {
                         </div>
                         <div>
                           <p className="mb-2 text-xs font-semibold opacity-70">Quote style</p>
-                          <div className={`join h-9 overflow-hidden rounded-md border ${toolbarBorderClass}`}>
+                          <div className={`join h-8 overflow-hidden rounded border ${toolbarBorderClass} ${joinItemBorderClass}`}>
                             {(["double", "single"] as const).map((quote) => (
-                              <input
+                              <button
                                 key={quote}
-                                className="join-item btn btn-sm h-9 min-h-9 rounded-none border-0 px-3 shadow-none"
-                                type="radio"
-                                name="quote-style-options"
-                                aria-label={quote === "double" ? "Double" : "Single"}
-                                checked={formatOptions.quoteStyle === quote}
-                                onChange={() => applyFormatWithOptions({ ...formatOptions, quoteStyle: quote })}
-                              />
+                                type="button"
+                                className={`btn btn-xs join-item h-8 min-h-8 rounded-none border-0 px-2 text-xs shadow-none ${
+                                  formatOptions.quoteStyle === quote
+                                    ? "bg-primary text-primary-content hover:bg-primary/90"
+                                    : "bg-base-100 text-base-content hover:bg-base-200"
+                                }`}
+                                onClick={() => applyFormatWithOptions({ ...formatOptions, quoteStyle: quote })}
+                              >
+                                {quote === "double" ? "Double" : "Single"}
+                              </button>
                             ))}
                           </div>
                         </div>
@@ -788,10 +1013,10 @@ export default function Home() {
                     type="button"
                     key={label}
                     disabled={busy}
-                    className={`${activeOperation === action ? toolbarBtnActive : toolbarBtnBase} shrink-0 disabled:opacity-40`}
+                    className={`${activeOperation === action ? toolbarBtnActive : toolbarBtnBase} disabled:opacity-40`}
                     onClick={() => runOperation(action)}
                   >
-                    {label}
+                    <span className="whitespace-nowrap">{label}</span>
                   </button>
                 ),
               )}
@@ -800,7 +1025,7 @@ export default function Home() {
                   type="button"
                   className={`${
                     activeOperation === "generateTypes" ? toolbarBtnActive : toolbarBtnBase
-                  } inline-flex w-24 items-center justify-between gap-1.5 sm:w-28`}
+                  } min-w-[6.5rem] inline-flex items-center justify-between gap-1.5`}
                   popoverTarget="type-language-popover"
                   style={{ anchorName: "--type-language-anchor" } as CSSProperties}
                   aria-label="Select type language"
@@ -809,7 +1034,7 @@ export default function Home() {
                   <ChevronDownIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
                 </button>
                 <ul
-                  className={`dropdown menu z-30 mt-1 w-40 border p-1 shadow-xl ${toolbarBorderClass} ${dropdownPanelClass}`}
+                  className={`dropdown rounded-md menu z-30 mt-1 w-32 border p-1 shadow-xl ${toolbarBorderClass} ${dropdownPanelClass}`}
                   popover="auto"
                   id="type-language-popover"
                   style={{ positionAnchor: "--type-language-anchor" } as CSSProperties}
@@ -834,13 +1059,13 @@ export default function Home() {
                 </ul>
               </div>
               <div aria-hidden="true" className={`h-6 w-px self-center ${toolbarDividerClass}`} />
-              <div className={`join ml-auto h-9 shrink-0 overflow-hidden rounded-md border ${toolbarBorderClass}`}>
+              <div className={`join ml-auto h-8 shrink-0 overflow-hidden rounded border ${toolbarBorderClass} ${joinItemBorderClass}`}>
                 {(["raw", "tree", "graph"] as const).map((view) => (
                   <button
                     key={view}
                     type="button"
                     disabled={(view === "tree" || view === "graph") && !parsedOutput}
-                    className={`btn btn-sm join-item h-9 min-h-9 rounded-none border-0 px-3 shadow-none disabled:opacity-40 ${
+                    className={`btn btn-xs join-item h-8 min-h-8 rounded-none border-0 px-2 text-xs shadow-none disabled:opacity-40 ${
                       rightView === view
                         ? "bg-primary text-primary-content hover:bg-primary/90"
                         : "bg-base-100 text-base-content hover:bg-base-200"
@@ -853,18 +1078,29 @@ export default function Home() {
               </div>
               <button
                 type="button"
-                className={`${toolbarBtnActive} min-w-[5.5rem] shrink-0 justify-center px-3 disabled:opacity-40`}
+                className={`${toolbarBtnBase} min-w-[5.5rem] shrink-0 gap-1.5`}
+                title="Copy shareable link"
+                onClick={shareWorkspace}
+              >
+                <ShareIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                <span className="hidden sm:inline">{shareLabel}</span>
+              </button>
+              <button
+                type="button"
+                className={`${toolbarBtnActive} min-w-[5rem] shrink-0 gap-1.5 disabled:opacity-40`}
                 disabled={!canDownload}
                 onClick={copyOutput}
               >
+                <ClipboardDocumentIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
                 {copyLabel}
               </button>
               <button
                 type="button"
-                className={`${toolbarBtnActive} shrink-0 px-3 disabled:opacity-40`}
+                className={`${toolbarBtnActive} min-w-[5rem] shrink-0 gap-1.5 disabled:opacity-40`}
                 disabled={!canDownload}
                 onClick={downloadOutput}
               >
+                <ArrowDownTrayIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
                 Download
               </button>
             </div>
@@ -895,7 +1131,7 @@ export default function Home() {
 
           {!isInputMinimized ? (
             <div
-              className={`min-h-[45vh] transition-all xl:min-h-0 ${focusedPane === "input" ? "opacity-100" : "opacity-60 saturate-50"}`}
+              className={`flex min-h-[45vh] flex-col transition-all xl:min-h-0 ${focusedPane === "input" ? "opacity-100" : "opacity-60 saturate-50"}`}
               onMouseDown={() => setFocusedPane("input")}
             >
               <JsonEditor
@@ -905,12 +1141,96 @@ export default function Home() {
                   pushHistory(next);
                   setFocusedPane("input");
                 }}
-                className="h-full min-h-0 p-1"
-                language="json"
+                className="h-full min-h-0 flex-1 p-1"
+                language={resolvedInputFormat === "toml" || resolvedInputFormat === "csv" ? "plaintext" : resolvedInputFormat}
                 monacoTheme={monacoTheme}
                 placeholder="Paste or drop JSON here"
                 panelTone="input"
               />
+              <div
+                className={`flex items-center justify-between gap-4 border-t px-2 py-1.5 text-xs ${inputEditorBgClass} ${isDark ? "text-gray-400" : "text-gray-600"}`}
+              >
+                <div className="flex items-center gap-4">
+                  <span className="flex min-w-[5rem] items-center gap-1.5">
+                    {inputValid === true ? (
+                      <>
+                        <CheckCircleIcon className="h-3.5 w-3.5 shrink-0 text-success" aria-hidden="true" />
+                        <span>Valid</span>
+                      </>
+                    ) : inputValid === false ? (
+                      <>
+                        <XCircleIcon className="h-3.5 w-3.5 shrink-0 text-error" aria-hidden="true" />
+                        <span>Invalid</span>
+                      </>
+                    ) : (
+                      <span className="opacity-60">—</span>
+                    )}
+                  </span>
+                  <button
+                    type="button"
+                    className={`flex min-w-[6.5rem] items-center gap-1.5 ${liveTransform ? "opacity-100" : "opacity-60 hover:opacity-100"}`}
+                    title={liveTransform ? "Live transform on" : "Live transform off"}
+                    onClick={() => setLiveTransform((v) => !v)}
+                  >
+                    {liveTransform ? (
+                      <ArrowPathIconSolid
+                        className="h-3.5 w-3.5 shrink-0 text-primary"
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      <NoSymbolIcon
+                        className="h-3.5 w-3.5 shrink-0"
+                        aria-hidden="true"
+                      />
+                    )}
+                    <span>Live Transform</span>
+                  </button>
+                </div>
+                <div className="dropdown dropdown-top dropdown-end">
+                  <div
+                    tabIndex={0}
+                    role="button"
+                    className="flex min-w-[4rem] cursor-pointer items-center gap-1.5 opacity-80 hover:opacity-100"
+                    aria-label="Input format"
+                  >
+                    <ChevronUpIcon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                    {FORMAT_LABELS[resolvedInputFormat]}
+                  </div>
+                  <ul
+                    className={`menu dropdown-content z-50 mb-1 w-32 rounded-md border p-1 shadow-xl ${toolbarBorderClass} ${dropdownPanelClass}`}
+                  >
+                    {FORMAT_KINDS.map((fmt) => (
+                      <li key={fmt}>
+                        <button
+                          type="button"
+                          className={`rounded-md ${resolvedInputFormat === fmt ? "bg-primary text-primary-content" : ""}`}
+                          onClick={() => {
+                            if (fmt === resolvedInputFormat) return;
+                            void (async () => {
+                              try {
+                                const json = await run<JsonValue>("parseFormat", {
+                                  input,
+                                  format: resolvedInputFormat,
+                                });
+                                const converted =
+                                  fmt === "json"
+                                    ? JSON.stringify(json, null, 2)
+                                    : await run<string>("convert", { json, toFormat: fmt });
+                                setInput(converted);
+                                pushHistory(converted);
+                              } catch {
+                                setError("Failed to convert input");
+                              }
+                            })();
+                          }}
+                        >
+                          {FORMAT_LABELS[fmt]}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
             </div>
           ) : null}
 
@@ -938,7 +1258,7 @@ export default function Home() {
                     original={diffPreview.original}
                     modified={diffPreview.modified}
                     className="h-full min-h-0"
-                    language="json"
+                    language={outputLanguage === "toml" || outputLanguage === "csv" ? "plaintext" : outputLanguage}
                     monacoTheme={monacoTheme}
                   />
                 ) : output.trim() ? (
@@ -948,7 +1268,7 @@ export default function Home() {
                     className="h-full min-h-0"
                     readOnly
                     passiveReadOnly
-                    language={outputLanguage}
+                    language={outputLanguage === "toml" || outputLanguage === "csv" ? "plaintext" : outputLanguage}
                     monacoTheme={monacoTheme}
                     panelTone="output"
                   />
@@ -989,16 +1309,15 @@ export default function Home() {
           </div>
         </section>
 
-        <div className="min-h-6 px-1">
-          {error ? <p className="text-sm text-error">{error}</p> : null}
-        </div>
 
         {modalKind ? (
           <div className="modal modal-open">
             <div className="modal-box w-full max-w-3xl">
               <div className="mb-2 flex items-center justify-between">
                 <h3 className="text-sm font-semibold">
-                  {modalKind === "validate" ? "Schema JSON for Validate" : "Second JSON for Diff"}
+                  {modalKind === "validate"
+                    ? "Schema (JSON or YAML) for Validate"
+                    : "Second document for Diff"}
                 </h3>
                 <button
                   type="button"
@@ -1048,9 +1367,25 @@ export default function Home() {
           </div>
         ) : null}
 
+        {error ? (
+          <div className="toast toast-bottom toast-start z-50">
+            <div className="alert alert-error flex items-center gap-2 shadow-lg">
+              <span className="flex-1">{error}</span>
+              <button
+                type="button"
+                aria-label="Close error"
+                className="btn btn-ghost btn-xs btn-circle shrink-0"
+                onClick={() => setError(null)}
+              >
+                <XMarkIcon className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+        ) : null}
+
         <div className="fixed bottom-6 right-6 z-40" ref={settingsRef}>
           {isSettingsOpen ? (
-            <div className="absolute bottom-full right-0 mb-2 w-[320px] border border-base-300 bg-base-100 p-3 shadow-xl">
+            <div className="absolute rounded-md bottom-full right-0 mb-2 w-[320px] border border-base-300 bg-base-100 p-3 shadow-xl">
               <div className="mb-2 rounded-md border border-base-300 bg-base-200 px-2 py-1.5">
                 <p className="text-base font-bold leading-tight">jsonix</p>
                 <p className="text-sm leading-tight text-base-content/70">
@@ -1060,14 +1395,14 @@ export default function Home() {
               <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-base-content/70">
                 Theme
               </p>
-              <div className="join">
+              <div className={`join overflow-hidden rounded border border-base-300 ${joinItemBorderClass}`}>
                 {themeOptions.map(({ mode, ariaLabel, title, Icon }) => (
                   <button
                     key={mode}
                     type="button"
                     aria-label={ariaLabel}
                     title={title}
-                    className={`btn btn-sm join-item btn-square ${
+                    className={`btn btn-sm join-item btn-square min-w-9 border-0 rounded-none ${
                       themeMode === mode ? "btn-primary" : "btn-ghost"
                     }`}
                     onClick={() => setThemeMode(mode)}

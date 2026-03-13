@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef } from "react";
 
 type Action =
   | "parse"
+  | "parseFormat"
   | "search"
   | "sort"
   | "removeEmpty"

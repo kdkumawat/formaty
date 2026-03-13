@@ -18,9 +18,11 @@ import {
   type SearchMode,
   type TypeTargetLanguage,
 } from "@/lib/json/core";
+import { parseInput, stringifyOutput, type FormatKind, type FormatStringifyOptions } from "@/lib/formats";
 
 type WorkerAction =
   | "parse"
+  | "parseFormat"
   | "search"
   | "sort"
   | "removeEmpty"
@@ -59,6 +61,9 @@ ctx.onmessage = (event: MessageEvent<WorkerRequest>) => {
     switch (action) {
       case "parse":
         result = parseJsonInput(payload.input as string);
+        break;
+      case "parseFormat":
+        result = parseInput(payload.input as string, payload.format as FormatKind);
         break;
       case "search":
         result = searchJson(
@@ -116,11 +121,18 @@ ctx.onmessage = (event: MessageEvent<WorkerRequest>) => {
         result = minifyJson(payload.json as JsonValue);
         break;
       case "convert": {
-        const kind = payload.kind as string;
         const json = payload.json as JsonValue;
-        if (kind === "yaml") result = toYaml(json);
-        if (kind === "xml") result = toXml(json);
-        if (kind === "csv") result = toCsv(json);
+        const toFormat = payload.toFormat as FormatKind | undefined;
+        const formatOptions = payload.formatOptions as FormatStringifyOptions | undefined;
+        if (toFormat) {
+          result = stringifyOutput(json, toFormat, formatOptions);
+        } else {
+          const kind = payload.kind as string;
+          if (kind === "yaml") result = toYaml(json);
+          else if (kind === "xml") result = toXml(json);
+          else if (kind === "csv") result = toCsv(json);
+          else result = stringifyOutput(json, kind as FormatKind);
+        }
         break;
       }
       default:
