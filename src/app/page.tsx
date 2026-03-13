@@ -953,7 +953,7 @@ export default function Home() {
                     panelTone="output"
                   />
                 ) : (
-                  <div className={`flex h-full min-h-0 items-center justify-center rounded-xl border text-sm text-base-content/70 ${outputPanelClass}`}>
+                  <div className={`flex h-full min-h-0 items-center justify-center border text-sm text-base-content/70 ${outputPanelClass}`}>
                     Run any operation to see output here
                   </div>
                 )
