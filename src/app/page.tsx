@@ -15,7 +15,9 @@ import {
   ClipboardDocumentIcon,
   ComputerDesktopIcon,
   Cog6ToothIcon,
+  MinusIcon,
   MoonIcon,
+  PlusIcon,
   ShareIcon,
   SunIcon,
   XCircleIcon,
@@ -186,6 +188,7 @@ export default function Home() {
   const [formatOptions, setFormatOptions] = useState<FormatOptions>(DEFAULT_FORMAT_OPTIONS);
   const [convertToFormat, setConvertToFormat] = useState<FormatKind>("json");
   const [liveTransform, setLiveTransform] = useState(false);
+  const [editorFontSize, setEditorFontSize] = useState(13);
   const [inputValid, setInputValid] = useState<boolean | null>(null);
   const [undoStack, setUndoStack] = useState<string[]>([SAMPLE_JSON]);
   const [undoIndex, setUndoIndex] = useState(0);
@@ -238,14 +241,15 @@ export default function Home() {
   const TOOLBAR_BTN_SIZE = "h-8 min-h-8";
   const TOOLBAR_TEXT = "text-xs";
   const toolbarBtnBase =
-    `btn btn-xs ${TOOLBAR_BTN_SIZE} rounded border ${toolbarBorderClass} bg-base-100 px-2 ${TOOLBAR_TEXT} text-base-content shadow-none hover:bg-base-200`;
+    `btn btn-xs ${TOOLBAR_BTN_SIZE} rounded px-2 ${TOOLBAR_TEXT} shadow-none text-base-content hover:bg-base-200 disabled:opacity-70 disabled:text-base-content/60`;
   const toolbarBtnActive =
-    `btn btn-xs ${TOOLBAR_BTN_SIZE} rounded border border-primary bg-primary px-2 ${TOOLBAR_TEXT} text-primary-content shadow-none hover:bg-primary/90`;
+    `btn btn-xs btn-primary ${TOOLBAR_BTN_SIZE} rounded px-2 ${TOOLBAR_TEXT} shadow-none text-primary-content hover:bg-primary/90 disabled:opacity-70 disabled:text-primary-content/70`;
   const toolbarBtnIcon =
-    `btn btn-xs btn-square ${TOOLBAR_BTN_SIZE} min-w-8 rounded border ${toolbarBorderClass} bg-base-100 ${TOOLBAR_TEXT} text-base-content shadow-none hover:bg-base-200`;
-  const joinItemBorderClass = isDark
-    ? "[&>*:not(:last-child)]:border-r [&>*:not(:last-child)]:!border-white/40"
-    : "[&>*:not(:last-child)]:border-r [&>*:not(:last-child)]:!border-base-300";
+    `btn btn-xs btn-square ${TOOLBAR_BTN_SIZE} min-w-8 rounded px-2 ${TOOLBAR_TEXT} shadow-none text-base-content hover:bg-base-200 disabled:opacity-70 disabled:text-base-content/60`;
+  const joinItemBorderClass =
+    "[&>*:not(:last-child)]:border-r [&>*:not(:last-child)]:!border-base-300/50";
+  const radioGroupClass = `join h-8 shrink-0 overflow-hidden rounded-md ${toolbarBorderClass} ${joinItemBorderClass}`;
+  const radioBtnClass = `btn btn-xs join-item h-8 min-h-8 rounded-none px-2 text-xs shadow-none transition-colors`;
   const dropdownPanelClass = isDark ? "bg-[#252526] text-base-content" : "bg-base-100 text-base-content";
 
   const resolvedInputFormat = useMemo(() => detectFormat(input), [input]);
@@ -344,15 +348,17 @@ export default function Home() {
         rightView?: RightView;
         formatOptions?: Partial<FormatOptions>;
         convertToFormat?: FormatKind;
-        liveTransform?: boolean;
-      };
-      if (data.input) setInput(data.input);
-      if (data.output) setOutput(data.output);
-      if (typeof data.split === "number") setSplit(data.split);
-      if (data.themeMode) setThemeMode(data.themeMode);
-      if (data.typeLanguage) setTypeLanguage(data.typeLanguage);
-      if (data.rightView) setRightView(data.rightView);
-      if (data.convertToFormat) setConvertToFormat(data.convertToFormat);
+editorFontSize?: number;
+      liveTransform?: boolean;
+    };
+    if (data.input) setInput(data.input);
+    if (data.output) setOutput(data.output);
+    if (typeof data.split === "number") setSplit(data.split);
+    if (data.themeMode) setThemeMode(data.themeMode);
+    if (data.typeLanguage) setTypeLanguage(data.typeLanguage);
+    if (data.rightView) setRightView(data.rightView);
+    if (data.convertToFormat) setConvertToFormat(data.convertToFormat);
+    if (typeof data.editorFontSize === "number") setEditorFontSize(data.editorFontSize);
       if (typeof data.liveTransform === "boolean") setLiveTransform(data.liveTransform);
       if (data.formatOptions) {
         const nextIndentation = Number(data.formatOptions.indentation);
@@ -370,9 +376,20 @@ export default function Home() {
   useEffect(() => {
     localStorage.setItem(
       "jsonix-session",
-      JSON.stringify({ input, output, split, themeMode, typeLanguage, rightView, formatOptions, convertToFormat, liveTransform }),
+      JSON.stringify({
+        input,
+        output,
+        split,
+        themeMode,
+        typeLanguage,
+        rightView,
+        formatOptions,
+        convertToFormat,
+        liveTransform,
+        editorFontSize,
+      }),
     );
-  }, [input, output, split, themeMode, typeLanguage, rightView, formatOptions, convertToFormat, liveTransform]);
+  }, [input, output, split, themeMode, typeLanguage, rightView, formatOptions, convertToFormat, liveTransform, editorFontSize]);
 
   useEffect(() => {
     if (!output.trim()) {
@@ -423,9 +440,7 @@ export default function Home() {
       const fmt = detectFormat(currentInput);
       void run<JsonValue>("parseFormat", { input: currentInput, format: fmt })
         .then(async (json) => {
-          const out = convertToFormat === "json"
-            ? JSON.stringify(json, null, 2)
-            : await run<string>("convert", { json, toFormat: convertToFormat });
+          const out = await convertJsonToOutput(json, { toFormat: convertToFormat });
           setOutput(out);
           setOutputExt(EXT_BY_FORMAT[convertToFormat]);
           setOutputLanguage(convertToFormat);
@@ -529,12 +544,25 @@ export default function Home() {
 
   const convertJsonToOutput = async (
     json: JsonValue,
-    opts?: { indentation?: number; quoteStyle?: QuoteStyle; sortKeys?: boolean },
+    opts?: {
+      toFormat?: FormatKind;
+      indentation?: number;
+      quoteStyle?: QuoteStyle;
+      sortKeys?: boolean;
+    },
   ): Promise<string> => {
-    const formatOpts = opts
-      ? { indentation: opts.indentation ?? 2, quoteStyle: opts.quoteStyle ?? "double", sortKeys: opts.sortKeys ?? false }
-      : undefined;
-    return run<string>("convert", { json, toFormat: convertToFormat, formatOptions: formatOpts });
+    const toFormat = opts?.toFormat ?? convertToFormat;
+    const formatOpts = {
+      indentation: opts?.indentation ?? formatOptions.indentation,
+      quoteStyle: opts?.quoteStyle ?? formatOptions.quoteStyle,
+      sortKeys: opts?.sortKeys ?? formatOptions.sortKeys,
+    };
+
+    if (toFormat === "json") {
+      return JSON.stringify(json, null, formatOpts.indentation);
+    }
+
+    return run<string>("convert", { json, toFormat, formatOptions: formatOpts });
   };
 
   const parseOnly = () => {
@@ -676,14 +704,12 @@ export default function Home() {
           input,
           format: resolvedInputFormat,
         });
-        const result = await run<string>("convert", {
-          json,
-          toFormat,
-        });
+        const result = await convertJsonToOutput(json, { toFormat });
         setOutput(result);
         setOutputExt(EXT_BY_FORMAT[toFormat]);
         setOutputLanguage(toFormat);
         setParsedOutput(json);
+        setActiveOperation(null);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Conversion failed");
       } finally {
@@ -833,7 +859,7 @@ export default function Home() {
                 type="button"
                 aria-label="Undo"
                 title="Undo (Cmd/Ctrl+Z)"
-                className={`${toolbarBtnIcon} disabled:opacity-40`}
+                className={toolbarBtnIcon}
                 disabled={!canUndo}
                 onClick={() => moveHistory(-1)}
               >
@@ -843,7 +869,7 @@ export default function Home() {
                 type="button"
                 aria-label="Redo"
                 title="Redo (Shift+Cmd/Ctrl+Z)"
-                className={`${toolbarBtnIcon} disabled:opacity-40`}
+                className={toolbarBtnIcon}
                 disabled={!canRedo}
                 onClick={() => moveHistory(1)}
               >
@@ -876,15 +902,13 @@ export default function Home() {
               className={`h-6 w-px self-center ${toolbarDividerClass}`}
             />
 
-            <div className={`join h-8 shrink-0 overflow-hidden rounded border ${toolbarBorderClass} ${joinItemBorderClass}`}>
+            <div className={radioGroupClass}>
               {FORMAT_KINDS.map((fmt) => (
                 <button
                   key={fmt}
                   type="button"
-                  className={`btn btn-xs join-item h-8 min-h-8 rounded-none border-0 px-2 text-xs shadow-none ${
-                    convertToFormat === fmt
-                      ? "bg-primary text-primary-content hover:bg-primary/90"
-                      : "bg-base-100 text-base-content hover:bg-base-200"
+                  className={`${radioBtnClass} ${
+                    convertToFormat === fmt ? "btn-primary" : ""
                   }`}
                   onClick={() => runConvert(fmt)}
                 >
@@ -902,11 +926,13 @@ export default function Home() {
               {OPERATION_ACTIONS.map(([label, action]) =>
                 action === "format" ? (
                   <div key={label} className="dropdown dropdown-bottom shrink-0">
-                    <div className={`join h-8 overflow-hidden rounded border ${toolbarBorderClass} ${joinItemBorderClass}`}>
+                    <div className={radioGroupClass}>
                       <button
                         type="button"
                         disabled={busy}
-                        className={`btn btn-xs join-item h-8 min-h-8 shrink-0 rounded-none border-0 px-2 text-xs shadow-none ${activeOperation === action ? "bg-primary text-primary-content hover:bg-primary/90" : "bg-base-100 text-base-content hover:bg-base-200"}`}
+                        className={`${radioBtnClass} ${
+                          activeOperation === action ? "btn-primary" : ""
+                        }`}
                         onClick={() => runOperation(action)}
                       >
                         <span className="whitespace-nowrap">{label}</span>
@@ -916,7 +942,9 @@ export default function Home() {
                         aria-label="Format options"
                         popoverTarget="format-options-popover"
                         style={{ anchorName: "--format-options-anchor" } as CSSProperties}
-                        className={`btn btn-xs join-item h-8 min-h-8 min-w-8 rounded-none border-0 px-1.5 text-xs shadow-none ${activeOperation === action ? "bg-primary text-primary-content hover:bg-primary/90" : "bg-base-100 text-base-content hover:bg-base-200"}`}
+                        className={`${radioBtnClass} min-w-8 ${
+                          activeOperation === action ? "btn-primary" : ""
+                        }`}
                       >
                         <ChevronDownIcon className="h-4 w-4" aria-hidden="true" />
                       </button>
@@ -963,15 +991,13 @@ export default function Home() {
                         </div>
                         <div>
                           <p className="mb-2 text-xs font-semibold opacity-70">Quote style</p>
-                          <div className={`join h-8 overflow-hidden rounded border ${toolbarBorderClass} ${joinItemBorderClass}`}>
+                          <div className={`join h-8 overflow-hidden rounded-md border ${toolbarBorderClass} ${joinItemBorderClass}`}>
                             {(["double", "single"] as const).map((quote) => (
                               <button
                                 key={quote}
                                 type="button"
-                                className={`btn btn-xs join-item h-8 min-h-8 rounded-none border-0 px-2 text-xs shadow-none ${
-                                  formatOptions.quoteStyle === quote
-                                    ? "bg-primary text-primary-content hover:bg-primary/90"
-                                    : "bg-base-100 text-base-content hover:bg-base-200"
+                                className={`${radioBtnClass} ${
+                                  formatOptions.quoteStyle === quote ? "btn-primary" : ""
                                 }`}
                                 onClick={() => applyFormatWithOptions({ ...formatOptions, quoteStyle: quote })}
                               >
@@ -1013,7 +1039,7 @@ export default function Home() {
                     type="button"
                     key={label}
                     disabled={busy}
-                    className={`${activeOperation === action ? toolbarBtnActive : toolbarBtnBase} disabled:opacity-40`}
+                    className={`${activeOperation === action ? toolbarBtnActive : toolbarBtnBase}`}
                     onClick={() => runOperation(action)}
                   >
                     <span className="whitespace-nowrap">{label}</span>
@@ -1059,17 +1085,15 @@ export default function Home() {
                 </ul>
               </div>
               <div aria-hidden="true" className={`h-6 w-px self-center ${toolbarDividerClass}`} />
-              <div className={`join ml-auto h-8 shrink-0 overflow-hidden rounded border ${toolbarBorderClass} ${joinItemBorderClass}`}>
+              <div className={radioGroupClass}>
                 {(["raw", "tree", "graph"] as const).map((view) => (
                   <button
                     key={view}
                     type="button"
                     disabled={(view === "tree" || view === "graph") && !parsedOutput}
-                    className={`btn btn-xs join-item h-8 min-h-8 rounded-none border-0 px-2 text-xs shadow-none disabled:opacity-40 ${
-                      rightView === view
-                        ? "bg-primary text-primary-content hover:bg-primary/90"
-                        : "bg-base-100 text-base-content hover:bg-base-200"
-                    }`}
+                    className={`${radioBtnClass} ${
+                      rightView === view ? "btn-primary" : ""
+                    } disabled:opacity-50 disabled:cursor-not-allowed`}
                     onClick={() => setRightView(view)}
                   >
                     {view[0].toUpperCase() + view.slice(1)}
@@ -1087,7 +1111,7 @@ export default function Home() {
               </button>
               <button
                 type="button"
-                className={`${toolbarBtnActive} min-w-[5rem] shrink-0 gap-1.5 disabled:opacity-40`}
+                className={`${toolbarBtnActive} min-w-[5rem] shrink-0 gap-1.5 ${!canDownload ? "opacity-50 cursor-not-allowed" : ""}`}
                 disabled={!canDownload}
                 onClick={copyOutput}
               >
@@ -1096,7 +1120,7 @@ export default function Home() {
               </button>
               <button
                 type="button"
-                className={`${toolbarBtnActive} min-w-[5rem] shrink-0 gap-1.5 disabled:opacity-40`}
+                className={`${toolbarBtnActive} min-w-[5rem] shrink-0 gap-1.5 ${!canDownload ? "opacity-50 cursor-not-allowed" : ""}`}
                 disabled={!canDownload}
                 onClick={downloadOutput}
               >
@@ -1146,6 +1170,7 @@ export default function Home() {
                 monacoTheme={monacoTheme}
                 placeholder="Paste or drop JSON here"
                 panelTone="input"
+                fontSize={editorFontSize}
               />
               <div
                 className={`flex items-center justify-between gap-4 border-t px-2 py-1.5 text-xs ${inputEditorBgClass} ${isDark ? "text-gray-400" : "text-gray-600"}`}
@@ -1168,7 +1193,7 @@ export default function Home() {
                   </span>
                   <button
                     type="button"
-                    className={`flex min-w-[6.5rem] items-center gap-1.5 ${liveTransform ? "opacity-100" : "opacity-60 hover:opacity-100"}`}
+                    className={`flex min-w-[6.5rem] items-center gap-1.5 whitespace-nowrap ${liveTransform ? "opacity-100" : "opacity-60 hover:opacity-100"}`}
                     title={liveTransform ? "Live transform on" : "Live transform off"}
                     onClick={() => setLiveTransform((v) => !v)}
                   >
@@ -1260,6 +1285,7 @@ export default function Home() {
                     className="h-full min-h-0"
                     language={outputLanguage === "toml" || outputLanguage === "csv" ? "plaintext" : outputLanguage}
                     monacoTheme={monacoTheme}
+                    fontSize={editorFontSize}
                   />
                 ) : output.trim() ? (
                   <JsonEditor
@@ -1271,6 +1297,7 @@ export default function Home() {
                     language={outputLanguage === "toml" || outputLanguage === "csv" ? "plaintext" : outputLanguage}
                     monacoTheme={monacoTheme}
                     panelTone="output"
+                    fontSize={editorFontSize}
                   />
                 ) : (
                   <div className={`flex h-full min-h-0 items-center justify-center border text-sm text-base-content/70 ${outputPanelClass}`}>
@@ -1321,7 +1348,7 @@ export default function Home() {
                 </h3>
                 <button
                   type="button"
-                  className="btn btn-ghost btn-xs"
+                  className="btn btn-xs btn-soft"
                   onClick={() => setModalKind(null)}
                 >
                   Close
@@ -1335,7 +1362,7 @@ export default function Home() {
               <div className="mt-2 flex justify-end gap-2">
                 <button
                   type="button"
-                  className="btn btn-ghost btn-sm"
+                  className="btn btn-sm btn-soft"
                   onClick={() => setModalKind(null)}
                 >
                   Cancel
@@ -1374,7 +1401,7 @@ export default function Home() {
               <button
                 type="button"
                 aria-label="Close error"
-                className="btn btn-ghost btn-xs btn-circle shrink-0"
+                className="btn btn-xs btn-soft btn-circle shrink-0"
                 onClick={() => setError(null)}
               >
                 <XMarkIcon className="h-4 w-4" aria-hidden="true" />
@@ -1392,18 +1419,18 @@ export default function Home() {
                   Local-first JSON transform and validation workspace
                 </p>
               </div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-base-content/70">
+              <p className="mb-2 text-xs font-semibold tracking-wide text-base-content/70">
                 Theme
               </p>
-              <div className={`join overflow-hidden rounded border border-base-300 ${joinItemBorderClass}`}>
+              <div className={`join overflow-hidden rounded-md border ${toolbarBorderClass} ${joinItemBorderClass}`}>
                 {themeOptions.map(({ mode, ariaLabel, title, Icon }) => (
                   <button
                     key={mode}
                     type="button"
                     aria-label={ariaLabel}
                     title={title}
-                    className={`btn btn-sm join-item btn-square min-w-9 border-0 rounded-none ${
-                      themeMode === mode ? "btn-primary" : "btn-ghost"
+                    className={`btn btn-sm btn-soft join-item btn-square min-w-9 h-9 min-h-9 rounded-none transition-colors ${
+                      themeMode === mode ? "btn-primary" : ""
                     }`}
                     onClick={() => setThemeMode(mode)}
                   >
@@ -1411,12 +1438,54 @@ export default function Home() {
                   </button>
                 ))}
               </div>
+
+              <p className="mt-4 mb-2 text-xs font-semibold tracking-wide text-base-content/70">
+                Font size
+              </p>
+              <div className={`join overflow-hidden rounded-md border ${toolbarBorderClass} ${joinItemBorderClass}`}>
+                <button
+                  type="button"
+                  aria-label="Decrease font size"
+                  title="Decrease font size"
+                  className="btn btn-sm btn-soft join-item btn-square min-w-9 h-9 min-h-9 rounded-none transition-colors"
+                  onClick={() => setEditorFontSize((size) => Math.max(10, size - 1))}
+                >
+                  <MinusIcon className="h-4 w-4" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Current font size"
+                  title="Current font size"
+                  className="btn btn-sm btn-soft join-item btn-square min-w-[3.5rem] h-9 min-h-9 rounded-none disabled:opacity-70 disabled:text-base-content/60"
+                  disabled
+                >
+                  {editorFontSize}
+                </button>
+                <button
+                  type="button"
+                  aria-label="Increase font size"
+                  title="Increase font size"
+                  className="btn btn-sm btn-soft join-item btn-square min-w-9 h-9 min-h-9 rounded-none transition-colors"
+                  onClick={() => setEditorFontSize((size) => Math.min(24, size + 1))}
+                >
+                  <PlusIcon className="h-4 w-4" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Reset font size"
+                  title="Reset font size"
+                  className="btn btn-sm btn-soft join-item btn-square min-w-9 h-9 min-h-9 rounded-none transition-colors"
+                  onClick={() => setEditorFontSize(13)}
+                >
+                  <ArrowPathIcon className="h-4 w-4" aria-hidden="true" />
+                </button>
+              </div>
             </div>
           ) : null}
           <button
             type="button"
-            aria-label="Open theme settings"
-            title="Theme settings"
+            aria-label="Open settings"
+            title="Settings"
             className="btn btn-primary btn-circle shadow-lg"
             onClick={() => setIsSettingsOpen((s) => !s)}
           >

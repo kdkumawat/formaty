@@ -39,39 +39,6 @@ export interface GraphViewRef {
 
 const LAYOUTS: LayoutDirection[] = ["DOWN", "RIGHT", "UP", "LEFT"];
 
-function inlineComputedStyles(source: Element, target: Element) {
-  const sourceChildren = Array.from(source.children);
-  const targetChildren = Array.from(target.children);
-  const computedStyle = window.getComputedStyle(source);
-
-  if (target instanceof HTMLElement || target instanceof SVGElement) {
-    for (const property of computedStyle) {
-      target.style.setProperty(
-        property,
-        computedStyle.getPropertyValue(property),
-        computedStyle.getPropertyPriority(property),
-      );
-    }
-  }
-
-  if (source instanceof HTMLInputElement && target instanceof HTMLInputElement) {
-    target.value = source.value;
-    target.setAttribute("value", source.value);
-  }
-
-  if (source instanceof HTMLTextAreaElement && target instanceof HTMLTextAreaElement) {
-    target.value = source.value;
-    target.textContent = source.value;
-  }
-
-  sourceChildren.forEach((child, index) => {
-    const clonedChild = targetChildren[index];
-    if (clonedChild) {
-      inlineComputedStyles(child, clonedChild);
-    }
-  });
-}
-
 export const GraphView = forwardRef<GraphViewRef, GraphViewProps>(function GraphView(
   { data, className, isDark = false }: GraphViewProps,
   ref,
@@ -103,10 +70,11 @@ export const GraphView = forwardRef<GraphViewRef, GraphViewProps>(function Graph
   };
 
   const toolbarBorderClass = isDark ? "border-white/45" : "border-base-300";
+  const joinItemBorderClass = "[&>*:not(:last-child)]:border-r [&>*:not(:last-child)]:!border-base-300";
   const toolbarBtnIcon =
-    `btn btn-sm btn-square h-9 min-h-9 rounded-md border ${toolbarBorderClass} bg-base-100 text-base-content shadow-none hover:bg-base-200`;
+    "btn btn-sm btn-square btn-soft h-9 min-h-9 rounded-md";
   const toolbarBtnActive =
-    "btn btn-sm btn-square h-9 min-h-9 rounded-md border border-primary bg-primary text-primary-content shadow-none hover:bg-primary/90";
+    "btn btn-sm btn-square h-9 min-h-9 rounded-md btn-primary";
   const searchInputClass =
     `input input-sm h-9 w-48 rounded-md border ${toolbarBorderClass} bg-base-100 text-base-content shadow-none`;
 
@@ -116,60 +84,91 @@ export const GraphView = forwardRef<GraphViewRef, GraphViewProps>(function Graph
       throw new Error("Graph canvas is not ready yet.");
     }
 
+    // Try to find a canvas element directly rendered by JSONCrack
+    const nativeCanvas = source.querySelector("canvas") as HTMLCanvasElement | null;
+    if (nativeCanvas && nativeCanvas.width > 0 && nativeCanvas.height > 0) {
+      try {
+        return await new Promise<Blob>((resolve, reject) => {
+          nativeCanvas.toBlob(
+            (blob) => {
+              if (blob) {
+                resolve(blob);
+              } else {
+                reject(new Error("Failed to export canvas."));
+              }
+            },
+            "image/png"
+          );
+        });
+      } catch (error) {
+        console.warn("Native canvas export failed, trying fallback...");
+      }
+    }
+
+    // Fallback: Render via SVG serialization
     const rect = source.getBoundingClientRect();
     const width = Math.max(1, Math.round(rect.width));
     const height = Math.max(1, Math.round(rect.height));
     if (!width || !height) {
-      throw new Error("Graph canvas is empty.");
+      throw new Error("Graph element is empty.");
     }
 
-    const clone = source.cloneNode(true) as HTMLDivElement;
-    inlineComputedStyles(source, clone);
-    clone.setAttribute("xmlns", "http://www.w3.org/1999/xhtml");
+    const scale = window.devicePixelRatio || 1;
+    const canvas = document.createElement("canvas");
+    canvas.width = width * scale;
+    canvas.height = height * scale;
+    
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      throw new Error("Canvas context unavailable.");
+    }
 
-    const serializedClone = new XMLSerializer().serializeToString(clone);
-    const svgMarkup = `
-      <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
-        <foreignObject width="100%" height="100%">${serializedClone}</foreignObject>
-      </svg>
-    `;
-
-    const svgBlob = new Blob([svgMarkup], { type: "image/svg+xml;charset=utf-8" });
-    const url = URL.createObjectURL(svgBlob);
+    ctx.scale(scale, scale);
+    ctx.fillStyle = isDark ? "#1e1e1e" : "#ffffff";
+    ctx.fillRect(0, 0, width, height);
 
     try {
-      const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-        const nextImage = new Image();
-        nextImage.onload = () => resolve(nextImage);
-        nextImage.onerror = () => reject(new Error("Failed to render graph image."));
-        nextImage.src = url;
-      });
-
-      const scale = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.max(1, Math.round(width * scale));
-      canvas.height = Math.max(1, Math.round(height * scale));
-      const ctx = canvas.getContext("2d");
-      if (!ctx) {
-        throw new Error("Canvas export is not available.");
-      }
-
-      ctx.scale(scale, scale);
-      ctx.drawImage(image, 0, 0, width, height);
-
-      const blob = await new Promise<Blob>((resolve, reject) => {
-        canvas.toBlob((result) => {
-          if (result) {
-            resolve(result);
-            return;
+      const svgString = new XMLSerializer().serializeToString(source);
+      const svg = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
+      const url = URL.createObjectURL(svg);
+      
+      const img = new Image();
+      
+      return await new Promise<Blob>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          URL.revokeObjectURL(url);
+          reject(new Error("Image rendering timeout."));
+        }, 3000);
+        
+        img.onload = () => {
+          clearTimeout(timeout);
+          try {
+            ctx.drawImage(img, 0, 0);
+            URL.revokeObjectURL(url);
+            
+            canvas.toBlob((blob) => {
+              if (blob) {
+                resolve(blob);
+              } else {
+                reject(new Error("PNG conversion failed."));
+              }
+            }, "image/png");
+          } catch (drawError) {
+            URL.revokeObjectURL(url);
+            reject(drawError);
           }
-          reject(new Error("Failed to create PNG."));
-        }, "image/png");
+        };
+        
+        img.onerror = () => {
+          clearTimeout(timeout);
+          URL.revokeObjectURL(url);
+          reject(new Error("SVG image failed to load."));
+        };
+        
+        img.src = url;
       });
-
-      return blob;
-    } finally {
-      URL.revokeObjectURL(url);
+    } catch (error) {
+      throw error instanceof Error ? error : new Error("Graph export failed.");
     }
   };
 
@@ -209,7 +208,7 @@ export const GraphView = forwardRef<GraphViewRef, GraphViewProps>(function Graph
       </div>
 
       <div className="absolute bottom-2 left-2 z-10 flex items-center gap-2">
-        <div className={`join overflow-hidden rounded-md border ${toolbarBorderClass}`}>
+        <div className={`join overflow-hidden rounded-md border ${toolbarBorderClass} ${joinItemBorderClass}`}>
           <button
             type="button"
             className={`${toolbarBtnIcon} join-item rounded-none border-0`}

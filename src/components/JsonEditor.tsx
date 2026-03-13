@@ -13,6 +13,7 @@ interface JsonEditorProps {
   placeholder?: string;
   className?: string;
   hideLineNumbers?: boolean;
+  fontSize?: number;
 }
 
 export function JsonEditor({
@@ -26,6 +27,7 @@ export function JsonEditor({
   className,
   hideLineNumbers = false,
   panelTone = "input",
+  fontSize = 13,
 }: JsonEditorProps) {
   const resolvedTheme = monacoTheme === "vs-dark" ? "jsonix-dark" : "jsonix-light";
   const isDarkTheme = monacoTheme === "vs-dark";
@@ -72,7 +74,7 @@ export function JsonEditor({
         }}
         options={{
           minimap: { enabled: false },
-          fontSize: 13,
+          fontSize,
           automaticLayout: true,
           padding: { top: 6, bottom: 6 },
           scrollBeyondLastLine: false,

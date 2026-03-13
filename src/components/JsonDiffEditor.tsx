@@ -8,6 +8,7 @@ interface JsonDiffEditorProps {
   language?: string;
   monacoTheme?: string;
   className?: string;
+  fontSize?: number;
 }
 
 export function JsonDiffEditor({
@@ -16,6 +17,7 @@ export function JsonDiffEditor({
   language = "json",
   monacoTheme = "vs-dark",
   className,
+  fontSize = 13,
 }: JsonDiffEditorProps) {
   return (
     <div
@@ -34,7 +36,7 @@ export function JsonDiffEditor({
           renderSideBySide: true,
           minimap: { enabled: false },
           wordWrap: "on",
-          fontSize: 13,
+          fontSize,
           originalEditable: false,
           diffWordWrap: "on",
           ignoreTrimWhitespace: false,

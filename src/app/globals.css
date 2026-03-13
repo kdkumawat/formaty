@@ -4,8 +4,8 @@
 }
 
 @theme inline {
-  --font-sans: Arial, Helvetica, sans-serif;
-  --font-mono: "Courier New", Courier, monospace;
+  --font-sans: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
 html,
@@ -14,5 +14,5 @@ body {
 }
 
 body {
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
