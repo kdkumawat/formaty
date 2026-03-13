@@ -11,8 +11,8 @@ import {
 } from "react";
 import dynamic from "next/dynamic";
 import {
-  ArrowPathRoundedSquareIcon,
   ArrowsPointingOutIcon,
+  ArrowUturnRightIcon,
   HomeIcon,
   MagnifyingGlassIcon,
   ScaleIcon,
@@ -37,7 +37,7 @@ export interface GraphViewRef {
   downloadPng: () => Promise<void>;
 }
 
-const LAYOUTS: LayoutDirection[] = ["DOWN", "RIGHT", "LEFT", "UP"];
+const LAYOUTS: LayoutDirection[] = ["DOWN", "RIGHT", "UP", "LEFT"];
 
 function inlineComputedStyles(source: Element, target: Element) {
   const sourceChildren = Array.from(source.children);
@@ -193,7 +193,7 @@ export const GraphView = forwardRef<GraphViewRef, GraphViewProps>(function Graph
   }));
 
   return (
-    <div className={`relative h-full overflow-hidden rounded-xl border ${className ?? ""}`}>
+    <div className={`relative h-full overflow-hidden border ${className ?? ""}`}>
       <div ref={exportRef} className="h-full">
         <JSONCrackDynamic
           ref={graphRef}
@@ -233,9 +233,9 @@ export const GraphView = forwardRef<GraphViewRef, GraphViewProps>(function Graph
             className={`${toolbarBtnIcon} join-item rounded-none border-0`}
             onClick={rotateLayout}
             aria-label="Rotate layout"
-            title={`Rotate layout (${layoutDirection})`}
+            title={`Rotate layout`}
           >
-            <ArrowPathRoundedSquareIcon className="h-4 w-4" />
+            <ArrowUturnRightIcon className="h-4 w-4" />
           </button>
           <button
             type="button"

@@ -32,7 +32,7 @@ export function JsonEditor({
 
   return (
     <div
-      className={`relative h-[52vh] min-h-[360px] overflow-hidden rounded-box border ${
+      className={`relative h-[52vh] min-h-[360px] overflow-hidden border ${
         panelTone === "output"
           ? isDarkTheme
             ? "border-[#2d2d30] bg-[#1e1e1e]"
