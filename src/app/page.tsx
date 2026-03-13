@@ -16,7 +16,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { JsonDiffEditor } from "@/components/JsonDiffEditor";
 import { JsonEditor } from "@/components/JsonEditor";
-import { GraphView } from "@/components/GraphView";
+import { GraphView, type GraphViewRef } from "@/components/GraphView";
 import { TreeView } from "@/components/TreeView";
 import { diffJson } from "@/lib/json/diff";
 import { useJsonWorker } from "@/hooks/useJsonWorker";
@@ -156,7 +156,7 @@ export default function Home() {
   const [themeMode, setThemeMode] = useState<ThemeMode>("system");
   const [systemDark, setSystemDark] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [split, setSplit] = useState(30);
+  const [split, setSplit] = useState(20);
   const [isResizing, setIsResizing] = useState(false);
   const [schemaInput, setSchemaInput] = useState("");
   const [compareInput, setCompareInput] = useState("");
@@ -175,8 +175,13 @@ export default function Home() {
   const historyLock = useRef(false);
   const splitContainerRef = useRef<HTMLElement | null>(null);
   const settingsRef = useRef<HTMLDivElement | null>(null);
+  const graphViewRef = useRef<GraphViewRef | null>(null);
 
-  const canDownload = useMemo(() => output.trim().length > 0, [output]);
+  const isGraphView = rightView === "graph" && Boolean(parsedOutput);
+  const canDownload = useMemo(
+    () => (isGraphView ? Boolean(parsedOutput) : output.trim().length > 0),
+    [isGraphView, output, parsedOutput],
+  );
   const isModalInputValid = useMemo(() => {
     if (!modalKind) return false;
     if (!modalValue.trim()) return false;
@@ -338,7 +343,7 @@ export default function Home() {
       if (!section) return;
       const rect = section.getBoundingClientRect();
       const nextSplit = ((event.clientX - rect.left) / rect.width) * 100;
-      setSplit(Math.max(30, Math.min(70, Math.round(nextSplit))));
+      setSplit(Math.max(20, Math.min(80, Math.round(nextSplit))));
     };
 
     const onMouseUp = () => setIsResizing(false);
@@ -526,6 +531,20 @@ export default function Home() {
   };
 
   const downloadOutput = () => {
+    if (isGraphView) {
+      void (async () => {
+        try {
+          if (!graphViewRef.current) {
+            throw new Error("Graph export is not ready yet.");
+          }
+          await graphViewRef.current.downloadPng();
+        } catch {
+          setCopyState("error");
+          window.setTimeout(() => setCopyState("idle"), 1400);
+        }
+      })();
+      return;
+    }
     if (!output.trim()) return;
     const blob = new Blob([output], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -537,6 +556,19 @@ export default function Home() {
   };
 
   const copyOutput = async () => {
+    if (isGraphView) {
+      try {
+        if (!graphViewRef.current) {
+          throw new Error("Graph export is not ready yet.");
+        }
+        await graphViewRef.current.copyPngToClipboard();
+        setCopyState("done");
+      } catch {
+        setCopyState("error");
+      }
+      window.setTimeout(() => setCopyState("idle"), 1400);
+      return;
+    }
     if (!output.trim()) return;
     try {
       await navigator.clipboard.writeText(output);
@@ -575,10 +607,10 @@ export default function Home() {
   return (
     <main
       data-theme={resolvedTheme}
-      className="min-h-screen overflow-y-auto bg-base-200 p-3 text-base-content md:p-4 xl:h-screen xl:overflow-hidden"
+      className="min-h-screen overflow-y-auto bg-base-200 p-3 text-base-content md:p-3 xl:h-screen xl:overflow-hidden"
     >
-      <div className="mx-auto min-h-full max-w-[1700px] flex flex-col gap-3 xl:h-full">
-        <section className="rounded-md border border-base-300 bg-base-100 p-2.5 shadow-sm">
+      <div className="mx-auto min-h-full max-w-[1700px] flex flex-col xl:h-full">
+        <section className="border border-base-300 bg-base-100 p-1 shadow-sm">
           <div className="flex items-center gap-2 overflow-x-auto overflow-y-visible pb-1">
             <div className="flex shrink-0 items-center gap-2">
               <label
@@ -629,7 +661,7 @@ export default function Home() {
                   setParsedOutput(null);
                   setError(null);
                   setActiveOperation(null);
-                  setSplit(30);
+                  setSplit(20);
                   setIsInputMinimized(false);
                   setFocusedPane("input");
                   setCopyState("idle");
@@ -671,7 +703,7 @@ export default function Home() {
                       popover="auto"
                       id="format-options-popover"
                       style={{ positionAnchor: "--format-options-anchor" } as CSSProperties}
-                      className={`dropdown z-30 mt-1 w-72 rounded-box border p-3 shadow-xl ${toolbarBorderClass} ${dropdownPanelClass}`}
+                      className={`dropdown z-30 mt-1 w-72 border p-3 shadow-xl ${toolbarBorderClass} ${dropdownPanelClass}`}
                     >
                       <div className="space-y-3">
                         <div>
@@ -777,7 +809,7 @@ export default function Home() {
                   <ChevronDownIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
                 </button>
                 <ul
-                  className={`dropdown menu z-30 mt-1 w-40 rounded-box border p-1 shadow-xl ${toolbarBorderClass} ${dropdownPanelClass}`}
+                  className={`dropdown menu z-30 mt-1 w-40 border p-1 shadow-xl ${toolbarBorderClass} ${dropdownPanelClass}`}
                   popover="auto"
                   id="type-language-popover"
                   style={{ positionAnchor: "--type-language-anchor" } as CSSProperties}
@@ -841,7 +873,7 @@ export default function Home() {
 
         <section
           ref={splitContainerRef}
-          className={`relative flex-1 min-h-0 grid ${isInputMinimized ? "grid-cols-1 gap-0 min-h-[calc(100dvh-11rem)]" : "grid-cols-1 gap-3 xl:gap-0 xl:grid-cols-[30%_70%]"}`}
+          className={`relative flex-1 min-h-0 grid ${isInputMinimized ? "grid-cols-1 gap-0 min-h-[calc(100dvh-11rem)]" : "grid-cols-1 gap-3 xl:gap-0 xl:grid-cols-[20%_80%]"}`}
           style={isInputMinimized || !isDesktopLayout ? undefined : { gridTemplateColumns: `${split}% ${100 - split}%` }}
         >
           <div
@@ -921,7 +953,7 @@ export default function Home() {
                     panelTone="output"
                   />
                 ) : (
-                  <div className={`flex h-full min-h-0 items-center justify-center rounded-xl border text-sm text-base-content/70 ${outputPanelClass}`}>
+                  <div className={`flex h-full min-h-0 items-center justify-center border text-sm text-base-content/70 ${outputPanelClass}`}>
                     Run any operation to see output here
                   </div>
                 )
@@ -942,6 +974,7 @@ export default function Home() {
               {rightView === "graph" ? (
                 parsedOutput ? (
                   <GraphView
+                    ref={graphViewRef}
                     data={parsedOutput}
                     isDark={isDark}
                     className={`${outputPanelClass} min-h-0`}
@@ -1017,7 +1050,7 @@ export default function Home() {
 
         <div className="fixed bottom-6 right-6 z-40" ref={settingsRef}>
           {isSettingsOpen ? (
-            <div className="absolute bottom-full right-0 mb-2 w-[320px] rounded-box border border-base-300 bg-base-100 p-3 shadow-xl">
+            <div className="absolute bottom-full right-0 mb-2 w-[320px] border border-base-300 bg-base-100 p-3 shadow-xl">
               <div className="mb-2 rounded-md border border-base-300 bg-base-200 px-2 py-1.5">
                 <p className="text-base font-bold leading-tight">jsonix</p>
                 <p className="text-sm leading-tight text-base-content/70">
