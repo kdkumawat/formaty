@@ -1,38 +1,33 @@
-# jsonix.io
+# jsonix
 
-jsonix is a local-first JSON toolkit built with Next.js.
+**Transform, validate & format JSON, XML, YAML, TOML, CSV** — a local-first data toolkit.
+
+## Features
+
+- **Multi-format support**: JSON, XML, YAML, TOML, CSV — paste, import, or convert between formats
+- **Transform**: Format, minify, flatten, unflatten, validate, diff, schema validation
+- **Views**: Raw editor, tree view, graph visualization
+- **Type generation**: TypeScript, Java, C#, Python, Go, Protobuf, Kotlin, Swift, Rust, SQL
+- **Local-first**: All processing runs in your browser; no data leaves your device
+- **Share & export**: Share via URL, copy, or download
 
 ## Getting Started
 
-First, run the development server:
-
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Documentation
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- [Feature Guide](docs/guide.md) — detailed guide to all features
+- [Live app](https://jsonix.vercel.app)
 
-## Learn More
+## Tech Stack
 
-To learn more about Next.js, take a look at the following resources:
+- Next.js 16, React 19, Tailwind CSS, DaisyUI
+- Monaco Editor, ReactFlow, jsoncrack
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.

@@ -21,7 +21,7 @@ export function JsonDiffEditor({
 }: JsonDiffEditorProps) {
   return (
     <div
-      className={`relative h-[52vh] min-h-[360px] overflow-hidden rounded-box border border-base-300 bg-base-100 ${className ?? ""}`}
+      className={`relative h-full min-h-0 overflow-hidden border border-base-300 bg-base-100 ${className ?? ""}`}
     >
       <DiffEditor
         height="100%"

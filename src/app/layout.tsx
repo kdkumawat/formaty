@@ -5,12 +5,12 @@ import "./globals.css";
 
 const SITE_URL = "https://jsonix.vercel.app";
 const SITE_NAME = "jsonix";
-const SITE_TITLE = "jsonix — Local-first JSON Tools";
+const SITE_TITLE = "jsonix — Transform, Validate & Format JSON, XML, YAML, TOML, CSV";
 const CREATOR_NAME = "Kuldeep Kumawat";
 const CREATOR_X = "https://x.com/kuldeep_kumawat";
 const CREATOR_LINKEDIN = "https://www.linkedin.com/in/kdkumawat";
 const SITE_DESCRIPTION =
-  "Powerful local-first JSON tooling platform for formatting, validating, transforming, diffing, and generating types from JSON.";
+  "Local-first data toolkit: format, validate, transform, diff, and generate types from JSON, XML, YAML, TOML, and CSV. Supports tree view, graph visualization, schema validation, and type generation for TypeScript, Python, Go, and more.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -26,6 +26,12 @@ export const metadata: Metadata = {
     "JSON diff",
     "JSON schema",
     "JSON to TypeScript",
+    "XML formatter",
+    "YAML formatter",
+    "TOML formatter",
+    "CSV formatter",
+    "JSON XML YAML converter",
+    "data format converter",
     "JSON tools",
     "developer tools",
     "local-first",
@@ -78,6 +84,28 @@ export const metadata: Metadata = {
   },
 };
 
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  name: SITE_NAME,
+  description: SITE_DESCRIPTION,
+  url: SITE_URL,
+  applicationCategory: "DeveloperApplication",
+  operatingSystem: "Any",
+  offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+  featureList: [
+    "JSON formatter and validator",
+    "XML, YAML, TOML, CSV support",
+    "Format conversion between data formats",
+    "Tree view and graph visualization",
+    "JSON Schema validation",
+    "Type generation (TypeScript, Python, Go, Java, etc.)",
+    "JSON diff tool",
+    "Flatten and unflatten",
+    "Local-first, no data sent to server",
+  ],
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -86,6 +114,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="antialiased">
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        />
         {children}
         <SpeedInsights />
         <Analytics />

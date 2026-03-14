@@ -1,36 +1,41 @@
 "use client";
 
 import type { CSSProperties } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDownTrayIcon,
-  ArrowPathIcon,
   ArrowsPointingInIcon,
   ArrowsPointingOutIcon,
+  ArrowPathIcon,
   ArrowUturnLeftIcon,
   ArrowUturnRightIcon,
-  CheckCircleIcon,
   ChevronDownIcon,
   ChevronUpIcon,
   ClipboardDocumentIcon,
   ComputerDesktopIcon,
-  Cog6ToothIcon,
+  DocumentArrowDownIcon,
   MinusIcon,
   MoonIcon,
   PlusIcon,
   ShareIcon,
+  StarIcon,
   SunIcon,
-  XCircleIcon,
-  XMarkIcon,
+  TrashIcon,
 } from "@heroicons/react/24/outline";
-import { ArrowPathIcon as ArrowPathIconSolid, NoSymbolIcon } from "@heroicons/react/24/solid";
+import { NoSymbolIcon } from "@heroicons/react/24/solid";
 import { JsonDiffEditor } from "@/components/JsonDiffEditor";
 import { JsonEditor } from "@/components/JsonEditor";
 import { GraphView, type GraphViewRef } from "@/components/GraphView";
 import { TreeView } from "@/components/TreeView";
+import {
+  Dropdown,
+  getSizeFormatted,
+  Header as WorkspaceHeader,
+  StatusBar,
+} from "@/components/workspace";
 import { diffJson } from "@/lib/json/diff";
 import { useJsonWorker } from "@/hooks/useJsonWorker";
-import { detectFormat, FORMAT_LABELS, parseInput, type FormatKind } from "@/lib/formats";
+import { detectFormat, FORMAT_LABELS, parseInput, stringifyOutput, type FormatKind } from "@/lib/formats";
 import { decodeState, encodeState } from "@/lib/shareState";
 import type { JsonValue, TypeTargetLanguage } from "@/lib/json/core";
 
@@ -48,6 +53,53 @@ const SAMPLE_JSON = `{
     { "day": "tue", "count": 1290 }
   ]
 }`;
+
+const SAMPLE_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<root>
+  <id>42</id>
+  <name>jsonix</name>
+  <tags>
+    <item>json</item>
+    <item>tooling</item>
+  </tags>
+  <owner team="platform" active="true"/>
+</root>`;
+
+const SAMPLE_YAML = `id: 42
+name: jsonix
+tags:
+  - json
+  - tooling
+  - productivity
+owner:
+  team: platform
+  active: true
+  priority: null
+metrics:
+  - day: mon
+    count: 1023
+  - day: tue
+    count: 1290`;
+
+const SAMPLE_CSV = `id,name,tags
+42,jsonix,"json,tooling"
+1,example,"a,b,c"`;
+
+const SAMPLE_TOML = `id = 42
+name = "jsonix"
+tags = ["json", "tooling"]
+
+[owner]
+team = "platform"
+active = true`;
+
+const SAMPLES: Record<FormatKind, string> = {
+  json: SAMPLE_JSON,
+  xml: SAMPLE_XML,
+  yaml: SAMPLE_YAML,
+  toml: SAMPLE_TOML,
+  csv: SAMPLE_CSV,
+};
 
 const OPERATION_ACTIONS = [
   ["Format", "format"],
@@ -160,7 +212,7 @@ const DEFAULT_FORMAT_OPTIONS: FormatOptions = {
 
 export default function Home() {
   const { run } = useJsonWorker();
-  const [input, setInput] = useState(SAMPLE_JSON);
+  const [input, setInput] = useState("");
   const [output, setOutput] = useState("");
   const [parsedOutput, setParsedOutput] = useState<JsonValue | null>(null);
   const [outputExt, setOutputExt] = useState("json");
@@ -170,7 +222,6 @@ export default function Home() {
   const [activeOperation, setActiveOperation] = useState<OperationAction | null>(null);
   const [themeMode, setThemeMode] = useState<ThemeMode>("system");
   const [systemDark, setSystemDark] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [split, setSplit] = useState(20);
   const [isResizing, setIsResizing] = useState(false);
   const [schemaInput, setSchemaInput] = useState("");
@@ -183,18 +234,24 @@ export default function Home() {
   const [copyState, setCopyState] = useState<"idle" | "done" | "error">("idle");
   const [shareState, setShareState] = useState<"idle" | "done" | "error">("idle");
   const [isInputMinimized, setIsInputMinimized] = useState(false);
+  const [isOutputMaximized, setIsOutputMaximized] = useState(false);
   const [isDesktopLayout, setIsDesktopLayout] = useState(false);
   const [focusedPane, setFocusedPane] = useState<"input" | "output">("input");
   const [formatOptions, setFormatOptions] = useState<FormatOptions>(DEFAULT_FORMAT_OPTIONS);
   const [convertToFormat, setConvertToFormat] = useState<FormatKind>("json");
+  const [inputFormatOverride, setInputFormatOverride] = useState<FormatKind | null>(null);
+  const [inputFormatOpen, setInputFormatOpen] = useState(false);
+  const [transformConfigOpen, setTransformConfigOpen] = useState(false);
+  const [pinnedItems, setPinnedItems] = useState<Set<string>>(
+    () => new Set(["fmt:json", "fmt:xml", "view:raw", "action:minify", "action:schema", "type:typescript", "type:java", "type:go", "type:python", "type:sql"])
+  );
   const [liveTransform, setLiveTransform] = useState(false);
   const [editorFontSize, setEditorFontSize] = useState(13);
   const [inputValid, setInputValid] = useState<boolean | null>(null);
-  const [undoStack, setUndoStack] = useState<string[]>([SAMPLE_JSON]);
+  const [undoStack, setUndoStack] = useState<string[]>([""]);
   const [undoIndex, setUndoIndex] = useState(0);
   const historyLock = useRef(false);
-  const splitContainerRef = useRef<HTMLElement | null>(null);
-  const settingsRef = useRef<HTMLDivElement | null>(null);
+  const splitContainerRef = useRef<HTMLDivElement | null>(null);
   const graphViewRef = useRef<GraphViewRef | null>(null);
 
   const isGraphView = rightView === "graph" && Boolean(parsedOutput);
@@ -236,23 +293,19 @@ export default function Home() {
   const canRedo = undoIndex < undoStack.length - 1;
   const copyLabel = copyState === "done" ? "Copied" : copyState === "error" ? "Failed" : "Copy";
   const shareLabel = shareState === "done" ? "Copied" : shareState === "error" ? "Failed" : "Share";
+  const inputLineCount = input.split("\n").length;
+  const inputSizeFormatted = getSizeFormatted(input);
   const selectedTypeLanguageLabel =
     TYPE_LANGUAGES.find((item) => item.id === typeLanguage)?.label ?? "Language";
-  const TOOLBAR_BTN_SIZE = "h-8 min-h-8";
-  const TOOLBAR_TEXT = "text-xs";
-  const toolbarBtnBase =
-    `btn btn-xs ${TOOLBAR_BTN_SIZE} rounded px-2 ${TOOLBAR_TEXT} shadow-none text-base-content hover:bg-base-200 disabled:opacity-70 disabled:text-base-content/60`;
-  const toolbarBtnActive =
-    `btn btn-xs btn-primary ${TOOLBAR_BTN_SIZE} rounded px-2 ${TOOLBAR_TEXT} shadow-none text-primary-content hover:bg-primary/90 disabled:opacity-70 disabled:text-primary-content/70`;
-  const toolbarBtnIcon =
-    `btn btn-xs btn-square ${TOOLBAR_BTN_SIZE} min-w-8 rounded px-2 ${TOOLBAR_TEXT} shadow-none text-base-content hover:bg-base-200 disabled:opacity-70 disabled:text-base-content/60`;
+
   const joinItemBorderClass =
     "[&>*:not(:last-child)]:border-r [&>*:not(:last-child)]:!border-base-300/50";
-  const radioGroupClass = `join h-8 shrink-0 overflow-hidden rounded-md ${toolbarBorderClass} ${joinItemBorderClass}`;
-  const radioBtnClass = `btn btn-xs join-item h-8 min-h-8 rounded-none px-2 text-xs shadow-none transition-colors`;
   const dropdownPanelClass = isDark ? "bg-[#252526] text-base-content" : "bg-base-100 text-base-content";
+  const linkBtnClass = "btn btn-xs btn-ghost rounded p-1 border-0 hover:bg-[var(--workspace-panel)] hover:underline hover:text-primary";
+  const inputEmpty = !input.trim();
 
-  const resolvedInputFormat = useMemo(() => detectFormat(input), [input]);
+  const detectedInputFormat = useMemo(() => detectFormat(input), [input]);
+  const resolvedInputFormat = inputFormatOverride ?? detectedInputFormat;
 
   const themeOptions = [
     { mode: "system" as const, ariaLabel: "Use system theme", title: "System theme", Icon: ComputerDesktopIcon },
@@ -290,6 +343,11 @@ export default function Home() {
     media.addEventListener("change", onChange);
     return () => media.removeEventListener("change", onChange);
   }, []);
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", resolvedTheme);
+    return () => document.documentElement.removeAttribute("data-theme");
+  }, [resolvedTheme]);
 
   useEffect(() => {
     const media = window.matchMedia("(min-width: 1280px)");
@@ -348,9 +406,10 @@ export default function Home() {
         rightView?: RightView;
         formatOptions?: Partial<FormatOptions>;
         convertToFormat?: FormatKind;
-editorFontSize?: number;
-      liveTransform?: boolean;
-    };
+        editorFontSize?: number;
+        liveTransform?: boolean;
+      pinnedItems?: string[];
+      };
     if (data.input) setInput(data.input);
     if (data.output) setOutput(data.output);
     if (typeof data.split === "number") setSplit(data.split);
@@ -360,9 +419,10 @@ editorFontSize?: number;
     if (data.convertToFormat) setConvertToFormat(data.convertToFormat);
     if (typeof data.editorFontSize === "number") setEditorFontSize(data.editorFontSize);
       if (typeof data.liveTransform === "boolean") setLiveTransform(data.liveTransform);
+      if (Array.isArray(data.pinnedItems)) setPinnedItems(new Set(data.pinnedItems));
       if (data.formatOptions) {
         const nextIndentation = Number(data.formatOptions.indentation);
-        const indentation = Number.isFinite(nextIndentation) ? Math.max(1, Math.min(10, Math.floor(nextIndentation))) : DEFAULT_FORMAT_OPTIONS.indentation;
+        const indentation = Number.isFinite(nextIndentation) ? Math.max(0, Math.min(10, Math.floor(nextIndentation))) : DEFAULT_FORMAT_OPTIONS.indentation;
         const quoteStyle = data.formatOptions.quoteStyle === "single" ? "single" : "double";
         const sortKeys = Boolean(data.formatOptions.sortKeys);
         const removeEmpty = Boolean(data.formatOptions.removeEmpty);
@@ -387,9 +447,10 @@ editorFontSize?: number;
         convertToFormat,
         liveTransform,
         editorFontSize,
+        pinnedItems: Array.from(pinnedItems),
       }),
     );
-  }, [input, output, split, themeMode, typeLanguage, rightView, formatOptions, convertToFormat, liveTransform, editorFontSize]);
+  }, [input, output, split, themeMode, typeLanguage, rightView, formatOptions, convertToFormat, liveTransform, editorFontSize, pinnedItems]);
 
   useEffect(() => {
     if (!output.trim()) {
@@ -413,6 +474,16 @@ editorFontSize?: number;
   const liveTransformTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inputRef = useRef(input);
   inputRef.current = input;
+
+  const [showBusy, setShowBusy] = useState(false);
+  useEffect(() => {
+    if (!busy) {
+      setShowBusy(false);
+      return;
+    }
+    const id = setTimeout(() => setShowBusy(true), 120);
+    return () => clearTimeout(id);
+  }, [busy]);
 
   useEffect(() => {
     if (!input.trim()) {
@@ -511,18 +582,6 @@ editorFontSize?: number;
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [modalKind]);
-
-  useEffect(() => {
-    const onMouseDown = (event: MouseEvent) => {
-      const target = event.target as Node | null;
-      if (!target) return;
-      if (isSettingsOpen && settingsRef.current && !settingsRef.current.contains(target)) {
-        setIsSettingsOpen(false);
-      }
-    };
-    window.addEventListener("mousedown", onMouseDown);
-    return () => window.removeEventListener("mousedown", onMouseDown);
-  }, [isSettingsOpen]);
 
   const setOutputData = (
     value: string,
@@ -743,7 +802,8 @@ editorFontSize?: number;
             throw new Error("Graph export is not ready yet.");
           }
           await graphViewRef.current.downloadPng();
-        } catch {
+        } catch (e) {
+          console.warn("Graph download failed:", e);
           setCopyState("error");
           window.setTimeout(() => setCopyState("idle"), 1400);
         }
@@ -818,12 +878,54 @@ editorFontSize?: number;
     executeOperation("format", { formatOptions: next });
   };
 
+  const onInputFormatChange = useCallback(
+    (newFormat: FormatKind) => {
+      if (!input.trim()) {
+        setInputFormatOverride(newFormat === detectedInputFormat ? null : newFormat);
+        return;
+      }
+      try {
+        const parsed = parseInput(input, resolvedInputFormat);
+        const formatted = stringifyOutput(parsed, newFormat, {
+          indentation: formatOptions.indentation,
+          quoteStyle: formatOptions.quoteStyle,
+          sortKeys: formatOptions.sortKeys,
+        });
+        setInput(formatted);
+        pushHistory(formatted);
+        setInputFormatOverride(newFormat === detectedInputFormat ? null : newFormat);
+        setError(null);
+      } catch {
+        setInputFormatOverride(newFormat === detectedInputFormat ? null : newFormat);
+      }
+    },
+    [input, resolvedInputFormat, detectedInputFormat, formatOptions, pushHistory]
+  );
+
+  const pasteFromClipboard = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (!text) return;
+      if (!output.trim() || focusedPane === "input") {
+        setInput(text);
+        pushHistory(text);
+        setInputFormatOverride(null);
+        setError(null);
+      } else {
+        setOutput(text);
+      }
+    } catch {
+      setError("Could not read clipboard.");
+    }
+  };
+
   const importJsonFile = (file: File) => {
     const reader = new FileReader();
     reader.onload = () => {
       const text = String(reader.result ?? "");
       setInput(text);
       pushHistory(text);
+      setInputFormatOverride(null);
       setError(null);
     };
     reader.onerror = () => setError("Unable to read selected file.");
@@ -833,331 +935,123 @@ editorFontSize?: number;
   return (
     <main
       data-theme={resolvedTheme}
-      className="min-h-screen overflow-y-auto bg-base-200 p-3 text-base-content md:p-3 xl:h-screen xl:overflow-hidden"
+      className="flex h-screen flex-col overflow-hidden bg-[var(--workspace-background)] text-[var(--workspace-text)]"
+      style={{ height: "100vh" }}
     >
-      <div className="mx-auto min-h-full max-w-[1700px] flex flex-col xl:h-full">
-        <section className="border border-base-300 bg-base-100 p-1.5 shadow-sm overflow-x-auto">
-          <div className="flex min-w-max flex-wrap items-center gap-1.5">
-            <div className="flex shrink-0 items-center gap-2">
-              <label
-                className={toolbarBtnBase}
-              >
-                Import
-                <input
-                  type="file"
-                  accept=".json,.yaml,.yml,.xml,.toml,.csv,application/json,text/plain,text/yaml,text/xml,text/csv"
-                  className="hidden"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (!file) return;
-                    importJsonFile(file);
-                    event.currentTarget.value = "";
-                  }}
-                />
-              </label>
+      <WorkspaceHeader
+        themeMode={themeMode}
+        onThemeChange={setThemeMode}
+        editorFontSize={editorFontSize}
+        onEditorFontSizeChange={setEditorFontSize}
+      />
+
+      <div
+        ref={splitContainerRef}
+        className={`flex min-h-0 flex-1 overflow-hidden ${isDesktopLayout && !isOutputMaximized ? "flex-row" : "flex-col"}`}
+      >
+        {!isOutputMaximized && (
+        <div
+          className={`flex min-h-0 shrink-0 flex-col overflow-hidden transition-opacity duration-200 ${
+            focusedPane === "output" ? "opacity-60" : "opacity-100"
+          }`}
+          style={isDesktopLayout ? { width: `${split}%`, minWidth: 160 } : undefined}
+        >
+          <div
+            className={`flex shrink-0 flex-wrap items-center gap-1 border-b px-1.5 py-1 text-xs sm:flex-nowrap sm:overflow-x-auto ${inputEditorBgClass} ${isDark ? "text-gray-400" : "text-gray-600"}`}
+          >
+            <div className="flex shrink-0 items-center gap-1">
               <button
                 type="button"
-                aria-label="Undo"
-                title="Undo (Cmd/Ctrl+Z)"
-                className={toolbarBtnIcon}
+                title="Undo (Ctrl+Z)"
                 disabled={!canUndo}
+                className={`${linkBtnClass} btn-square h-7 min-h-7 w-7 shrink-0`}
                 onClick={() => moveHistory(-1)}
               >
-                <ArrowUturnLeftIcon className="h-4 w-4" aria-hidden="true" />
+                <ArrowUturnLeftIcon className="h-3.5 w-3.5" />
               </button>
               <button
                 type="button"
-                aria-label="Redo"
-                title="Redo (Shift+Cmd/Ctrl+Z)"
-                className={toolbarBtnIcon}
+                title="Redo (Shift+Ctrl+Z)"
                 disabled={!canRedo}
+                className={`${linkBtnClass} btn-square h-7 min-h-7 w-7 shrink-0`}
                 onClick={() => moveHistory(1)}
               >
-                <ArrowUturnRightIcon className="h-4 w-4" aria-hidden="true" />
+                <ArrowUturnRightIcon className="h-3.5 w-3.5" />
               </button>
               <button
                 type="button"
-                aria-label="Reset"
-                title="Reset to sample"
-                className={toolbarBtnIcon}
+                title="Clear"
+                className={`${linkBtnClass} btn-square h-7 min-h-7 w-7 shrink-0`}
                 onClick={() => {
-                  setInput(SAMPLE_JSON);
-                  pushHistory(SAMPLE_JSON);
+                  setInput("");
                   setOutput("");
                   setParsedOutput(null);
                   setError(null);
                   setActiveOperation(null);
-                  setSplit(20);
-                  setIsInputMinimized(false);
-                  setFocusedPane("input");
                   setCopyState("idle");
                 }}
               >
-                <ArrowPathIcon className="h-4 w-4" aria-hidden="true" />
+                <TrashIcon className="h-3.5 w-3.5" />
               </button>
             </div>
-
-            <div
-              aria-hidden="true"
-              className={`h-6 w-px self-center ${toolbarDividerClass}`}
-            />
-
-            <div className={radioGroupClass}>
-              {FORMAT_KINDS.map((fmt) => (
-                <button
-                  key={fmt}
-                  type="button"
-                  className={`${radioBtnClass} ${
-                    convertToFormat === fmt ? "btn-primary" : ""
-                  }`}
-                  onClick={() => runConvert(fmt)}
-                >
-                  {FORMAT_LABELS[fmt]}
-                </button>
-              ))}
-            </div>
-
-            <div
-              aria-hidden="true"
-              className={`h-6 w-px self-center ${toolbarDividerClass}`}
-            />
-
-            <div className="flex min-w-0 flex-1 shrink-0 items-center gap-2">
-              {OPERATION_ACTIONS.map(([label, action]) =>
-                action === "format" ? (
-                  <div key={label} className="dropdown dropdown-bottom shrink-0">
-                    <div className={radioGroupClass}>
-                      <button
-                        type="button"
-                        disabled={busy}
-                        className={`${radioBtnClass} ${
-                          activeOperation === action ? "btn-primary" : ""
-                        }`}
-                        onClick={() => runOperation(action)}
-                      >
-                        <span className="whitespace-nowrap">{label}</span>
-                      </button>
-                      <button
-                        type="button"
-                        aria-label="Format options"
-                        popoverTarget="format-options-popover"
-                        style={{ anchorName: "--format-options-anchor" } as CSSProperties}
-                        className={`${radioBtnClass} min-w-8 ${
-                          activeOperation === action ? "btn-primary" : ""
-                        }`}
-                      >
-                        <ChevronDownIcon className="h-4 w-4" aria-hidden="true" />
-                      </button>
-                    </div>
-                    <div
-                      popover="auto"
-                      id="format-options-popover"
-                      style={{ positionAnchor: "--format-options-anchor" } as CSSProperties}
-                      className={`dropdown rounded-md z-30 mt-1 w-72 border p-3 shadow-xl ${toolbarBorderClass} ${dropdownPanelClass}`}
-                    >
-                      <div className="space-y-3">
-                        <div>
-                          <div className="mb-2 flex items-center justify-between">
-                            <p className="text-xs font-semibold opacity-70">Indentation</p>
-                            <span className="text-xs font-semibold opacity-80">{formatOptions.indentation}</span>
-                          </div>
-                          <div className="w-full">
-                            <input
-                              type="range"
-                              min={1}
-                              max={10}
-                              step={1}
-                              value={formatOptions.indentation}
-                              className="range range-primary range-xs"
-                              aria-label="Indentation level"
-                              onChange={(event) => {
-                                const parsed = Number(event.target.value);
-                                if (!Number.isFinite(parsed)) return;
-                                const indentation = Math.max(1, Math.min(10, Math.floor(parsed)));
-                                applyFormatWithOptions({ ...formatOptions, indentation });
-                              }}
-                            />
-                            <div className="mt-2 grid grid-cols-10 px-1 text-[10px] leading-none opacity-70">
-                              {Array.from({ length: 10 }, (_, index) => (
-                                <span key={`indent-mark-${index + 1}`} className="text-center">|</span>
-                              ))}
-                            </div>
-                            <div className="mt-1 grid grid-cols-10 px-1 text-[10px] leading-none tabular-nums opacity-80">
-                              {Array.from({ length: 10 }, (_, index) => (
-                                <span key={`indent-label-${index + 1}`} className="text-center">{index + 1}</span>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-                        <div>
-                          <p className="mb-2 text-xs font-semibold opacity-70">Quote style</p>
-                          <div className={`join h-8 overflow-hidden rounded-md border ${toolbarBorderClass} ${joinItemBorderClass}`}>
-                            {(["double", "single"] as const).map((quote) => (
-                              <button
-                                key={quote}
-                                type="button"
-                                className={`${radioBtnClass} ${
-                                  formatOptions.quoteStyle === quote ? "btn-primary" : ""
-                                }`}
-                                onClick={() => applyFormatWithOptions({ ...formatOptions, quoteStyle: quote })}
-                              >
-                                {quote === "double" ? "Double" : "Single"}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-6 pt-1">
-                          <label className="flex cursor-pointer items-center gap-2 text-sm">
-                            <input
-                              type="checkbox"
-                              className="checkbox checkbox-sm"
-                              checked={formatOptions.sortKeys}
-                              onChange={(event) =>
-                                applyFormatWithOptions({ ...formatOptions, sortKeys: event.target.checked })
-                              }
-                            />
-                            <span>Sort</span>
-                          </label>
-                          <label className="flex cursor-pointer items-center gap-2 text-sm">
-                            <input
-                              type="checkbox"
-                              className="checkbox checkbox-sm"
-                              checked={formatOptions.removeEmpty}
-                              onChange={(event) =>
-                                applyFormatWithOptions({ ...formatOptions, removeEmpty: event.target.checked })
-                              }
-                            />
-                            <span>Remove Empty</span>
-                          </label>
-                        </div>
-
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    key={label}
-                    disabled={busy}
-                    className={`${activeOperation === action ? toolbarBtnActive : toolbarBtnBase}`}
-                    onClick={() => runOperation(action)}
-                  >
-                    <span className="whitespace-nowrap">{label}</span>
-                  </button>
-                ),
-              )}
-              <div className="dropdown dropdown-bottom dropdown-end shrink-0">
-                <button
-                  type="button"
-                  className={`${
-                    activeOperation === "generateTypes" ? toolbarBtnActive : toolbarBtnBase
-                  } min-w-[6.5rem] inline-flex items-center justify-between gap-1.5`}
-                  popoverTarget="type-language-popover"
-                  style={{ anchorName: "--type-language-anchor" } as CSSProperties}
-                  aria-label="Select type language"
-                >
-                  <span className="truncate">{selectedTypeLanguageLabel}</span>
-                  <ChevronDownIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
-                </button>
-                <ul
-                  className={`dropdown rounded-md menu z-30 mt-1 w-32 border p-1 shadow-xl ${toolbarBorderClass} ${dropdownPanelClass}`}
-                  popover="auto"
-                  id="type-language-popover"
-                  style={{ positionAnchor: "--type-language-anchor" } as CSSProperties}
-                >
-                  {TYPE_LANGUAGES.map((item) => (
-                    <li key={item.id}>
-                      <button
-                        type="button"
-                        className={`rounded-md ${typeLanguage === item.id ? "bg-primary text-primary-content" : "text-base-content hover:bg-base-200"}`}
-                        onClick={(event) => {
-                          (event.currentTarget.closest("ul") as (HTMLElement & { hidePopover?: () => void }) | null)
-                            ?.hidePopover?.();
-                          setFocusedPane("output");
-                          setActiveOperation("generateTypes");
-                          executeOperation("generateTypes", { typeLanguage: item.id });
-                        }}
-                      >
-                        {item.label}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <div aria-hidden="true" className={`h-6 w-px self-center ${toolbarDividerClass}`} />
-              <div className={radioGroupClass}>
-                {(["raw", "tree", "graph"] as const).map((view) => (
-                  <button
-                    key={view}
-                    type="button"
-                    disabled={(view === "tree" || view === "graph") && !parsedOutput}
-                    className={`${radioBtnClass} ${
-                      rightView === view ? "btn-primary" : ""
-                    } disabled:opacity-50 disabled:cursor-not-allowed`}
-                    onClick={() => setRightView(view)}
-                  >
-                    {view[0].toUpperCase() + view.slice(1)}
-                  </button>
-                ))}
-              </div>
+            <div className="flex shrink-0 items-center gap-1">
+              <input
+                id="import-json-file"
+                type="file"
+                accept=".json,.yaml,.yml,.xml,.toml,.csv,application/json,text/plain"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    importJsonFile(file);
+                    e.currentTarget.value = "";
+                  }
+                }}
+              />
               <button
                 type="button"
-                className={`${toolbarBtnBase} min-w-[5.5rem] shrink-0 gap-1.5`}
-                title="Copy shareable link"
-                onClick={shareWorkspace}
+                className={`${linkBtnClass} h-7 min-h-7 shrink-0`}
+                onClick={pasteFromClipboard}
               >
-                <ShareIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
-                <span className="hidden sm:inline">{shareLabel}</span>
+                <ClipboardDocumentIcon className="h-3.5 w-3.5 shrink-0" />
+                Paste
               </button>
               <button
                 type="button"
-                className={`${toolbarBtnActive} min-w-[5rem] shrink-0 gap-1.5 ${!canDownload ? "opacity-50 cursor-not-allowed" : ""}`}
-                disabled={!canDownload}
-                onClick={copyOutput}
+                className={`${linkBtnClass} h-7 min-h-7 shrink-0`}
+                onClick={() => document.getElementById("import-json-file")?.click()}
               >
-                <ClipboardDocumentIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
-                {copyLabel}
-              </button>
-              <button
-                type="button"
-                className={`${toolbarBtnActive} min-w-[5rem] shrink-0 gap-1.5 ${!canDownload ? "opacity-50 cursor-not-allowed" : ""}`}
-                disabled={!canDownload}
-                onClick={downloadOutput}
-              >
-                <ArrowDownTrayIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
-                Download
+                <DocumentArrowDownIcon className="h-3.5 w-3.5 shrink-0" />
+                Import
               </button>
             </div>
           </div>
-        </section>
-
-        <section
-          ref={splitContainerRef}
-          className={`relative flex-1 min-h-0 grid ${isInputMinimized ? "grid-cols-1 gap-0 min-h-[calc(100dvh-11rem)]" : "grid-cols-1 gap-3 xl:gap-0 xl:grid-cols-[20%_80%]"}`}
-          style={isInputMinimized || !isDesktopLayout ? undefined : { gridTemplateColumns: `${split}% ${100 - split}%` }}
-        >
           <div
-            className={`absolute top-0 bottom-0 z-20 items-center ${isInputMinimized ? "hidden" : "hidden xl:flex"}`}
-            style={{ left: `${split}%`, transform: "translateX(-50%)" }}
+            className="relative min-h-0 flex-1 overflow-hidden cursor-text"
+            onClick={() => setFocusedPane("input")}
           >
-            <div className="h-full w-px bg-base-300" />
-            <button
-              type="button"
-              className="absolute inset-y-0 -left-2 w-4 cursor-col-resize bg-transparent"
-              aria-label="Resize panels by dragging divider"
-              onMouseDown={(event) => {
-                event.preventDefault();
-                if (isInputMinimized) setIsInputMinimized(false);
-                setIsResizing(true);
-              }}
-            />
-          </div>
-
-          {!isInputMinimized ? (
-            <div
-              className={`flex min-h-[45vh] flex-col transition-all xl:min-h-0 ${focusedPane === "input" ? "opacity-100" : "opacity-60 saturate-50"}`}
-              onMouseDown={() => setFocusedPane("input")}
-            >
+            {!input.trim() ? (
+              <div className="flex h-full min-h-[200px] flex-col items-center justify-center gap-4 p-4 text-center text-sm text-[var(--workspace-text-muted)]">
+                <p className="max-w-[16rem] sm:max-w-none">Paste or import JSON, XML, YAML, TOML, or CSV here</p>
+                <div className="flex flex-wrap items-center justify-center gap-1">
+                  {(["json", "xml", "yaml", "csv"] as const).map((fmt) => (
+                    <button
+                      key={fmt}
+                      type="button"
+                      className="btn btn-ghost btn-xs rounded p-1 border-0 hover:bg-[var(--workspace-panel)] hover:underline hover:text-primary transition-colors"
+                      onClick={() => {
+                        setInput(SAMPLES[fmt]);
+                        pushHistory(SAMPLES[fmt]);
+                        setInputFormatOverride(null);
+                        setError(null);
+                      }}
+                    >
+                      Load sample {FORMAT_LABELS[fmt]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
               <JsonEditor
                 value={input}
                 onChange={(next) => {
@@ -1165,177 +1059,534 @@ editorFontSize?: number;
                   pushHistory(next);
                   setFocusedPane("input");
                 }}
-                className="h-full min-h-0 flex-1 p-1"
+                className="h-full"
                 language={resolvedInputFormat === "toml" || resolvedInputFormat === "csv" ? "plaintext" : resolvedInputFormat}
                 monacoTheme={monacoTheme}
-                placeholder="Paste or drop JSON here"
+                placeholder="Paste or drop JSON, XML, YAML, TOML, or CSV here"
                 panelTone="input"
                 fontSize={editorFontSize}
               />
-              <div
-                className={`flex items-center justify-between gap-4 border-t px-2 py-1.5 text-xs ${inputEditorBgClass} ${isDark ? "text-gray-400" : "text-gray-600"}`}
-              >
-                <div className="flex items-center gap-4">
-                  <span className="flex min-w-[5rem] items-center gap-1.5">
-                    {inputValid === true ? (
-                      <>
-                        <CheckCircleIcon className="h-3.5 w-3.5 shrink-0 text-success" aria-hidden="true" />
-                        <span>Valid</span>
-                      </>
-                    ) : inputValid === false ? (
-                      <>
-                        <XCircleIcon className="h-3.5 w-3.5 shrink-0 text-error" aria-hidden="true" />
-                        <span>Invalid</span>
-                      </>
-                    ) : (
-                      <span className="opacity-60">—</span>
-                    )}
-                  </span>
-                  <button
-                    type="button"
-                    className={`flex min-w-[6.5rem] items-center gap-1.5 whitespace-nowrap ${liveTransform ? "opacity-100" : "opacity-60 hover:opacity-100"}`}
-                    title={liveTransform ? "Live transform on" : "Live transform off"}
-                    onClick={() => setLiveTransform((v) => !v)}
-                  >
-                    {liveTransform ? (
-                      <ArrowPathIconSolid
-                        className="h-3.5 w-3.5 shrink-0 text-primary"
-                        aria-hidden="true"
-                      />
-                    ) : (
-                      <NoSymbolIcon
-                        className="h-3.5 w-3.5 shrink-0"
-                        aria-hidden="true"
-                      />
-                    )}
-                    <span>Live Transform</span>
-                  </button>
-                </div>
-                <div className="dropdown dropdown-top dropdown-end">
-                  <div
-                    tabIndex={0}
-                    role="button"
-                    className="flex min-w-[4rem] cursor-pointer items-center gap-1.5 opacity-80 hover:opacity-100"
-                    aria-label="Input format"
-                  >
-                    <ChevronUpIcon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                    {FORMAT_LABELS[resolvedInputFormat]}
-                  </div>
-                  <ul
-                    className={`menu dropdown-content z-50 mb-1 w-32 rounded-md border p-1 shadow-xl ${toolbarBorderClass} ${dropdownPanelClass}`}
-                  >
-                    {FORMAT_KINDS.map((fmt) => (
-                      <li key={fmt}>
-                        <button
-                          type="button"
-                          className={`rounded-md ${resolvedInputFormat === fmt ? "bg-primary text-primary-content" : ""}`}
-                          onClick={() => {
-                            if (fmt === resolvedInputFormat) return;
-                            void (async () => {
-                              try {
-                                const json = await run<JsonValue>("parseFormat", {
-                                  input,
-                                  format: resolvedInputFormat,
-                                });
-                                const converted =
-                                  fmt === "json"
-                                    ? JSON.stringify(json, null, 2)
-                                    : await run<string>("convert", { json, toFormat: fmt });
-                                setInput(converted);
-                                pushHistory(converted);
-                              } catch {
-                                setError("Failed to convert input");
-                              }
-                            })();
-                          }}
-                        >
-                          {FORMAT_LABELS[fmt]}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            </div>
-          ) : null}
-
+            )}
+          </div>
+        </div>
+        )}
+        {isDesktopLayout && !isOutputMaximized && (
           <div
-            className={`relative flex flex-col xl:min-h-0 ${isInputMinimized ? "min-h-full" : "min-h-[45vh]"}`}
-            onMouseDown={() => setFocusedPane("output")}
+            role="separator"
+            aria-orientation="vertical"
+            className="w-px shrink-0 cursor-col-resize bg-[var(--workspace-border)] hover:bg-primary/30 transition-colors"
+            onMouseDown={() => setIsResizing(true)}
+          />
+        )}
+        <div
+          className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+          style={isDesktopLayout && !isOutputMaximized ? { width: `${100 - split}%` } : undefined}
+        >
+          <div
+            className={`flex shrink-0 flex-wrap items-center gap-1 border-b px-1.5 py-1 text-xs sm:flex-nowrap sm:overflow-x-auto ${inputEditorBgClass} ${isDark ? "text-gray-400" : "text-gray-600"}`}
           >
             <button
               type="button"
-              aria-label={isInputMinimized ? "Restore input panel" : "Maximize output panel"}
-              title={isInputMinimized ? "Restore input panel" : "Maximize output panel"}
-              className={`${toolbarBtnIcon} absolute right-2 top-2 z-20`}
-              onClick={toggleInputMinimized}
+              disabled={showBusy || inputEmpty}
+              className={`${linkBtnClass} h-7 min-h-7 shrink-0 ${
+                activeOperation === "format" ? "text-primary" : ""
+              }`}
+              onClick={() => runOperation("format")}
             >
-              {isInputMinimized ? (
-                <ArrowsPointingInIcon className="h-4 w-4" aria-hidden="true" />
+              Transform
+            </button>
+            <Dropdown
+              open={transformConfigOpen}
+              onOpenChange={setTransformConfigOpen}
+              side="bottom"
+              align="start"
+              rootClassName="shrink-0"
+              contentClassName={`w-80 rounded-lg border p-3 shadow-xl ${toolbarBorderClass} ${dropdownPanelClass}`}
+              trigger={
+                <div
+                  className={`${linkBtnClass} flex h-7 min-h-7 shrink-0 items-center justify-center ${
+                    transformConfigOpen ? "text-primary" : ""
+                  }`}
+                  title="Transform config"
+                >
+                  <ChevronDownIcon className="h-3.5 w-3.5" />
+                </div>
+              }
+            >
+              <div className="space-y-3 text-xs">
+                <div>
+                <p className="text-xs font-medium opacity-70 mb-1">Output format</p>
+                <div className="flex flex-wrap gap-1">
+                  {FORMAT_KINDS.map((fmt) => (
+                    <div key={fmt} className="flex items-center gap-0.5">
+                      <button
+                        type="button"
+                        disabled={inputEmpty}
+                        className={`${linkBtnClass} h-6 min-h-6 disabled:opacity-50 ${
+                          convertToFormat === fmt ? "text-primary" : ""
+                        }`}
+                        onClick={() => {
+                          setFocusedPane("output");
+                          runConvert(fmt);
+                        }}
+                      >
+                        {FORMAT_LABELS[fmt]}
+                      </button>
+                      <button
+                        type="button"
+                        className={`btn btn-ghost btn-xs btn-square h-5 w-5 p-0 rounded ${
+                          pinnedItems.has(`fmt:${fmt}`) ? "text-primary" : "opacity-40"
+                        }`}
+                        onClick={() => setPinnedItems((s) => { const n = new Set(s); n.has(`fmt:${fmt}`) ? n.delete(`fmt:${fmt}`) : n.add(`fmt:${fmt}`); return n; })}
+                        title={pinnedItems.has(`fmt:${fmt}`) ? "Unpin" : "Pin to toolbar"}
+                      >
+                        <StarIcon className={`h-3.5 w-3.5 ${pinnedItems.has(`fmt:${fmt}`) ? "text-primary" : "opacity-40"}`} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                </div>
+                <div className="border-t border-[var(--workspace-border)] pt-2">
+                <p className="text-xs font-medium opacity-70 mb-1">View</p>
+                <div className="flex flex-wrap gap-1">
+                  {(["raw", "tree", "graph"] as const).map((view) => (
+                    <div key={view} className="flex items-center gap-0.5">
+                      <button
+                        type="button"
+                        disabled={inputEmpty || ((view === "tree" || view === "graph") && !parsedOutput)}
+                        className={`${linkBtnClass} h-6 min-h-6 disabled:opacity-50 ${
+                          rightView === view ? "text-primary" : ""
+                        }`}
+                        onClick={() => {
+                          setRightView(view);
+                          setFocusedPane("output");
+                        }}
+                      >
+                        {view[0].toUpperCase() + view.slice(1)}
+                      </button>
+                      <button
+                        type="button"
+                        className={`btn btn-ghost btn-xs btn-square h-5 w-5 p-0 rounded ${
+                          pinnedItems.has(`view:${view}`) ? "text-primary" : "opacity-40"
+                        }`}
+                        onClick={() => setPinnedItems((s) => { const n = new Set(s); n.has(`view:${view}`) ? n.delete(`view:${view}`) : n.add(`view:${view}`); return n; })}
+                        title={pinnedItems.has(`view:${view}`) ? "Unpin" : "Pin to toolbar"}
+                      >
+                        <StarIcon className={`h-3.5 w-3.5 ${pinnedItems.has(`view:${view}`) ? "text-primary" : "opacity-40"}`} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                </div>
+                <div className="border-t border-[var(--workspace-border)] pt-2">
+                <p className="text-xs font-medium opacity-70 mb-1">Actions</p>
+                <div className="flex flex-wrap gap-1">
+                  {OPERATION_ACTIONS.map(([label, action]) => (
+                    <div key={action} className="flex items-center gap-0.5">
+                      <button
+                        type="button"
+                        disabled={showBusy || inputEmpty}
+                        className={`${linkBtnClass} h-6 min-h-6 disabled:opacity-50 ${
+                          activeOperation === action ? "text-primary" : ""
+                        }`}
+                        onClick={() => runOperation(action)}
+                      >
+                        {label}
+                      </button>
+                      <button
+                        type="button"
+                        className={`btn btn-ghost btn-xs btn-square h-5 w-5 p-0 rounded ${
+                          pinnedItems.has(`action:${action}`) ? "text-primary" : "opacity-40"
+                        }`}
+                        onClick={() => setPinnedItems((s) => { const n = new Set(s); n.has(`action:${action}`) ? n.delete(`action:${action}`) : n.add(`action:${action}`); return n; })}
+                        title={pinnedItems.has(`action:${action}`) ? "Unpin" : "Pin to toolbar"}
+                      >
+                        <StarIcon className={`h-3.5 w-3.5 ${pinnedItems.has(`action:${action}`) ? "text-primary" : "opacity-40"}`} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                </div>
+                <div className="border-t border-[var(--workspace-border)] pt-2">
+                <div className="flex w-fit shrink-0 items-center justify-between gap-2">
+                  <p className="text-xs font-medium opacity-70">Indent</p>
+                  <button
+                    type="button"
+                    className={`btn btn-ghost btn-xs btn-square h-5 w-5 p-0 rounded ${
+                      pinnedItems.has("indent") ? "text-primary" : "opacity-40"
+                    }`}
+                    onClick={() => setPinnedItems((s) => { const n = new Set(s); n.has("indent") ? n.delete("indent") : n.add("indent"); return n; })}
+                    title={pinnedItems.has("indent") ? "Unpin" : "Pin to toolbar"}
+                  >
+                    <StarIcon className={`h-3.5 w-3.5 ${pinnedItems.has("indent") ? "text-primary" : "opacity-40"}`} />
+                  </button>
+                </div>
+                <div className="flex w-fit shrink-0 items-center rounded-lg border border-[var(--workspace-border)] overflow-hidden [&>*:not(:last-child)]:border-r [&>*:not(:last-child)]:border-[var(--workspace-border)]">
+                  <button
+                    type="button"
+                    aria-label="Decrease indent"
+                    className="flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors"
+                    onClick={() => {
+                      const v = Math.max(0, formatOptions.indentation - 1);
+                      applyFormatWithOptions({ ...formatOptions, indentation: v });
+                    }}
+                  >
+                    <MinusIcon className="h-3.5 w-3.5" aria-hidden />
+                  </button>
+                  <span className="flex shrink-0 items-center justify-center px-1 py-0.5 text-xs tabular-nums text-[var(--workspace-text)] border-r border-[var(--workspace-border)]">
+                    {formatOptions.indentation}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label="Increase indent"
+                    className="flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors"
+                    onClick={() => {
+                      const v = Math.min(10, formatOptions.indentation + 1);
+                      applyFormatWithOptions({ ...formatOptions, indentation: v });
+                    }}
+                  >
+                    <PlusIcon className="h-3.5 w-3.5" aria-hidden />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Reset indent"
+                    className="flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors"
+                    onClick={() => applyFormatWithOptions({ ...formatOptions, indentation: 2 })}
+                  >
+                    <ArrowPathIcon className="h-3.5 w-3.5" aria-hidden />
+                  </button>
+                </div>
+                </div>
+                <div className="border-t border-[var(--workspace-border)] pt-2">
+                <p className="text-xs font-medium opacity-70 mb-1">Quote style</p>
+                <div className="flex flex-wrap gap-1">
+                  {(["double", "single"] as const).map((q) => (
+                    <button
+                      key={q}
+                      type="button"
+                      className={`${linkBtnClass} h-6 min-h-6 ${
+                        formatOptions.quoteStyle === q ? "text-primary" : ""
+                      }`}
+                      onClick={() => applyFormatWithOptions({ ...formatOptions, quoteStyle: q })}
+                    >
+                      {q === "double" ? "Double" : "Single"}
+                    </button>
+                  ))}
+                </div>
+                </div>
+                <div className="border-t border-[var(--workspace-border)] pt-2">
+                <div className="flex flex-wrap items-center gap-3">
+                  <label className="flex cursor-pointer items-center gap-1.5">
+                    <input
+                      type="checkbox"
+                      className="checkbox checkbox-xs"
+                      checked={formatOptions.sortKeys}
+                      onChange={(e) =>
+                        applyFormatWithOptions({ ...formatOptions, sortKeys: e.target.checked })
+                      }
+                    />
+                    Sort keys
+                  </label>
+                  <label className="flex cursor-pointer items-center gap-1.5">
+                    <input
+                      type="checkbox"
+                      className="checkbox checkbox-xs"
+                      checked={formatOptions.removeEmpty}
+                      onChange={(e) =>
+                        applyFormatWithOptions({ ...formatOptions, removeEmpty: e.target.checked })
+                      }
+                    />
+                    Remove empty
+                  </label>
+                </div>
+                </div>
+                <div className="border-t border-[var(--workspace-border)] pt-2">
+                <p className="text-xs font-medium opacity-70 mb-1">Generate Types</p>
+                <div className="flex flex-wrap gap-1">
+                  {TYPE_LANGUAGES.map((item) => (
+                    <div key={item.id} className="flex items-center gap-0.5">
+                      <button
+                        type="button"
+                        disabled={inputEmpty}
+                        className={`${linkBtnClass} h-6 min-h-6 disabled:opacity-50 ${
+                          typeLanguage === item.id ? "text-primary" : ""
+                        }`}
+                        onClick={() => {
+                          setFocusedPane("output");
+                          setActiveOperation("generateTypes");
+                          executeOperation("generateTypes", { typeLanguage: item.id });
+                        }}
+                      >
+                        {item.label}
+                      </button>
+                      <button
+                        type="button"
+                        className={`btn btn-ghost btn-xs btn-square h-5 w-5 p-0 rounded ${
+                          pinnedItems.has(`type:${item.id}`) ? "text-primary" : "opacity-40"
+                        }`}
+                        onClick={() => setPinnedItems((s) => { const n = new Set(s); n.has(`type:${item.id}`) ? n.delete(`type:${item.id}`) : n.add(`type:${item.id}`); return n; })}
+                        title={pinnedItems.has(`type:${item.id}`) ? "Unpin" : "Pin to toolbar"}
+                      >
+                        <StarIcon className={`h-3.5 w-3.5 ${pinnedItems.has(`type:${item.id}`) ? "text-primary" : "opacity-40"}`} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                </div>
+              </div>
+            </Dropdown>
+            {FORMAT_KINDS.some((f) => pinnedItems.has(`fmt:${f}`)) && (
+              <span className="mx-1 h-4 w-px shrink-0 self-center bg-[var(--workspace-text-muted)]/60" role="separator" aria-hidden />
+            )}
+            {FORMAT_KINDS.filter((f) => pinnedItems.has(`fmt:${f}`)).map((fmt) => (
+              <button
+                key={fmt}
+                type="button"
+                disabled={inputEmpty}
+                className={`${linkBtnClass} h-7 min-h-7 shrink-0 disabled:opacity-50 ${
+                  convertToFormat === fmt ? "text-primary" : ""
+                }`}
+                onClick={() => { setFocusedPane("output"); runConvert(fmt); }}
+              >
+                {FORMAT_LABELS[fmt]}
+              </button>
+            ))}
+            {(["raw", "tree", "graph"] as const).some((v) => pinnedItems.has(`view:${v}`)) && (
+              <span className="mx-1 h-4 w-px shrink-0 self-center bg-[var(--workspace-text-muted)]/60" role="separator" aria-hidden />
+            )}
+            {(["raw", "tree", "graph"] as const)
+              .filter((v) => pinnedItems.has(`view:${v}`))
+              .map((view) => (
+                <button
+                  key={view}
+                  type="button"
+                  disabled={inputEmpty || ((view === "tree" || view === "graph") && !parsedOutput)}
+                  className={`${linkBtnClass} h-7 min-h-7 shrink-0 disabled:opacity-50 ${
+                    rightView === view ? "text-primary" : ""
+                  }`}
+                  onClick={() => { setRightView(view); setFocusedPane("output"); }}
+                >
+                  {view[0].toUpperCase() + view.slice(1)}
+                </button>
+              ))}
+            {OPERATION_ACTIONS.some(([, a]) => pinnedItems.has(`action:${a}`)) && (
+              <span className="mx-1 h-4 w-px shrink-0 self-center bg-[var(--workspace-text-muted)]/60" role="separator" aria-hidden />
+            )}
+            {OPERATION_ACTIONS.filter(([, a]) => pinnedItems.has(`action:${a}`)).map(([label, action]) => (
+              <button
+                key={action}
+                type="button"
+                disabled={showBusy || inputEmpty}
+                className={`${linkBtnClass} h-7 min-h-7 shrink-0 disabled:opacity-50 ${
+                  activeOperation === action ? "text-primary" : ""
+                }`}
+                onClick={() => runOperation(action)}
+              >
+                {label}
+              </button>
+            ))}
+            {pinnedItems.has("indent") && (
+              <>
+              <span className="mx-1 h-4 w-px shrink-0 self-center bg-[var(--workspace-text-muted)]/60" role="separator" aria-hidden />
+              <div className="flex w-fit shrink-0 items-center rounded-lg border border-[var(--workspace-border)] overflow-hidden [&>*:not(:last-child)]:border-r [&>*:not(:last-child)]:border-[var(--workspace-border)]">
+                <span className="px-1.5 py-0.5 text-xs opacity-70 border-r border-[var(--workspace-border)]">Indent</span>
+                <button
+                  type="button"
+                  aria-label="Decrease indent"
+                  className="flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors"
+                  onClick={() => {
+                    const v = Math.max(0, formatOptions.indentation - 1);
+                    applyFormatWithOptions({ ...formatOptions, indentation: v });
+                  }}
+                >
+                  <MinusIcon className="h-3 w-3" aria-hidden />
+                </button>
+                <span className="flex shrink-0 items-center justify-center px-1 py-0.5 text-xs tabular-nums border-r border-[var(--workspace-border)]">{formatOptions.indentation}</span>
+                <button
+                  type="button"
+                  aria-label="Increase indent"
+                  className="flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors"
+                  onClick={() => {
+                    const v = Math.min(10, formatOptions.indentation + 1);
+                    applyFormatWithOptions({ ...formatOptions, indentation: v });
+                  }}
+                >
+                  <PlusIcon className="h-3 w-3" aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Reset indent"
+                  className="flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors"
+                  onClick={() => applyFormatWithOptions({ ...formatOptions, indentation: 2 })}
+                >
+                  <ArrowPathIcon className="h-3 w-3" aria-hidden />
+                </button>
+              </div>
+              </>
+            )}
+            {TYPE_LANGUAGES.some((t) => pinnedItems.has(`type:${t.id}`)) && (
+              <span className="mx-1 h-4 w-px shrink-0 self-center bg-[var(--workspace-text-muted)]/60" role="separator" aria-hidden />
+            )}
+            {TYPE_LANGUAGES.filter((t) => pinnedItems.has(`type:${t.id}`)).map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                disabled={inputEmpty}
+                className={`${linkBtnClass} flex h-7 min-h-7 shrink-0 items-center gap-1 disabled:opacity-50 ${
+                  activeOperation === "generateTypes" && typeLanguage === item.id ? "text-primary underline" : ""
+                }`}
+                onClick={() => {
+                  setFocusedPane("output");
+                  setActiveOperation("generateTypes");
+                  executeOperation("generateTypes", { typeLanguage: item.id });
+                }}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+          <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+            {rightView === "raw" ? (
+              activeOperation === "diff" && diffPreview ? (
+                <JsonDiffEditor
+                  original={diffPreview.original}
+                  modified={diffPreview.modified}
+                  className="h-full min-h-0 flex-1"
+                  language={outputLanguage === "toml" || outputLanguage === "csv" ? "plaintext" : outputLanguage}
+                  monacoTheme={monacoTheme}
+                  fontSize={editorFontSize}
+                />
+              ) : output.trim() ? (
+                <JsonEditor
+                  value={output}
+                  onChange={setOutput}
+                  className="h-full min-h-0 flex-1"
+                  readOnly
+                  passiveReadOnly
+                  language={outputLanguage === "toml" || outputLanguage === "csv" ? "plaintext" : outputLanguage}
+                  monacoTheme={monacoTheme}
+                  panelTone="output"
+                  fontSize={editorFontSize}
+                />
               ) : (
-                <ArrowsPointingOutIcon className="h-4 w-4" aria-hidden="true" />
+                <div className="flex h-full min-h-[200px] items-center justify-center bg-[var(--workspace-panel)] text-sm text-[var(--workspace-text-muted)]">
+                  Run an operation to see output here
+                </div>
+              )
+            ) : null}
+            {rightView === "tree" ? (
+              parsedOutput ? (
+                <TreeView
+                  data={parsedOutput}
+                  isDark={isDark}
+                  className={`${outputPanelClass} min-h-0 flex-1 overflow-auto`}
+                />
+              ) : (
+                <div className={`flex h-full min-h-[200px] items-center justify-center border text-sm text-base-content/70 ${outputPanelClass}`}>
+                  Current output is not valid JSON.
+                </div>
+              )
+            ) : null}
+            {rightView === "graph" ? (
+              parsedOutput ? (
+                <GraphView
+                  ref={graphViewRef}
+                  data={parsedOutput}
+                  isDark={isDark}
+                  className={`${outputPanelClass} min-h-0 flex-1`}
+                />
+              ) : (
+                <div className={`flex h-full min-h-[200px] items-center justify-center border text-sm text-base-content/70 ${outputPanelClass}`}>
+                  Current output is not valid JSON.
+                </div>
+              )
+            ) : null}
+          </div>
+        </div>
+      </div>
+
+      <StatusBar
+        valid={inputValid}
+        errorMessage={error}
+        lineCount={inputLineCount}
+        sizeFormatted={inputSizeFormatted}
+        liveTransform={liveTransform}
+        onLiveTransformToggle={() => setLiveTransform((v) => !v)}
+        inputFormatDropdown={
+          <Dropdown
+            open={inputFormatOpen}
+            onOpenChange={setInputFormatOpen}
+            side="top"
+            contentClassName={`w-24 rounded border p-1 shadow-xl ${toolbarBorderClass} ${dropdownPanelClass}`}
+            trigger={() => (
+              <div className={`${linkBtnClass} flex h-7 min-h-7 shrink-0 cursor-pointer items-center gap-1`}>
+                <span className="truncate">{FORMAT_LABELS[resolvedInputFormat]}</span>
+                <ChevronUpIcon className="h-3.5 w-3.5 shrink-0" />
+              </div>
+            )}
+          >
+            <ul className="menu">
+              {FORMAT_KINDS.map((fmt) => (
+                <li key={fmt}>
+                  <button
+                    type="button"
+                    className={`rounded text-xs ${resolvedInputFormat === fmt ? "bg-primary text-primary-content" : ""}`}
+                    onClick={() => {
+                      onInputFormatChange(fmt);
+                      setInputFormatOpen(false);
+                    }}
+                  >
+                    {FORMAT_LABELS[fmt]}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </Dropdown>
+        }
+        rightActions={
+          <>
+            <button
+              type="button"
+              className={`${linkBtnClass} h-7 min-h-7 shrink-0 gap-1`}
+              onClick={shareWorkspace}
+            >
+              <ShareIcon className="h-3.5 w-3.5 shrink-0" />
+              {shareLabel}
+            </button>
+            <button
+              type="button"
+              className={`${linkBtnClass} h-7 min-h-7 shrink-0 gap-1 disabled:opacity-50`}
+              disabled={!canDownload}
+              onClick={copyOutput}
+            >
+              <ClipboardDocumentIcon className="h-3.5 w-3.5 shrink-0" />
+              {copyLabel}
+            </button>
+            <button
+              type="button"
+              className={`${linkBtnClass} h-7 min-h-7 shrink-0 gap-1 disabled:opacity-50`}
+              disabled={!canDownload}
+              onClick={downloadOutput}
+            >
+              <ArrowDownTrayIcon className="h-3.5 w-3.5 shrink-0" />
+              Download
+            </button>
+            <button
+              type="button"
+              className={`${linkBtnClass} h-7 min-h-7 w-7 shrink-0`}
+              onClick={() => setIsOutputMaximized((v) => !v)}
+              title={isOutputMaximized ? "Restore layout" : "Maximize output"}
+              aria-label={isOutputMaximized ? "Restore layout" : "Maximize output"}
+            >
+              {isOutputMaximized ? (
+                <ArrowsPointingInIcon className="h-3.5 w-3.5 shrink-0" />
+              ) : (
+                <ArrowsPointingOutIcon className="h-3.5 w-3.5 shrink-0" />
               )}
             </button>
-            <div className="flex-1 min-h-0">
-              {rightView === "raw" ? (
-                activeOperation === "diff" && diffPreview ? (
-                  <JsonDiffEditor
-                    original={diffPreview.original}
-                    modified={diffPreview.modified}
-                    className="h-full min-h-0"
-                    language={outputLanguage === "toml" || outputLanguage === "csv" ? "plaintext" : outputLanguage}
-                    monacoTheme={monacoTheme}
-                    fontSize={editorFontSize}
-                  />
-                ) : output.trim() ? (
-                  <JsonEditor
-                    value={output}
-                    onChange={setOutput}
-                    className="h-full min-h-0"
-                    readOnly
-                    passiveReadOnly
-                    language={outputLanguage === "toml" || outputLanguage === "csv" ? "plaintext" : outputLanguage}
-                    monacoTheme={monacoTheme}
-                    panelTone="output"
-                    fontSize={editorFontSize}
-                  />
-                ) : (
-                  <div className={`flex h-full min-h-0 items-center justify-center border text-sm text-base-content/70 ${outputPanelClass}`}>
-                    Run any operation to see output here
-                  </div>
-                )
-              ) : null}
-              {rightView === "tree" ? (
-                parsedOutput ? (
-                  <TreeView
-                    data={parsedOutput}
-                    isDark={isDark}
-                    className={`${outputPanelClass} min-h-0`}
-                  />
-                ) : (
-                  <div className={`flex h-full min-h-0 items-center justify-center rounded-xl border text-sm text-base-content/70 ${outputPanelClass}`}>
-                    Current output is not valid JSON.
-                  </div>
-                )
-              ) : null}
-              {rightView === "graph" ? (
-                parsedOutput ? (
-                  <GraphView
-                    ref={graphViewRef}
-                    data={parsedOutput}
-                    isDark={isDark}
-                    className={`${outputPanelClass} min-h-0`}
-                  />
-                ) : (
-                  <div className={`flex h-full min-h-0 items-center justify-center rounded-xl border text-sm text-base-content/70 ${outputPanelClass}`}>
-                    Current output is not valid JSON.
-                  </div>
-                )
-              ) : null}
-            </div>
-          </div>
-        </section>
-
+          </>
+        }
+      />
 
         {modalKind ? (
           <div className="modal modal-open">
@@ -1394,106 +1645,6 @@ editorFontSize?: number;
           </div>
         ) : null}
 
-        {error ? (
-          <div className="toast toast-bottom toast-start z-50">
-            <div className="alert alert-error flex items-center gap-2 shadow-lg">
-              <span className="flex-1">{error}</span>
-              <button
-                type="button"
-                aria-label="Close error"
-                className="btn btn-xs btn-soft btn-circle shrink-0"
-                onClick={() => setError(null)}
-              >
-                <XMarkIcon className="h-4 w-4" aria-hidden="true" />
-              </button>
-            </div>
-          </div>
-        ) : null}
-
-        <div className="fixed bottom-6 right-6 z-40" ref={settingsRef}>
-          {isSettingsOpen ? (
-            <div className="absolute rounded-md bottom-full right-0 mb-2 w-[320px] border border-base-300 bg-base-100 p-3 shadow-xl">
-              <div className="mb-2 rounded-md border border-base-300 bg-base-200 px-2 py-1.5">
-                <p className="text-base font-bold leading-tight">jsonix</p>
-                <p className="text-sm leading-tight text-base-content/70">
-                  Local-first JSON transform and validation workspace
-                </p>
-              </div>
-              <p className="mb-2 text-xs font-semibold tracking-wide text-base-content/70">
-                Theme
-              </p>
-              <div className={`join overflow-hidden rounded-md border ${toolbarBorderClass} ${joinItemBorderClass}`}>
-                {themeOptions.map(({ mode, ariaLabel, title, Icon }) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    aria-label={ariaLabel}
-                    title={title}
-                    className={`btn btn-sm btn-soft join-item btn-square min-w-9 h-9 min-h-9 rounded-none transition-colors ${
-                      themeMode === mode ? "btn-primary" : ""
-                    }`}
-                    onClick={() => setThemeMode(mode)}
-                  >
-                    <Icon className="h-4 w-4" aria-hidden="true" />
-                  </button>
-                ))}
-              </div>
-
-              <p className="mt-4 mb-2 text-xs font-semibold tracking-wide text-base-content/70">
-                Font size
-              </p>
-              <div className={`join overflow-hidden rounded-md border ${toolbarBorderClass} ${joinItemBorderClass}`}>
-                <button
-                  type="button"
-                  aria-label="Decrease font size"
-                  title="Decrease font size"
-                  className="btn btn-sm btn-soft join-item btn-square min-w-9 h-9 min-h-9 rounded-none transition-colors"
-                  onClick={() => setEditorFontSize((size) => Math.max(10, size - 1))}
-                >
-                  <MinusIcon className="h-4 w-4" aria-hidden="true" />
-                </button>
-                <button
-                  type="button"
-                  aria-label="Current font size"
-                  title="Current font size"
-                  className="btn btn-sm btn-soft join-item btn-square min-w-[3.5rem] h-9 min-h-9 rounded-none disabled:opacity-70 disabled:text-base-content/60"
-                  disabled
-                >
-                  {editorFontSize}
-                </button>
-                <button
-                  type="button"
-                  aria-label="Increase font size"
-                  title="Increase font size"
-                  className="btn btn-sm btn-soft join-item btn-square min-w-9 h-9 min-h-9 rounded-none transition-colors"
-                  onClick={() => setEditorFontSize((size) => Math.min(24, size + 1))}
-                >
-                  <PlusIcon className="h-4 w-4" aria-hidden="true" />
-                </button>
-                <button
-                  type="button"
-                  aria-label="Reset font size"
-                  title="Reset font size"
-                  className="btn btn-sm btn-soft join-item btn-square min-w-9 h-9 min-h-9 rounded-none transition-colors"
-                  onClick={() => setEditorFontSize(13)}
-                >
-                  <ArrowPathIcon className="h-4 w-4" aria-hidden="true" />
-                </button>
-              </div>
-            </div>
-          ) : null}
-          <button
-            type="button"
-            aria-label="Open settings"
-            title="Settings"
-            className="btn btn-primary btn-circle shadow-lg"
-            onClick={() => setIsSettingsOpen((s) => !s)}
-          >
-            <Cog6ToothIcon className="h-4 w-4" aria-hidden="true" />
-          </button>
-        </div>
-
-      </div>
     </main>
   );
 }

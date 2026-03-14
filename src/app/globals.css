@@ -8,6 +8,24 @@
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
+/* Workspace design tokens – developer tool aesthetic */
+:root {
+  --workspace-background: #f5f5f5;
+  --workspace-panel: #ffffff;
+  --workspace-border: #e5e5e5;
+  --workspace-text: #171717;
+  --workspace-text-muted: #737373;
+  --workspace-primary: oklch(var(--p));
+}
+
+[data-theme="dark"] {
+  --workspace-background: #0b0b0b;
+  --workspace-panel: #111111;
+  --workspace-border: #1f1f1f;
+  --workspace-text: #e5e5e5;
+  --workspace-text-muted: #9ca3af;
+}
+
 html,
 body {
   min-height: 100%;

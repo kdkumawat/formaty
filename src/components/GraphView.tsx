@@ -2,6 +2,7 @@
 
 import {
   forwardRef,
+  useEffect,
   useImperativeHandle,
   useMemo,
   useRef,
@@ -10,11 +11,13 @@ import {
   type RefAttributes,
 } from "react";
 import dynamic from "next/dynamic";
+import html2canvas from "html2canvas";
 import {
   ArrowsPointingOutIcon,
   ArrowUturnRightIcon,
   HomeIcon,
   MagnifyingGlassIcon,
+  PlusIcon,
   ScaleIcon,
 } from "@heroicons/react/24/outline";
 import "jsoncrack-react/style.css";
@@ -61,6 +64,23 @@ export const GraphView = forwardRef<GraphViewRef, GraphViewProps>(function Graph
     const source = JSON.stringify(normalizedData).toLowerCase();
     return source.split(term).length - 1;
   }, [normalizedData, search]);
+
+  useEffect(() => {
+    const el = exportRef.current;
+    if (!el) return;
+    const term = search.trim().toLowerCase();
+    const texts = el.querySelectorAll("text");
+    texts.forEach((t) => {
+      const content = t.textContent ?? "";
+      if (term && content.toLowerCase().includes(term)) {
+        t.setAttribute("fill", isDark ? "#fbbf24" : "#ca8a04");
+        t.setAttribute("font-weight", "bold");
+      } else {
+        t.removeAttribute("font-weight");
+        t.removeAttribute("fill");
+      }
+    });
+  }, [search, isDark]);
 
   const rotateLayout = () => {
     setLayoutDirection((prev) => {
@@ -167,8 +187,43 @@ export const GraphView = forwardRef<GraphViewRef, GraphViewProps>(function Graph
         
         img.src = url;
       });
-    } catch (error) {
-      throw error instanceof Error ? error : new Error("Graph export failed.");
+    } catch {
+      // Final fallback: html2canvas with onclone to replace lab/oklch colors
+      try {
+        const fallbackColor = isDark ? "#111111" : "#ffffff";
+        const canvas = await html2canvas(source, {
+          backgroundColor: fallbackColor,
+          scale: window.devicePixelRatio || 1,
+          useCORS: true,
+          allowTaint: true,
+          logging: false,
+          onclone: (clonedDoc, clonedElement) => {
+            [clonedDoc.documentElement, clonedDoc.body, clonedElement as HTMLElement].forEach((el) => {
+              if (el?.style) el.style.setProperty("background-color", fallbackColor, "important");
+            });
+            clonedDoc.querySelectorAll("*").forEach((el) => {
+              const htmlEl = el as HTMLElement;
+              try {
+                const comp = clonedDoc.defaultView?.getComputedStyle(htmlEl);
+                const bg = comp?.backgroundColor ?? "";
+                if (bg && (bg.includes("lab") || bg.includes("oklch") || bg.includes("oklab"))) {
+                  htmlEl.style.setProperty("background-color", "transparent", "important");
+                }
+              } catch {
+                htmlEl.style?.setProperty("background-color", "transparent", "important");
+              }
+            });
+          },
+        });
+        return await new Promise<Blob>((resolve, reject) => {
+          canvas.toBlob((blob) => {
+            if (blob) resolve(blob);
+            else reject(new Error("PNG conversion failed."));
+          }, "image/png");
+        });
+      } catch (fallbackError) {
+        throw fallbackError instanceof Error ? fallbackError : new Error("Graph export failed.");
+      }
     }
   };
 
@@ -243,7 +298,7 @@ export const GraphView = forwardRef<GraphViewRef, GraphViewProps>(function Graph
             aria-label={showGrid ? "Hide rulers" : "Show rulers"}
             title={showGrid ? "Hide rulers" : "Show rulers"}
           >
-            <ScaleIcon className="h-4 w-4" />
+            <PlusIcon className="h-4 w-4" />
           </button>
         </div>
 

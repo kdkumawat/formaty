@@ -1,5 +1,7 @@
 "use client";
 
+import React from "react";
+import type { editor } from "monaco-editor";
 import Editor from "@monaco-editor/react";
 
 interface JsonEditorProps {
@@ -29,12 +31,14 @@ export function JsonEditor({
   panelTone = "input",
   fontSize = 13,
 }: JsonEditorProps) {
+  const editorRef = React.useRef<editor.IStandaloneCodeEditor | null>(null);
   const resolvedTheme = monacoTheme === "vs-dark" ? "jsonix-dark" : "jsonix-light";
   const isDarkTheme = monacoTheme === "vs-dark";
 
   return (
     <div
-      className={`relative h-[52vh] min-h-[360px] overflow-hidden border ${
+      role="presentation"
+      className={`relative h-full min-h-0 overflow-hidden border cursor-text ${
         panelTone === "output"
           ? isDarkTheme
             ? "border-[#2d2d30] bg-[#1e1e1e]"
@@ -43,6 +47,7 @@ export function JsonEditor({
             ? "border-[#3c3c3c] bg-[#252526]"
             : "border-[#d4d4d4] bg-[#f3f3f3]"
       } ${className ?? ""}`}
+      onClick={() => editorRef.current?.focus()}
     >
       <Editor
         height="100%"
@@ -96,6 +101,7 @@ export function JsonEditor({
           parameterHints: { enabled: !passiveReadOnly },
         }}
         onChange={(next) => onChange(next ?? "")}
+        onMount={(editor) => { editorRef.current = editor; }}
       />
       {!value.trim() && placeholder ? (
         <div className="pointer-events-none absolute left-4 top-3 text-xs text-base-content/50">
