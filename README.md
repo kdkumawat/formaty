@@ -1,4 +1,4 @@
-# jsonix
+# formix
 
 **Transform, validate & format JSON, XML, YAML, TOML, CSV** — a local-first data toolkit.
 
