@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 
-const SITE_URL = "https://jsonix.vercel.app";
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://jsonix.pages.dev";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   return [

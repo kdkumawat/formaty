@@ -23,11 +23,9 @@ Open [http://localhost:3000](http://localhost:3000).
 ## Documentation
 
 - [Feature Guide](docs/guide.md) — detailed guide to all features
-- [Live app](https://jsonix.vercel.app)
+- [Live app](https://jsonix.pages.dev)
 
 ## Tech Stack
 
 - Next.js 16, React 19, Tailwind CSS, DaisyUI
 - Monaco Editor, ReactFlow, jsoncrack
-
-

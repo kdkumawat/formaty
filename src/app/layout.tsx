@@ -1,9 +1,7 @@
 import type { Metadata } from "next";
-import { SpeedInsights } from "@vercel/speed-insights/next";
-import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
-const SITE_URL = "https://jsonix.vercel.app";
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://jsonix.pages.dev";
 const SITE_NAME = "jsonix";
 const SITE_TITLE = "jsonix — Transform, Validate & Format JSON, XML, YAML, TOML, CSV";
 const CREATOR_NAME = "Kuldeep Kumawat";
@@ -119,8 +117,6 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
         {children}
-        <SpeedInsights />
-        <Analytics />
       </body>
     </html>
   );
