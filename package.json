@@ -6,10 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
-    "pages:build": "npx @cloudflare/next-on-pages",
-    "preview": "npm run pages:build && wrangler pages dev .vercel/output/static",
-    "deploy": "npm run pages:build && wrangler pages deploy .vercel/output/static"
+    "lint": "eslint"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",
@@ -40,8 +37,6 @@
     "eslint": "^9",
     "eslint-config-next": "15.3.9",
     "tailwindcss": "^4",
-    "typescript": "^5",
-    "@cloudflare/next-on-pages": "^1",
-    "wrangler": "^3"
+    "typescript": "^5"
   }
 }
