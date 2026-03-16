@@ -16,6 +16,7 @@ interface JsonEditorProps {
   className?: string;
   hideLineNumbers?: boolean;
   fontSize?: number;
+  onCursorChange?: (line: number, column: number) => void;
 }
 
 export function JsonEditor({
@@ -30,10 +31,19 @@ export function JsonEditor({
   hideLineNumbers = false,
   panelTone = "input",
   fontSize = 13,
+  onCursorChange,
 }: JsonEditorProps) {
   const editorRef = React.useRef<editor.IStandaloneCodeEditor | null>(null);
   const resolvedTheme = monacoTheme === "vs-dark" ? "formaty-dark" : "formaty-light";
   const isDarkTheme = monacoTheme === "vs-dark";
+
+  const skeleton = (
+    <div className="flex h-full w-full flex-col gap-2 p-4">
+      {[1, 2, 3, 4, 5, 6, 7].map((i) => (
+        <div key={i} className="h-4 animate-pulse rounded bg-base-content/10" style={{ width: `${60 + (i % 3) * 20}%` }} />
+      ))}
+    </div>
+  );
 
   return (
     <div
@@ -51,6 +61,7 @@ export function JsonEditor({
     >
       <Editor
         height="100%"
+        loading={skeleton}
         defaultLanguage={language}
         theme={resolvedTheme}
         value={value}
@@ -101,7 +112,16 @@ export function JsonEditor({
           parameterHints: { enabled: !passiveReadOnly },
         }}
         onChange={(next) => onChange(next ?? "")}
-        onMount={(editor) => { editorRef.current = editor; }}
+        onMount={(editor) => {
+          editorRef.current = editor;
+          if (onCursorChange) {
+            editor.onDidChangeCursorPosition((e) => {
+              onCursorChange(e.position.lineNumber, e.position.column);
+            });
+            const pos = editor.getPosition();
+            if (pos) onCursorChange(pos.lineNumber, pos.column);
+          }
+        }}
       />
       {!value.trim() && placeholder ? (
         <div className="pointer-events-none absolute left-4 top-3 text-xs text-base-content/50">

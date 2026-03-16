@@ -13,6 +13,9 @@ interface StatusBarProps {
   onLiveTransformToggle?: () => void;
   inputFormatDropdown?: ReactNode;
   rightActions?: ReactNode;
+  cursorPosition?: string;
+  indentSize?: number;
+  encoding?: string;
 }
 
 function formatSize(bytes: number): string {
@@ -30,11 +33,14 @@ export function StatusBar({
   onLiveTransformToggle,
   inputFormatDropdown,
   rightActions,
+  cursorPosition,
+  indentSize,
+  encoding = "UTF-8",
 }: StatusBarProps) {
   const validInvalidEl = errorMessage ? (
-    <span className="flex min-w-0 max-w-[40rem] shrink items-center gap-1.5 truncate text-error" title={errorMessage}>
+    <span className="flex min-w-0 shrink items-center gap-1.5 text-error whitespace-nowrap" title={errorMessage}>
       <XCircleIcon className="h-3.5 w-3.5 shrink-0" aria-hidden />
-      <span className="truncate">{errorMessage}</span>
+      <span className="min-w-0">{errorMessage}</span>
     </span>
   ) : valid === true ? (
     <span className="flex min-w-[5rem] items-center gap-1.5">
@@ -52,12 +58,20 @@ export function StatusBar({
 
   return (
     <div
-      className="flex flex-shrink-0 items-center justify-between gap-1 overflow-visible border-t border-[var(--workspace-border)] bg-[var(--workspace-background)] px-1.5 text-xs text-[var(--workspace-text-muted)]"
+      className="flex flex-shrink-0 items-center justify-between gap-1 overflow-x-auto overflow-y-hidden border-t border-[var(--workspace-border)] bg-[var(--workspace-background)] px-1.5 text-xs text-[var(--workspace-text-muted)]"
       style={{ minHeight: "28px", padding: "0 8px", paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
     >
       <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto flex-nowrap">
-        <span className="shrink-0 tabular-nums">{lineCount} lines</span>
         <span className="shrink-0">{sizeFormatted}</span>
+        {cursorPosition ? (
+          <span className="shrink-0 tabular-nums">{cursorPosition}</span>
+        ) : (
+          <span className="shrink-0 tabular-nums">{lineCount} lines</span>
+        )}
+        {encoding && <span className="shrink-0 tabular-nums">{encoding}</span>}
+        {typeof indentSize === "number" && (
+          <span className="shrink-0 tabular-nums">Indent {indentSize}</span>
+        )}
         {inputFormatDropdown}
         {onLiveTransformToggle && (
           <button
