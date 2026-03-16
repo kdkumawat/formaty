@@ -92,6 +92,7 @@ export function Dropdown({
           <div
             ref={contentRef}
             className={`fixed z-[100] ${contentClassName}`}
+            onPointerDown={(e) => e.stopPropagation()}
             style={{
               [side === "top" ? "bottom" : "top"]: side === "top" ? `calc(100vh - ${position.top}px)` : position.top,
               left: position.left,

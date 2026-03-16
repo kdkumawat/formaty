@@ -11,6 +11,7 @@ import {
   ChevronDownIcon,
   ChevronUpIcon,
   ClipboardDocumentIcon,
+  Cog6ToothIcon,
   ComputerDesktopIcon,
   DocumentArrowDownIcon,
   MinusIcon,
@@ -240,10 +241,15 @@ export default function Home() {
   const [inputFormatOverride, setInputFormatOverride] = useState<FormatKind | null>(null);
   const [inputFormatOpen, setInputFormatOpen] = useState(false);
   const [transformConfigOpen, setTransformConfigOpen] = useState(false);
+  const [viewAsMenu, setViewAsMenu] = useState(false);
+  const [formatMenuOpen, setFormatMenuOpen] = useState(false);
+  const [viewMenuOpen, setViewMenuOpen] = useState(false);
+  const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
+  const [typesMenuOpen, setTypesMenuOpen] = useState(false);
   const [pinnedItems, setPinnedItems] = useState<Set<string>>(
     () => new Set(["fmt:json", "fmt:xml", "view:raw", "view:graph", "action:minify", "action:schema", "type:typescript", "type:java", "type:go", "type:python", "type:sql"])
   );
-  const [liveTransform, setLiveTransform] = useState(false);
+  const [liveTransform, setLiveTransform] = useState(true);
   const [editorFontSize, setEditorFontSize] = useState(13);
   const [inputValid, setInputValid] = useState<boolean | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -252,8 +258,10 @@ export default function Home() {
   const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
   const [actionBounce, setActionBounce] = useState<"share" | "copy" | null>(null);
   const [mobileShowOutput, setMobileShowOutput] = useState(false);
+  const [cursorPosition, setCursorPosition] = useState<{ line: number; column: number } | null>(null);
   const historyLock = useRef(false);
   const splitContainerRef = useRef<HTMLDivElement | null>(null);
+  const pinnedItemsBeforeMenuRef = useRef<Set<string> | null>(null);
   const graphViewRef = useRef<GraphViewRef | null>(null);
   const diffDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -306,6 +314,9 @@ export default function Home() {
   const dropdownPanelClass = isDark ? "bg-[#252526] text-base-content" : "bg-base-100 text-base-content";
   const linkBtnClass = "btn btn-xs btn-ghost rounded p-1 border-0 hover:bg-[var(--workspace-panel)] hover:underline hover:text-primary";
   const inputEmpty = !input.trim();
+  useEffect(() => {
+    if (inputEmpty) setCursorPosition(null);
+  }, [inputEmpty]);
 
   const detectedInputFormat = useMemo(() => detectFormat(input), [input]);
   const resolvedInputFormat = inputFormatOverride ?? detectedInputFormat;
@@ -411,6 +422,7 @@ export default function Home() {
         convertToFormat?: FormatKind;
         editorFontSize?: number;
         liveTransform?: boolean;
+        viewAsMenu?: boolean;
       pinnedItems?: string[];
       };
     if (data.input) setInput(data.input);
@@ -422,6 +434,7 @@ export default function Home() {
     if (data.convertToFormat) setConvertToFormat(data.convertToFormat);
     if (typeof data.editorFontSize === "number") setEditorFontSize(data.editorFontSize);
       if (typeof data.liveTransform === "boolean") setLiveTransform(data.liveTransform);
+      if (typeof data.viewAsMenu === "boolean") setViewAsMenu(data.viewAsMenu);
       if (Array.isArray(data.pinnedItems)) setPinnedItems(new Set(data.pinnedItems));
       if (data.formatOptions) {
         const nextIndentation = Number(data.formatOptions.indentation);
@@ -450,10 +463,11 @@ export default function Home() {
         convertToFormat,
         liveTransform,
         editorFontSize,
+        viewAsMenu,
         pinnedItems: Array.from(pinnedItems),
       }),
     );
-  }, [input, output, split, themeMode, typeLanguage, rightView, formatOptions, convertToFormat, liveTransform, editorFontSize, pinnedItems]);
+  }, [input, output, split, themeMode, typeLanguage, rightView, formatOptions, convertToFormat, liveTransform, editorFontSize, viewAsMenu, pinnedItems]);
 
   useEffect(() => {
     if (!output.trim()) {
@@ -1019,11 +1033,21 @@ export default function Home() {
       >
         {!isOutputMaximized && (!isDesktopLayout ? !mobileShowOutput : true) && (
         <div
-          className={`flex min-h-0 shrink-0 flex-col overflow-hidden bg-[var(--workspace-background)] transition-opacity duration-200 ${
-            focusedPane === "output" ? "opacity-60" : "opacity-100"
-          }`}
+          className={`flex min-h-0 flex-col overflow-hidden bg-[var(--workspace-background)] transition-opacity duration-200 ${
+            isDesktopLayout ? "shrink-0" : "min-h-0 flex-1"
+          } ${focusedPane === "output" ? "opacity-60" : "opacity-100"}`}
           style={isDesktopLayout ? { width: `${split}%`, minWidth: 160 } : undefined}
         >
+          {!isDesktopLayout && !mobileShowOutput && (
+            <button
+              type="button"
+              className="flex w-full shrink-0 items-center justify-center gap-2 border-b border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-4 py-3 text-sm font-medium text-primary transition-colors hover:bg-[var(--workspace-background)] active:opacity-80"
+              onClick={() => setMobileShowOutput(true)}
+            >
+              View output
+              <ArrowUturnRightIcon className="h-4 w-4 shrink-0" />
+            </button>
+          )}
           <div
             className={`flex shrink-0 flex-wrap items-center gap-1 border-b px-1.5 py-1 text-xs sm:flex-nowrap sm:overflow-x-auto ${inputEditorBgClass} ${isDark ? "text-gray-400" : "text-gray-600"}`}
           >
@@ -1100,21 +1124,49 @@ export default function Home() {
             onClick={() => setFocusedPane("input")}
           >
             {!input.trim() ? (
-              <div className="flex h-full min-h-[200px] flex-col items-center justify-center gap-4 p-4 text-center text-sm text-[var(--workspace-text-muted)]">
-                <p className="max-w-[16rem] sm:max-w-none">Paste or import or click sample input</p>
-                <div className="flex flex-nowrap items-center justify-center gap-2 overflow-x-auto w-full max-w-full px-2">
-                  {(["json", "xml", "yaml", "toml", "csv"] as const).map((fmt) => (
+              <div className="flex h-full min-h-[280px] flex-col items-center justify-center gap-6 p-6 text-center overflow-y-auto">
+                <div className="flex flex-col items-center gap-4">
+                  <div className="flex items-center">
+                    <img src="/icon.svg" alt="" width={48} height={48} className="workspace-icon shrink-0" />
+                    <span className="text-xl font-semibold text-primary">ormaty</span>
+                  </div>
+                  <p className="max-w-md text-sm text-[var(--workspace-text-muted)]">
+                    Format, convert and validate JSON, XML, YAML, TOML and CSV. Paste, upload, or try an example to get started.
+                  </p>
+                  <div className="flex flex-wrap gap-2 text-xs text-[var(--workspace-text-muted)]">
+                    <span>Format & convert</span>
+                    <span>·</span>
+                    <span>Tree & graph view</span>
+                    <span>·</span>
+                    <span>Schema validation</span>
+                    <span>·</span>
+                    <span>Type generation</span>
+                    <span>·</span>
+                    <span>Diff & flatten</span>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <button type="button" className={`${linkBtnClass} gap-1.5`} onClick={pasteFromClipboard}>
+                    <ClipboardDocumentIcon className="h-4 w-4" />
+                    Paste
+                  </button>
+                  <button type="button" className={`${linkBtnClass} gap-1.5`} onClick={() => document.getElementById("import-json-file")?.click()}>
+                    <DocumentArrowDownIcon className="h-4 w-4" />
+                    Upload
+                  </button>
+                  <div className="mx-0 text-xs">or try sample</div>
+                  {FORMAT_KINDS.map((fmt) => (
                     <button
                       key={fmt}
                       type="button"
-                      className="btn btn-ghost btn-xs rounded p-1 border-0 hover:bg-[var(--workspace-panel)] hover:underline hover:text-primary transition-colors"
+                      className={linkBtnClass}
                       onClick={() => {
                         const sample = SAMPLES[fmt];
                         setInput(sample);
                         pushHistory(sample);
                         setInputFormatOverride(null);
                         setError(null);
-        setValidationError(null);
+                        setValidationError(null);
                         parseOnly(sample, fmt);
                       }}
                     >
@@ -1137,6 +1189,7 @@ export default function Home() {
                 placeholder="Paste or drop JSON, XML, YAML, TOML, or CSV here"
                 panelTone="input"
                 fontSize={editorFontSize}
+                onCursorChange={(line, column) => setCursorPosition({ line, column })}
               />
             )}
           </div>
@@ -1159,329 +1212,199 @@ export default function Home() {
           {!isDesktopLayout && mobileShowOutput && (
             <button
               type="button"
-              className="shrink-0 border-b px-2 py-1.5 text-xs text-primary hover:bg-[var(--workspace-panel)]"
+              className="flex w-full shrink-0 items-center justify-center gap-2 border-b border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-4 py-3 text-sm font-medium text-primary transition-colors hover:bg-[var(--workspace-background)] active:opacity-80"
               onClick={() => {
                 setMobileShowOutput(false);
                 setIsOutputMaximized(false);
               }}
             >
-              ← Back to input
+              <ArrowUturnLeftIcon className="h-4 w-4 shrink-0" />
+              Back to input
             </button>
           )}
           <div
             className={`flex shrink-0 flex-nowrap items-center gap-1 overflow-x-auto border-b px-1.5 py-1 text-xs ${inputEditorBgClass} ${isDark ? "text-gray-400" : "text-gray-600"}`}
           >
-            <button
-              type="button"
-              disabled={showBusy || inputEmpty}
-              className={`${linkBtnClass} h-7 min-h-7 shrink-0 ${
-                activeOperation === "format" ? "text-primary" : ""
-              }`}
-              onClick={() => runOperation("format")}
-            >
-              Transform
-            </button>
             <Dropdown
               open={transformConfigOpen}
               onOpenChange={setTransformConfigOpen}
               side="bottom"
               align="start"
               rootClassName="shrink-0"
-              contentClassName={`w-full max-w-[18rem] sm:w-84 rounded-lg border p-3 shadow-xl ${toolbarBorderClass} ${dropdownPanelClass}`}
+              contentClassName={`dropdown-content card card-sm bg-base-100 z-[100] w-64 sm:w-80 max-w-[90vw] shadow-xl ${dropdownPanelClass}`}
               trigger={
-                <div
-                  className={`${linkBtnClass} flex h-7 min-h-7 shrink-0 items-center justify-center ${
-                    transformConfigOpen ? "text-primary" : ""
-                  }`}
-                  title="Transform config"
-                >
-                  <ChevronDownIcon className="h-3.5 w-3.5" />
+                <div className={`${linkBtnClass} flex h-7 min-h-7 shrink-0 items-center justify-center ${transformConfigOpen ? "text-primary" : ""}`} title="Settings">
+                  <Cog6ToothIcon className="h-3.5 w-3.5" />
                 </div>
               }
             >
-              <div className="space-y-3 text-xs">
-                <div>
+              <div className="card-body p-3 text-xs max-h-[70vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                <label className="flex cursor-pointer items-center gap-2 mb-3 pb-2 border-b border-[var(--workspace-border)]">
+                  <input type="checkbox" className="toggle toggle-sm toggle-primary" checked={viewAsMenu} onChange={(e) => { const on = e.target.checked; setViewAsMenu(on); if (on) { pinnedItemsBeforeMenuRef.current = new Set(pinnedItems); setPinnedItems(new Set()); setTransformConfigOpen(false); } else { if (pinnedItemsBeforeMenuRef.current) { setPinnedItems(pinnedItemsBeforeMenuRef.current); pinnedItemsBeforeMenuRef.current = null; } } }} />
+                  <span className="text-xs font-medium">View as Menu items</span>
+                </label>
+                {viewAsMenu ? (
+                  <p className="text-xs opacity-70 py-2">Options are now in the menu bar above. Uncheck to use the settings panel.</p>
+                ) : (
+                  <>
                 <p className="text-xs font-medium opacity-70 mb-1">Output format</p>
                 <div className="flex flex-wrap gap-1">
                   {FORMAT_KINDS.map((fmt) => (
                     <div key={fmt} className="flex items-center gap-0.5">
-                      <button
-                        type="button"
-                        disabled={inputEmpty}
-                        className={`${linkBtnClass} h-6 min-h-6 disabled:opacity-50 ${
-                          convertToFormat === fmt ? "text-primary" : ""
-                        }`}
-                        onClick={() => {
-                          setFocusedPane("output");
-                          runConvert(fmt);
-                        }}
-                      >
+                      <button type="button" disabled={inputEmpty} className={`${linkBtnClass} h-6 min-h-6 disabled:opacity-50 ${convertToFormat === fmt ? "text-primary" : ""}`} onClick={() => { setFocusedPane("output"); runConvert(fmt); }}>
                         {FORMAT_LABELS[fmt]}
                       </button>
-                      <button
-                        type="button"
-                        className={`btn btn-ghost btn-xs btn-square h-5 w-5 p-0 rounded ${
-                          pinnedItems.has(`fmt:${fmt}`) ? "text-primary" : "opacity-40"
-                        }`}
-                        onClick={() => setPinnedItems((s) => { const n = new Set(s); n.has(`fmt:${fmt}`) ? n.delete(`fmt:${fmt}`) : n.add(`fmt:${fmt}`); return n; })}
-                        title={pinnedItems.has(`fmt:${fmt}`) ? "Unpin" : "Pin to toolbar"}
-                      >
+                      <button type="button" className={`btn btn-ghost btn-xs btn-square h-5 w-5 p-0 rounded ${pinnedItems.has(`fmt:${fmt}`) ? "text-primary" : "opacity-40"}`} onClick={(e) => { e.stopPropagation(); setPinnedItems((s) => { const n = new Set(s); n.has(`fmt:${fmt}`) ? n.delete(`fmt:${fmt}`) : n.add(`fmt:${fmt}`); return n; }); }} title={pinnedItems.has(`fmt:${fmt}`) ? "Unpin" : "Pin to toolbar"}>
                         <StarIcon className={`h-3.5 w-3.5 ${pinnedItems.has(`fmt:${fmt}`) ? "text-primary" : "opacity-40"}`} />
                       </button>
                     </div>
                   ))}
                 </div>
-                </div>
-                <div className="border-t border-[var(--workspace-border)] pt-2">
-                <p className="text-xs font-medium opacity-70 mb-1">View</p>
-                <div className="flex flex-wrap gap-1">
-                  {(["raw", "tree", "graph"] as const).map((view) => (
-                    <div key={view} className="flex items-center gap-0.5">
-                      <button
-                        type="button"
-                        disabled={inputEmpty || ((view === "tree" || view === "graph") && !parsedOutput)}
-                        className={`${linkBtnClass} h-6 min-h-6 disabled:opacity-50 ${
-                          rightView === view ? "text-primary" : ""
-                        }`}
-                        onClick={() => {
-                          setRightView(view);
-                          setFocusedPane("output");
-                        }}
-                      >
-                        {view[0].toUpperCase() + view.slice(1)}
-                      </button>
-                      <button
-                        type="button"
-                        className={`btn btn-ghost btn-xs btn-square h-5 w-5 p-0 rounded ${
-                          pinnedItems.has(`view:${view}`) ? "text-primary" : "opacity-40"
-                        }`}
-                        onClick={() => setPinnedItems((s) => { const n = new Set(s); n.has(`view:${view}`) ? n.delete(`view:${view}`) : n.add(`view:${view}`); return n; })}
-                        title={pinnedItems.has(`view:${view}`) ? "Unpin" : "Pin to toolbar"}
-                      >
-                        <StarIcon className={`h-3.5 w-3.5 ${pinnedItems.has(`view:${view}`) ? "text-primary" : "opacity-40"}`} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                </div>
-                <div className="border-t border-[var(--workspace-border)] pt-2">
-                <p className="text-xs font-medium opacity-70 mb-1">Actions</p>
-                <div className="flex flex-wrap gap-1">
-                  {OPERATION_ACTIONS.map(([label, action]) => (
-                    <div key={action} className="flex items-center gap-0.5">
-                      <button
-                        type="button"
-                        disabled={showBusy || inputEmpty}
-                        className={`${linkBtnClass} h-6 min-h-6 disabled:opacity-50 ${
-                          activeOperation === action ? "text-primary" : ""
-                        }`}
-                        onClick={() => runOperation(action)}
-                      >
-                        {label}
-                      </button>
-                      <button
-                        type="button"
-                        className={`btn btn-ghost btn-xs btn-square h-5 w-5 p-0 rounded ${
-                          pinnedItems.has(`action:${action}`) ? "text-primary" : "opacity-40"
-                        }`}
-                        onClick={() => setPinnedItems((s) => { const n = new Set(s); n.has(`action:${action}`) ? n.delete(`action:${action}`) : n.add(`action:${action}`); return n; })}
-                        title={pinnedItems.has(`action:${action}`) ? "Unpin" : "Pin to toolbar"}
-                      >
-                        <StarIcon className={`h-3.5 w-3.5 ${pinnedItems.has(`action:${action}`) ? "text-primary" : "opacity-40"}`} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                </div>
-                <div className="border-t border-[var(--workspace-border)] pt-2">
-                <div className="flex items-center justify-between gap-2 mb-1">
-                  <p className="text-xs font-medium opacity-70">Font size</p>
-                  <button
-                    type="button"
-                    className={`btn btn-ghost btn-xs btn-square h-5 w-5 p-0 rounded ${
-                      pinnedItems.has("fontSize") ? "text-primary" : "opacity-40"
-                    }`}
-                    onClick={() => setPinnedItems((s) => { const n = new Set(s); n.has("fontSize") ? n.delete("fontSize") : n.add("fontSize"); return n; })}
-                    title={pinnedItems.has("fontSize") ? "Unpin" : "Pin to toolbar"}
-                  >
-                    <StarIcon className={`h-3.5 w-3.5 ${pinnedItems.has("fontSize") ? "text-primary" : "opacity-40"}`} />
-                  </button>
-                </div>
-                <div className="flex w-fit shrink-0 items-center rounded-lg border border-[var(--workspace-border)] overflow-hidden [&>*:not(:last-child)]:border-r [&>*:not(:last-child)]:border-[var(--workspace-border)] mb-2">
-                  <button
-                    type="button"
-                    aria-label="Decrease font size"
-                    className="flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors"
-                    onClick={() => setEditorFontSize((s) => Math.max(10, s - 1))}
-                  >
-                    <MinusIcon className="h-3.5 w-3.5" aria-hidden />
-                  </button>
-                  <span className="flex shrink-0 items-center justify-center px-1 py-0.5 text-xs tabular-nums text-[var(--workspace-text)] border-r border-[var(--workspace-border)] min-w-[2rem]">
-                    {editorFontSize}
-                  </span>
-                  <button
-                    type="button"
-                    aria-label="Increase font size"
-                    className="flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors"
-                    onClick={() => setEditorFontSize((s) => Math.min(24, s + 1))}
-                  >
-                    <PlusIcon className="h-3.5 w-3.5" aria-hidden />
-                  </button>
-                  <button
-                    type="button"
-                    aria-label="Reset font size"
-                    className="flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors"
-                    onClick={() => setEditorFontSize(13)}
-                  >
-                    <ArrowPathIcon className="h-3.5 w-3.5" aria-hidden />
-                  </button>
-                </div>
-                </div>
-                <div className="border-t border-[var(--workspace-border)] pt-2">
-                <div className="flex w-fit shrink-0 items-center justify-between gap-2">
-                  <p className="text-xs font-medium opacity-70">Indent</p>
-                    <button
-                      type="button"
-                      className={`btn btn-ghost btn-xs btn-square h-5 w-5 p-0 rounded ${
-                        pinnedItems.has("indent") ? "text-primary" : "opacity-40"
-                      }`}
-                      onClick={() => setPinnedItems((s) => { const n = new Set(s); n.has("indent") ? n.delete("indent") : n.add("indent"); return n; })}
-                      title={pinnedItems.has("indent") ? "Unpin" : "Pin to toolbar"}
-                    >
-                      <StarIcon className={`h-3.5 w-3.5 ${pinnedItems.has("indent") ? "text-primary" : "opacity-40"}`} />
-                    </button>
+                <div className="border-t border-[var(--workspace-border)] pt-2 mt-2">
+                  <p className="text-xs font-medium opacity-70 mb-1">View</p>
+                  <div className="flex flex-wrap gap-1">
+                    {(["raw", "tree", "graph"] as const).map((view) => (
+                      <div key={view} className="flex items-center gap-0.5">
+                        <button type="button" disabled={inputEmpty || ((view === "tree" || view === "graph") && !parsedOutput)} className={`${linkBtnClass} h-6 min-h-6 disabled:opacity-50 ${rightView === view ? "text-primary" : ""}`} onClick={() => { setRightView(view); setFocusedPane("output"); }}>
+                          {view[0].toUpperCase() + view.slice(1)}
+                        </button>
+                        <button type="button" className={`btn btn-ghost btn-xs btn-square h-5 w-5 p-0 rounded ${pinnedItems.has(`view:${view}`) ? "text-primary" : "opacity-40"}`} onClick={(e) => { e.stopPropagation(); setPinnedItems((s) => { const n = new Set(s); n.has(`view:${view}`) ? n.delete(`view:${view}`) : n.add(`view:${view}`); return n; }); }} title={pinnedItems.has(`view:${view}`) ? "Unpin" : "Pin to toolbar"}>
+                          <StarIcon className={`h-3.5 w-3.5 ${pinnedItems.has(`view:${view}`) ? "text-primary" : "opacity-40"}`} />
+                        </button>
+                      </div>
+                    ))}
                   </div>
-                  <div className="flex w-fit shrink-0 items-center rounded-lg border border-[var(--workspace-border)] overflow-hidden [&>*:not(:last-child)]:border-r [&>*:not(:last-child)]:border-[var(--workspace-border)]">
-                  <button
-                    type="button"
-                    aria-label="Decrease indent"
-                    className="flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors"
-                    onClick={() => {
-                      const v = Math.max(0, formatOptions.indentation - 1);
-                      applyFormatWithOptions({ ...formatOptions, indentation: v });
-                    }}
-                  >
-                    <MinusIcon className="h-3.5 w-3.5" aria-hidden />
-                  </button>
-                  <span className="flex shrink-0 items-center justify-center px-1 py-0.5 text-xs tabular-nums text-[var(--workspace-text)] border-r border-[var(--workspace-border)]">
-                    {formatOptions.indentation}
-                  </span>
-                  <button
-                    type="button"
-                    aria-label="Increase indent"
-                    className="flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors"
-                    onClick={() => {
-                      const v = Math.min(10, formatOptions.indentation + 1);
-                      applyFormatWithOptions({ ...formatOptions, indentation: v });
-                    }}
-                  >
-                    <PlusIcon className="h-3.5 w-3.5" aria-hidden />
-                  </button>
-                  <button
-                    type="button"
-                    aria-label="Reset indent"
-                    className="flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors"
-                    onClick={() => applyFormatWithOptions({ ...formatOptions, indentation: 2 })}
-                  >
-                    <ArrowPathIcon className="h-3.5 w-3.5" aria-hidden />
+                </div>
+                <div className="border-t border-[var(--workspace-border)] pt-2 mt-2">
+                  <p className="text-xs font-medium opacity-70 mb-1">Actions</p>
+                  <div className="flex flex-wrap gap-1">
+                    {OPERATION_ACTIONS.map(([label, action]) => (
+                      <div key={action} className="flex items-center gap-0.5">
+                        <button type="button" disabled={showBusy || inputEmpty} className={`${linkBtnClass} h-6 min-h-6 disabled:opacity-50 ${activeOperation === action ? "text-primary" : ""}`} onClick={() => runOperation(action)}>{label}</button>
+                        <button type="button" className={`btn btn-ghost btn-xs btn-square h-5 w-5 p-0 rounded ${pinnedItems.has(`action:${action}`) ? "text-primary" : "opacity-40"}`} onClick={(e) => { e.stopPropagation(); setPinnedItems((s) => { const n = new Set(s); n.has(`action:${action}`) ? n.delete(`action:${action}`) : n.add(`action:${action}`); return n; }); }} title={pinnedItems.has(`action:${action}`) ? "Unpin" : "Pin to toolbar"}>
+                          <StarIcon className={`h-3.5 w-3.5 ${pinnedItems.has(`action:${action}`) ? "text-primary" : "opacity-40"}`} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="border-t border-[var(--workspace-border)] pt-2 mt-2">
+                  <div className="flex w-fit items-center justify-between gap-2 mb-1">
+                    <p className="text-xs font-medium opacity-70">Font size</p>
+                    <button type="button" className={`btn btn-ghost btn-xs btn-square h-5 w-5 p-0 rounded ${pinnedItems.has("fontSize") ? "text-primary" : "opacity-40"}`} onClick={(e) => { e.stopPropagation(); setPinnedItems((s) => { const n = new Set(s); n.has("fontSize") ? n.delete("fontSize") : n.add("fontSize"); return n; }); }} title={pinnedItems.has("fontSize") ? "Unpin" : "Pin to toolbar"}><StarIcon className={`h-3.5 w-3.5 ${pinnedItems.has("fontSize") ? "text-primary" : "opacity-40"}`} /></button>
+                  </div>
+                  <div className="flex w-fit items-center rounded-lg border border-[var(--workspace-border)] overflow-hidden [&>*:not(:last-child)]:border-r [&>*:not(:last-child)]:border-[var(--workspace-border)] mb-2">
+                    <button type="button" aria-label="Decrease font size" className="flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors" onClick={() => setEditorFontSize((s) => Math.max(10, s - 1))}><MinusIcon className="h-3.5 w-3.5" aria-hidden /></button>
+                    <span className="flex shrink-0 items-center justify-center px-1 py-0.5 text-xs tabular-nums text-[var(--workspace-text)] border-r border-[var(--workspace-border)] min-w-[2rem]">{editorFontSize}</span>
+                    <button type="button" aria-label="Increase font size" className="flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors" onClick={() => setEditorFontSize((s) => Math.min(24, s + 1))}><PlusIcon className="h-3.5 w-3.5" aria-hidden /></button>
+                    <button type="button" aria-label="Reset font size" className="flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors" onClick={() => setEditorFontSize(13)}><ArrowPathIcon className="h-3.5 w-3.5" aria-hidden /></button>
+                  </div>
+                </div>
+                <div className="border-t border-[var(--workspace-border)] pt-2 mt-2">
+                  <div className="flex w-fit items-center justify-between gap-2 mb-1">
+                    <p className="text-xs font-medium opacity-70">Indent</p>
+                    <button type="button" className={`btn btn-ghost btn-xs btn-square h-5 w-5 p-0 rounded ${pinnedItems.has("indent") ? "text-primary" : "opacity-40"}`} onClick={(e) => { e.stopPropagation(); setPinnedItems((s) => { const n = new Set(s); n.has("indent") ? n.delete("indent") : n.add("indent"); return n; }); }} title={pinnedItems.has("indent") ? "Unpin" : "Pin to toolbar"}><StarIcon className={`h-3.5 w-3.5 ${pinnedItems.has("indent") ? "text-primary" : "opacity-40"}`} /></button>
+                  </div>
+                  <div className="flex w-fit items-center rounded-lg border border-[var(--workspace-border)] overflow-hidden [&>*:not(:last-child)]:border-r [&>*:not(:last-child)]:border-[var(--workspace-border)]">
+                    <button type="button" aria-label="Decrease indent" className="flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors" onClick={() => { const v = Math.max(0, formatOptions.indentation - 1); applyFormatWithOptions({ ...formatOptions, indentation: v }); }}><MinusIcon className="h-3.5 w-3.5" aria-hidden /></button>
+                    <span className="flex shrink-0 items-center justify-center px-1 py-0.5 text-xs tabular-nums text-[var(--workspace-text)] border-r border-[var(--workspace-border)]">{formatOptions.indentation}</span>
+                    <button type="button" aria-label="Increase indent" className="flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors" onClick={() => { const v = Math.min(10, formatOptions.indentation + 1); applyFormatWithOptions({ ...formatOptions, indentation: v }); }}><PlusIcon className="h-3.5 w-3.5" aria-hidden /></button>
+                    <button type="button" aria-label="Reset indent" className="flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors" onClick={() => applyFormatWithOptions({ ...formatOptions, indentation: 2 })}><ArrowPathIcon className="h-3.5 w-3.5" aria-hidden /></button>
+                  </div>
+                </div>
+                <div className="border-t border-[var(--workspace-border)] pt-2 mt-2">
+                  <p className="text-xs font-medium opacity-70 mb-1">Quote style</p>
+                  <div className="flex flex-wrap gap-1">
+                    {(["double", "single"] as const).map((q) => (
+                      <button key={q} type="button" className={`${linkBtnClass} h-6 min-h-6 ${formatOptions.quoteStyle === q ? "text-primary" : ""}`} onClick={() => applyFormatWithOptions({ ...formatOptions, quoteStyle: q })}>{q === "double" ? "Double" : "Single"}</button>
+                    ))}
+                  </div>
+                </div>
+                <div className="border-t border-[var(--workspace-border)] pt-2 mt-2">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <label className="flex cursor-pointer items-center gap-1.5"><input type="checkbox" className="checkbox checkbox-xs" checked={formatOptions.sortKeys} onChange={(e) => applyFormatWithOptions({ ...formatOptions, sortKeys: e.target.checked })} />Sort keys</label>
+                    <label className="flex cursor-pointer items-center gap-1.5"><input type="checkbox" className="checkbox checkbox-xs" checked={formatOptions.removeEmpty} onChange={(e) => applyFormatWithOptions({ ...formatOptions, removeEmpty: e.target.checked })} />Remove empty</label>
+                  </div>
+                </div>
+                <div className="border-t border-[var(--workspace-border)] pt-2 mt-2">
+                  <p className="text-xs font-medium opacity-70 mb-1">Generate Types</p>
+                  <div className="flex flex-wrap gap-1">
+                    {TYPE_LANGUAGES.map((item) => (
+                      <div key={item.id} className="flex items-center gap-0.5">
+                        <button type="button" disabled={inputEmpty} className={`${linkBtnClass} h-6 min-h-6 disabled:opacity-50 ${typeLanguage === item.id ? "text-primary" : ""}`} onClick={() => { setFocusedPane("output"); setActiveOperation("generateTypes"); executeOperation("generateTypes", { typeLanguage: item.id }); }}>{item.label}</button>
+                        <button type="button" className={`btn btn-ghost btn-xs btn-square h-5 w-5 p-0 rounded ${pinnedItems.has(`type:${item.id}`) ? "text-primary" : "opacity-40"}`} onClick={(e) => { e.stopPropagation(); setPinnedItems((s) => { const n = new Set(s); n.has(`type:${item.id}`) ? n.delete(`type:${item.id}`) : n.add(`type:${item.id}`); return n; }); }} title={pinnedItems.has(`type:${item.id}`) ? "Unpin" : "Pin to toolbar"}><StarIcon className={`h-3.5 w-3.5 ${pinnedItems.has(`type:${item.id}`) ? "text-primary" : "opacity-40"}`} /></button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="border-t border-[var(--workspace-border)] pt-2 mt-2">
+                  <button type="button" className={`${linkBtnClass} flex w-full items-center justify-center gap-1.5 py-1.5`} onClick={() => { setFormatOptions(DEFAULT_FORMAT_OPTIONS); setConvertToFormat("json"); setRightView("raw"); setEditorFontSize(13); setPinnedItems(new Set(["fmt:json", "fmt:xml", "view:raw", "view:graph", "action:minify", "action:schema", "type:typescript", "type:java", "type:go", "type:python", "type:sql"])); setTransformConfigOpen(false); }}>
+                    <ArrowPathIcon className="h-3.5 w-3.5" />Reset to default
                   </button>
                 </div>
+                  </>
+                )}
+              </div>
+            </Dropdown>
+            {viewAsMenu && (
+              <>
+            <Dropdown open={formatMenuOpen} onOpenChange={setFormatMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`dropdown-content z-[100] min-w-[7rem] p-1 shadow-xl rounded-lg border ${toolbarBorderClass} ${dropdownPanelClass}`} trigger={<div className={`${linkBtnClass} flex h-7 min-h-7 shrink-0 items-center gap-1 ${formatMenuOpen ? "text-primary" : ""}`} title="Format"><span>Format</span><ChevronDownIcon className="h-3 w-3" /></div>}>
+              <div className="flex flex-wrap gap-0.5 p-1" onClick={(e) => e.stopPropagation()}>
+                {FORMAT_KINDS.map((fmt) => (
+                  <button key={fmt} type="button" disabled={inputEmpty} className={`${linkBtnClass} h-6 min-h-6 px-1.5 ${convertToFormat === fmt ? "text-primary" : ""}`} onClick={() => { setFocusedPane("output"); runConvert(fmt); setFormatMenuOpen(false); }}>{FORMAT_LABELS[fmt]}</button>
+                ))}
+              </div>
+            </Dropdown>
+            <Dropdown open={viewMenuOpen} onOpenChange={setViewMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`dropdown-content z-[100] min-w-[8rem] p-1 shadow-xl rounded-lg border ${toolbarBorderClass} ${dropdownPanelClass}`} trigger={<div className={`${linkBtnClass} flex h-7 min-h-7 shrink-0 items-center gap-1 ${viewMenuOpen ? "text-primary" : ""}`} title="View"><span>View</span><ChevronDownIcon className="h-3 w-3" /></div>}>
+              <div className="p-1.5 max-h-[50vh] overflow-y-auto space-y-2" onClick={(e) => e.stopPropagation()}>
+                <div className="flex flex-wrap gap-0.5">
+                  {(["raw", "tree", "graph"] as const).map((view) => (
+                    <button key={view} type="button" disabled={inputEmpty || ((view === "tree" || view === "graph") && !parsedOutput)} className={`${linkBtnClass} h-6 min-h-6 px-1.5 disabled:opacity-50 ${rightView === view ? "text-primary" : ""}`} onClick={() => { setRightView(view); setFocusedPane("output"); setViewMenuOpen(false); }}>{view[0].toUpperCase() + view.slice(1)}</button>
+                  ))}
                 </div>
-                <div className="border-t border-[var(--workspace-border)] pt-2">
-                <p className="text-xs font-medium opacity-70 mb-1">Quote style</p>
-                <div className="flex flex-wrap gap-1">
+                <div className="flex flex-wrap items-center gap-0.5">
+                  <button type="button" className={`${linkBtnClass} btn-square h-6 w-6 p-0`} onClick={() => setEditorFontSize((s) => Math.max(10, s - 1))}><MinusIcon className="h-3 w-3" /></button>
+                  <span className="text-xs tabular-nums px-1 min-w-[1.5rem]">{editorFontSize}</span>
+                  <button type="button" className={`${linkBtnClass} btn-square h-6 w-6 p-0`} onClick={() => setEditorFontSize((s) => Math.min(24, s + 1))}><PlusIcon className="h-3 w-3" /></button>
+                  <button type="button" className={`${linkBtnClass} h-6 min-h-6`} onClick={() => setEditorFontSize(13)}>Reset</button>
+                </div>
+                <div className="flex flex-wrap items-center gap-0.5">
+                  <button type="button" className={`${linkBtnClass} btn-square h-6 w-6 p-0`} onClick={() => { const v = Math.max(0, formatOptions.indentation - 1); applyFormatWithOptions({ ...formatOptions, indentation: v }); }}><MinusIcon className="h-3 w-3" /></button>
+                  <span className="text-xs tabular-nums px-1 min-w-[1.5rem]">{formatOptions.indentation}</span>
+                  <button type="button" className={`${linkBtnClass} btn-square h-6 w-6 p-0`} onClick={() => { const v = Math.min(10, formatOptions.indentation + 1); applyFormatWithOptions({ ...formatOptions, indentation: v }); }}><PlusIcon className="h-3 w-3" /></button>
+                  <button type="button" className={`${linkBtnClass} h-6 min-h-6`} onClick={() => applyFormatWithOptions({ ...formatOptions, indentation: 2 })}>Reset</button>
+                </div>
+                <div className="flex flex-wrap gap-0.5">
                   {(["double", "single"] as const).map((q) => (
-                    <button
-                      key={q}
-                      type="button"
-                      className={`${linkBtnClass} h-6 min-h-6 ${
-                        formatOptions.quoteStyle === q ? "text-primary" : ""
-                      }`}
-                      onClick={() => applyFormatWithOptions({ ...formatOptions, quoteStyle: q })}
-                    >
-                      {q === "double" ? "Double" : "Single"}
-                    </button>
+                    <button key={q} type="button" className={`${linkBtnClass} h-6 min-h-6 px-1.5 ${formatOptions.quoteStyle === q ? "text-primary" : ""}`} onClick={() => applyFormatWithOptions({ ...formatOptions, quoteStyle: q })}>{q === "double" ? "Double" : "Single"}</button>
                   ))}
                 </div>
-                </div>
-                <div className="border-t border-[var(--workspace-border)] pt-2">
-                <div className="flex flex-wrap items-center gap-3">
-                  <label className="flex cursor-pointer items-center gap-1.5">
-                    <input
-                      type="checkbox"
-                      className="checkbox checkbox-xs"
-                      checked={formatOptions.sortKeys}
-                      onChange={(e) =>
-                        applyFormatWithOptions({ ...formatOptions, sortKeys: e.target.checked })
-                      }
-                    />
-                    Sort keys
-                  </label>
-                  <label className="flex cursor-pointer items-center gap-1.5">
-                    <input
-                      type="checkbox"
-                      className="checkbox checkbox-xs"
-                      checked={formatOptions.removeEmpty}
-                      onChange={(e) =>
-                        applyFormatWithOptions({ ...formatOptions, removeEmpty: e.target.checked })
-                      }
-                    />
-                    Remove empty
-                  </label>
-                </div>
-                </div>
-                <div className="border-t border-[var(--workspace-border)] pt-2">
-                <p className="text-xs font-medium opacity-70 mb-1">Generate Types</p>
-                <div className="flex flex-wrap gap-1">
-                  {TYPE_LANGUAGES.map((item) => (
-                    <div key={item.id} className="flex items-center gap-0.5">
-                      <button
-                        type="button"
-                        disabled={inputEmpty}
-                        className={`${linkBtnClass} h-6 min-h-6 disabled:opacity-50 ${
-                          typeLanguage === item.id ? "text-primary" : ""
-                        }`}
-                        onClick={() => {
-                          setFocusedPane("output");
-                          setActiveOperation("generateTypes");
-                          executeOperation("generateTypes", { typeLanguage: item.id });
-                        }}
-                      >
-                        {item.label}
-                      </button>
-                      <button
-                        type="button"
-                        className={`btn btn-ghost btn-xs btn-square h-5 w-5 p-0 rounded ${
-                          pinnedItems.has(`type:${item.id}`) ? "text-primary" : "opacity-40"
-                        }`}
-                        onClick={() => setPinnedItems((s) => { const n = new Set(s); n.has(`type:${item.id}`) ? n.delete(`type:${item.id}`) : n.add(`type:${item.id}`); return n; })}
-                        title={pinnedItems.has(`type:${item.id}`) ? "Unpin" : "Pin to toolbar"}
-                      >
-                        <StarIcon className={`h-3.5 w-3.5 ${pinnedItems.has(`type:${item.id}`) ? "text-primary" : "opacity-40"}`} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                </div>
-                <div className="border-t border-[var(--workspace-border)] pt-2">
-                  <button
-                    type="button"
-                    className={`${linkBtnClass} flex w-full items-center justify-center gap-1.5 py-1.5`}
-                    onClick={() => {
-                      setFormatOptions(DEFAULT_FORMAT_OPTIONS);
-                      setConvertToFormat("json");
-                      setRightView("raw");
-                      setEditorFontSize(13);
-                      setTransformConfigOpen(false);
-                    }}
-                  >
-                    <ArrowPathIcon className="h-3.5 w-3.5" />
-                    Reset to default
-                  </button>
+                <div className="flex flex-wrap gap-0.5">
+                  <button type="button" className={`${linkBtnClass} h-6 min-h-6 px-1.5 ${formatOptions.sortKeys ? "text-primary" : ""}`} onClick={() => applyFormatWithOptions({ ...formatOptions, sortKeys: !formatOptions.sortKeys })}>Sort keys</button>
+                  <button type="button" className={`${linkBtnClass} h-6 min-h-6 px-1.5 ${formatOptions.removeEmpty ? "text-primary" : ""}`} onClick={() => applyFormatWithOptions({ ...formatOptions, removeEmpty: !formatOptions.removeEmpty })}>Remove empty</button>
                 </div>
               </div>
             </Dropdown>
-            {FORMAT_KINDS.some((f) => pinnedItems.has(`fmt:${f}`)) && (
+            <Dropdown open={actionsMenuOpen} onOpenChange={setActionsMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`dropdown-content z-[100] min-w-[6.5rem] p-1 shadow-xl rounded-lg border ${toolbarBorderClass} ${dropdownPanelClass}`} trigger={<div className={`${linkBtnClass} flex h-7 min-h-7 shrink-0 items-center gap-1 ${actionsMenuOpen ? "text-primary" : ""}`} title="Actions"><span>Actions</span><ChevronDownIcon className="h-3 w-3" /></div>}>
+              <div className="flex flex-wrap gap-0.5 p-1" onClick={(e) => e.stopPropagation()}>
+                {OPERATION_ACTIONS.map(([label, action]) => (
+                  <button key={action} type="button" disabled={showBusy || inputEmpty} className={`${linkBtnClass} h-6 min-h-6 px-1.5 disabled:opacity-50 ${activeOperation === action ? "text-primary" : ""}`} onClick={() => { runOperation(action); setActionsMenuOpen(false); }}>{label}</button>
+                ))}
+              </div>
+            </Dropdown>
+            <Dropdown open={typesMenuOpen} onOpenChange={setTypesMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`dropdown-content z-[100] min-w-[6rem] max-h-[50vh] overflow-y-auto p-1 shadow-xl rounded-lg border ${toolbarBorderClass} ${dropdownPanelClass}`} trigger={<div className={`${linkBtnClass} flex h-7 min-h-7 shrink-0 items-center gap-1 ${typesMenuOpen ? "text-primary" : ""}`} title="Generate Types"><span>Types</span><ChevronDownIcon className="h-3 w-3" /></div>}>
+              <div className="flex flex-wrap gap-0.5 p-1" onClick={(e) => e.stopPropagation()}>
+                {TYPE_LANGUAGES.map((item) => (
+                  <button key={item.id} type="button" disabled={inputEmpty} className={`${linkBtnClass} h-6 min-h-6 px-1.5 disabled:opacity-50 ${typeLanguage === item.id ? "text-primary" : ""}`} onClick={() => { setFocusedPane("output"); setActiveOperation("generateTypes"); executeOperation("generateTypes", { typeLanguage: item.id }); setTypesMenuOpen(false); }}>{item.label}</button>
+                ))}
+              </div>
+            </Dropdown>
+              </>
+            )}
+            {!viewAsMenu && (
+            <button type="button" disabled={showBusy || inputEmpty} className={`${linkBtnClass} h-7 min-h-7 shrink-0 ${activeOperation === "format" ? "text-primary" : ""}`} onClick={() => runOperation("format")}>Transform</button>
+            )}
+            {!viewAsMenu && FORMAT_KINDS.some((f) => pinnedItems.has(`fmt:${f}`)) && (
               <span className="mx-1 h-4 w-px shrink-0 self-center bg-[var(--workspace-text-muted)]/60" role="separator" aria-hidden />
             )}
             {FORMAT_KINDS.filter((f) => pinnedItems.has(`fmt:${f}`)).map((fmt) => (
@@ -1497,7 +1420,7 @@ export default function Home() {
                 {FORMAT_LABELS[fmt]}
               </button>
             ))}
-            {(["raw", "tree", "graph"] as const).some((v) => pinnedItems.has(`view:${v}`)) && (
+            {!viewAsMenu && (["raw", "tree", "graph"] as const).some((v) => pinnedItems.has(`view:${v}`)) && (
               <span className="mx-1 h-4 w-px shrink-0 self-center bg-[var(--workspace-text-muted)]/60" role="separator" aria-hidden />
             )}
             {(["raw", "tree", "graph"] as const)
@@ -1515,7 +1438,7 @@ export default function Home() {
                   {view[0].toUpperCase() + view.slice(1)}
                 </button>
               ))}
-            {OPERATION_ACTIONS.some(([, a]) => pinnedItems.has(`action:${a}`)) && (
+            {!viewAsMenu && OPERATION_ACTIONS.some(([, a]) => pinnedItems.has(`action:${a}`)) && (
               <span className="mx-1 h-4 w-px shrink-0 self-center bg-[var(--workspace-text-muted)]/60" role="separator" aria-hidden />
             )}
             {OPERATION_ACTIONS.filter(([, a]) => pinnedItems.has(`action:${a}`)).map(([label, action]) => (
@@ -1530,8 +1453,8 @@ export default function Home() {
               >
                 {label}
               </button>
-            ))}
-            {pinnedItems.has("fontSize") && (
+            )            )}
+            {!viewAsMenu && pinnedItems.has("fontSize") && (
               <>
               <span className="mx-1 h-4 w-px shrink-0 self-center bg-[var(--workspace-text-muted)]/60" role="separator" aria-hidden />
               <div className="flex w-fit shrink-0 items-center rounded-lg border border-[var(--workspace-border)] overflow-hidden [&>*:not(:last-child)]:border-r [&>*:not(:last-child)]:border-[var(--workspace-border)]">
@@ -1549,7 +1472,7 @@ export default function Home() {
               </div>
               </>
             )}
-            {pinnedItems.has("indent") && (
+            {!viewAsMenu && pinnedItems.has("indent") && (
               <>
               <span className="mx-1 h-4 w-px shrink-0 self-center bg-[var(--workspace-text-muted)]/60" role="separator" aria-hidden />
               <div className="flex w-fit shrink-0 items-center rounded-lg border border-[var(--workspace-border)] overflow-hidden [&>*:not(:last-child)]:border-r [&>*:not(:last-child)]:border-[var(--workspace-border)]">
@@ -1588,7 +1511,7 @@ export default function Home() {
               </div>
               </>
             )}
-            {TYPE_LANGUAGES.some((t) => pinnedItems.has(`type:${t.id}`)) && (
+            {!viewAsMenu && TYPE_LANGUAGES.some((t) => pinnedItems.has(`type:${t.id}`)) && (
               <span className="mx-1 h-4 w-px shrink-0 self-center bg-[var(--workspace-text-muted)]/60" role="separator" aria-hidden />
             )}
             {TYPE_LANGUAGES.filter((t) => pinnedItems.has(`type:${t.id}`)).map((item) => (
@@ -1608,9 +1531,10 @@ export default function Home() {
                 {item.label}
               </button>
             ))}
+            <span className="flex-1" />
           </div>
           <div className="relative flex min-h-[200px] min-h-0 flex-1 flex-col overflow-hidden">
-            <div className="absolute right-2 top-2 z-10 flex items-center gap-0.5 rounded-lg border border-[var(--workspace-border)] p-0.5 bg-[var(--workspace-background)]/95 backdrop-blur-sm">
+            <div className="absolute right-[14px] top-2 z-10 flex items-center gap-0.5 rounded-lg border border-[var(--workspace-border)] p-0.5 bg-[var(--workspace-background)]/95 backdrop-blur-sm shadow-sm">
               <button
                 type="button"
                 className={`rounded p-1.5 shrink-0 transition-all duration-200 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] ${actionBounce === "share" ? "-translate-y-0.5" : ""}`}
@@ -1701,8 +1625,12 @@ export default function Home() {
                   fontSize={editorFontSize}
                 />
               ) : (
-                <div className="flex h-full min-h-[200px] items-center justify-center bg-[var(--workspace-panel)] text-sm text-[var(--workspace-text-muted)]">
-                  Run an operation to see output here
+                <div className="flex h-full min-h-[200px] flex-col gap-2 bg-[var(--workspace-panel)] p-4">
+                  <div className="h-4 w-3/4 animate-pulse rounded bg-base-content/10" />
+                  <div className="h-4 w-1/2 animate-pulse rounded bg-base-content/10" />
+                  <div className="h-4 w-2/3 animate-pulse rounded bg-base-content/10" />
+                  <div className="h-4 w-4/5 animate-pulse rounded bg-base-content/10" />
+                  <div className="h-4 w-3/4 animate-pulse rounded bg-base-content/10" />
                 </div>
               )
             ) : null}
@@ -1744,6 +1672,9 @@ export default function Home() {
         sizeFormatted={inputSizeFormatted}
         liveTransform={liveTransform}
         onLiveTransformToggle={() => setLiveTransform((v) => !v)}
+        cursorPosition={cursorPosition ? `Ln ${cursorPosition.line}, Col ${cursorPosition.column}` : undefined}
+        indentSize={formatOptions.indentation}
+        encoding="UTF-8"
         inputFormatDropdown={
           <Dropdown
             open={inputFormatOpen}

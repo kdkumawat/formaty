@@ -97,7 +97,7 @@ export const GraphView = forwardRef<GraphViewRef, GraphViewProps>(function Graph
   const toolbarBtnActive =
     "btn btn-sm btn-square h-9 min-h-9 rounded-md btn-primary";
   const searchInputClass =
-    "input input-sm h-9 w-48 rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-panel)] text-[var(--workspace-text)] shadow-none";
+    "flex h-8 min-w-[8rem] max-w-48 items-center gap-2 rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-2 text-sm text-[var(--workspace-text)] shadow-none outline-none focus:ring-2 focus:ring-primary/30";
 
   const renderGraphImage = async (format: "png" | "jpg"): Promise<Blob> => {
     const source = exportRef.current;
@@ -317,18 +317,18 @@ export const GraphView = forwardRef<GraphViewRef, GraphViewProps>(function Graph
           </button>
         </div>
 
-        <label className={`${searchInputClass} flex items-center gap-2 px-2`}>
-          <MagnifyingGlassIcon className="h-4 w-4 opacity-60" />
+        <label className={searchInputClass}>
+          <MagnifyingGlassIcon className="h-4 w-4 shrink-0 text-[var(--workspace-text-muted)]" />
           <input
             type="text"
             placeholder="Search node"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            className="w-full bg-transparent text-sm outline-none"
+            className="min-w-0 flex-1 bg-transparent text-[var(--workspace-text)] placeholder:text-[var(--workspace-text-muted)]"
             aria-label="Search graph"
           />
         </label>
-        {search.trim() ? <span className="text-xs text-base-content/70">{searchMatches} matches</span> : null}
+        {search.trim() ? <span className="text-xs text-[var(--workspace-text-muted)] shrink-0">{searchMatches} matches</span> : null}
       </div>
     </div>
   );

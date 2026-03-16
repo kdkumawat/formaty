@@ -21,13 +21,13 @@ export function Header({ themeMode, onThemeChange }: HeaderProps) {
       className="flex h-10 shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[var(--workspace-border)] bg-[var(--workspace-background)] px-2 sm:px-3"
       style={{ height: "40px", minHeight: "40px" }}
     >
-      <div className="flex min-w-0 flex-1 items-center gap-1 sm:gap-2">
+      <div className="flex min-w-0 flex-1 items-center">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/icon.svg" alt="" width={24} height={24} className="shrink-0" />
+        <img src="/icon.svg" alt="" width={24} height={24} className="workspace-icon shrink-0" />
         <span className="shrink-0 text-base font-semibold text-primary">
-          formaty
+          ormaty
         </span>
-        <span className="hidden truncate text-xs text-[var(--workspace-text-muted)] sm:inline md:max-w-[20rem] lg:max-w-none">
+        <span className="hidden truncate text-xs text-[var(--workspace-text-muted)] sm:inline md:max-w-[20rem] lg:max-w-none ml-2">
           Format, convert and validate JSON, XML, YAML, TOML and CSV
         </span>
       </div>
