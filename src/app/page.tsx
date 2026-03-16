@@ -1231,7 +1231,7 @@ export default function Home() {
               side="bottom"
               align="start"
               rootClassName="shrink-0"
-              contentClassName={`dropdown-content card card-sm bg-base-100 z-[100] w-64 sm:w-80 max-w-[90vw] shadow-xl ${dropdownPanelClass}`}
+              contentClassName={`dropdown-content card card-sm bg-base-100 z-[100] w-64 sm:w-85 max-w-[90vw] shadow-xl ${dropdownPanelClass}`}
               trigger={
                 <div className={`${linkBtnClass} flex h-7 min-h-7 shrink-0 items-center justify-center ${transformConfigOpen ? "text-primary" : ""}`} title="Settings">
                   <Cog6ToothIcon className="h-3.5 w-3.5" />
@@ -1239,7 +1239,7 @@ export default function Home() {
               }
             >
               <div className="card-body p-3 text-xs max-h-[70vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-                <label className="flex cursor-pointer items-center gap-2 mb-3 pb-2 border-b border-[var(--workspace-border)]">
+                <label className="flex cursor-pointer items-center gap-2 pb-2 border-b border-[var(--workspace-border)]">
                   <input type="checkbox" className="toggle toggle-sm toggle-primary" checked={viewAsMenu} onChange={(e) => { const on = e.target.checked; setViewAsMenu(on); if (on) { pinnedItemsBeforeMenuRef.current = new Set(pinnedItems); setPinnedItems(new Set()); setTransformConfigOpen(false); } else { if (pinnedItemsBeforeMenuRef.current) { setPinnedItems(pinnedItemsBeforeMenuRef.current); pinnedItemsBeforeMenuRef.current = null; } } }} />
                   <span className="text-xs font-medium">View as Menu items</span>
                 </label>
@@ -1247,10 +1247,10 @@ export default function Home() {
                   <p className="text-xs opacity-70 py-2">Options are now in the menu bar above. Uncheck to use the settings panel.</p>
                 ) : (
                   <>
-                <p className="text-xs font-medium opacity-70 mb-1">Output format</p>
+                <p className="text-xs font-medium opacity-70">Output format</p>
                 <div className="flex flex-wrap gap-1">
                   {FORMAT_KINDS.map((fmt) => (
-                    <div key={fmt} className="flex items-center gap-0.5">
+                    <div key={fmt} className="flex items-center">
                       <button type="button" disabled={inputEmpty} className={`${linkBtnClass} h-6 min-h-6 disabled:opacity-50 ${convertToFormat === fmt ? "text-primary" : ""}`} onClick={() => { setFocusedPane("output"); runConvert(fmt); }}>
                         {FORMAT_LABELS[fmt]}
                       </button>
@@ -1260,11 +1260,11 @@ export default function Home() {
                     </div>
                   ))}
                 </div>
-                <div className="border-t border-[var(--workspace-border)] pt-2 mt-2">
+                <div className="border-t border-[var(--workspace-border)] pt-2">
                   <p className="text-xs font-medium opacity-70 mb-1">View</p>
                   <div className="flex flex-wrap gap-1">
                     {(["raw", "tree", "graph"] as const).map((view) => (
-                      <div key={view} className="flex items-center gap-0.5">
+                      <div key={view} className="flex items-center">
                         <button type="button" disabled={inputEmpty || ((view === "tree" || view === "graph") && !parsedOutput)} className={`${linkBtnClass} h-6 min-h-6 disabled:opacity-50 ${rightView === view ? "text-primary" : ""}`} onClick={() => { setRightView(view); setFocusedPane("output"); }}>
                           {view[0].toUpperCase() + view.slice(1)}
                         </button>
@@ -1275,11 +1275,11 @@ export default function Home() {
                     ))}
                   </div>
                 </div>
-                <div className="border-t border-[var(--workspace-border)] pt-2 mt-2">
+                <div className="border-t border-[var(--workspace-border)] pt-2">
                   <p className="text-xs font-medium opacity-70 mb-1">Actions</p>
                   <div className="flex flex-wrap gap-1">
                     {OPERATION_ACTIONS.map(([label, action]) => (
-                      <div key={action} className="flex items-center gap-0.5">
+                      <div key={action} className="flex items-center">
                         <button type="button" disabled={showBusy || inputEmpty} className={`${linkBtnClass} h-6 min-h-6 disabled:opacity-50 ${activeOperation === action ? "text-primary" : ""}`} onClick={() => runOperation(action)}>{label}</button>
                         <button type="button" className={`btn btn-ghost btn-xs btn-square h-5 w-5 p-0 rounded ${pinnedItems.has(`action:${action}`) ? "text-primary" : "opacity-40"}`} onClick={(e) => { e.stopPropagation(); setPinnedItems((s) => { const n = new Set(s); n.has(`action:${action}`) ? n.delete(`action:${action}`) : n.add(`action:${action}`); return n; }); }} title={pinnedItems.has(`action:${action}`) ? "Unpin" : "Pin to toolbar"}>
                           <StarIcon className={`h-3.5 w-3.5 ${pinnedItems.has(`action:${action}`) ? "text-primary" : "opacity-40"}`} />
@@ -1288,19 +1288,19 @@ export default function Home() {
                     ))}
                   </div>
                 </div>
-                <div className="border-t border-[var(--workspace-border)] pt-2 mt-2">
+                <div className="border-t border-[var(--workspace-border)] pt-2">
                   <div className="flex w-fit items-center justify-between gap-2 mb-1">
                     <p className="text-xs font-medium opacity-70">Font size</p>
                     <button type="button" className={`btn btn-ghost btn-xs btn-square h-5 w-5 p-0 rounded ${pinnedItems.has("fontSize") ? "text-primary" : "opacity-40"}`} onClick={(e) => { e.stopPropagation(); setPinnedItems((s) => { const n = new Set(s); n.has("fontSize") ? n.delete("fontSize") : n.add("fontSize"); return n; }); }} title={pinnedItems.has("fontSize") ? "Unpin" : "Pin to toolbar"}><StarIcon className={`h-3.5 w-3.5 ${pinnedItems.has("fontSize") ? "text-primary" : "opacity-40"}`} /></button>
                   </div>
-                  <div className="flex w-fit items-center rounded-lg border border-[var(--workspace-border)] overflow-hidden [&>*:not(:last-child)]:border-r [&>*:not(:last-child)]:border-[var(--workspace-border)] mb-2">
+                  <div className="flex w-fit items-center rounded-lg border border-[var(--workspace-border)] overflow-hidden [&>*:not(:last-child)]:border-r [&>*:not(:last-child)]:border-[var(--workspace-border)]">
                     <button type="button" aria-label="Decrease font size" className="flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors" onClick={() => setEditorFontSize((s) => Math.max(10, s - 1))}><MinusIcon className="h-3.5 w-3.5" aria-hidden /></button>
                     <span className="flex shrink-0 items-center justify-center px-1 py-0.5 text-xs tabular-nums text-[var(--workspace-text)] border-r border-[var(--workspace-border)] min-w-[2rem]">{editorFontSize}</span>
                     <button type="button" aria-label="Increase font size" className="flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors" onClick={() => setEditorFontSize((s) => Math.min(24, s + 1))}><PlusIcon className="h-3.5 w-3.5" aria-hidden /></button>
                     <button type="button" aria-label="Reset font size" className="flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors" onClick={() => setEditorFontSize(13)}><ArrowPathIcon className="h-3.5 w-3.5" aria-hidden /></button>
                   </div>
                 </div>
-                <div className="border-t border-[var(--workspace-border)] pt-2 mt-2">
+                <div className="border-t border-[var(--workspace-border)] pt-2">
                   <div className="flex w-fit items-center justify-between gap-2 mb-1">
                     <p className="text-xs font-medium opacity-70">Indent</p>
                     <button type="button" className={`btn btn-ghost btn-xs btn-square h-5 w-5 p-0 rounded ${pinnedItems.has("indent") ? "text-primary" : "opacity-40"}`} onClick={(e) => { e.stopPropagation(); setPinnedItems((s) => { const n = new Set(s); n.has("indent") ? n.delete("indent") : n.add("indent"); return n; }); }} title={pinnedItems.has("indent") ? "Unpin" : "Pin to toolbar"}><StarIcon className={`h-3.5 w-3.5 ${pinnedItems.has("indent") ? "text-primary" : "opacity-40"}`} /></button>
@@ -1312,7 +1312,7 @@ export default function Home() {
                     <button type="button" aria-label="Reset indent" className="flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors" onClick={() => applyFormatWithOptions({ ...formatOptions, indentation: 2 })}><ArrowPathIcon className="h-3.5 w-3.5" aria-hidden /></button>
                   </div>
                 </div>
-                <div className="border-t border-[var(--workspace-border)] pt-2 mt-2">
+                <div className="border-t border-[var(--workspace-border)] pt-2">
                   <p className="text-xs font-medium opacity-70 mb-1">Quote style</p>
                   <div className="flex flex-wrap gap-1">
                     {(["double", "single"] as const).map((q) => (
@@ -1320,24 +1320,24 @@ export default function Home() {
                     ))}
                   </div>
                 </div>
-                <div className="border-t border-[var(--workspace-border)] pt-2 mt-2">
+                <div className="border-t border-[var(--workspace-border)] pt-2">
                   <div className="flex flex-wrap items-center gap-3">
                     <label className="flex cursor-pointer items-center gap-1.5"><input type="checkbox" className="checkbox checkbox-xs" checked={formatOptions.sortKeys} onChange={(e) => applyFormatWithOptions({ ...formatOptions, sortKeys: e.target.checked })} />Sort keys</label>
                     <label className="flex cursor-pointer items-center gap-1.5"><input type="checkbox" className="checkbox checkbox-xs" checked={formatOptions.removeEmpty} onChange={(e) => applyFormatWithOptions({ ...formatOptions, removeEmpty: e.target.checked })} />Remove empty</label>
                   </div>
                 </div>
-                <div className="border-t border-[var(--workspace-border)] pt-2 mt-2">
+                <div className="border-t border-[var(--workspace-border)] pt-2">
                   <p className="text-xs font-medium opacity-70 mb-1">Generate Types</p>
                   <div className="flex flex-wrap gap-1">
                     {TYPE_LANGUAGES.map((item) => (
-                      <div key={item.id} className="flex items-center gap-0.5">
+                      <div key={item.id} className="flex items-center">
                         <button type="button" disabled={inputEmpty} className={`${linkBtnClass} h-6 min-h-6 disabled:opacity-50 ${typeLanguage === item.id ? "text-primary" : ""}`} onClick={() => { setFocusedPane("output"); setActiveOperation("generateTypes"); executeOperation("generateTypes", { typeLanguage: item.id }); }}>{item.label}</button>
                         <button type="button" className={`btn btn-ghost btn-xs btn-square h-5 w-5 p-0 rounded ${pinnedItems.has(`type:${item.id}`) ? "text-primary" : "opacity-40"}`} onClick={(e) => { e.stopPropagation(); setPinnedItems((s) => { const n = new Set(s); n.has(`type:${item.id}`) ? n.delete(`type:${item.id}`) : n.add(`type:${item.id}`); return n; }); }} title={pinnedItems.has(`type:${item.id}`) ? "Unpin" : "Pin to toolbar"}><StarIcon className={`h-3.5 w-3.5 ${pinnedItems.has(`type:${item.id}`) ? "text-primary" : "opacity-40"}`} /></button>
                       </div>
                     ))}
                   </div>
                 </div>
-                <div className="border-t border-[var(--workspace-border)] pt-2 mt-2">
+                <div className="border-t border-[var(--workspace-border)] pt-2">
                   <button type="button" className={`${linkBtnClass} flex w-full items-center justify-center gap-1.5 py-1.5`} onClick={() => { setFormatOptions(DEFAULT_FORMAT_OPTIONS); setConvertToFormat("json"); setRightView("raw"); setEditorFontSize(13); setPinnedItems(new Set(["fmt:json", "fmt:xml", "view:raw", "view:graph", "action:minify", "action:schema", "type:typescript", "type:java", "type:go", "type:python", "type:sql"])); setTransformConfigOpen(false); }}>
                     <ArrowPathIcon className="h-3.5 w-3.5" />Reset to default
                   </button>
