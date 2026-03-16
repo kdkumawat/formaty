@@ -9,7 +9,6 @@ import {
   ArrowUturnLeftIcon,
   ArrowUturnRightIcon,
   ChevronDownIcon,
-  ChevronUpIcon,
   ClipboardDocumentIcon,
   Cog6ToothIcon,
   ComputerDesktopIcon,
@@ -20,9 +19,9 @@ import {
   ShareIcon,
   StarIcon,
   SunIcon,
-  TrashIcon,
+  ArrowLeftCircleIcon,
+  ArrowRightCircleIcon,
 } from "@heroicons/react/24/outline";
-import { NoSymbolIcon } from "@heroicons/react/24/solid";
 import { JsonDiffEditor } from "@/components/JsonDiffEditor";
 import { JsonEditor } from "@/components/JsonEditor";
 import { GraphView, type GraphViewRef } from "@/components/GraphView";
@@ -36,6 +35,7 @@ import {
 import { diffJson } from "@/lib/json/diff";
 import { useJsonWorker } from "@/hooks/useJsonWorker";
 import { detectFormat, FORMAT_LABELS, parseInput, stringifyOutput, type FormatKind } from "@/lib/formats";
+import { formatJson } from "@/lib/json/core";
 import { decodeState, encodeState } from "@/lib/shareState";
 import type { JsonValue, TypeTargetLanguage } from "@/lib/json/core";
 
@@ -257,13 +257,14 @@ export default function Home() {
   const [undoIndex, setUndoIndex] = useState(0);
   const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
   const [actionBounce, setActionBounce] = useState<"share" | "copy" | null>(null);
-  const [mobileShowOutput, setMobileShowOutput] = useState(false);
+  const [mobileShowOutput, setMobileShowOutput] = useState(true);
   const [cursorPosition, setCursorPosition] = useState<{ line: number; column: number } | null>(null);
   const historyLock = useRef(false);
   const splitContainerRef = useRef<HTMLDivElement | null>(null);
-  const pinnedItemsBeforeMenuRef = useRef<Set<string> | null>(null);
+  const prevBeforeDiffRef = useRef<{ rightView: RightView; activeOperation: OperationAction | null; isOutputMaximized: boolean } | null>(null);
   const graphViewRef = useRef<GraphViewRef | null>(null);
   const diffDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sessionRestoredRef = useRef(false);
 
   const isGraphView = rightView === "graph" && Boolean(parsedOutput);
   const canDownload = useMemo(
@@ -406,6 +407,7 @@ export default function Home() {
       if (state.typeLanguage) setTypeLanguage(state.typeLanguage);
       if (state.viewMode) setRightView(state.viewMode);
       if (typeof state.split === "number") setSplit(Math.max(20, Math.min(80, state.split)));
+      if (state.input) sessionRestoredRef.current = true;
       return;
     }
     const raw = localStorage.getItem("formaty-session");
@@ -423,6 +425,8 @@ export default function Home() {
         editorFontSize?: number;
         liveTransform?: boolean;
         viewAsMenu?: boolean;
+        mobileShowOutput?: boolean;
+        activeOperation?: OperationAction;
       pinnedItems?: string[];
       };
     if (data.input) setInput(data.input);
@@ -435,7 +439,10 @@ export default function Home() {
     if (typeof data.editorFontSize === "number") setEditorFontSize(data.editorFontSize);
       if (typeof data.liveTransform === "boolean") setLiveTransform(data.liveTransform);
       if (typeof data.viewAsMenu === "boolean") setViewAsMenu(data.viewAsMenu);
+      if (typeof data.mobileShowOutput === "boolean") setMobileShowOutput(data.mobileShowOutput);
+      if (data.activeOperation) setActiveOperation(data.activeOperation);
       if (Array.isArray(data.pinnedItems)) setPinnedItems(new Set(data.pinnedItems));
+      sessionRestoredRef.current = true;
       if (data.formatOptions) {
         const nextIndentation = Number(data.formatOptions.indentation);
         const indentation = Number.isFinite(nextIndentation) ? Math.max(0, Math.min(10, Math.floor(nextIndentation))) : DEFAULT_FORMAT_OPTIONS.indentation;
@@ -464,10 +471,12 @@ export default function Home() {
         liveTransform,
         editorFontSize,
         viewAsMenu,
+        mobileShowOutput,
+        activeOperation,
         pinnedItems: Array.from(pinnedItems),
       }),
     );
-  }, [input, output, split, themeMode, typeLanguage, rightView, formatOptions, convertToFormat, liveTransform, editorFontSize, viewAsMenu, pinnedItems]);
+  }, [input, output, split, themeMode, typeLanguage, rightView, formatOptions, convertToFormat, liveTransform, editorFontSize, viewAsMenu, mobileShowOutput, activeOperation, pinnedItems]);
 
   useEffect(() => {
     if (!output.trim()) {
@@ -486,6 +495,26 @@ export default function Home() {
       setParsedOutput(null);
     }
   }, [output, outputLanguage]);
+
+  useEffect(() => {
+    if (!sessionRestoredRef.current || !input.trim() || !activeOperation) return;
+    sessionRestoredRef.current = false;
+    if (activeOperation === "diff") return;
+    const id = setTimeout(() => {
+      if (activeOperation === "generateTypes") {
+        executeOperation("generateTypes", { typeLanguage });
+        return;
+      }
+      if (activeOperation === "format" || OPERATION_ACTIONS.some(([, a]) => a === activeOperation)) {
+        if (activeOperation === "format") {
+          runConvert(convertToFormat);
+        } else {
+          executeOperation(activeOperation);
+        }
+      }
+    }, 500);
+    return () => clearTimeout(id);
+  }, [input, output, activeOperation, convertToFormat, typeLanguage]);
 
   useEffect(() => {
     if ((rightView === "tree" || rightView === "graph") && !parsedOutput) {
@@ -560,9 +589,18 @@ export default function Home() {
     const onKeyDown = (event: KeyboardEvent) => {
       const mod = event.metaKey || event.ctrlKey;
       if (!mod) return;
+      if (modalKind) return;
       if (event.key === "Enter") {
         event.preventDefault();
         parseOnly();
+      }
+      if (event.key.toLowerCase() === "v") {
+        const target = event.target as HTMLElement;
+        const isEditable = target.isContentEditable || target.tagName === "INPUT" || target.tagName === "TEXTAREA";
+        if (!isEditable && (inputEmpty || focusedPane === "input")) {
+          event.preventDefault();
+          pasteFromClipboard();
+        }
       }
       if (event.key.toLowerCase() === "z" && !event.shiftKey) {
         event.preventDefault();
@@ -575,7 +613,7 @@ export default function Home() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  });
+  }, [modalKind, inputEmpty, focusedPane]);
 
   useEffect(() => {
     if (!isResizing) return;
@@ -648,7 +686,11 @@ export default function Home() {
     };
 
     if (toFormat === "json") {
-      return JSON.stringify(json, null, formatOpts.indentation);
+      return formatJson(json, {
+        indentation: formatOpts.indentation,
+        quoteStyle: formatOpts.quoteStyle,
+        sortKeys: formatOpts.sortKeys,
+      });
     }
 
     return run<string>("convert", { json, toFormat, formatOptions: formatOpts });
@@ -841,6 +883,24 @@ export default function Home() {
       return;
     }
     if (action === "diff") {
+      if (activeOperation === "diff") {
+        if (prevBeforeDiffRef.current && !prevBeforeDiffRef.current.isOutputMaximized) {
+          setRightView(prevBeforeDiffRef.current.rightView);
+          setActiveOperation(prevBeforeDiffRef.current.activeOperation);
+          setIsOutputMaximized(false);
+          setDiffPreview(null);
+          if (prevBeforeDiffRef.current.activeOperation === "format") {
+            runConvert(convertToFormat);
+          } else if (prevBeforeDiffRef.current.activeOperation === "generateTypes") {
+            executeOperation("generateTypes", { typeLanguage });
+          } else if (prevBeforeDiffRef.current.activeOperation) {
+            executeOperation(prevBeforeDiffRef.current.activeOperation);
+          }
+        }
+        prevBeforeDiffRef.current = null;
+        return;
+      }
+      prevBeforeDiffRef.current = { rightView, activeOperation, isOutputMaximized: isOutputMaximized };
       setIsOutputMaximized(true);
       setRightView("raw");
       setBusy(true);
@@ -987,16 +1047,14 @@ export default function Home() {
     try {
       const text = await navigator.clipboard.readText();
       if (!text) return;
-      if (!output.trim() || focusedPane === "input") {
-        setInput(text);
-        pushHistory(text);
-        setInputFormatOverride(null);
-        setError(null);
-        setValidationError(null);
-        parseOnly(text, detectFormat(text));
-      } else {
-        setOutput(text);
-      }
+      setInput(text);
+      pushHistory(text);
+      setInputFormatOverride(null);
+      setError(null);
+      setValidationError(null);
+      parseOnly(text, detectFormat(text));
+      setFocusedPane("output");
+      if (!isDesktopLayout) setMobileShowOutput(true);
     } catch {
       setError("Could not read clipboard.");
     }
@@ -1045,7 +1103,7 @@ export default function Home() {
               onClick={() => setMobileShowOutput(true)}
             >
               View output
-              <ArrowUturnRightIcon className="h-4 w-4 shrink-0" />
+              <ArrowRightCircleIcon className="h-4 w-4 shrink-0" />
             </button>
           )}
           <div
@@ -1082,9 +1140,10 @@ export default function Home() {
         setValidationError(null);
                   setActiveOperation(null);
                   setCopyState("idle");
+                  if (!isDesktopLayout) setMobileShowOutput(true);
                 }}
               >
-                <TrashIcon className="h-3.5 w-3.5" />
+                <ArrowPathIcon className="h-3.5 w-3.5" />
               </button>
             </div>
             <div className="flex shrink-0 items-center gap-1">
@@ -1117,81 +1176,58 @@ export default function Home() {
                 <DocumentArrowDownIcon className="h-3.5 w-3.5 shrink-0" />
                 Import
               </button>
+              <Dropdown
+              open={inputFormatOpen}
+              onOpenChange={setInputFormatOpen}
+              side="bottom"
+              align="start"
+              rootClassName="shrink-0"
+              contentClassName={`dropdown-content z-[100] min-w-[7rem] p-1 shadow-xl rounded-lg border ${toolbarBorderClass} ${dropdownPanelClass}`}
+              trigger={
+                <div className={`${linkBtnClass} flex h-7 min-h-7 shrink-0 items-center gap-1 ${inputFormatOpen ? "text-primary" : ""}`} title="Input format">
+                  <span className="truncate capitalize">{FORMAT_LABELS[resolvedInputFormat]}</span>
+                  <ChevronDownIcon className="h-3 w-3 shrink-0" />
+                </div>
+              }
+            >
+              <div className="flex flex-wrap gap-0.5 p-1" onClick={(e) => e.stopPropagation()}>
+                {FORMAT_KINDS.map((fmt) => (
+                  <button
+                    key={fmt}
+                    type="button"
+                    className={`${linkBtnClass} h-6 min-h-6 px-1.5 ${resolvedInputFormat === fmt ? "text-primary" : ""}`}
+                    onClick={() => {
+                      onInputFormatChange(fmt);
+                      setInputFormatOpen(false);
+                    }}
+                  >
+                    {FORMAT_LABELS[fmt]}
+                  </button>
+                ))}
+              </div>
+            </Dropdown>
             </div>
           </div>
           <div
             className="relative min-h-0 flex-1 overflow-hidden cursor-text"
             onClick={() => setFocusedPane("input")}
+            onMouseEnter={() => setFocusedPane("input")}
           >
-            {!input.trim() ? (
-              <div className="flex h-full min-h-[280px] flex-col items-center justify-center gap-6 p-6 text-center overflow-y-auto">
-                <div className="flex flex-col items-center gap-4">
-                  <div className="flex items-center">
-                    <img src="/icon.svg" alt="" width={48} height={48} className="workspace-icon shrink-0" />
-                    <span className="text-xl font-semibold text-primary">ormaty</span>
-                  </div>
-                  <p className="max-w-md text-sm text-[var(--workspace-text-muted)]">
-                    Format, convert and validate JSON, XML, YAML, TOML and CSV. Paste, upload, or try an example to get started.
-                  </p>
-                  <div className="flex flex-wrap gap-2 text-xs text-[var(--workspace-text-muted)]">
-                    <span>Format & convert</span>
-                    <span>·</span>
-                    <span>Tree & graph view</span>
-                    <span>·</span>
-                    <span>Schema validation</span>
-                    <span>·</span>
-                    <span>Type generation</span>
-                    <span>·</span>
-                    <span>Diff & flatten</span>
-                  </div>
-                </div>
-                <div className="flex flex-wrap items-center justify-center gap-2">
-                  <button type="button" className={`${linkBtnClass} gap-1.5`} onClick={pasteFromClipboard}>
-                    <ClipboardDocumentIcon className="h-4 w-4" />
-                    Paste
-                  </button>
-                  <button type="button" className={`${linkBtnClass} gap-1.5`} onClick={() => document.getElementById("import-json-file")?.click()}>
-                    <DocumentArrowDownIcon className="h-4 w-4" />
-                    Upload
-                  </button>
-                  <div className="mx-0 text-xs">or try sample</div>
-                  {FORMAT_KINDS.map((fmt) => (
-                    <button
-                      key={fmt}
-                      type="button"
-                      className={linkBtnClass}
-                      onClick={() => {
-                        const sample = SAMPLES[fmt];
-                        setInput(sample);
-                        pushHistory(sample);
-                        setInputFormatOverride(null);
-                        setError(null);
-                        setValidationError(null);
-                        parseOnly(sample, fmt);
-                      }}
-                    >
-                      {FORMAT_LABELS[fmt]}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <JsonEditor
-                value={input}
-                onChange={(next) => {
-                  setInput(next);
-                  pushHistory(next);
-                  setFocusedPane("input");
-                }}
-                className="h-full"
-                language={resolvedInputFormat === "toml" || resolvedInputFormat === "csv" ? "plaintext" : resolvedInputFormat}
-                monacoTheme={monacoTheme}
-                placeholder="Paste or drop JSON, XML, YAML, TOML, or CSV here"
-                panelTone="input"
-                fontSize={editorFontSize}
-                onCursorChange={(line, column) => setCursorPosition({ line, column })}
-              />
-            )}
+            <JsonEditor
+              value={input}
+              onChange={(next) => {
+                setInput(next);
+                pushHistory(next);
+                setFocusedPane("input");
+              }}
+              className="h-full"
+              language={resolvedInputFormat === "toml" || resolvedInputFormat === "csv" ? "plaintext" : resolvedInputFormat}
+              monacoTheme={monacoTheme}
+              // placeholder="Paste or drop JSON, XML, YAML, TOML, or CSV here"
+              panelTone="input"
+              fontSize={editorFontSize}
+              onCursorChange={(line, column) => setCursorPosition({ line, column })}
+            />
           </div>
         </div>
         )}
@@ -1209,7 +1245,7 @@ export default function Home() {
           className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[var(--workspace-background)] ${!isDesktopLayout && !mobileShowOutput ? "hidden" : ""}`}
           style={isDesktopLayout && !isOutputMaximized ? { width: `${100 - split}%` } : undefined}
         >
-          {!isDesktopLayout && mobileShowOutput && (
+          {!isDesktopLayout && mobileShowOutput && !inputEmpty && (
             <button
               type="button"
               className="flex w-full shrink-0 items-center justify-center gap-2 border-b border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-4 py-3 text-sm font-medium text-primary transition-colors hover:bg-[var(--workspace-background)] active:opacity-80"
@@ -1218,7 +1254,7 @@ export default function Home() {
                 setIsOutputMaximized(false);
               }}
             >
-              <ArrowUturnLeftIcon className="h-4 w-4 shrink-0" />
+              <ArrowLeftCircleIcon className="h-4 w-4 shrink-0" />
               Back to input
             </button>
           )}
@@ -1240,7 +1276,7 @@ export default function Home() {
             >
               <div className="card-body p-3 text-xs max-h-[70vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                 <label className="flex cursor-pointer items-center gap-2 pb-2 border-b border-[var(--workspace-border)]">
-                  <input type="checkbox" className="toggle toggle-sm toggle-primary" checked={viewAsMenu} onChange={(e) => { const on = e.target.checked; setViewAsMenu(on); if (on) { pinnedItemsBeforeMenuRef.current = new Set(pinnedItems); setPinnedItems(new Set()); setTransformConfigOpen(false); } else { if (pinnedItemsBeforeMenuRef.current) { setPinnedItems(pinnedItemsBeforeMenuRef.current); pinnedItemsBeforeMenuRef.current = null; } } }} />
+                  <input type="checkbox" className="toggle toggle-sm toggle-primary" checked={viewAsMenu} onChange={(e) => setViewAsMenu(e.target.checked)} />
                   <span className="text-xs font-medium">View as Menu items</span>
                 </label>
                 {viewAsMenu ? (
@@ -1338,7 +1374,7 @@ export default function Home() {
                   </div>
                 </div>
                 <div className="border-t border-[var(--workspace-border)] pt-2">
-                  <button type="button" className={`${linkBtnClass} flex w-full items-center justify-center gap-1.5 py-1.5`} onClick={() => { setFormatOptions(DEFAULT_FORMAT_OPTIONS); setConvertToFormat("json"); setRightView("raw"); setEditorFontSize(13); setPinnedItems(new Set(["fmt:json", "fmt:xml", "view:raw", "view:graph", "action:minify", "action:schema", "type:typescript", "type:java", "type:go", "type:python", "type:sql"])); setTransformConfigOpen(false); }}>
+                  <button type="button" className={`${linkBtnClass} flex w-full items-center justify-center gap-1.5 py-1.5`} onClick={() => { setFormatOptions(DEFAULT_FORMAT_OPTIONS); setConvertToFormat("json"); setRightView("raw"); setEditorFontSize(13); setPinnedItems(new Set(["fmt:json", "fmt:xml", "view:raw", "view:graph", "action:minify", "action:schema", "type:typescript", "type:java", "type:go", "type:python", "type:sql"])); }}>
                     <ArrowPathIcon className="h-3.5 w-3.5" />Reset to default
                   </button>
                 </div>
@@ -1407,7 +1443,7 @@ export default function Home() {
             {!viewAsMenu && FORMAT_KINDS.some((f) => pinnedItems.has(`fmt:${f}`)) && (
               <span className="mx-1 h-4 w-px shrink-0 self-center bg-[var(--workspace-text-muted)]/60" role="separator" aria-hidden />
             )}
-            {FORMAT_KINDS.filter((f) => pinnedItems.has(`fmt:${f}`)).map((fmt) => (
+            {!viewAsMenu && FORMAT_KINDS.filter((f) => pinnedItems.has(`fmt:${f}`)).map((fmt) => (
               <button
                 key={fmt}
                 type="button"
@@ -1423,7 +1459,7 @@ export default function Home() {
             {!viewAsMenu && (["raw", "tree", "graph"] as const).some((v) => pinnedItems.has(`view:${v}`)) && (
               <span className="mx-1 h-4 w-px shrink-0 self-center bg-[var(--workspace-text-muted)]/60" role="separator" aria-hidden />
             )}
-            {(["raw", "tree", "graph"] as const)
+            {!viewAsMenu &&(["raw", "tree", "graph"] as const)
               .filter((v) => pinnedItems.has(`view:${v}`))
               .map((view) => (
                 <button
@@ -1441,7 +1477,7 @@ export default function Home() {
             {!viewAsMenu && OPERATION_ACTIONS.some(([, a]) => pinnedItems.has(`action:${a}`)) && (
               <span className="mx-1 h-4 w-px shrink-0 self-center bg-[var(--workspace-text-muted)]/60" role="separator" aria-hidden />
             )}
-            {OPERATION_ACTIONS.filter(([, a]) => pinnedItems.has(`action:${a}`)).map(([label, action]) => (
+            {!viewAsMenu && OPERATION_ACTIONS.filter(([, a]) => pinnedItems.has(`action:${a}`)).map(([label, action]) => (
               <button
                 key={action}
                 type="button"
@@ -1514,7 +1550,7 @@ export default function Home() {
             {!viewAsMenu && TYPE_LANGUAGES.some((t) => pinnedItems.has(`type:${t.id}`)) && (
               <span className="mx-1 h-4 w-px shrink-0 self-center bg-[var(--workspace-text-muted)]/60" role="separator" aria-hidden />
             )}
-            {TYPE_LANGUAGES.filter((t) => pinnedItems.has(`type:${t.id}`)).map((item) => (
+            {!viewAsMenu && TYPE_LANGUAGES.filter((t) => pinnedItems.has(`type:${t.id}`)).map((item) => (
               <button
                 key={item.id}
                 type="button"
@@ -1625,12 +1661,63 @@ export default function Home() {
                   fontSize={editorFontSize}
                 />
               ) : (
-                <div className="flex h-full min-h-[200px] flex-col gap-2 bg-[var(--workspace-panel)] p-4">
-                  <div className="h-4 w-3/4 animate-pulse rounded bg-base-content/10" />
-                  <div className="h-4 w-1/2 animate-pulse rounded bg-base-content/10" />
-                  <div className="h-4 w-2/3 animate-pulse rounded bg-base-content/10" />
-                  <div className="h-4 w-4/5 animate-pulse rounded bg-base-content/10" />
-                  <div className="h-4 w-3/4 animate-pulse rounded bg-base-content/10" />
+                <div className="flex h-full min-h-[280px] flex-col items-center justify-center gap-6 p-6 text-center overflow-y-auto bg-[var(--workspace-panel)]">
+                  <div className="flex flex-col items-center gap-4">
+                    <div className="flex items-center">
+                      <img src="/icon.svg" alt="" width={48} height={48} className="workspace-icon shrink-0" />
+                      <span className="text-xl font-semibold text-primary">ormaty</span>
+                    </div>
+                    <p className="max-w-md text-sm text-[var(--workspace-text-muted)]">
+                      Format, convert and validate JSON, XML, YAML, TOML and CSV. Paste, import, or try an example to get started.
+                    </p>
+                    <p className="max-w-md text-xs text-[var(--workspace-text-muted)]">
+                      From Settings you can pin your favorite formats, views, and actions to the toolbar. We preserve your favorite settings and actions across sessions.
+                    </p>
+                    <div className="flex flex-wrap gap-2 text-xs text-[var(--workspace-text-muted)] justify-center">
+                      <span>Format & convert</span>
+                      <span>·</span>
+                      <span>Tree & graph view</span>
+                      <span>·</span>
+                      <span>Schema validation</span>
+                      <span>·</span>
+                      <span>Type generation</span>
+                      <span>·</span>
+                      <span>Diff & flatten</span>
+                      <span>·</span>
+                      <span>Minify & sort keys</span>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-center gap-2">
+                    <button type="button" className={`${linkBtnClass} gap-1.5`} onClick={pasteFromClipboard}>
+                      <ClipboardDocumentIcon className="h-4 w-4" />
+                      Paste
+                    </button>
+                    <button type="button" className={`${linkBtnClass} gap-1.5`} onClick={() => document.getElementById("import-json-file")?.click()}>
+                      <DocumentArrowDownIcon className="h-4 w-4" />
+                      Import
+                    </button>
+                    <span className="text-xs font-medium">or try sample</span>
+                    {FORMAT_KINDS.map((fmt) => (
+                      <button
+                        key={fmt}
+                        type="button"
+                        className={linkBtnClass}
+                        onClick={() => {
+                          const sample = SAMPLES[fmt];
+                          setInput(sample);
+                          pushHistory(sample);
+                          setInputFormatOverride(null);
+                          setError(null);
+                          setValidationError(null);
+                          parseOnly(sample, fmt);
+                          setFocusedPane("output");
+                          if (!isDesktopLayout) setMobileShowOutput(true);
+                        }}
+                      >
+                        {FORMAT_LABELS[fmt]}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )
             ) : null}
@@ -1675,38 +1762,6 @@ export default function Home() {
         cursorPosition={cursorPosition ? `Ln ${cursorPosition.line}, Col ${cursorPosition.column}` : undefined}
         indentSize={formatOptions.indentation}
         encoding="UTF-8"
-        inputFormatDropdown={
-          <Dropdown
-            open={inputFormatOpen}
-            onOpenChange={setInputFormatOpen}
-            side="top"
-            align="start"
-            contentClassName={`min-w-[5rem] rounded-lg border p-1.5 shadow-xl ${toolbarBorderClass} ${dropdownPanelClass}`}
-            trigger={() => (
-              <div className={`${linkBtnClass} flex h-7 min-h-7 shrink-0 cursor-pointer items-center gap-1 rounded-md border border-[var(--workspace-border)] px-1.5`}>
-                <span className="truncate capitalize">{FORMAT_LABELS[resolvedInputFormat]}</span>
-                <ChevronUpIcon className="h-3.5 w-3.5 shrink-0" />
-              </div>
-            )}
-          >
-            <ul className="menu">
-              {FORMAT_KINDS.map((fmt) => (
-                <li key={fmt}>
-                  <button
-                    type="button"
-                    className={`rounded text-xs ${resolvedInputFormat === fmt ? "bg-primary text-primary-content" : ""}`}
-                    onClick={() => {
-                      onInputFormatChange(fmt);
-                      setInputFormatOpen(false);
-                    }}
-                  >
-                    {FORMAT_LABELS[fmt]}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </Dropdown>
-        }
       />
 
         {modalKind === "validate" ? (

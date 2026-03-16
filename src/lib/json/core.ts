@@ -47,7 +47,7 @@ function normalizeIndentation(indentation: number | undefined): number {
 function toSingleQuotedJsonString(input: string): string {
   return input.replace(/"(?:\\.|[^"\\])*"/g, (token) => {
     const content = token.slice(1, -1).replace(/\\"/g, '"').replace(/'/g, "\\'");
-    return `'${content.replace(/"/g, "\\\"")}'`;
+    return `'${content}'`;
   });
 }
 
