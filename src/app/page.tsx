@@ -26,6 +26,8 @@ import { JsonDiffEditor } from "@/components/JsonDiffEditor";
 import { JsonEditor } from "@/components/JsonEditor";
 import { GraphView, type GraphViewRef } from "@/components/GraphView";
 import { TreeView } from "@/components/TreeView";
+import { QueryView } from "@/components/QueryView";
+import { TableView } from "@/components/TableView";
 import {
   Dropdown,
   getSizeFormatted,
@@ -34,7 +36,8 @@ import {
 } from "@/components/workspace";
 import { diffJson } from "@/lib/json/diff";
 import { useJsonWorker } from "@/hooks/useJsonWorker";
-import { detectFormat, FORMAT_LABELS, parseInput, stringifyOutput, type FormatKind } from "@/lib/formats";
+import { detectFormat, FORMAT_LABELS, getInputFormatLabel, parseInput, stringifyOutput, type FormatKind, type InputFormatKind } from "@/lib/formats";
+import { executeCurl, parseCurl } from "@/lib/curl/parseCurl";
 import { formatJson } from "@/lib/json/core";
 import { decodeState, encodeState } from "@/lib/shareState";
 import type { JsonValue, TypeTargetLanguage } from "@/lib/json/core";
@@ -93,6 +96,97 @@ tags = ["json", "tooling"]
 team = "platform"
 active = true`;
 
+const SAMPLE_CURL = `curl -X GET "https://www.cloudflarestatus.com/api/v2/status.json"`;
+
+const EXAMPLE_GITHUB = `{
+  "id": 460078,
+  "name": "next.js",
+  "full_name": "vercel/next.js",
+  "private": false,
+  "owner": {
+    "login": "vercel",
+    "id": 14985020,
+    "avatar_url": "https://avatars.githubusercontent.com/u/14985020?v=4",
+    "type": "Organization"
+  },
+  "description": "The React Framework",
+  "fork": false,
+  "created_at": "2016-01-17T00:55:59Z",
+  "updated_at": "2025-03-16T12:00:00Z",
+  "stargazers_count": 120000,
+  "language": "TypeScript",
+  "license": { "key": "mit", "name": "MIT License" }
+}`;
+
+const EXAMPLE_STRIPE = `{
+  "id": "evt_1ABC123",
+  "object": "event",
+  "api_version": "2023-10-16",
+  "created": 1699000000,
+  "type": "payment_intent.succeeded",
+  "data": {
+    "object": {
+      "id": "pi_1ABC123",
+      "object": "payment_intent",
+      "amount": 2000,
+      "currency": "usd",
+      "status": "succeeded",
+      "metadata": { "order_id": "ord_123" }
+    }
+  }
+}`;
+
+const EXAMPLE_K8S = `{
+  "apiVersion": "apps/v1",
+  "kind": "Deployment",
+  "metadata": {
+    "name": "nginx-deployment",
+    "labels": { "app": "nginx" }
+  },
+  "spec": {
+    "replicas": 3,
+    "selector": { "matchLabels": { "app": "nginx" } },
+    "template": {
+      "metadata": { "labels": { "app": "nginx" } },
+      "spec": {
+        "containers": [{
+          "name": "nginx",
+          "image": "nginx:1.14.2",
+          "ports": [{ "containerPort": 80 }]
+        }]
+      }
+    }
+  }
+}`;
+
+const EXAMPLE_OPENAPI = `{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Sample API",
+    "version": "1.0.0",
+    "description": "A sample OpenAPI specification"
+  },
+  "paths": {
+    "/users": {
+      "get": {
+        "summary": "List users",
+        "responses": { "200": { "description": "Success" } }
+      },
+      "post": {
+        "summary": "Create user",
+        "responses": { "201": { "description": "Created" } }
+      }
+    }
+  }
+}`;
+
+const EXAMPLES = [
+  { id: "github", label: "GitHub API", data: EXAMPLE_GITHUB },
+  { id: "stripe", label: "Stripe webhook", data: EXAMPLE_STRIPE },
+  { id: "k8s", label: "Kubernetes manifest", data: EXAMPLE_K8S },
+  { id: "openapi", label: "OpenAPI schema", data: EXAMPLE_OPENAPI },
+] as const;
+
 const SAMPLES: Record<FormatKind, string> = {
   json: SAMPLE_JSON,
   xml: SAMPLE_XML,
@@ -111,6 +205,7 @@ const OPERATION_ACTIONS = [
 ] as const;
 
 const FORMAT_KINDS: FormatKind[] = ["json", "xml", "yaml", "toml", "csv"];
+const INPUT_FORMAT_KINDS: InputFormatKind[] = [...FORMAT_KINDS, "curl"];
 
 const TYPE_LANGUAGES: Array<{ id: TypeTargetLanguage; label: string; ext: string }> = [
   { id: "typescript", label: "TypeScript", ext: "ts" },
@@ -144,7 +239,7 @@ type OutputLanguage =
   | "plaintext";
 type ThemeMode = "system" | "dark" | "light";
 type ModalKind = "validate" | "diff" | null;
-type RightView = "raw" | "tree" | "graph";
+type RightView = "raw" | "tree" | "graph" | "query" | "table";
 type QuoteStyle = "double" | "single";
 type FormatOptions = {
   indentation: number;
@@ -238,7 +333,7 @@ export default function Home() {
   const [focusedPane, setFocusedPane] = useState<"input" | "output">("input");
   const [formatOptions, setFormatOptions] = useState<FormatOptions>(DEFAULT_FORMAT_OPTIONS);
   const [convertToFormat, setConvertToFormat] = useState<FormatKind>("json");
-  const [inputFormatOverride, setInputFormatOverride] = useState<FormatKind | null>(null);
+  const [inputFormatOverride, setInputFormatOverride] = useState<InputFormatKind | null>(null);
   const [inputFormatOpen, setInputFormatOpen] = useState(false);
   const [transformConfigOpen, setTransformConfigOpen] = useState(false);
   const [viewAsMenu, setViewAsMenu] = useState(false);
@@ -247,7 +342,7 @@ export default function Home() {
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
   const [typesMenuOpen, setTypesMenuOpen] = useState(false);
   const [pinnedItems, setPinnedItems] = useState<Set<string>>(
-    () => new Set(["fmt:json", "fmt:xml", "view:raw", "view:graph", "action:minify", "action:schema", "type:typescript", "type:java", "type:go", "type:python", "type:sql"])
+    () => new Set(["fmt:json", "fmt:xml", "view:raw", "view:graph", "view:query", "action:minify", "action:schema", "action:diff", "type:typescript", "type:java", "type:go", "type:python", "type:sql"])
   );
   const [liveTransform, setLiveTransform] = useState(true);
   const [editorFontSize, setEditorFontSize] = useState(13);
@@ -271,6 +366,7 @@ export default function Home() {
     () => (isGraphView ? Boolean(parsedOutput) : output.trim().length > 0),
     [isGraphView, output, parsedOutput],
   );
+
   const parseSchemaToObject = useCallback((text: string): object | null => {
     if (!text.trim()) return null;
     const fmt = detectFormat(text);
@@ -320,7 +416,18 @@ export default function Home() {
   }, [inputEmpty]);
 
   const detectedInputFormat = useMemo(() => detectFormat(input), [input]);
-  const resolvedInputFormat = inputFormatOverride ?? detectedInputFormat;
+  const resolvedInputFormat: InputFormatKind = inputFormatOverride ?? detectedInputFormat;
+  const resolvedParseFormat: FormatKind = resolvedInputFormat === "curl" ? "json" : resolvedInputFormat;
+
+  const getParsedInput = useCallback(async (): Promise<JsonValue> => {
+    if (resolvedInputFormat === "curl") {
+      const parsed = parseCurl(input);
+      const responseText = await executeCurl(parsed);
+      const fmt = detectFormat(responseText) === "curl" ? "json" : (detectFormat(responseText) as FormatKind);
+      return run<JsonValue>("parseFormat", { input: responseText, format: fmt });
+    }
+    return run<JsonValue>("parseFormat", { input, format: resolvedParseFormat });
+  }, [input, resolvedInputFormat, resolvedParseFormat, run]);
 
   const themeOptions = [
     { mode: "system" as const, ariaLabel: "Use system theme", title: "System theme", Icon: ComputerDesktopIcon },
@@ -517,7 +624,7 @@ export default function Home() {
   }, [input, output, activeOperation, convertToFormat, typeLanguage]);
 
   useEffect(() => {
-    if ((rightView === "tree" || rightView === "graph") && !parsedOutput) {
+    if ((rightView === "tree" || rightView === "graph" || rightView === "query" || rightView === "table") && !parsedOutput) {
       setRightView("raw");
     }
   }, [rightView, parsedOutput]);
@@ -543,6 +650,17 @@ export default function Home() {
       setValidationError(null);
       return;
     }
+    if (resolvedInputFormat === "curl") {
+      try {
+        parseCurl(input);
+        setInputValid(true);
+        setValidationError(null);
+      } catch {
+        setInputValid(false);
+        setValidationError("Invalid cURL command");
+      }
+      return;
+    }
     validationTimeoutRef.current = setTimeout(() => {
       run("parseFormat", { input, format: resolvedInputFormat })
         .then(() => {
@@ -551,7 +669,7 @@ export default function Home() {
         })
         .catch((e) => {
           setInputValid(false);
-          setValidationError(e instanceof Error ? e.message : `Invalid ${FORMAT_LABELS[resolvedInputFormat]}`);
+          setValidationError(e instanceof Error ? e.message : `Invalid ${getInputFormatLabel(resolvedInputFormat)}`);
         });
     }, 300);
     return () => {
@@ -561,14 +679,17 @@ export default function Home() {
 
   useEffect(() => {
     if (!liveTransform || !input.trim()) return;
+    const fmt = detectFormat(input);
+    if (fmt === "curl") return; // cURL: execute only on explicit run (Cmd+Enter)
     liveTransformTimeoutRef.current = setTimeout(() => {
       const currentInput = inputRef.current;
       if (!currentInput.trim()) return;
       setBusy(true);
       setError(null);
       setDiffPreview(null);
-      const fmt = detectFormat(currentInput);
-      void run<JsonValue>("parseFormat", { input: currentInput, format: fmt })
+      const currentFmt = detectFormat(currentInput);
+      if (currentFmt === "curl") return;
+      void run<JsonValue>("parseFormat", { input: currentInput, format: currentFmt })
         .then(async (json) => {
           const out = await convertJsonToOutput(json, { toFormat: convertToFormat });
           setOutput(out);
@@ -597,7 +718,8 @@ export default function Home() {
       if (event.key.toLowerCase() === "v") {
         const target = event.target as HTMLElement;
         const isEditable = target.isContentEditable || target.tagName === "INPUT" || target.tagName === "TEXTAREA";
-        if (!isEditable && (inputEmpty || focusedPane === "input")) {
+        // Only intercept when input is empty (paste to start) — when input has content, let editor handle paste at cursor
+        if (!isEditable && inputEmpty) {
           event.preventDefault();
           pasteFromClipboard();
         }
@@ -696,7 +818,7 @@ export default function Home() {
     return run<string>("convert", { json, toFormat, formatOptions: formatOpts });
   };
 
-  const parseOnly = (inputOverride?: string, formatOverride?: FormatKind) => {
+  const parseOnly = (inputOverride?: string, formatOverride?: InputFormatKind) => {
     const text = inputOverride ?? input;
     const fmt = formatOverride ?? resolvedInputFormat;
     if (!text.trim()) return;
@@ -706,9 +828,16 @@ export default function Home() {
     setDiffPreview(null);
     void (async () => {
       try {
+        let toParse = text;
+        let parseFmt: FormatKind = fmt === "curl" ? "json" : fmt;
+        if (fmt === "curl") {
+          const parsed = parseCurl(text);
+          toParse = await executeCurl(parsed);
+          parseFmt = detectFormat(toParse) === "curl" ? "json" : (detectFormat(toParse) as FormatKind);
+        }
         const json = await run<JsonValue>("parseFormat", {
-          input: text,
-          format: fmt,
+          input: toParse,
+          format: parseFmt,
         });
         const result = await convertJsonToOutput(json);
         setOutputData(result, "parse");
@@ -716,7 +845,7 @@ export default function Home() {
         setActiveOperation(null);
         if (!isDesktopLayout) setMobileShowOutput(true);
       } catch (e) {
-        setError(e instanceof Error ? e.message : `Invalid ${FORMAT_LABELS[fmt]}`);
+        setError(e instanceof Error ? e.message : fmt === "curl" ? "cURL execution failed" : `Invalid ${FORMAT_LABELS[fmt as FormatKind]}`);
       } finally {
         setBusy(false);
       }
@@ -737,10 +866,7 @@ export default function Home() {
     if (action !== "diff") setDiffPreview(null);
     void (async () => {
       try {
-        const left = await run<JsonValue>("parseFormat", {
-          input,
-          format: resolvedInputFormat,
-        });
+        const left = await getParsedInput();
 
         if (action === "validate") {
           const schemaText = options?.schemaText ?? schemaInput;
@@ -837,10 +963,7 @@ export default function Home() {
     setError(null);
     void (async () => {
       try {
-        const json = await run<JsonValue>("parseFormat", {
-          input,
-          format: resolvedInputFormat,
-        });
+        const json = await getParsedInput();
         const result = await convertJsonToOutput(json, { toFormat });
         setOutput(result);
         setOutputExt(EXT_BY_FORMAT[toFormat]);
@@ -907,10 +1030,7 @@ export default function Home() {
       setError(null);
       void (async () => {
         try {
-          const left = await run<JsonValue>("parseFormat", {
-            input,
-            format: resolvedInputFormat,
-          });
+          const left = await getParsedInput();
           const leftStr = await convertJsonToOutput(left);
           setDiffPreview({ original: leftStr, modified: compareInput });
           if (compareInput.trim()) {
@@ -1019,14 +1139,18 @@ export default function Home() {
   };
 
   const onInputFormatChange = useCallback(
-    (newFormat: FormatKind) => {
+    (newFormat: InputFormatKind) => {
       if (!input.trim()) {
         setInputFormatOverride(newFormat === detectedInputFormat ? null : newFormat);
         return;
       }
+      if (newFormat === "curl" || resolvedInputFormat === "curl") {
+        setInputFormatOverride(newFormat === detectedInputFormat ? null : newFormat);
+        return;
+      }
       try {
-        const parsed = parseInput(input, resolvedInputFormat);
-        const formatted = stringifyOutput(parsed, newFormat, {
+        const parsed = parseInput(input, resolvedInputFormat as FormatKind);
+        const formatted = stringifyOutput(parsed, newFormat as FormatKind, {
           indentation: formatOptions.indentation,
           quoteStyle: formatOptions.quoteStyle,
           sortKeys: formatOptions.sortKeys,
@@ -1040,7 +1164,7 @@ export default function Home() {
         setInputFormatOverride(newFormat === detectedInputFormat ? null : newFormat);
       }
     },
-    [input, resolvedInputFormat, detectedInputFormat, formatOptions, pushHistory]
+    [input, resolvedInputFormat, detectedInputFormat, formatOptions, pushHistory],
   );
 
   const pasteFromClipboard = async () => {
@@ -1185,13 +1309,13 @@ export default function Home() {
               contentClassName={`dropdown-content z-[100] min-w-[7rem] p-1 shadow-xl rounded-lg border ${toolbarBorderClass} ${dropdownPanelClass}`}
               trigger={
                 <div className={`${linkBtnClass} flex h-7 min-h-7 shrink-0 items-center gap-1 ${inputFormatOpen ? "text-primary" : ""}`} title="Input format">
-                  <span className="truncate capitalize">{FORMAT_LABELS[resolvedInputFormat]}</span>
+                  <span className="truncate">{getInputFormatLabel(resolvedInputFormat)}</span>
                   <ChevronDownIcon className="h-3 w-3 shrink-0" />
                 </div>
               }
             >
               <div className="flex flex-wrap gap-0.5 p-1" onClick={(e) => e.stopPropagation()}>
-                {FORMAT_KINDS.map((fmt) => (
+                    {INPUT_FORMAT_KINDS.map((fmt) => (
                   <button
                     key={fmt}
                     type="button"
@@ -1201,7 +1325,7 @@ export default function Home() {
                       setInputFormatOpen(false);
                     }}
                   >
-                    {FORMAT_LABELS[fmt]}
+                    {getInputFormatLabel(fmt)}
                   </button>
                 ))}
               </div>
@@ -1221,7 +1345,7 @@ export default function Home() {
                 setFocusedPane("input");
               }}
               className="h-full"
-              language={resolvedInputFormat === "toml" || resolvedInputFormat === "csv" ? "plaintext" : resolvedInputFormat}
+              language={resolvedInputFormat === "toml" || resolvedInputFormat === "csv" || resolvedInputFormat === "curl" ? "plaintext" : resolvedInputFormat}
               monacoTheme={monacoTheme}
               // placeholder="Paste or drop JSON, XML, YAML, TOML, or CSV here"
               panelTone="input"
@@ -1267,14 +1391,14 @@ export default function Home() {
               side="bottom"
               align="start"
               rootClassName="shrink-0"
-              contentClassName={`dropdown-content card card-sm z-[100] w-64 sm:w-85 max-w-[90vw] shadow-xl ${dropdownPanelClass}`}
+              contentClassName={`dropdown-content card card-sm z-[100] w-64 sm:w-85 max-w-[90vw] shadow-xl border border-white/45 ${dropdownPanelClass}`}
               trigger={
                 <div className={`${linkBtnClass} flex h-7 min-h-7 shrink-0 items-center justify-center ${transformConfigOpen ? "text-primary" : ""}`} title="Settings">
                   <Cog6ToothIcon className="h-3.5 w-3.5" />
                 </div>
               }
             >
-              <div className="card-body p-3 text-xs max-h-[70vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+              <div className="card-body p-3 text-xs max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                 <label className="flex cursor-pointer items-center gap-2 pb-2 border-b border-[var(--workspace-border)]">
                   <input type="checkbox" className="toggle toggle-sm toggle-primary" checked={viewAsMenu} onChange={(e) => setViewAsMenu(e.target.checked)} />
                   <span className="text-xs font-medium">View as Menu items</span>
@@ -1299,9 +1423,9 @@ export default function Home() {
                 <div className="border-t border-[var(--workspace-border)] pt-2">
                   <p className="text-xs font-medium opacity-70 mb-1">View</p>
                   <div className="flex flex-wrap gap-1">
-                    {(["raw", "tree", "graph"] as const).map((view) => (
+                    {(["raw", "tree", "graph", "query", "table"] as const).map((view) => (
                       <div key={view} className="flex items-center">
-                        <button type="button" disabled={inputEmpty || ((view === "tree" || view === "graph") && !parsedOutput)} className={`${linkBtnClass} h-6 min-h-6 disabled:opacity-50 ${rightView === view ? "text-primary" : ""}`} onClick={() => { setRightView(view); setFocusedPane("output"); }}>
+                        <button type="button" disabled={inputEmpty || ((view === "tree" || view === "graph" || view === "query" || view === "table") && !parsedOutput)} className={`${linkBtnClass} h-6 min-h-6 disabled:opacity-50 ${rightView === view ? "text-primary" : ""}`} onClick={() => { setRightView(view); setFocusedPane("output"); }}>
                           {view[0].toUpperCase() + view.slice(1)}
                         </button>
                         <button type="button" className={`btn btn-ghost btn-xs btn-square h-5 w-5 p-0 rounded ${pinnedItems.has(`view:${view}`) ? "text-primary" : "opacity-40"}`} onClick={(e) => { e.stopPropagation(); setPinnedItems((s) => { const n = new Set(s); n.has(`view:${view}`) ? n.delete(`view:${view}`) : n.add(`view:${view}`); return n; }); }} title={pinnedItems.has(`view:${view}`) ? "Unpin" : "Pin to toolbar"}>
@@ -1324,42 +1448,47 @@ export default function Home() {
                     ))}
                   </div>
                 </div>
-                <div className="border-t border-[var(--workspace-border)] pt-2">
-                  <div className="flex w-fit items-center justify-between gap-2 mb-1">
-                    <p className="text-xs font-medium opacity-70">Font size</p>
-                    <button type="button" className={`btn btn-ghost btn-xs btn-square h-5 w-5 p-0 rounded ${pinnedItems.has("fontSize") ? "text-primary" : "opacity-40"}`} onClick={(e) => { e.stopPropagation(); setPinnedItems((s) => { const n = new Set(s); n.has("fontSize") ? n.delete("fontSize") : n.add("fontSize"); return n; }); }} title={pinnedItems.has("fontSize") ? "Unpin" : "Pin to toolbar"}><StarIcon className={`h-3.5 w-3.5 ${pinnedItems.has("fontSize") ? "text-primary" : "opacity-40"}`} /></button>
+                <div className="border-t border-[var(--workspace-border)] pt-2 flex flex-wrap gap-4 sm:gap-6">
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center justify-between gap-1">
+                      <p className="text-xs font-medium opacity-70">Font size</p>
+                      <button type="button" className={`btn btn-ghost btn-xs btn-square h-5 w-5 p-0 rounded ${pinnedItems.has("fontSize") ? "text-primary" : "opacity-40"}`} onClick={(e) => { e.stopPropagation(); setPinnedItems((s) => { const n = new Set(s); n.has("fontSize") ? n.delete("fontSize") : n.add("fontSize"); return n; }); }} title={pinnedItems.has("fontSize") ? "Unpin" : "Pin to toolbar"}><StarIcon className="h-3.5 w-3.5" /></button>
+                    </div>
+                    <div className="flex items-center rounded-lg border border-[var(--workspace-border)] overflow-hidden [&>*:not(:last-child)]:border-r [&>*:not(:last-child)]:border-[var(--workspace-border)]">
+                      <button type="button" aria-label="Decrease font size" className="flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors" onClick={() => setEditorFontSize((s) => Math.max(10, s - 1))}><MinusIcon className="h-3.5 w-3.5" aria-hidden /></button>
+                      <span className="flex shrink-0 items-center justify-center px-1 py-0.5 text-xs tabular-nums text-[var(--workspace-text)] border-r border-[var(--workspace-border)] min-w-[2rem]">{editorFontSize}</span>
+                      <button type="button" aria-label="Increase font size" className="flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors" onClick={() => setEditorFontSize((s) => Math.min(24, s + 1))}><PlusIcon className="h-3.5 w-3.5" aria-hidden /></button>
+                      <button type="button" aria-label="Reset font size" className="flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors" onClick={() => setEditorFontSize(13)}><ArrowPathIcon className="h-3.5 w-3.5" aria-hidden /></button>
+                    </div>
                   </div>
-                  <div className="flex w-fit items-center rounded-lg border border-[var(--workspace-border)] overflow-hidden [&>*:not(:last-child)]:border-r [&>*:not(:last-child)]:border-[var(--workspace-border)]">
-                    <button type="button" aria-label="Decrease font size" className="flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors" onClick={() => setEditorFontSize((s) => Math.max(10, s - 1))}><MinusIcon className="h-3.5 w-3.5" aria-hidden /></button>
-                    <span className="flex shrink-0 items-center justify-center px-1 py-0.5 text-xs tabular-nums text-[var(--workspace-text)] border-r border-[var(--workspace-border)] min-w-[2rem]">{editorFontSize}</span>
-                    <button type="button" aria-label="Increase font size" className="flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors" onClick={() => setEditorFontSize((s) => Math.min(24, s + 1))}><PlusIcon className="h-3.5 w-3.5" aria-hidden /></button>
-                    <button type="button" aria-label="Reset font size" className="flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors" onClick={() => setEditorFontSize(13)}><ArrowPathIcon className="h-3.5 w-3.5" aria-hidden /></button>
-                  </div>
-                </div>
-                <div className="border-t border-[var(--workspace-border)] pt-2">
-                  <div className="flex w-fit items-center justify-between gap-2 mb-1">
-                    <p className="text-xs font-medium opacity-70">Indent</p>
-                    <button type="button" className={`btn btn-ghost btn-xs btn-square h-5 w-5 p-0 rounded ${pinnedItems.has("indent") ? "text-primary" : "opacity-40"}`} onClick={(e) => { e.stopPropagation(); setPinnedItems((s) => { const n = new Set(s); n.has("indent") ? n.delete("indent") : n.add("indent"); return n; }); }} title={pinnedItems.has("indent") ? "Unpin" : "Pin to toolbar"}><StarIcon className={`h-3.5 w-3.5 ${pinnedItems.has("indent") ? "text-primary" : "opacity-40"}`} /></button>
-                  </div>
-                  <div className="flex w-fit items-center rounded-lg border border-[var(--workspace-border)] overflow-hidden [&>*:not(:last-child)]:border-r [&>*:not(:last-child)]:border-[var(--workspace-border)]">
-                    <button type="button" aria-label="Decrease indent" className="flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors" onClick={() => { const v = Math.max(0, formatOptions.indentation - 1); applyFormatWithOptions({ ...formatOptions, indentation: v }); }}><MinusIcon className="h-3.5 w-3.5" aria-hidden /></button>
-                    <span className="flex shrink-0 items-center justify-center px-1 py-0.5 text-xs tabular-nums text-[var(--workspace-text)] border-r border-[var(--workspace-border)]">{formatOptions.indentation}</span>
-                    <button type="button" aria-label="Increase indent" className="flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors" onClick={() => { const v = Math.min(10, formatOptions.indentation + 1); applyFormatWithOptions({ ...formatOptions, indentation: v }); }}><PlusIcon className="h-3.5 w-3.5" aria-hidden /></button>
-                    <button type="button" aria-label="Reset indent" className="flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors" onClick={() => applyFormatWithOptions({ ...formatOptions, indentation: 2 })}><ArrowPathIcon className="h-3.5 w-3.5" aria-hidden /></button>
-                  </div>
-                </div>
-                <div className="border-t border-[var(--workspace-border)] pt-2">
-                  <p className="text-xs font-medium opacity-70 mb-1">Quote style</p>
-                  <div className="flex flex-wrap gap-1">
-                    {(["double", "single"] as const).map((q) => (
-                      <button key={q} type="button" className={`${linkBtnClass} h-6 min-h-6 ${formatOptions.quoteStyle === q ? "text-primary" : ""}`} onClick={() => applyFormatWithOptions({ ...formatOptions, quoteStyle: q })}>{q === "double" ? "Double" : "Single"}</button>
-                    ))}
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center justify-between gap-1">
+                      <p className="text-xs font-medium opacity-70">Indent</p>
+                      <button type="button" className={`btn btn-ghost btn-xs btn-square h-5 w-5 p-0 rounded ${pinnedItems.has("indent") ? "text-primary" : "opacity-40"}`} onClick={(e) => { e.stopPropagation(); setPinnedItems((s) => { const n = new Set(s); n.has("indent") ? n.delete("indent") : n.add("indent"); return n; }); }} title={pinnedItems.has("indent") ? "Unpin" : "Pin to toolbar"}><StarIcon className="h-3.5 w-3.5" /></button>
+                    </div>
+                    <div className="flex items-center rounded-lg border border-[var(--workspace-border)] overflow-hidden [&>*:not(:last-child)]:border-r [&>*:not(:last-child)]:border-[var(--workspace-border)]">
+                      <button type="button" aria-label="Decrease indent" className="flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors" onClick={() => { const v = Math.max(0, formatOptions.indentation - 1); applyFormatWithOptions({ ...formatOptions, indentation: v }); }}><MinusIcon className="h-3.5 w-3.5" aria-hidden /></button>
+                      <span className="flex shrink-0 items-center justify-center px-1 py-0.5 text-xs tabular-nums text-[var(--workspace-text)] border-r border-[var(--workspace-border)]">{formatOptions.indentation}</span>
+                      <button type="button" aria-label="Increase indent" className="flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors" onClick={() => { const v = Math.min(10, formatOptions.indentation + 1); applyFormatWithOptions({ ...formatOptions, indentation: v }); }}><PlusIcon className="h-3.5 w-3.5" aria-hidden /></button>
+                      <button type="button" aria-label="Reset indent" className="flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors" onClick={() => applyFormatWithOptions({ ...formatOptions, indentation: 2 })}><ArrowPathIcon className="h-3.5 w-3.5" aria-hidden /></button>
+                    </div>
                   </div>
                 </div>
-                <div className="border-t border-[var(--workspace-border)] pt-2">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <label className="flex cursor-pointer items-center gap-1.5"><input type="checkbox" className="checkbox checkbox-xs" checked={formatOptions.sortKeys} onChange={(e) => applyFormatWithOptions({ ...formatOptions, sortKeys: e.target.checked })} />Sort keys</label>
-                    <label className="flex cursor-pointer items-center gap-1.5"><input type="checkbox" className="checkbox checkbox-xs" checked={formatOptions.removeEmpty} onChange={(e) => applyFormatWithOptions({ ...formatOptions, removeEmpty: e.target.checked })} />Remove empty</label>
+                <div className="border-t border-[var(--workspace-border)] pt-2 flex flex-wrap items-center gap-3 sm:gap-4">
+                  <div className="flex flex-col gap-1">
+                    <p className="text-xs font-medium opacity-70">Quote style</p>
+                    <div className="flex flex-wrap gap-1">
+                      {(["double", "single"] as const).map((q) => (
+                        <button key={q} type="button" className={`${linkBtnClass} h-6 min-h-6 ${formatOptions.quoteStyle === q ? "text-primary" : ""}`} onClick={() => applyFormatWithOptions({ ...formatOptions, quoteStyle: q })}>{q === "double" ? "Double" : "Single"}</button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <p className="text-xs font-medium opacity-70">Format options</p>
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                      <label className="flex cursor-pointer items-center gap-1.5 p-1"><input type="checkbox" className="checkbox checkbox-xs" checked={formatOptions.sortKeys} onChange={(e) => applyFormatWithOptions({ ...formatOptions, sortKeys: e.target.checked })} />Sort keys</label>
+                      <label className="flex cursor-pointer items-center gap-1.5"><input type="checkbox" className="checkbox checkbox-xs" checked={formatOptions.removeEmpty} onChange={(e) => applyFormatWithOptions({ ...formatOptions, removeEmpty: e.target.checked })} />Remove empty</label>
+                    </div>
                   </div>
                 </div>
                 <div className="border-t border-[var(--workspace-border)] pt-2">
@@ -1374,7 +1503,7 @@ export default function Home() {
                   </div>
                 </div>
                 <div className="border-t border-[var(--workspace-border)] pt-2">
-                  <button type="button" className={`${linkBtnClass} flex w-full items-center justify-center gap-1.5 py-1.5`} onClick={() => { setFormatOptions(DEFAULT_FORMAT_OPTIONS); setConvertToFormat("json"); setRightView("raw"); setEditorFontSize(13); setPinnedItems(new Set(["fmt:json", "fmt:xml", "view:raw", "view:graph", "action:minify", "action:schema", "type:typescript", "type:java", "type:go", "type:python", "type:sql"])); }}>
+                  <button type="button" className={`${linkBtnClass} flex w-full items-center justify-center gap-1.5 py-1.5`} onClick={() => { setFormatOptions(DEFAULT_FORMAT_OPTIONS); setConvertToFormat("json"); setRightView("raw"); setEditorFontSize(13); setPinnedItems(new Set(["fmt:json", "fmt:xml", "view:raw", "view:graph", "view:query", "action:minify", "action:schema", "action:diff", "type:typescript", "type:java", "type:go", "type:python", "type:sql"])); }}>
                     <ArrowPathIcon className="h-3.5 w-3.5" />Reset to default
                   </button>
                 </div>
@@ -1391,33 +1520,52 @@ export default function Home() {
                 ))}
               </div>
             </Dropdown>
-            <Dropdown open={viewMenuOpen} onOpenChange={setViewMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`dropdown-content z-[100] min-w-[8rem] p-1 shadow-xl rounded-lg border ${toolbarBorderClass} ${dropdownPanelClass}`} trigger={<div className={`${linkBtnClass} flex h-7 min-h-7 shrink-0 items-center gap-1 ${viewMenuOpen ? "text-primary" : ""}`} title="View"><span>View</span><ChevronDownIcon className="h-3 w-3" /></div>}>
-              <div className="p-1.5 max-h-[50vh] overflow-y-auto space-y-2" onClick={(e) => e.stopPropagation()}>
-                <div className="flex flex-wrap gap-0.5">
-                  {(["raw", "tree", "graph"] as const).map((view) => (
-                    <button key={view} type="button" disabled={inputEmpty || ((view === "tree" || view === "graph") && !parsedOutput)} className={`${linkBtnClass} h-6 min-h-6 px-1.5 disabled:opacity-50 ${rightView === view ? "text-primary" : ""}`} onClick={() => { setRightView(view); setFocusedPane("output"); setViewMenuOpen(false); }}>{view[0].toUpperCase() + view.slice(1)}</button>
-                  ))}
+            <Dropdown open={viewMenuOpen} onOpenChange={setViewMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`dropdown-content z-[100] min-w-[10rem] p-1.5 shadow-xl rounded-lg border ${toolbarBorderClass} ${dropdownPanelClass}`} trigger={<div className={`${linkBtnClass} flex h-7 min-h-7 shrink-0 items-center gap-1 ${viewMenuOpen ? "text-primary" : ""}`} title="View"><span>View</span><ChevronDownIcon className="h-3 w-3" /></div>}>
+              <div className="max-h-[50vh] overflow-y-auto space-y-2" onClick={(e) => e.stopPropagation()}>
+                <div>
+                  <p className="text-[10px] font-medium opacity-60 mb-1">View mode</p>
+                  <div className="flex flex-wrap gap-0.5">
+                    {(["raw", "tree", "graph", "query", "table"] as const).map((view) => (
+                      <button key={view} type="button" disabled={inputEmpty || ((view === "tree" || view === "graph" || view === "query" || view === "table") && !parsedOutput)} className={`${linkBtnClass} h-6 min-h-6 px-1.5 disabled:opacity-50 ${rightView === view ? "text-primary" : ""}`} onClick={() => { setRightView(view); setFocusedPane("output"); setViewMenuOpen(false); }}>{view[0].toUpperCase() + view.slice(1)}</button>
+                    ))}
+                  </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-0.5">
-                  <button type="button" className={`${linkBtnClass} btn-square h-6 w-6 p-0`} onClick={() => setEditorFontSize((s) => Math.max(10, s - 1))}><MinusIcon className="h-3 w-3" /></button>
-                  <span className="text-xs tabular-nums px-1 min-w-[1.5rem]">{editorFontSize}</span>
-                  <button type="button" className={`${linkBtnClass} btn-square h-6 w-6 p-0`} onClick={() => setEditorFontSize((s) => Math.min(24, s + 1))}><PlusIcon className="h-3 w-3" /></button>
-                  <button type="button" className={`${linkBtnClass} h-6 min-h-6`} onClick={() => setEditorFontSize(13)}>Reset</button>
+                <div className="flex flex-wrap gap-3 pt-1 border-t border-[var(--workspace-border)]">
+                  <div>
+                    <p className="text-[10px] font-medium opacity-60 mb-0.5">Font size</p>
+                    <div className="flex items-center gap-0.5">
+                      <button type="button" className={`${linkBtnClass} btn-square h-6 w-6 p-0`} onClick={() => setEditorFontSize((s) => Math.max(10, s - 1))}><MinusIcon className="h-3 w-3" /></button>
+                      <span className="text-xs tabular-nums px-1 min-w-[1.5rem]">{editorFontSize}</span>
+                      <button type="button" className={`${linkBtnClass} btn-square h-6 w-6 p-0`} onClick={() => setEditorFontSize((s) => Math.min(24, s + 1))}><PlusIcon className="h-3 w-3" /></button>
+                      <button type="button" className={`${linkBtnClass} h-6 min-h-6 text-[10px]`} onClick={() => setEditorFontSize(13)}>Reset</button>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-medium opacity-60 mb-0.5">Indent</p>
+                    <div className="flex items-center gap-0.5">
+                      <button type="button" className={`${linkBtnClass} btn-square h-6 w-6 p-0`} onClick={() => { const v = Math.max(0, formatOptions.indentation - 1); applyFormatWithOptions({ ...formatOptions, indentation: v }); }}><MinusIcon className="h-3 w-3" /></button>
+                      <span className="text-xs tabular-nums px-1 min-w-[1.5rem]">{formatOptions.indentation}</span>
+                      <button type="button" className={`${linkBtnClass} btn-square h-6 w-6 p-0`} onClick={() => { const v = Math.min(10, formatOptions.indentation + 1); applyFormatWithOptions({ ...formatOptions, indentation: v }); }}><PlusIcon className="h-3 w-3" /></button>
+                      <button type="button" className={`${linkBtnClass} h-6 min-h-6 text-[10px]`} onClick={() => applyFormatWithOptions({ ...formatOptions, indentation: 2 })}>Reset</button>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-0.5">
-                  <button type="button" className={`${linkBtnClass} btn-square h-6 w-6 p-0`} onClick={() => { const v = Math.max(0, formatOptions.indentation - 1); applyFormatWithOptions({ ...formatOptions, indentation: v }); }}><MinusIcon className="h-3 w-3" /></button>
-                  <span className="text-xs tabular-nums px-1 min-w-[1.5rem]">{formatOptions.indentation}</span>
-                  <button type="button" className={`${linkBtnClass} btn-square h-6 w-6 p-0`} onClick={() => { const v = Math.min(10, formatOptions.indentation + 1); applyFormatWithOptions({ ...formatOptions, indentation: v }); }}><PlusIcon className="h-3 w-3" /></button>
-                  <button type="button" className={`${linkBtnClass} h-6 min-h-6`} onClick={() => applyFormatWithOptions({ ...formatOptions, indentation: 2 })}>Reset</button>
-                </div>
-                <div className="flex flex-wrap gap-0.5">
-                  {(["double", "single"] as const).map((q) => (
-                    <button key={q} type="button" className={`${linkBtnClass} h-6 min-h-6 px-1.5 ${formatOptions.quoteStyle === q ? "text-primary" : ""}`} onClick={() => applyFormatWithOptions({ ...formatOptions, quoteStyle: q })}>{q === "double" ? "Double" : "Single"}</button>
-                  ))}
-                </div>
-                <div className="flex flex-wrap gap-0.5">
-                  <button type="button" className={`${linkBtnClass} h-6 min-h-6 px-1.5 ${formatOptions.sortKeys ? "text-primary" : ""}`} onClick={() => applyFormatWithOptions({ ...formatOptions, sortKeys: !formatOptions.sortKeys })}>Sort keys</button>
-                  <button type="button" className={`${linkBtnClass} h-6 min-h-6 px-1.5 ${formatOptions.removeEmpty ? "text-primary" : ""}`} onClick={() => applyFormatWithOptions({ ...formatOptions, removeEmpty: !formatOptions.removeEmpty })}>Remove empty</button>
+                <div className="flex flex-wrap gap-3 pt-1 border-t border-[var(--workspace-border)]">
+                  <div>
+                    <p className="text-[10px] font-medium opacity-60 mb-0.5">Quote style</p>
+                    <div className="flex gap-0.5">
+                      {(["double", "single"] as const).map((q) => (
+                        <button key={q} type="button" className={`${linkBtnClass} h-6 min-h-6 px-1.5 ${formatOptions.quoteStyle === q ? "text-primary" : ""}`} onClick={() => applyFormatWithOptions({ ...formatOptions, quoteStyle: q })}>{q === "double" ? "Double" : "Single"}</button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-medium opacity-60 mb-0.5">Format options</p>
+                    <div className="flex gap-1">
+                      <button type="button" className={`${linkBtnClass} h-6 min-h-6 px-1.5 ${formatOptions.sortKeys ? "text-primary" : ""}`} onClick={() => applyFormatWithOptions({ ...formatOptions, sortKeys: !formatOptions.sortKeys })}>Sort keys</button>
+                      <button type="button" className={`${linkBtnClass} h-6 min-h-6 px-1.5 ${formatOptions.removeEmpty ? "text-primary" : ""}`} onClick={() => applyFormatWithOptions({ ...formatOptions, removeEmpty: !formatOptions.removeEmpty })}>Remove empty</button>
+                    </div>
+                  </div>
                 </div>
               </div>
             </Dropdown>
@@ -1456,16 +1604,16 @@ export default function Home() {
                 {FORMAT_LABELS[fmt]}
               </button>
             ))}
-            {!viewAsMenu && (["raw", "tree", "graph"] as const).some((v) => pinnedItems.has(`view:${v}`)) && (
+            {!viewAsMenu && (["raw", "tree", "graph", "query", "table"] as const).some((v) => pinnedItems.has(`view:${v}`)) && (
               <span className="mx-1 h-4 w-px shrink-0 self-center bg-[var(--workspace-text-muted)]/60" role="separator" aria-hidden />
             )}
-            {!viewAsMenu &&(["raw", "tree", "graph"] as const)
+            {!viewAsMenu && (["raw", "tree", "graph", "query", "table"] as const)
               .filter((v) => pinnedItems.has(`view:${v}`))
               .map((view) => (
                 <button
                   key={view}
                   type="button"
-                  disabled={inputEmpty || ((view === "tree" || view === "graph") && !parsedOutput)}
+                  disabled={inputEmpty || ((view === "tree" || view === "graph" || view === "query" || view === "table") && !parsedOutput)}
                   className={`${linkBtnClass} h-7 min-h-7 shrink-0 disabled:opacity-50 ${
                     rightView === view ? "text-primary" : ""
                   }`}
@@ -1661,30 +1809,25 @@ export default function Home() {
                   fontSize={editorFontSize}
                 />
               ) : (
-                <div className="flex h-full min-h-[280px] flex-col items-center justify-center gap-6 p-6 text-center overflow-y-auto bg-[var(--workspace-panel)]">
-                  <div className="flex flex-col items-center gap-4">
-                    <div className="flex items-center">
-                      <img src="/icon.svg" alt="" width={48} height={48} className="workspace-icon shrink-0" />
-                      <span className="text-xl font-semibold text-primary">ormaty</span>
+                <div className="flex h-full min-h-[280px] flex-col items-center justify-center gap-5 p-6 text-center overflow-y-auto bg-[var(--workspace-panel)]">
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="flex items-center gap-1">
+                      <img src="/icon.svg" alt="" width={40} height={40} className="workspace-icon shrink-0" />
+                      <span className="text-lg font-semibold text-primary">formaty</span>
                     </div>
-                    <p className="max-w-md text-sm text-[var(--workspace-text-muted)]">
-                      Format, convert and validate JSON, XML, YAML, TOML and CSV. Paste, import, or try an example to get started.
+                    <p className="max-w-lg text-sm text-[var(--workspace-text-muted)] leading-relaxed">
+                      Format, convert, validate, and query JSON, XML, YAML, TOML, CSV. Paste with <kbd className="px-1.5 py-0.5 rounded text-[10px] bg-[var(--workspace-border)] font-mono">ctrl+v/cmd+v</kbd> or import a file.
                     </p>
-                    <p className="max-w-md text-xs text-[var(--workspace-text-muted)]">
-                      From Settings you can pin your favorite formats, views, and actions to the toolbar. We preserve your favorite settings and actions across sessions.
-                    </p>
-                    <div className="flex flex-wrap gap-2 text-xs text-[var(--workspace-text-muted)] justify-center">
-                      <span>Format & convert</span>
+                    <div className="flex flex-wrap gap-x-2 gap-y-1 text-[11px] text-[var(--workspace-text-muted)] justify-center">
+                      <span>Query (JSONPath/JMESPath)</span>
                       <span>·</span>
-                      <span>Tree & graph view</span>
+                      <span>cURL → fetch API</span>
                       <span>·</span>
-                      <span>Schema validation</span>
+                      <span>Tree & graph & table</span>
                       <span>·</span>
-                      <span>Type generation</span>
+                      <span>Schema & types</span>
                       <span>·</span>
-                      <span>Diff & flatten</span>
-                      <span>·</span>
-                      <span>Minify & sort keys</span>
+                      <span>Diff & share</span>
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center justify-center gap-2">
@@ -1717,6 +1860,48 @@ export default function Home() {
                         {FORMAT_LABELS[fmt]}
                       </button>
                     ))}
+                    <button
+                      type="button"
+                      className={linkBtnClass}
+                      onClick={() => {
+                        setInput(SAMPLE_CURL);
+                        pushHistory(SAMPLE_CURL);
+                        setInputFormatOverride("curl");
+                        setError(null);
+                        setValidationError(null);
+                        parseOnly(SAMPLE_CURL, "curl");
+                        setFocusedPane("output");
+                        if (!isDesktopLayout) setMobileShowOutput(true);
+                      }}
+                    >
+                      cURL
+                    </button>
+                  </div>
+                  <div className="flex flex-col gap-2 mt-4 pt-4 border-t border-[var(--workspace-border)]">
+                    <span className="text-xs font-medium opacity-70">Example gallery</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {EXAMPLES.map((ex) => (
+                        <button
+                          key={ex.id}
+                          type="button"
+                          className={`${linkBtnClass} text-xs`}
+                          onClick={() => {
+                            setInput(ex.data);
+                            pushHistory(ex.data);
+                            setInputFormatOverride(null);
+                            setError(null);
+                            setValidationError(null);
+                            parseOnly(ex.data, "json");
+                            setConvertToFormat("json");
+                            setRightView("raw");
+                            setFocusedPane("output");
+                            if (!isDesktopLayout) setMobileShowOutput(true);
+                          }}
+                        >
+                          {ex.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
               )
@@ -1741,6 +1926,34 @@ export default function Home() {
                   data={parsedOutput}
                   isDark={isDark}
                   className={`${outputPanelClass} min-h-0 flex-1`}
+                />
+              ) : (
+                <div className={`flex h-full min-h-[200px] items-center justify-center border text-sm text-base-content/70 ${outputPanelClass}`}>
+                  Current output is not valid JSON.
+                </div>
+              )
+            ) : null}
+            {rightView === "query" ? (
+              parsedOutput ? (
+                <QueryView
+                  data={parsedOutput}
+                  className={`${outputPanelClass} min-h-0 flex-1`}
+                  isDark={isDark}
+                  fontSize={editorFontSize}
+                  monacoTheme={monacoTheme}
+                />
+              ) : (
+                <div className={`flex h-full min-h-[200px] items-center justify-center border text-sm text-base-content/70 ${outputPanelClass}`}>
+                  Current output is not valid JSON.
+                </div>
+              )
+            ) : null}
+            {rightView === "table" ? (
+              parsedOutput ? (
+                <TableView
+                  data={parsedOutput}
+                  className={`${outputPanelClass} min-h-0 flex-1 overflow-auto`}
+                  isDark={isDark}
                 />
               ) : (
                 <div className={`flex h-full min-h-[200px] items-center justify-center border text-sm text-base-content/70 ${outputPanelClass}`}>

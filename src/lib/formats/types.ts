@@ -2,6 +2,9 @@ import type { JsonValue } from "@/lib/json/core";
 
 export type FormatKind = "json" | "xml" | "yaml" | "toml" | "csv";
 
+/** Input-only format: curl is executed to fetch response, not parsed. */
+export type InputFormatKind = FormatKind | "curl";
+
 export interface FormatStringifyOptions {
   indentation?: number;
   quoteStyle?: "single" | "double";
@@ -21,3 +24,12 @@ export const FORMAT_LABELS: Record<FormatKind, string> = {
   toml: "TOML",
   csv: "CSV",
 };
+
+export const INPUT_FORMAT_LABELS: Record<InputFormatKind, string> = {
+  ...FORMAT_LABELS,
+  curl: "cURL",
+};
+
+export function getInputFormatLabel(fmt: InputFormatKind): string {
+  return INPUT_FORMAT_LABELS[fmt];
+}

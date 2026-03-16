@@ -1,8 +1,11 @@
-import type { FormatKind } from "./types";
+import type { InputFormatKind } from "./types";
+import { isCurlCommand } from "@/lib/curl/parseCurl";
 
-export function detectFormat(input: string): FormatKind {
+export function detectFormat(input: string): InputFormatKind {
   const trimmed = input.trim();
   if (!trimmed) return "json";
+
+  if (isCurlCommand(trimmed)) return "curl";
 
   const first = trimmed[0];
   const firstLine = trimmed.split("\n")[0].trim();

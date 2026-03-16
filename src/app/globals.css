@@ -41,6 +41,11 @@ body {
   line-height: 1.5;
 }
 
+/* Monaco editor: reserve space for scrollbar to prevent content overlap */
+.monaco-editor .monaco-scrollable-element {
+  scrollbar-gutter: stable;
+}
+
 /* [data-theme="dark"] .workspace-icon {
-  filter: invert(1);
+  color:oklch(58% 0.233 277.117)
 } */

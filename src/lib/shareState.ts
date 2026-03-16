@@ -12,7 +12,7 @@ export interface WorkspaceState {
   output?: string;
   outputFormat?: FormatKind;
   typeLanguage?: TypeTargetLanguage;
-  viewMode?: "raw" | "tree" | "graph";
+  viewMode?: "raw" | "tree" | "graph" | "query" | "table";
   split?: number;
 }
 

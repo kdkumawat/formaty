@@ -1,4 +1,4 @@
-import type { FormatAdapter, FormatKind, FormatStringifyOptions } from "./types";
+import type { FormatAdapter, FormatKind, FormatStringifyOptions, InputFormatKind } from "./types";
 import { jsonAdapter } from "./jsonParser";
 import { xmlAdapter } from "./xmlParser";
 import { yamlAdapter } from "./yamlParser";
@@ -14,8 +14,8 @@ const adapters: Record<FormatKind, FormatAdapter> = {
   csv: csvAdapter,
 };
 
-export type { FormatAdapter, FormatKind, FormatStringifyOptions };
-export { FORMAT_LABELS } from "./types";
+export type { FormatAdapter, FormatKind, FormatStringifyOptions, InputFormatKind };
+export { FORMAT_LABELS, INPUT_FORMAT_LABELS, getInputFormatLabel } from "./types";
 export { detectFormat };
 
 export function getAdapter(kind: FormatKind): FormatAdapter {
