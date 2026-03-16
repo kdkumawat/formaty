@@ -1,29 +1,42 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="14" fill="oklch(90% 0 0)" />
 
-  <g transform="translate(32 32) scale(1.6) translate(-32 -32)">
+  <rect width="64" height="64" rx="14" fill="none"/>
+
+  <g transform="translate(32 32) scale(1.9) translate(-32 -32)">
     
     <!-- Left brace -->
     <path d="M24 18c-4 0-4 4-4 6v2c0 2-2 4-4 4 2 0 4 2 4 4v2c0 2 0 6 4 6"
-      stroke="oklch(45% .24 277.023)"
-      stroke-width="3"
+      stroke="oklch(45% 0.24 277.023)"
+      stroke-width="3.5"
       fill="none"
       stroke-linecap="round"
     />
 
     <!-- Right brace -->
     <path d="M40 18c4 0 4 4 4 6v2c0 2 2 4 4 4-2 0-4 2-4 4v2c0 2 0 6-4 6"
-      stroke="oklch(45% .24 277.023)"
-      stroke-width="3"
+      stroke="oklch(45% 0.24 277.023)"
+      stroke-width="3.5"
       fill="none"
       stroke-linecap="round"
     />
 
-    <!-- Tilted conversion arrows -->
+    <!-- Conversion arrows -->
     <g transform="rotate(-18 32 30)">
-      <path d="M26 30h12" stroke="oklch(45% .24 277.023)" stroke-width="3" stroke-linecap="round"/>
-      <path d="M32 24l6 6-6 6" stroke="oklch(45% .24 277.023)" stroke-width="3" fill="none"/>
-      <path d="M32 40l-6-6 6-6" stroke="oklch(45% .24 277.023)" stroke-width="3" fill="none"/>
+      <path d="M26 30h12"
+        stroke="oklch(45% 0.24 277.023)"
+        stroke-width="3.5"
+        stroke-linecap="round"
+      />
+      <path d="M32 24l6 6-6 6"
+        stroke="oklch(45% 0.24 277.023)"
+        stroke-width="3.5"
+        fill="none"
+      />
+      <path d="M32 40l-6-6 6-6"
+        stroke="oklch(45% 0.24 277.023)"
+        stroke-width="3.5"
+        fill="none"
+      />
     </g>
 
   </g>

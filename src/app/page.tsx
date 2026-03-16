@@ -1231,7 +1231,7 @@ export default function Home() {
               side="bottom"
               align="start"
               rootClassName="shrink-0"
-              contentClassName={`dropdown-content card card-sm bg-base-100 z-[100] w-64 sm:w-85 max-w-[90vw] shadow-xl ${dropdownPanelClass}`}
+              contentClassName={`dropdown-content card card-sm z-[100] w-64 sm:w-85 max-w-[90vw] shadow-xl ${dropdownPanelClass}`}
               trigger={
                 <div className={`${linkBtnClass} flex h-7 min-h-7 shrink-0 items-center justify-center ${transformConfigOpen ? "text-primary" : ""}`} title="Settings">
                   <Cog6ToothIcon className="h-3.5 w-3.5" />
