@@ -6,7 +6,6 @@ const API_URL = process.env.FORMATY_API_URL ?? "";
 
 export interface PlaygroundApiPayload {
   input: string;
-  output: string;
   format: string;
   options?: Record<string, unknown>;
 }
@@ -14,7 +13,6 @@ export interface PlaygroundApiPayload {
 export function mapStateToPayload(state: WorkspaceState): PlaygroundApiPayload {
   return {
     input: state.input,
-    output: state.output ?? "",
     format: state.convertToFormat ?? "json",
     options: {
       liveTransform: state.liveTransform,
@@ -22,6 +20,7 @@ export function mapStateToPayload(state: WorkspaceState): PlaygroundApiPayload {
       outputLanguage: state.outputLanguage,
       typeLanguage: state.typeLanguage,
       viewMode: state.viewMode,
+      activeOperation: state.activeOperation,
       split: state.split,
     },
   };
@@ -39,7 +38,6 @@ export function mapPayloadToState(payload: PlaygroundApiPayload): WorkspaceState
     : outputFormat;
   return {
     input: payload.input,
-    output: payload.output,
     convertToFormat: (payload.format as FormatKind) || "json",
     liveTransform: opts.liveTransform as boolean | undefined,
     outputFormat,
@@ -51,6 +49,7 @@ export function mapPayloadToState(payload: PlaygroundApiPayload): WorkspaceState
       if (v === "raw" || v === "tree" || v === "graph" || v === "query" || v === "table") return v;
       return undefined;
     })(),
+    activeOperation: opts.activeOperation as WorkspaceState["activeOperation"] | undefined,
     split: typeof opts.split === "number" ? opts.split : undefined,
   };
 }

@@ -7,6 +7,10 @@ import type { TypeTargetLanguage } from "./json/core";
 
 export type OutputDisplayKind = FormatKind | TypeTargetLanguage | "plaintext";
 
+export type OperationAction =
+  | "format" | "beautify" | "minify" | "sort" | "removeEmpty" | "flatten" | "unflatten"
+  | "diff" | "schema" | "validate" | "generateTypes";
+
 export interface WorkspaceState {
   input: string;
   convertToFormat?: FormatKind;
@@ -16,6 +20,7 @@ export interface WorkspaceState {
   outputLanguage?: OutputDisplayKind; // for type output: typescript, java, etc.
   typeLanguage?: TypeTargetLanguage;
   viewMode?: "raw" | "tree" | "graph" | "query" | "table";
+  activeOperation?: OperationAction;
   split?: number;
 }
 

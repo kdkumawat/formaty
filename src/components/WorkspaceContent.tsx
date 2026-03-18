@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import {
   ArrowDownTrayIcon,
   ArrowsPointingInIcon,
@@ -320,6 +320,8 @@ export interface WorkspaceContentProps {
 }
 
 export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLinkId, sharedLinkUrl: initialSharedLinkUrl }: WorkspaceContentProps = {}) {
+  const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const { run } = useJsonWorker();
   const [input, setInput] = useState("");
@@ -380,6 +382,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   const graphViewRef = useRef<GraphViewRef | null>(null);
   const diffDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sessionRestoredRef = useRef(false);
+  const skipNextPersistRef = useRef(true);
   const curlCacheRef = useRef<{ input: string; result: string } | null>(null);
   const isViewingSharedRef = useRef(false);
 
@@ -490,12 +493,10 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
       const s = localStorage.getItem("formaty-session");
       if (s) {
         const d = JSON.parse(s) as { themeMode?: ThemeMode };
-        if (d.themeMode === "dark" || d.themeMode === "light") setThemeMode(d.themeMode);
+        if (d.themeMode === "dark" || d.themeMode === "light" || d.themeMode === "system") setThemeMode(d.themeMode);
       }
     } catch {}
-    const t = document.documentElement.getAttribute("data-theme");
-    const dark = t === "dark" ? true : t === "light" ? false : window.matchMedia("(prefers-color-scheme: dark)").matches;
-    setSystemDark(dark);
+    setSystemDark(window.matchMedia("(prefers-color-scheme: dark)").matches);
     setIsDesktopLayout(window.matchMedia("(min-width: 1280px)").matches);
     setThemeSynced(true);
   }, []);
@@ -566,6 +567,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
       }
       if (initialState.typeLanguage) setTypeLanguage(initialState.typeLanguage);
       if (initialState.viewMode) setRightView(initialState.viewMode);
+      setActiveOperation((initialState.activeOperation as OperationAction) ?? "format");
       if (typeof initialState.split === "number") setSplit(Math.max(20, Math.min(80, initialState.split)));
       sessionRestoredRef.current = true;
       return;
@@ -667,6 +669,10 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
 
   useEffect(() => {
     if (isViewingSharedRef.current) return;
+    if (skipNextPersistRef.current) {
+      skipNextPersistRef.current = false;
+      return;
+    }
     localStorage.setItem(
       "formaty-session",
       JSON.stringify({
@@ -727,10 +733,11 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   }, [input, output, activeOperation, convertToFormat, typeLanguage]);
 
   useEffect(() => {
-    if ((rightView === "tree" || rightView === "graph" || rightView === "query" || rightView === "table") && !parsedOutput) {
+    if (isViewingSharedRef.current) return;
+    if ((rightView === "tree" || rightView === "graph" || rightView === "query" || rightView === "table") && !parsedOutput && !output.trim()) {
       setRightView("raw");
     }
-  }, [rightView, parsedOutput]);
+  }, [rightView, parsedOutput, output]);
 
   const validationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const liveTransformTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1364,7 +1371,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
         ref={splitContainerRef}
         className={`flex min-h-0 flex-1 overflow-hidden ${isDesktopLayout && !isOutputMaximized ? "flex-row" : "flex-col"}`}
       >
-        {!isOutputMaximized && (!isDesktopLayout ? !mobileShowOutput : true) && (
+        {!isOutputMaximized && (!isDesktopLayout ? !mobileShowOutput : true) && (isDesktopLayout || output.trim() || !inputEmpty) && (
         <div
           className={`flex min-h-0 flex-col overflow-hidden bg-[var(--workspace-background)] transition-opacity duration-200 ${
             isDesktopLayout ? "shrink-0" : "min-h-0 flex-1"
@@ -1415,6 +1422,10 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
         setValidationError(null);
                   setActiveOperation(null);
                   setCopyState("idle");
+                  setSharedLinkId(null);
+                  setSharedLinkUrl(null);
+                  isViewingSharedRef.current = false;
+                  if (pathname === "/playground" && searchParams?.get("id")) router.replace("/");
                   if (!isDesktopLayout) setMobileShowOutput(true);
                 }}
               >
@@ -1506,7 +1517,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
           </div>
         </div>
         )}
-        {isDesktopLayout && !isOutputMaximized && (
+        {isDesktopLayout && !isOutputMaximized && (isDesktopLayout || output.trim() || !inputEmpty) && (
           <div
             role="separator"
             aria-orientation="vertical"
@@ -1518,7 +1529,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
         )}
         <div
           className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[var(--workspace-background)] ${!isDesktopLayout && !mobileShowOutput ? "hidden" : ""}`}
-          style={isDesktopLayout && !isOutputMaximized ? { width: `${100 - split}%` } : undefined}
+          style={isDesktopLayout && !isOutputMaximized && (output.trim() || !inputEmpty) ? { width: `${100 - split}%` } : undefined}
         >
           {!isDesktopLayout && mobileShowOutput && !inputEmpty && (
             <button
@@ -1869,6 +1880,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
             <span className="flex-1" />
           </div>
           <div className="relative flex min-h-[200px] min-h-0 flex-1 flex-col overflow-hidden">
+            {output.trim() && (
             <div className="absolute right-2 top-1/2 z-10 flex -translate-y-1/2 flex-col gap-0.5 rounded-lg border border-[var(--workspace-border)] p-0.5 bg-[var(--workspace-panel)] shadow-sm">
               <button
                 type="button"
@@ -1934,6 +1946,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                 )}
               </button>
             </div>
+            )}
             {(error || validationError) ? (
               <div className={`flex h-full min-h-[200px] flex-col items-start justify-start gap-2 p-4 overflow-y-auto ${outputPanelClass}`}>
                 <div className="flex items-center gap-2 text-error font-medium">
@@ -1974,10 +1987,10 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                   <div className="flex flex-col items-center gap-3">
                     <div className="flex items-center">
                       <Logo size={40} className="shrink-0" />
-                      <span className="text-lg font-extrabold text-primary">ormaty</span>
+                      <span className="text-xl font-extrabold text-primary">ormaty</span>
                     </div>
                     <p className="max-w-lg text-sm text-[var(--workspace-text-muted)] leading-relaxed">
-                      Your data stays in your browser only. Format, convert, validate, and query JSON, XML, YAML, TOML, CSV. Paste with <kbd className="px-1.5 py-0.5 rounded text-[10px] bg-[var(--workspace-border)] font-mono">ctrl+v/cmd+v</kbd> or import a file.
+                    Process everything locally—your data never leaves your browser—while you instantly format, convert, validate, and query JSON, XML, YAML, TOML, and CSV by simply pasting <kbd className="px-1.5 py-0.5 rounded text-[10px] bg-[var(--workspace-border)] font-mono">ctrl+v/cmd+v</kbd> or importing a file.
                     </p>
                     <div className="flex flex-wrap gap-x-2 gap-y-1 text-[11px] text-[var(--workspace-text-muted)] justify-center">
                       <span>Query (JSONPath/JMESPath)</span>

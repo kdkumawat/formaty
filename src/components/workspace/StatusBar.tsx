@@ -40,9 +40,9 @@ export function StatusBar({
   sharedLink,
 }: StatusBarProps) {
   const validInvalidEl = errorMessage ? (
-    <span className="flex min-w-0 shrink items-center gap-1.5 text-error whitespace-nowrap" title={errorMessage}>
+    <span className="flex min-w-0 max-w-full shrink items-center gap-1.5 text-error" title={errorMessage}>
       <XCircleIcon className="h-3.5 w-3.5 shrink-0" aria-hidden />
-      <span className="min-w-0">{errorMessage}</span>
+      <span className="min-w-0 truncate">{errorMessage}</span>
     </span>
   ) : valid === true ? (
     <span className="flex min-w-[5rem] items-center gap-1.5">
@@ -64,7 +64,7 @@ export function StatusBar({
       className="flex flex-shrink-0 items-center justify-between gap-1 overflow-x-auto overflow-y-hidden border-t border-[var(--workspace-border)] bg-[var(--workspace-background)] px-1.5 text-xs text-[var(--workspace-text-muted)]"
       style={{ minHeight: "28px", padding: "0 8px", paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
     >
-      <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto flex-nowrap">
+      <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto flex-wrap min-h-[28px]">
         <span className="shrink-0">{sizeFormatted}</span>
         {cursorPosition ? (
           <span className="shrink-0 tabular-nums">{cursorPosition}</span>
@@ -92,8 +92,8 @@ export function StatusBar({
           </button>
         )}
         {validInvalidEl}
-        {sharedLink}
-        <span className="flex-1" />
+        {sharedLink ? <span className="shrink-0">{sharedLink}</span> : null}
+        <span className="flex-1 min-w-4" />
       </div>
       {rightActions ? (
         <div className="flex shrink-0 flex-nowrap items-center gap-1 overflow-x-auto">{rightActions}</div>
