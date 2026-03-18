@@ -26,7 +26,7 @@ import {
   XCircleIcon,
   LinkSlashIcon,
 } from "@heroicons/react/24/outline";
-import { JsonDiffEditor } from "@/components/JsonDiffEditor";
+import { JsonDiffEditor, type JsonDiffEditorRef } from "@/components/JsonDiffEditor";
 import { JsonEditor } from "@/components/JsonEditor";
 import { GraphView, type GraphViewRef } from "@/components/GraphView";
 import { TreeView } from "@/components/TreeView";
@@ -381,6 +381,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   const splitContainerRef = useRef<HTMLDivElement | null>(null);
   const prevBeforeDiffRef = useRef<{ rightView: RightView; activeOperation: OperationAction | null; isOutputMaximized: boolean } | null>(null);
   const graphViewRef = useRef<GraphViewRef | null>(null);
+  const diffEditorRef = useRef<JsonDiffEditorRef | null>(null);
   const diffDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sessionRestoredRef = useRef(false);
   const skipNextPersistRef = useRef(true);
@@ -864,6 +865,10 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
       const mod = event.metaKey || event.ctrlKey;
       if (!mod) return;
       if (modalKind) return;
+      if (activeOperation === "diff") {
+        // Let Monaco diff editor handle paste/undo/redo when focused
+        return;
+      }
       if (event.key === "Enter") {
         event.preventDefault();
         parseOnly();
@@ -888,7 +893,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [modalKind, inputEmpty, focusedPane]);
+  }, [modalKind, inputEmpty, focusedPane, activeOperation]);
 
   useEffect(() => {
     if (!isResizing) return;
@@ -1031,16 +1036,20 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
             setBusy(false);
             return;
           }
-          const leftParse = leftText.trim()
-            ? await run<JsonValue>("parseFormat", { input: leftText, format: detectFormat(leftText) })
-            : null;
-          const rightParse = rightText.trim()
-            ? await run<JsonValue>("parseFormat", { input: rightText, format: detectFormat(rightText) })
-            : null;
-          const left = leftParse ?? (rightParse ? {} : {});
-          const right = rightParse ?? (leftParse ? {} : {});
+          let left: JsonValue = {};
+          let right: JsonValue = {};
+          try {
+            left = leftText.trim() ? (JSON.parse(leftText) as JsonValue) : {};
+          } catch {
+            left = {};
+          }
+          try {
+            right = rightText.trim() ? (JSON.parse(rightText) as JsonValue) : {};
+          } catch {
+            right = {};
+          }
           setRightView("raw");
-          const result = diffJson(left as JsonValue, right as JsonValue);
+          const result = diffJson(left, right);
           const out = await convertJsonToOutput(result as unknown as JsonValue);
           setOutputData(out, action);
           setParsedOutput(result as unknown as JsonValue);
@@ -1212,25 +1221,19 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
       setRightView("raw");
       setActiveOperation("diff");
       setError(null);
+      if (input.trim()) {
+        setDiffLeftInput(input);
+        setDiffRightInput("");
+      }
       setBusy(true);
-      void (async () => {
-        try {
-          let leftStr = diffLeftInput;
-          if (input.trim()) {
-            const left = await getParsedInput();
-            leftStr = await convertJsonToOutput(left);
-            setDiffLeftInput(leftStr);
-          }
-          if (leftStr.trim() || diffRightInput.trim()) {
-            executeOperation("diff", { leftText: leftStr, rightText: diffRightInput });
-          } else {
-            setBusy(false);
-          }
-        } catch (e) {
-          setError(e instanceof Error ? e.message : "Operation failed.");
-          setBusy(false);
-        }
-      })();
+      if (diffLeftInput.trim() || diffRightInput.trim()) {
+        executeOperation("diff", {
+          leftText: input.trim() ? input : diffLeftInput,
+          rightText: input.trim() ? "" : diffRightInput,
+        });
+      } else {
+        setBusy(false);
+      }
       return;
     }
     executeOperation(action);
@@ -1390,6 +1393,10 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     try {
       const text = await navigator.clipboard.readText();
       if (!text) return;
+      if (activeOperation === "diff" && diffEditorRef.current) {
+        diffEditorRef.current.pasteIntoFocusedEditor(text);
+        return;
+      }
       setInput(text);
       pushHistory(text);
       setInputFormatOverride(null);
@@ -1455,18 +1462,18 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
               <button
                 type="button"
                 title="Undo (Ctrl+Z)"
-                disabled={!canUndo}
+                disabled={activeOperation === "diff" ? false : !canUndo}
                 className={`${linkBtnClass} btn-square h-7 min-h-7 w-7 shrink-0`}
-                onClick={() => moveHistory(-1)}
+                onClick={() => (activeOperation === "diff" ? diffEditorRef.current?.undo() : moveHistory(-1))}
               >
                 <ArrowUturnLeftIcon className="h-3.5 w-3.5" />
               </button>
               <button
                 type="button"
                 title="Redo (Shift+Ctrl+Z)"
-                disabled={!canRedo}
+                disabled={activeOperation === "diff" ? false : !canRedo}
                 className={`${linkBtnClass} btn-square h-7 min-h-7 w-7 shrink-0`}
-                onClick={() => moveHistory(1)}
+                onClick={() => (activeOperation === "diff" ? diffEditorRef.current?.redo() : moveHistory(1))}
               >
                 <ArrowUturnRightIcon className="h-3.5 w-3.5" />
               </button>
@@ -1662,7 +1669,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                   <div className="flex flex-wrap gap-1">
                     {OPERATION_ACTIONS.map(([label, action]) => (
                       <div key={action} className="flex items-center">
-                        <button type="button" disabled={showBusy || inputEmpty} className={`${linkBtnClass} h-6 min-h-6 disabled:opacity-50 ${activeOperation === action ? "text-primary" : ""}`} onClick={() => runOperation(action)}>{label}</button>
+                        <button type="button" disabled={showBusy || (action !== "diff" && inputEmpty)} className={`${linkBtnClass} h-6 min-h-6 disabled:opacity-50 ${activeOperation === action ? "text-primary" : ""}`} onClick={() => runOperation(action)}>{label}</button>
                         <button type="button" className={`btn btn-ghost btn-xs btn-square h-5 w-5 p-0 rounded ${pinnedItems.has(`action:${action}`) ? "text-primary" : "opacity-40"}`} onClick={(e) => { e.stopPropagation(); setPinnedItems((s) => { const n = new Set(s); n.has(`action:${action}`) ? n.delete(`action:${action}`) : n.add(`action:${action}`); return n; }); }} title={pinnedItems.has(`action:${action}`) ? "Unpin" : "Pin to toolbar"}>
                           <StarIcon className={`h-3.5 w-3.5 ${pinnedItems.has(`action:${action}`) ? "text-primary" : "opacity-40"}`} />
                         </button>
@@ -1794,7 +1801,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
             <Dropdown open={actionsMenuOpen} onOpenChange={setActionsMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`dropdown-content z-[100] min-w-[6.5rem] p-1 shadow-xl rounded-lg border ${toolbarBorderClass} ${dropdownPanelClass}`} trigger={<div className={`${linkBtnClass} flex h-7 min-h-7 shrink-0 items-center gap-1 ${actionsMenuOpen ? "text-primary" : ""}`} title="Actions"><span>Actions</span><ChevronDownIcon className="h-3 w-3" /></div>}>
               <div className="flex flex-wrap gap-0.5 p-1" onClick={(e) => e.stopPropagation()}>
                 {OPERATION_ACTIONS.map(([label, action]) => (
-                  <button key={action} type="button" disabled={showBusy || inputEmpty} className={`${linkBtnClass} h-6 min-h-6 px-1.5 disabled:opacity-50 ${activeOperation === action ? "text-primary" : ""}`} onClick={() => { runOperation(action); setActionsMenuOpen(false); }}>{label}</button>
+                  <button key={action} type="button" disabled={showBusy || (action !== "diff" && inputEmpty)} className={`${linkBtnClass} h-6 min-h-6 px-1.5 disabled:opacity-50 ${activeOperation === action ? "text-primary" : ""}`} onClick={() => { runOperation(action); setActionsMenuOpen(false); }}>{label}</button>
                 ))}
               </div>
             </Dropdown>
@@ -1851,7 +1858,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
               <button
                 key={action}
                 type="button"
-                disabled={showBusy || inputEmpty}
+                disabled={showBusy || (action !== "diff" && inputEmpty)}
                 className={`${linkBtnClass} h-7 min-h-7 shrink-0 disabled:opacity-50 ${
                   activeOperation === action ? "text-primary" : ""
                 }`}
@@ -2019,19 +2026,49 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
               </div>
             ) : rightView === "raw" ? (
               activeOperation === "diff" ? (
-                <JsonDiffEditor
-                  original={diffLeftInput}
-                  modified={diffRightInput}
-                  className="h-full min-h-0 flex-1"
-                  language="json"
-                  monacoTheme={monacoTheme}
-                  fontSize={editorFontSize}
-                  originalEditable
-                  modifiedEditable
-                  onOriginalChange={handleDiffLeftChange}
-                  onModifiedChange={handleDiffRightChange}
-                  outputPanelClass={outputPanelClass}
-                />
+                <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+                  <div className={`flex shrink-0 items-center gap-1 border-b px-1.5 py-1 ${outputPanelClass}`}>
+                    <button
+                      type="button"
+                      title="Undo (Ctrl+Z)"
+                      className={`${linkBtnClass} btn-square h-7 min-h-7 w-7 shrink-0`}
+                      onClick={() => diffEditorRef.current?.undo()}
+                    >
+                      <ArrowUturnLeftIcon className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      title="Redo (Shift+Ctrl+Z)"
+                      className={`${linkBtnClass} btn-square h-7 min-h-7 w-7 shrink-0`}
+                      onClick={() => diffEditorRef.current?.redo()}
+                    >
+                      <ArrowUturnRightIcon className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      title="Paste"
+                      className={`${linkBtnClass} h-7 min-h-7 shrink-0`}
+                      onClick={pasteFromClipboard}
+                    >
+                      <ClipboardDocumentIcon className="h-3.5 w-3.5 shrink-0" />
+                      Paste
+                    </button>
+                  </div>
+                  <JsonDiffEditor
+                    ref={diffEditorRef}
+                    original={diffLeftInput}
+                    modified={diffRightInput}
+                    className="h-full min-h-0 flex-1"
+                    language="json"
+                    monacoTheme={monacoTheme}
+                    fontSize={editorFontSize}
+                    originalEditable
+                    modifiedEditable
+                    onOriginalChange={handleDiffLeftChange}
+                    onModifiedChange={handleDiffRightChange}
+                    outputPanelClass={outputPanelClass}
+                  />
+                </div>
               ) : output.trim() ? (
                 <JsonEditor
                   value={output}

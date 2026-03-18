@@ -1,8 +1,16 @@
 "use client";
 
-import { useCallback } from "react";
+import { forwardRef, useCallback, useImperativeHandle, useRef } from "react";
 import { DiffEditor } from "@monaco-editor/react";
 import type { editor } from "monaco-editor";
+
+export interface JsonDiffEditorRef {
+  pasteIntoFocusedEditor: (text: string) => void;
+  undo: () => void;
+  redo: () => void;
+  canUndo: () => boolean;
+  canRedo: () => boolean;
+}
 
 interface JsonDiffEditorProps {
   original: string;
@@ -18,21 +26,77 @@ interface JsonDiffEditorProps {
   outputPanelClass?: string;
 }
 
-export function JsonDiffEditor({
-  original,
-  modified,
-  language = "json",
-  monacoTheme = "vs-dark",
-  className,
-  fontSize = 13,
-  originalEditable = false,
-  modifiedEditable = false,
-  onOriginalChange,
-  onModifiedChange,
-  outputPanelClass = "border-base-300 bg-base-100",
-}: JsonDiffEditorProps) {
+export const JsonDiffEditor = forwardRef<JsonDiffEditorRef, JsonDiffEditorProps>(function JsonDiffEditor(
+  {
+    original,
+    modified,
+    language = "json",
+    monacoTheme = "vs-dark",
+    className,
+    fontSize = 13,
+    originalEditable = false,
+    modifiedEditable = false,
+    onOriginalChange,
+    onModifiedChange,
+    outputPanelClass = "border-base-300 bg-base-100",
+  },
+  ref,
+) {
+  const diffEditorRef = useRef<editor.IStandaloneDiffEditor | null>(null);
+
+  const getFocusedEditor = useCallback((): editor.IStandaloneCodeEditor | null => {
+    const ed = diffEditorRef.current;
+    if (!ed || !document.activeElement) return null;
+    const orig = ed.getOriginalEditor();
+    const mod = ed.getModifiedEditor();
+    const origDom = orig.getContainerDomNode?.();
+    const modDom = mod.getContainerDomNode?.();
+    if (origDom?.contains(document.activeElement)) return orig;
+    if (modDom?.contains(document.activeElement)) return mod;
+    return null;
+  }, []);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      pasteIntoFocusedEditor(text: string) {
+        let ed = getFocusedEditor();
+        if (!ed) {
+          const diff = diffEditorRef.current;
+          if (diff) {
+            ed = diff.getOriginalEditor();
+            ed.focus();
+          } else return;
+        }
+        const model = ed.getModel();
+        if (!model) return;
+        const sel = ed.getSelection();
+        const range = sel ?? model.getFullModelRange();
+        ed.executeEdits("paste", [{ range, text }]);
+      },
+      undo() {
+        const ed = getFocusedEditor();
+        if (ed) ed.trigger("keyboard", "undo", null);
+      },
+      redo() {
+        const ed = getFocusedEditor();
+        if (ed) ed.trigger("keyboard", "redo", null);
+      },
+      canUndo() {
+        const ed = getFocusedEditor();
+        return ed ? ed.getModel()?.canUndo() ?? false : false;
+      },
+      canRedo() {
+        const ed = getFocusedEditor();
+        return ed ? ed.getModel()?.canRedo() ?? false : false;
+      },
+    }),
+    [getFocusedEditor],
+  );
+
   const handleMount = useCallback(
     (ed: editor.IStandaloneDiffEditor) => {
+      diffEditorRef.current = ed;
       const model = ed.getModel();
       if (!model) return;
       const disposables: { dispose: () => void }[] = [];
@@ -48,7 +112,10 @@ export function JsonDiffEditor({
           disposables.push(mod.onDidChangeContent(() => onModifiedChange(mod.getValue())));
         }
       }
-      return () => disposables.forEach((d) => d.dispose());
+      return () => {
+        diffEditorRef.current = null;
+        disposables.forEach((d) => d.dispose());
+      };
     },
     [originalEditable, modifiedEditable, onOriginalChange, onModifiedChange],
   );
@@ -81,4 +148,4 @@ export function JsonDiffEditor({
       />
     </div>
   );
-}
+});
