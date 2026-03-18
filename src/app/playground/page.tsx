@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { loadPlayground, type LoadPlaygroundResult } from "@/lib/playgroundApi";
 import { WorkspaceContent } from "@/components/WorkspaceContent";
 import { Logo } from "@/components/Logo";
@@ -12,14 +12,13 @@ const linkBtnClass = "btn btn-m btn-ghost rounded p-1 border-0 hover:bg-[var(--w
 type LoadStatus = "loading" | LoadPlaygroundResult;
 
 function PlaygroundContent() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const id = searchParams?.get("id");
-  const [status, setStatus] = useState<LoadStatus>("loading");
+  const [status, setStatus] = useState<LoadStatus | "no_id">(id ? "loading" : "no_id");
 
   useEffect(() => {
     if (!id) {
-      router.replace("/");
+      setStatus("no_id");
       return;
     }
     let cancelled = false;
@@ -30,7 +29,11 @@ function PlaygroundContent() {
     return () => {
       cancelled = true;
     };
-  }, [id, router]);
+  }, [id]);
+
+  if (status === "no_id") {
+    return <WorkspaceContent />;
+  }
 
   if (status === "loading") {
     return (
@@ -69,8 +72,8 @@ function PlaygroundContent() {
               <span>• Diff, beautify, minify</span>
             </div>
           </div>
-          <Link href="/" className={`${linkBtnClass} w-full justify-center py-2`}>
-            Go to formaty
+          <Link href="/playground" className={`${linkBtnClass} w-full justify-center py-2`}>
+            Go to playground
           </Link>
         </div>
       </div>

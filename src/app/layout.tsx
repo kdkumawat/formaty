@@ -8,14 +8,14 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-const SITE_URL = process.env.SITE_URL || "https://formaty.pages.dev";
-const SITE_NAME = "formaty";
-const SITE_TITLE = "formaty — Local JSON, XML, YAML converter, formatter & playground";
+const SITE_URL = process.env.SITE_URL || "https://formaty.dev";
+const SITE_NAME = "Formaty";
+const SITE_TITLE = "Formaty — Developer Data Toolkit | JSON, XML, YAML, CSV Formatter & Converter";
 const CREATOR_NAME = "Kuldeep Kumawat";
 const CREATOR_X = "https://x.com/kuldeep_kumawat";
 const CREATOR_LINKEDIN = "https://www.linkedin.com/in/kdkumawat";
 const SITE_DESCRIPTION =
-  "Your data stays in your browser only. Format, convert, validate, and query JSON, XML, YAML, TOML, CSV. Local-first: cURL fetch, JSONPath/JMESPath query, tree & graph view, schema validation, type generation. Paste with Ctrl+V.";
+  "Format, convert, validate, query, and visualize JSON, XML, YAML, TOML, CSV. Import cURL, inspect API responses, generate types. Works in browser—no data leaves your device. The most complete developer data tool online.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),

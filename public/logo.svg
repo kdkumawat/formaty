@@ -2,7 +2,7 @@
 
   <rect width="64" height="64" rx="14" fill="none"/>
 
-  <g transform="translate(32 32) scale(1.9) translate(-32 -32)">
+  <g transform="translate(34 32) scale(1.9) translate(-32 -32)">
     
     <!-- Left brace -->
     <path d="M24 18c-4 0-4 4-4 6v2c0 2-2 4-4 4 2 0 4 2 4 4v2c0 2 0 6 4 6"
