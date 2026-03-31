@@ -128,7 +128,7 @@ export function Hero() {
   const OutputPane = OUTPUT_PANES[mode];
 
   return (
-    <section className="relative flex min-h-[90vh] items-center overflow-hidden bg-[var(--workspace-background)] px-4 py-16 md:py-24">
+    <section className="relative flex min-h-[82vh] items-center overflow-hidden bg-[var(--workspace-background)] px-4 py-12 md:py-20">
       {/* Fine line grid background */}
       <div className="pointer-events-none absolute inset-0 hero-grid" aria-hidden />
 
@@ -246,7 +246,7 @@ export function Hero() {
           initial={{ opacity: 0, x: 32, scale: 0.96 }}
           animate={{ opacity: 1, x: 0, scale: 1 }}
           transition={{ duration: 0.7, delay: 0.2, type: "spring", stiffness: 80 }}
-          className="w-full max-w-lg flex-1"
+          className="w-full max-w-xl flex-1"
         >
           <div className="relative">
             {/* Rim glow */}

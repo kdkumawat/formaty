@@ -40,6 +40,7 @@ const CATEGORY_ORDER = [
   "View as",
   "Generate Types",
   "Samples",
+  "Settings",
   "Workspace",
   "Theme",
 ];
@@ -154,10 +155,14 @@ export function CommandPalette({
   const inputBg = isDark ? "bg-[#111111]" : "bg-[#f7f7f7]";
   const textMuted = isDark ? "text-[#888]" : "text-[#888]";
   const categoryColor = isDark ? "text-[#555]" : "text-[#bbb]";
-  const hoverBg = isDark ? "hover:bg-[#252525]" : "hover:bg-[#f5f5f5]";
-  const activeBg = isDark ? "bg-[#252525]" : "bg-[#f0f0f0]";
+  const hoverBg = isDark ? "hover:bg-white/[0.03]" : "hover:bg-black/[0.03]";
+  const activeBg = "bg-primary/10";
+  const activeText = "text-primary";
+  const dotActive = "bg-primary";
+  const dotInactive = isDark ? "bg-white/20" : "bg-black/15";
   const textColor = isDark ? "text-[#e8e8e8]" : "text-[#1a1a1a]";
-  const badgeBg = isDark ? "bg-[#2a2a2a] text-[#666]" : "bg-[#efefef] text-[#999]";
+  const badgeBg = isDark ? "bg-[#2a2a2a] text-[#666] border-[#333]" : "bg-[#efefef] text-[#999] border-[#e0e0e0]";
+  const activeBadgeBg = "bg-primary/15 text-primary/80 border-primary/25";
 
   let flatIdx = 0;
 
@@ -238,39 +243,42 @@ export function CommandPalette({
                         const isActive = flatIdx === activeIdx;
                         const myIdx = flatIdx++;
                         return (
+                          <div key={cmd.id} className="px-2 py-0.5">
                           <button
-                            key={cmd.id}
                             type="button"
                             data-active={isActive}
                             disabled={cmd.disabled}
                             onMouseEnter={() => setActiveIdx(myIdx)}
                             onClick={() => execute(cmd)}
-                            className={`flex w-full items-center gap-3 px-4 py-2 text-sm transition-colors disabled:opacity-40 ${
-                              isActive ? activeBg : hoverBg
-                            } ${textColor}`}
+                            className={`flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm transition-all disabled:opacity-40 ${
+                              isActive ? `${activeBg} ${activeText}` : `${hoverBg} ${textColor}`
+                            }`}
                           >
+                            {/* Dot indicator */}
+                            <span className={`h-1.5 w-1.5 shrink-0 rounded-full transition-colors ${isActive ? dotActive : dotInactive}`} />
                             {cmd.icon && (
-                              <span className={`h-4 w-4 shrink-0 ${textMuted}`}>
+                              <span className={`h-4 w-4 shrink-0 ${isActive ? activeText : textMuted}`}>
                                 {cmd.icon}
                               </span>
                             )}
-                            <span className="min-w-0 flex-1 truncate text-left">
+                            <span className="min-w-0 flex-1 truncate text-left font-medium">
                               {cmd.label}
                             </span>
                             {cmd.badge && (
-                              <span className={`shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] ${badgeBg}`}>
+                              <span className={`shrink-0 rounded border px-1.5 py-0.5 font-mono text-[10px] ${isActive ? activeBadgeBg : badgeBg}`}>
                                 {cmd.badge}
                               </span>
                             )}
                             {cmd.shortcut && (
-                              <kbd className={`hidden shrink-0 rounded border px-1.5 py-0.5 font-mono text-[10px] sm:flex ${badgeBg}`}>
+                              <kbd className={`hidden shrink-0 rounded border px-1.5 py-0.5 font-mono text-[10px] sm:flex ${isActive ? activeBadgeBg : badgeBg}`}>
                                 {cmd.shortcut}
                               </kbd>
                             )}
                             {isActive && !cmd.shortcut && !cmd.badge && (
-                              <ArrowTurnDownLeftIcon className={`h-3.5 w-3.5 shrink-0 opacity-40 ${textMuted}`} />
+                              <kbd className={`hidden shrink-0 rounded border px-1.5 py-0.5 font-mono text-[10px] sm:flex ${activeBadgeBg}`}>↵</kbd>
                             )}
                           </button>
+                          </div>
                         );
                       })}
                     </div>

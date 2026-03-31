@@ -10,6 +10,9 @@ export interface JsonDiffEditorRef {
   redo: () => void;
   canUndo: () => boolean;
   canRedo: () => boolean;
+  nextChange: () => void;
+  prevChange: () => void;
+  getDiffCount: () => number;
 }
 
 interface JsonDiffEditorProps {
@@ -24,6 +27,7 @@ interface JsonDiffEditorProps {
   onOriginalChange?: (value: string) => void;
   onModifiedChange?: (value: string) => void;
   outputPanelClass?: string;
+  renderSideBySide?: boolean;
 }
 
 export const JsonDiffEditor = forwardRef<JsonDiffEditorRef, JsonDiffEditorProps>(function JsonDiffEditor(
@@ -39,6 +43,7 @@ export const JsonDiffEditor = forwardRef<JsonDiffEditorRef, JsonDiffEditorProps>
     onOriginalChange,
     onModifiedChange,
     outputPanelClass = "border-base-300 bg-base-100",
+    renderSideBySide = true,
   },
   ref,
 ) {
@@ -90,6 +95,36 @@ export const JsonDiffEditor = forwardRef<JsonDiffEditorRef, JsonDiffEditorProps>
         const ed = getFocusedEditor();
         return ed ? ed.getModel()?.canRedo() ?? false : false;
       },
+      nextChange() {
+        const ed = diffEditorRef.current;
+        if (!ed) return;
+        const modEditor = ed.getModifiedEditor();
+        const changes = ed.getLineChanges();
+        if (!changes || changes.length === 0) return;
+        const currentLine = modEditor.getPosition()?.lineNumber ?? 0;
+        const next = changes.find((c) => c.modifiedStartLineNumber > currentLine);
+        const target = next ?? changes[0];
+        modEditor.revealLineInCenter(target.modifiedStartLineNumber);
+        modEditor.setPosition({ lineNumber: target.modifiedStartLineNumber, column: 1 });
+        modEditor.focus();
+      },
+      prevChange() {
+        const ed = diffEditorRef.current;
+        if (!ed) return;
+        const modEditor = ed.getModifiedEditor();
+        const changes = ed.getLineChanges();
+        if (!changes || changes.length === 0) return;
+        const currentLine = modEditor.getPosition()?.lineNumber ?? 0;
+        const reversed = [...changes].reverse();
+        const prev = reversed.find((c) => c.modifiedStartLineNumber < currentLine);
+        const target = prev ?? changes[changes.length - 1];
+        modEditor.revealLineInCenter(target.modifiedStartLineNumber);
+        modEditor.setPosition({ lineNumber: target.modifiedStartLineNumber, column: 1 });
+        modEditor.focus();
+      },
+      getDiffCount() {
+        return diffEditorRef.current?.getLineChanges()?.length ?? 0;
+      },
     }),
     [getFocusedEditor],
   );
@@ -137,7 +172,7 @@ export const JsonDiffEditor = forwardRef<JsonDiffEditorRef, JsonDiffEditorProps>
           readOnly: !bothEditable,
           automaticLayout: true,
           scrollBeyondLastLine: false,
-          renderSideBySide: true,
+          renderSideBySide,
           minimap: { enabled: false },
           wordWrap: "on",
           fontSize,

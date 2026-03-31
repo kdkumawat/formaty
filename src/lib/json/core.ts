@@ -111,6 +111,46 @@ export function removeEmptyDeep(input: JsonValue): JsonValue {
   return input;
 }
 
+export function sortArraysDeep(input: JsonValue): JsonValue {
+  if (Array.isArray(input)) {
+    const processed = input.map(sortArraysDeep);
+    return processed.sort((a, b) => {
+      const sa = typeof a === "object" ? JSON.stringify(a) : String(a ?? "");
+      const sb = typeof b === "object" ? JSON.stringify(b) : String(b ?? "");
+      return sa.localeCompare(sb);
+    });
+  }
+  if (input && typeof input === "object") {
+    const next: Record<string, JsonValue> = {};
+    Object.entries(input as Record<string, JsonValue>).forEach(([key, value]) => {
+      next[key] = sortArraysDeep(value);
+    });
+    return next;
+  }
+  return input;
+}
+
+export function deduplicateArraysDeep(input: JsonValue): JsonValue {
+  if (Array.isArray(input)) {
+    const processed = input.map(deduplicateArraysDeep);
+    const seen = new Set<string>();
+    return processed.filter((item) => {
+      const key = JSON.stringify(item);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+  if (input && typeof input === "object") {
+    const next: Record<string, JsonValue> = {};
+    Object.entries(input as Record<string, JsonValue>).forEach(([key, value]) => {
+      next[key] = deduplicateArraysDeep(value);
+    });
+    return next;
+  }
+  return input;
+}
+
 export function flattenJson(input: JsonValue, prefix = ""): Record<string, JsonValue> {
   const out: Record<string, JsonValue> = {};
   if (Array.isArray(input)) {
@@ -793,7 +833,7 @@ export function toXml(input: JsonValue): string {
   return builder.build({ root: input as object });
 }
 
-export function toCsv(input: JsonValue): string {
+export function toCsv(input: JsonValue, delimiter = ","): string {
   const rows = Array.isArray(input)
     ? input
     : typeof input === "object" && input !== null
@@ -803,7 +843,7 @@ export function toCsv(input: JsonValue): string {
     new Set(rows.flatMap((item) => Object.keys(item as Record<string, JsonValue>))),
   );
   const lines = [
-    headers.join(","),
+    headers.join(delimiter),
     ...rows.map((row) =>
       headers
         .map((header) => {
@@ -816,7 +856,7 @@ export function toCsv(input: JsonValue): string {
                 : String(value);
           return `"${serialized.replace(/"/g, '""')}"`;
         })
-        .join(","),
+        .join(delimiter),
     ),
   ];
   return lines.join("\n");

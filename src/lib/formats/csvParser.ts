@@ -16,7 +16,7 @@ export const csvAdapter: FormatAdapter = {
     }
     return (result.data as Record<string, string>[]) as JsonValue;
   },
-  stringify(data: JsonValue, _options?: Parameters<FormatAdapter["stringify"]>[1]): string {
-    return toCsv(data);
+  stringify(data: JsonValue, options?: Parameters<FormatAdapter["stringify"]>[1]): string {
+    return toCsv(data, options?.csvDelimiter ?? ",");
   },
 };
