@@ -5,7 +5,7 @@ import {
   TrustStrip,
   ProblemSolution,
   FeatureGrid,
-  ConversionGrid,
+  PowerFeatures,
   Workflow,
   UseCases,
   Differentiation,
@@ -23,7 +23,7 @@ export function HomePage() {
         <TrustStrip />
         <ProblemSolution />
         <FeatureGrid />
-        <ConversionGrid />
+        <PowerFeatures />
         <Workflow />
         <UseCases />
         <Differentiation />

@@ -2,7 +2,7 @@
 
 ## Overview
 
-formaty is a local-first data toolkit for working with JSON, XML, YAML, TOML, and CSV. All processing runs in your browser — no data is sent to any server.
+formaty is a local-first data toolkit for working with JSON, XML, YAML, TOML, and CSV. All processing runs in your browser - no data is sent to any server.
 
 Use it to format, validate, transform, diff, and convert between data formats. Generate type definitions for TypeScript, Python, Go, Java, and more. View data as a tree or interactive graph.
 
@@ -33,9 +33,9 @@ Input format is auto-detected when you paste or import. Override it via the stat
 
 ## Output Views
 
-- **Raw** — Code editor with syntax highlighting, line numbers, copy
-- **Tree** — Expandable tree view of the structure
-- **Graph** — Interactive graph visualization (all formats)
+- **Raw** - Code editor with syntax highlighting, line numbers, copy
+- **Tree** - Expandable tree view of the structure
+- **Graph** - Interactive graph visualization (all formats)
 
 Use the star icon next to any view to pin it to the toolbar for quick switching.
 
@@ -49,10 +49,10 @@ Star languages in the Transform config to pin them to the output toolbar. Each s
 
 ## Format Options
 
-- **Indent** — 0–10 spaces. Use − / + buttons or reset to default (2)
-- **Quote style** — Double or single quotes for JSON strings
-- **Sort keys** — Alphabetize object keys in output
-- **Remove empty** — Strip null and empty values
+- **Indent** - 0–10 spaces. Use − / + buttons or reset to default (2)
+- **Quote style** - Double or single quotes for JSON strings
+- **Sort keys** - Alphabetize object keys in output
+- **Remove empty** - Strip null and empty values
 
 ## Toolbar & Pinning
 
@@ -62,20 +62,20 @@ This lets you customize the toolbar with your most-used actions for faster workf
 
 ## Share & Export
 
-- **Share** — Save your playground to the cloud and get a short link (`/playground?id=...`). Anyone with the link sees the same input, output, view mode (raw/graph/table/tree/query), format, and settings. Your local preferences are not overwritten when viewing a shared link.
-- **Copy** — Copy output to clipboard
-- **Download** — Download output as a file with the appropriate extension
+- **Share** - Save your playground to the cloud and get a short link (`/playground?id=...`). Anyone with the link sees the same input, output, view mode (raw/graph/table/tree/query), format, and settings. Your local preferences are not overwritten when viewing a shared link.
+- **Copy** - Copy output to clipboard
+- **Download** - Download output as a file with the appropriate extension
 
 ## Keyboard & Input
 
-- **Undo / Redo** — Ctrl+Z, Ctrl+Shift+Z
-- **Paste** — Paste from clipboard (auto-detects format)
-- **Import** — Drop or select .json, .yaml, .xml, .toml, .csv files
-- **Live Transform** — Toggle in status bar to auto-transform on input change
+- **Undo / Redo** - Ctrl+Z, Ctrl+Shift+Z
+- **Paste** - Paste from clipboard (auto-detects format)
+- **Import** - Drop or select .json, .yaml, .xml, .toml, .csv files
+- **Live Transform** - Toggle in status bar to auto-transform on input change
 
 ## Privacy & Local-First
 
-formaty runs entirely in your browser. **Your data stays on your screen** — no input or output is sent to servers except when you explicitly share a link. Session state (pinned items, theme, etc.) is stored in localStorage. Shared links are stored temporarily; you can disable them at any time.
+formaty runs entirely in your browser. **Your data stays on your screen** - no input or output is sent to servers except when you explicitly share a link. Session state (pinned items, theme, etc.) is stored in localStorage. Shared links are stored temporarily; you can disable them at any time.
 
 ## Transform Config
 
@@ -83,7 +83,7 @@ Click the chevron next to the Transform button to open the config panel. From th
 
 ## Schema & Validate
 
-**Schema** generates a JSON Schema from your input. **Validate** checks your input against a schema — paste the schema in the modal and run. Errors show in the status bar.
+**Schema** generates a JSON Schema from your input. **Validate** checks your input against a schema - paste the schema in the modal and run. Errors show in the status bar.
 
 ## Diff
 
@@ -98,4 +98,4 @@ Share saves your playground to the cloud and generates a short link at `/playgro
 - Output format (JSON, XML, YAML, etc.) and type language (TypeScript, Java, etc.) when applicable
 - Split ratio and live-transform setting
 
-Your own settings (theme, pinned items, etc.) are not changed when you open a shared link. To stop sharing, click the disable icon next to the link — the link is removed and others will see a "not found" message.
+Your own settings (theme, pinned items, etc.) are not changed when you open a shared link. To stop sharing, click the disable icon next to the link - the link is removed and others will see a "not found" message.

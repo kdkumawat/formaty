@@ -1,10 +1,10 @@
 # formaty
 
-**Format, convert and validate JSON, XML, YAML, TOML and CSV** — a local-first data toolkit.
+**Format, convert and validate JSON, XML, YAML, TOML and CSV** - a local-first data toolkit.
 
 ## Features
 
-- **Multi-format support**: JSON, XML, YAML, TOML, CSV — paste, import, or convert between formats
+- **Multi-format support**: JSON, XML, YAML, TOML, CSV - paste, import, or convert between formats
 - **Transform**: Format, minify, flatten, unflatten, validate, diff, schema validation
 - **Views**: Raw editor, tree view, graph visualization
 - **Type generation**: TypeScript, Java, C#, Python, Go, Protobuf, Kotlin, Swift, Rust, SQL
@@ -22,7 +22,7 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ## Documentation
 
-- [Feature Guide](docs/guide.md) — detailed guide to all features
+- [Feature Guide](docs/guide.md) - detailed guide to all features
 - [Live app](https://formaty.pages.dev)
 
 ## Tech Stack

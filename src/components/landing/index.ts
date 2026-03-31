@@ -2,6 +2,7 @@ export { Hero } from "./Hero";
 export { TrustStrip } from "./TrustStrip";
 export { ProblemSolution } from "./ProblemSolution";
 export { FeatureGrid } from "./FeatureGrid";
+export { PowerFeatures } from "./PowerFeatures";
 export { Capabilities } from "./Capabilities";
 export { ConversionGrid } from "./ConversionGrid";
 export { Workflow } from "./Workflow";

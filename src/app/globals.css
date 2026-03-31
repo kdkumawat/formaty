@@ -4,44 +4,48 @@
 }
 
 @theme inline {
-  --font-sans: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  --font-sans: var(--font-dm-sans), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: var(--font-dm-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;
 }
 
-/* Workspace design tokens – developer tool aesthetic */
+/* Workspace design tokens */
 :root {
-  --workspace-background: #f5f5f5;
+  --workspace-background: #f8f8f8;
   --workspace-panel: #ffffff;
-  --workspace-border: #e5e5e5;
-  --workspace-text: #171717;
-  --workspace-text-muted: #737373;
+  --workspace-border: #e8e8e8;
+  --workspace-text: #0a0a0a;
+  --workspace-text-muted: #6b6b6b;
   --workspace-primary: oklch(var(--p));
+  --glow-color: rgba(124, 58, 237, 0.35);
 }
 
 [data-theme="dark"] {
-  --workspace-background: #0b0b0b;
-  --workspace-panel: #111111;
-  --workspace-border: #1f1f1f;
-  --workspace-text: #e5e5e5;
-  --workspace-text-muted: #9ca3af;
+  --workspace-background: #0d0d0d;
+  --workspace-panel: #141414;
+  --workspace-border: #252525;
+  --workspace-text: #ececec;
+  --workspace-text-muted: #858585;
+  --glow-color: rgba(124, 58, 237, 0.25);
 }
 
 [data-theme="light"] {
-  --workspace-background: #f5f5f5;
+  --workspace-background: #f8f8f8;
   --workspace-panel: #ffffff;
-  --workspace-border: #e5e5e5;
-  --workspace-text: #171717;
-  --workspace-text-muted: #737373;
+  --workspace-border: #e8e8e8;
+  --workspace-text: #0a0a0a;
+  --workspace-text-muted: #6b6b6b;
+  --glow-color: rgba(124, 58, 237, 0.35);
 }
 
 /* First paint: use system preference when no data-theme set yet */
 @media (prefers-color-scheme: dark) {
   html:not([data-theme]) {
-    --workspace-background: #0b0b0b;
-    --workspace-panel: #111111;
-    --workspace-border: #1f1f1f;
-    --workspace-text: #e5e5e5;
-    --workspace-text-muted: #9ca3af;
+    --workspace-background: #0d0d0d;
+    --workspace-panel: #141414;
+    --workspace-border: #252525;
+    --workspace-text: #ececec;
+    --workspace-text-muted: #858585;
+    --glow-color: rgba(124, 58, 237, 0.25);
   }
 }
 
@@ -55,19 +59,100 @@ body {
 }
 
 body {
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   font-size: 1rem;
   line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "cv01", "cv03", "cv04";
+  text-rendering: optimizeLegibility;
 }
 
-/* Monaco editor: single scrollbar, no overlap */
-.monaco-editor .monaco-scrollable-element > .scrollbar.vertical {
-  width: 10px;
-}
-.monaco-editor .monaco-scrollable-element > .scrollbar.horizontal {
-  height: 10px;
+/* ── Animations ─────────────────────────────────────────── */
+
+@keyframes drift-a {
+  0%,100% { transform: translate(0, 0) scale(1); }
+  35%     { transform: translate(40px, -35px) scale(1.06); }
+  70%     { transform: translate(-22px, 20px) scale(0.95); }
 }
 
-/* [data-theme="dark"] .workspace-icon {
-  color:oklch(58% 0.233 277.117)
-} */
+@keyframes drift-b {
+  0%,100% { transform: translate(0, 0) scale(1); }
+  40%     { transform: translate(-50px, 30px) scale(0.94); }
+  75%     { transform: translate(28px, -22px) scale(1.05); }
+}
+
+.blob-drift-a { animation: drift-a 16s ease-in-out infinite; }
+.blob-drift-b { animation: drift-b 20s ease-in-out infinite; }
+
+@keyframes shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-8px); }
+}
+
+@keyframes marquee {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Utility classes ─────────────────────────────────────── */
+
+.gradient-text {
+  background: linear-gradient(135deg, #7c3aed 0%, #2563eb 50%, #7c3aed 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer 5s linear infinite;
+}
+
+.dot-grid {
+  background-image: radial-gradient(circle, currentColor 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Fine line grid for hero sections */
+.hero-grid {
+  background-image:
+    linear-gradient(rgba(128,128,128,0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(128,128,128,0.05) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* Marquee – infinite horizontal scroll */
+.marquee-track {
+  display: flex;
+  flex-shrink: 0;
+  width: max-content;
+  animation: marquee 28s linear infinite;
+}
+.marquee-track:hover {
+  animation-play-state: paused;
+}
+
+/* ── Monaco editor ───────────────────────────────────────── */
+.monaco-editor .monaco-scrollable-element > .scrollbar.vertical  { width: 10px; }
+.monaco-editor .monaco-scrollable-element > .scrollbar.horizontal { height: 10px; }
+
+/* ── Custom scrollbar (Webkit) ───────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d0d0d0; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #bbb; }
+[data-theme="dark"] ::-webkit-scrollbar-thumb { background: #333; }
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: #4a4a4a; }
+
+/* ── Toolbar active state ────────────────────────────────── */
+@keyframes toolbar-pop {
+  0%   { transform: scale(0.92); opacity: 0.7; }
+  100% { transform: scale(1);    opacity: 1; }
+}

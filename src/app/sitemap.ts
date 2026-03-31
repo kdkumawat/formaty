@@ -29,8 +29,8 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const toolPages: MetadataRoute.Sitemap = ALL_TOOL_ROUTES.map((route) => ({
     url: `${SITE_URL}/${route}`,
     lastModified: new Date(),
-    changeFrequency: "weekly" as const,
-    priority: 0.8,
+    changeFrequency: "monthly" as const,
+    priority: 0.85,
   }));
   return [...base, ...toolPages];
 }

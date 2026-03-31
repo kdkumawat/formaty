@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { motion } from "framer-motion";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import {
   ArrowDownTrayIcon,
@@ -42,11 +43,12 @@ import { Logo } from "@/components/Logo";
 import { diffJson } from "@/lib/json/diff";
 import { useJsonWorker } from "@/hooks/useJsonWorker";
 import { detectFormat, FORMAT_LABELS, getInputFormatLabel, parseInput, stringifyOutput, type FormatKind, type InputFormatKind } from "@/lib/formats";
-import { ALL_TOOL_ROUTES, TOOL_PRESETS, type ToolRoute } from "@/lib/seo";
+import { ALL_TOOL_ROUTES, TOOL_PAGES, TOOL_PRESETS, type ToolRoute } from "@/lib/seo";
 import { executeCurl, parseCurl } from "@/lib/curl/parseCurl";
 import { formatJson } from "@/lib/json/core";
 import { decodeState, encodeState } from "@/lib/shareState";
 import { savePlayground, updatePlayground, deletePlayground } from "@/lib/playgroundApi";
+import { CommandPalette, type Command } from "@/components/CommandPalette";
 import type { JsonValue, TypeTargetLanguage } from "@/lib/json/core";
 
 const SAMPLE_JSON = `{
@@ -376,7 +378,9 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
   const [actionBounce, setActionBounce] = useState<"share" | "copy" | null>(null);
   const [mobileShowOutput, setMobileShowOutput] = useState(true);
+  const [loadedToolPreset, setLoadedToolPreset] = useState<ToolRoute | null>(null);
   const [cursorPosition, setCursorPosition] = useState<{ line: number; column: number } | null>(null);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const historyLock = useRef(false);
   const splitContainerRef = useRef<HTMLDivElement | null>(null);
   const prevBeforeDiffRef = useRef<{ rightView: RightView; activeOperation: OperationAction | null; isOutputMaximized: boolean } | null>(null);
@@ -434,7 +438,8 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   const joinItemBorderClass =
     "[&>*:not(:last-child)]:border-r [&>*:not(:last-child)]:!border-base-300/50";
   const dropdownPanelClass = isDark ? "bg-[#252526] text-base-content" : "bg-base-100 text-base-content";
-  const linkBtnClass = "btn btn-xs btn-ghost rounded p-1 border-0 hover:bg-[var(--workspace-panel)] hover:underline hover:text-primary";
+  const linkBtnClass = "btn btn-xs btn-ghost rounded-md p-1 border-0 font-normal text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-border)]/50 hover:text-[var(--workspace-text)] transition-all duration-100";
+  const tbActiveClass = "!bg-primary/10 !text-primary ring-1 ring-primary/20";
   const inputEmpty = !input.trim();
   useEffect(() => {
     if (inputEmpty) setCursorPosition(null);
@@ -516,8 +521,8 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     const style = document.getElementById("formaty-theme-inline");
     if (style) {
       style.textContent = resolvedTheme === "dark"
-        ? "html,body{--workspace-background:#0b0b0b;--workspace-panel:#111111;--workspace-border:#1f1f1f;--workspace-text:#e5e5e5;--workspace-text-muted:#9ca3af}"
-        : "html,body{--workspace-background:#f5f5f5;--workspace-panel:#ffffff;--workspace-border:#e5e5e5;--workspace-text:#171717;--workspace-text-muted:#737373}";
+        ? "html,body{--workspace-background:#0d0d0d;--workspace-panel:#141414;--workspace-border:#252525;--workspace-text:#ececec;--workspace-text-muted:#a3a3a3}"
+        : "html,body{--workspace-background:#f8f8f8;--workspace-panel:#ffffff;--workspace-border:#e8e8e8;--workspace-text:#0a0a0a;--workspace-text-muted:#545454}";
     }
   }, [resolvedTheme, themeSynced]);
 
@@ -586,7 +591,9 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
         if (preset.inputFormatOverride) setInputFormatOverride(preset.inputFormatOverride);
         if (preset.convertToFormat && FORMAT_KINDS.includes(preset.convertToFormat))
           setConvertToFormat(preset.convertToFormat);
-        if (preset.viewMode) setRightView(preset.viewMode);
+        if (preset.viewMode) {
+          setRightView(preset.viewMode);
+        }
         if (preset.activeOperation) setActiveOperation(preset.activeOperation as OperationAction);
         if (preset.outputLanguage) {
           const ol = preset.outputLanguage;
@@ -614,6 +621,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
           }
         }
         sessionRestoredRef.current = true;
+        setLoadedToolPreset(toolParam as ToolRoute);
         return;
       }
     }
@@ -779,10 +787,10 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
 
   useEffect(() => {
     if (isViewingSharedRef.current) return;
-    if ((rightView === "tree" || rightView === "graph" || rightView === "query" || rightView === "table") && !parsedOutput && !output.trim()) {
+    if ((rightView === "tree" || rightView === "graph" || rightView === "query" || rightView === "table") && !parsedOutput && !output.trim() && !input.trim()) {
       setRightView("raw");
     }
-  }, [rightView, parsedOutput, output]);
+  }, [rightView, parsedOutput, output, input]);
 
   const validationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const liveTransformTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -864,6 +872,11 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     const onKeyDown = (event: KeyboardEvent) => {
       const mod = event.metaKey || event.ctrlKey;
       if (!mod) return;
+      if (event.key === "k") {
+        event.preventDefault();
+        setCommandPaletteOpen((v) => !v);
+        return;
+      }
       if (modalKind) return;
       if (activeOperation === "diff") {
         // Let Monaco diff editor handle paste/undo/redo when focused
@@ -876,7 +889,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
       if (event.key.toLowerCase() === "v") {
         const target = event.target as HTMLElement;
         const isEditable = target.isContentEditable || target.tagName === "INPUT" || target.tagName === "TEXTAREA";
-        // Only intercept when input is empty (paste to start) — when input has content, let editor handle paste at cursor
+        // Only intercept when input is empty (paste to start) - when input has content, let editor handle paste at cursor
         if (!isEditable && inputEmpty) {
           event.preventDefault();
           pasteFromClipboard();
@@ -1424,6 +1437,95 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     reader.readAsText(file);
   };
 
+  const commandPaletteCommands = useMemo((): Command[] => [
+    // Operations / Actions
+    { id: "op-beautify",   label: "Beautify",              category: "Actions", keywords: ["format", "pretty", "indent"], disabled: inputEmpty || showBusy, action: () => runOperation("beautify") },
+    { id: "op-minify",    label: "Minify",               category: "Actions", keywords: ["compress", "compact"], disabled: inputEmpty || showBusy, action: () => runOperation("minify") },
+    { id: "op-flatten",   label: "Flatten",              category: "Actions", keywords: ["dot", "nested"], disabled: inputEmpty || showBusy, action: () => runOperation("flatten") },
+    { id: "op-unflatten", label: "Unflatten",            category: "Actions", keywords: ["nested", "expand"], disabled: inputEmpty || showBusy, action: () => runOperation("unflatten") },
+    { id: "op-schema",    label: "Generate JSON Schema", category: "Actions", keywords: ["schema", "types", "infer"], disabled: inputEmpty || showBusy, action: () => runOperation("schema") },
+    { id: "op-validate",  label: "Validate against Schema", category: "Actions", keywords: ["validate", "check"], disabled: inputEmpty || showBusy, action: () => runOperation("validate") },
+    { id: "op-diff",      label: activeOperation === "diff" ? "Exit Diff mode" : "Diff / Compare JSON", category: "Actions", keywords: ["diff", "compare", "delta"], disabled: showBusy, action: () => runOperation("diff") },
+    // Convert to
+    { id: "fmt-json",  label: "Convert to JSON",  category: "Convert to", keywords: ["json"],  badge: convertToFormat === "json"  ? "active" : undefined, disabled: inputEmpty, action: () => { setFocusedPane("output"); runConvert("json");  } },
+    { id: "fmt-yaml",  label: "Convert to YAML",  category: "Convert to", keywords: ["yaml"],  badge: convertToFormat === "yaml"  ? "active" : undefined, disabled: inputEmpty, action: () => { setFocusedPane("output"); runConvert("yaml");  } },
+    { id: "fmt-xml",   label: "Convert to XML",   category: "Convert to", keywords: ["xml"],   badge: convertToFormat === "xml"   ? "active" : undefined, disabled: inputEmpty, action: () => { setFocusedPane("output"); runConvert("xml");   } },
+    { id: "fmt-toml",  label: "Convert to TOML",  category: "Convert to", keywords: ["toml"],  badge: convertToFormat === "toml"  ? "active" : undefined, disabled: inputEmpty, action: () => { setFocusedPane("output"); runConvert("toml");  } },
+    { id: "fmt-csv",   label: "Convert to CSV",   category: "Convert to", keywords: ["csv"],   badge: convertToFormat === "csv"   ? "active" : undefined, disabled: inputEmpty, action: () => { setFocusedPane("output"); runConvert("csv");   } },
+    // View as
+    { id: "view-raw",   label: "View: Raw",   category: "View as", badge: rightView === "raw"   ? "active" : undefined, disabled: false, action: () => { setRightView("raw");   setFocusedPane("output"); } },
+    { id: "view-tree",  label: "View: Tree",  category: "View as", badge: rightView === "tree"  ? "active" : undefined, disabled: !parsedOutput, action: () => { setRightView("tree");  setFocusedPane("output"); } },
+    { id: "view-graph", label: "View: Graph", category: "View as", badge: rightView === "graph" ? "active" : undefined, disabled: !parsedOutput, action: () => { setRightView("graph"); setFocusedPane("output"); } },
+    { id: "view-query", label: "View: Query (JSONPath / JMESPath)", category: "View as", keywords: ["query", "jsonpath", "jmespath", "filter"], badge: rightView === "query" ? "active" : undefined, disabled: !parsedOutput, action: () => { setRightView("query"); setFocusedPane("output"); } },
+    { id: "view-table", label: "View: Table", category: "View as", keywords: ["table", "grid", "rows"], badge: rightView === "table" ? "active" : undefined, disabled: !parsedOutput, action: () => { setRightView("table"); setFocusedPane("output"); } },
+    // Generate Types
+    ...TYPE_LANGUAGES.map((t) => ({
+      id: `type-${t.id}`,
+      label: `Generate ${t.label} types`,
+      category: "Generate Types",
+      keywords: [t.id, t.label, "types", "interface", "struct"],
+      badge: activeOperation === "generateTypes" && typeLanguage === t.id ? "active" : undefined,
+      disabled: inputEmpty,
+      action: () => { setFocusedPane("output"); setActiveOperation("generateTypes"); executeOperation("generateTypes", { typeLanguage: t.id }); },
+    })),
+    // Samples
+    ...FORMAT_KINDS.map((fmt) => ({
+      id: `sample-${fmt}`,
+      label: `Load ${FORMAT_LABELS[fmt]} sample`,
+      category: "Samples",
+      keywords: [fmt, "sample", "example", "demo"],
+      disabled: false,
+      action: () => {
+        const sample = SAMPLES[fmt];
+        setInput(sample);
+        pushHistory(sample);
+        setInputFormatOverride(null);
+        setError(null);
+        setValidationError(null);
+        parseOnly(sample, fmt);
+        setFocusedPane("output");
+        if (!isDesktopLayout) setMobileShowOutput(true);
+      },
+    })),
+    ...EXAMPLES.map((ex) => ({
+      id: `example-${ex.id}`,
+      label: `Load example: ${ex.label}`,
+      category: "Samples",
+      keywords: [ex.id, ex.label.toLowerCase(), "example", "demo"],
+      disabled: false,
+      action: () => {
+        setInput(ex.data);
+        pushHistory(ex.data);
+        setInputFormatOverride(null);
+        setError(null);
+        setValidationError(null);
+        parseOnly(ex.data, "json");
+        setConvertToFormat("json");
+        setRightView("raw");
+        setFocusedPane("output");
+        if (!isDesktopLayout) setMobileShowOutput(true);
+      },
+    })),
+    // Workspace
+    { id: "ws-paste",    label: "Paste from clipboard",  category: "Workspace", shortcut: "⌘V", disabled: false, action: pasteFromClipboard },
+    { id: "ws-import",   label: "Import file",           category: "Workspace", keywords: ["upload", "open", "file"], disabled: false, action: () => document.getElementById("import-json-file")?.click() },
+    { id: "ws-copy",     label: "Copy output",           category: "Workspace", shortcut: "⌘C", keywords: ["clipboard"], disabled: !output.trim(), action: copyOutput },
+    { id: "ws-download", label: "Download output",       category: "Workspace", keywords: ["save", "export"], disabled: !output.trim(), action: () => downloadOutput() },
+    { id: "ws-share",    label: "Share workspace link",  category: "Workspace", keywords: ["link", "url"], disabled: !output.trim(), action: shareWorkspace },
+    { id: "ws-clear",    label: "Clear workspace",       category: "Workspace", keywords: ["reset", "new", "empty"], disabled: inputEmpty && !output.trim(), action: () => {
+      setInput(""); setOutput(""); setParsedOutput(null); setError(null);
+      setValidationError(null); setActiveOperation(null); setCopyState("idle");
+      setSharedLinkId(null); setSharedLinkUrl(null); isViewingSharedRef.current = false;
+      if (pathname === "/playground" && searchParams?.get("id")) router.replace("/playground");
+      if (!isDesktopLayout) setMobileShowOutput(true);
+    } },
+    // Theme
+    { id: "theme-light",  label: "Theme: Light",  category: "Theme", badge: themeMode === "light"  ? "active" : undefined, action: () => setThemeMode("light")  },
+    { id: "theme-dark",   label: "Theme: Dark",   category: "Theme", badge: themeMode === "dark"   ? "active" : undefined, action: () => setThemeMode("dark")   },
+    { id: "theme-system", label: "Theme: System", category: "Theme", badge: themeMode === "system" ? "active" : undefined, action: () => setThemeMode("system") },
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  ], [inputEmpty, showBusy, convertToFormat, rightView, parsedOutput, typeLanguage, activeOperation, output, themeMode]);
+
   return (
     <main
       className="flex flex-col overflow-hidden bg-[var(--workspace-background)] text-[var(--workspace-text)]"
@@ -1432,7 +1534,40 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
       <WorkspaceHeader
         themeMode={themeMode}
         onThemeChange={setThemeMode}
+        onOpenCommandPalette={() => setCommandPaletteOpen(true)}
       />
+
+      {loadedToolPreset && (
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-4 py-1">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="h-4 w-0.5 shrink-0 rounded-full bg-primary/70" aria-hidden />
+            <span className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-0.5">
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" aria-hidden />
+              <span className="text-[11px] font-semibold text-primary">
+                {TOOL_PAGES[loadedToolPreset]?.h1 ?? loadedToolPreset}
+              </span>
+            </span>
+            <span className="hidden text-[11px] text-[var(--workspace-text-muted)] sm:inline">preset loaded</span>
+          </div>
+          <div className="flex shrink-0 items-center gap-3">
+            <a
+              href={`/${loadedToolPreset}`}
+              className="hidden items-center gap-1 text-[11px] text-[var(--workspace-text-muted)] transition-colors hover:text-primary sm:inline-flex"
+            >
+              <ArrowLeftCircleIcon className="h-3.5 w-3.5" />
+              Tool page
+            </a>
+            <button
+              type="button"
+              aria-label="Dismiss"
+              className="text-[var(--workspace-text-muted)] transition-colors hover:text-[var(--workspace-text)]"
+              onClick={() => setLoadedToolPreset(null)}
+            >
+              <XMarkIcon className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
 
       <div
         ref={splitContainerRef}
@@ -1442,7 +1577,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
         <div
           className={`flex min-h-0 flex-col overflow-hidden bg-[var(--workspace-background)] transition-opacity duration-200 ${
             isDesktopLayout ? "shrink-0" : "min-h-0 flex-1"
-          } ${isDesktopLayout && focusedPane === "output" ? "opacity-60" : "opacity-100"}`}
+          } ${isDesktopLayout && focusedPane === "output" ? "opacity-70" : "opacity-100"}`}
           style={isDesktopLayout ? { width: `${split}%`, minWidth: 160 } : undefined}
         >
           {!isDesktopLayout && !mobileShowOutput && (
@@ -1456,7 +1591,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
             </button>
           )}
           <div
-            className={`flex shrink-0 flex-wrap items-center gap-1 border-b px-1.5 py-1 text-xs sm:flex-nowrap sm:overflow-x-auto ${inputEditorBgClass} text-[var(--workspace-text-muted)]`}
+            className={`flex shrink-0 flex-wrap items-center gap-0.5 border-b px-1.5 py-1 text-xs sm:flex-nowrap sm:overflow-x-auto ${inputEditorBgClass} text-[var(--workspace-text-muted)]`}
           >
             <div className="flex shrink-0 items-center gap-1">
               <button
@@ -1581,6 +1716,28 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
               fontSize={editorFontSize}
               onCursorChange={(line, column) => setCursorPosition({ line, column })}
             />
+            {inputEmpty && (
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3 p-8 text-center select-none">
+                <div className="rounded-xl border border-dashed border-[var(--workspace-border)] bg-[var(--workspace-panel)]/50 px-6 py-4 backdrop-blur-sm">
+                  <div className="mb-2 flex flex-wrap items-center justify-center gap-1.5">
+                    {["JSON", "XML", "YAML", "TOML", "CSV", "cURL"].map((fmt) => (
+                      <span
+                        key={fmt}
+                        className="rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-2 py-0.5 font-mono text-[11px] text-[var(--workspace-text-muted)]"
+                      >
+                        {fmt}
+                      </span>
+                    ))}
+                  </div>
+                  <p className="text-sm text-[var(--workspace-text-muted)]">
+                    Paste or drop your data{" "}
+                    <kbd className="rounded border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-1.5 py-0.5 font-mono text-[10px]">
+                      ⌘V
+                    </kbd>
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
         )}
@@ -1591,7 +1748,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
             className="group relative flex shrink-0 cursor-col-resize justify-center transition-colors"
             onMouseDown={() => setIsResizing(true)}
           >
-            <div className="absolute inset-y-0 left-1/2 w-px -translate-x-px bg-[var(--workspace-border)] opacity-60 group-hover:opacity-100 group-hover:bg-primary group-hover:w-[3px] group-hover:-ml-0.5 transition-all" />
+            <div className="absolute inset-y-0 left-1/2 w-px -translate-x-px bg-[var(--workspace-border)] transition-all duration-200 group-hover:w-[2px] group-hover:bg-gradient-to-b group-hover:from-transparent group-hover:via-primary group-hover:to-transparent group-hover:opacity-100 group-hover:[box-shadow:0_0_8px_rgba(124,58,237,0.4)]" />
           </div>
         )}
         <div
@@ -1612,7 +1769,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
             </button>
           )}
           <div
-            className={`flex shrink-0 flex-nowrap items-center gap-1 overflow-x-auto border-b px-1.5 py-1 text-xs ${inputEditorBgClass} text-[var(--workspace-text-muted)]`}
+            className={`flex shrink-0 flex-nowrap items-center gap-0.5 overflow-x-auto border-b px-1.5 py-1 text-xs ${inputEditorBgClass} text-[var(--workspace-text-muted)]`}
           >
             <Dropdown
               open={transformConfigOpen}
@@ -1815,18 +1972,18 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
               </>
             )}
             {!viewAsMenu && (
-            <button type="button" disabled={showBusy || inputEmpty} className={`${linkBtnClass} h-7 min-h-7 shrink-0 ${activeOperation === "format" ? "text-primary" : ""}`} onClick={() => runOperation("format")}>Transform</button>
+            <button type="button" disabled={showBusy || inputEmpty} className={`${linkBtnClass} h-7 min-h-7 shrink-0 font-medium ${activeOperation === "format" ? tbActiveClass : "hover:text-primary"}`} onClick={() => runOperation("format")}>Transform</button>
             )}
             {!viewAsMenu && FORMAT_KINDS.some((f) => pinnedItems.has(`fmt:${f}`)) && (
-              <span className="mx-1 h-4 w-px shrink-0 self-center bg-[var(--workspace-text-muted)]/60" role="separator" aria-hidden />
+              <span className="mx-1.5 h-3 w-px shrink-0 self-center bg-[var(--workspace-border)]" role="separator" aria-hidden />
             )}
             {!viewAsMenu && FORMAT_KINDS.filter((f) => pinnedItems.has(`fmt:${f}`)).map((fmt) => (
               <button
                 key={fmt}
                 type="button"
                 disabled={inputEmpty}
-                className={`${linkBtnClass} h-7 min-h-7 shrink-0 disabled:opacity-50 ${
-                  convertToFormat === fmt ? "text-primary" : ""
+                className={`${linkBtnClass} h-7 min-h-7 shrink-0 disabled:opacity-40 ${
+                  convertToFormat === fmt ? tbActiveClass : ""
                 }`}
                 onClick={() => { setFocusedPane("output"); runConvert(fmt); }}
               >
@@ -1834,7 +1991,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
               </button>
             ))}
             {!viewAsMenu && (["raw", "tree", "graph", "query", "table"] as const).some((v) => pinnedItems.has(`view:${v}`)) && (
-              <span className="mx-1 h-4 w-px shrink-0 self-center bg-[var(--workspace-text-muted)]/60" role="separator" aria-hidden />
+              <span className="mx-1.5 h-3 w-px shrink-0 self-center bg-[var(--workspace-border)]" role="separator" aria-hidden />
             )}
             {!viewAsMenu && (["raw", "tree", "graph", "query", "table"] as const)
               .filter((v) => pinnedItems.has(`view:${v}`))
@@ -1843,8 +2000,8 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                   key={view}
                   type="button"
                   disabled={inputEmpty || ((view === "tree" || view === "graph" || view === "query" || view === "table") && !parsedOutput)}
-                  className={`${linkBtnClass} h-7 min-h-7 shrink-0 disabled:opacity-50 ${
-                    rightView === view ? "text-primary" : ""
+                  className={`${linkBtnClass} h-7 min-h-7 shrink-0 disabled:opacity-40 ${
+                    rightView === view ? tbActiveClass : ""
                   }`}
                   onClick={() => { setRightView(view); setFocusedPane("output"); }}
                 >
@@ -1852,15 +2009,15 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                 </button>
               ))}
             {!viewAsMenu && OPERATION_ACTIONS.some(([, a]) => pinnedItems.has(`action:${a}`)) && (
-              <span className="mx-1 h-4 w-px shrink-0 self-center bg-[var(--workspace-text-muted)]/60" role="separator" aria-hidden />
+              <span className="mx-1.5 h-3 w-px shrink-0 self-center bg-[var(--workspace-border)]" role="separator" aria-hidden />
             )}
             {!viewAsMenu && OPERATION_ACTIONS.filter(([, a]) => pinnedItems.has(`action:${a}`)).map(([label, action]) => (
               <button
                 key={action}
                 type="button"
                 disabled={showBusy || (action !== "diff" && inputEmpty)}
-                className={`${linkBtnClass} h-7 min-h-7 shrink-0 disabled:opacity-50 ${
-                  activeOperation === action ? "text-primary" : ""
+                className={`${linkBtnClass} h-7 min-h-7 shrink-0 disabled:opacity-40 ${
+                  activeOperation === action ? tbActiveClass : ""
                 }`}
                 onClick={() => runOperation(action)}
               >
@@ -1869,7 +2026,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
             )            )}
             {!viewAsMenu && pinnedItems.has("fontSize") && (
               <>
-              <span className="mx-1 h-4 w-px shrink-0 self-center bg-[var(--workspace-text-muted)]/60" role="separator" aria-hidden />
+              <span className="mx-1.5 h-3 w-px shrink-0 self-center bg-[var(--workspace-border)]" role="separator" aria-hidden />
               <div className="flex w-fit shrink-0 items-center rounded-lg border border-[var(--workspace-border)] overflow-hidden [&>*:not(:last-child)]:border-r [&>*:not(:last-child)]:border-[var(--workspace-border)]">
                 <span className="px-1.5 py-0.5 text-xs opacity-70 border-r border-[var(--workspace-border)]">Font</span>
                 <button type="button" aria-label="Decrease font size" className="flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors" onClick={() => setEditorFontSize((s) => Math.max(10, s - 1))}>
@@ -1887,7 +2044,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
             )}
             {!viewAsMenu && pinnedItems.has("indent") && (
               <>
-              <span className="mx-1 h-4 w-px shrink-0 self-center bg-[var(--workspace-text-muted)]/60" role="separator" aria-hidden />
+              <span className="mx-1.5 h-3 w-px shrink-0 self-center bg-[var(--workspace-border)]" role="separator" aria-hidden />
               <div className="flex w-fit shrink-0 items-center rounded-lg border border-[var(--workspace-border)] overflow-hidden [&>*:not(:last-child)]:border-r [&>*:not(:last-child)]:border-[var(--workspace-border)]">
                 <span className="px-1.5 py-0.5 text-xs opacity-70 border-r border-[var(--workspace-border)]">Indent</span>
                 <button
@@ -1925,15 +2082,15 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
               </>
             )}
             {!viewAsMenu && TYPE_LANGUAGES.some((t) => pinnedItems.has(`type:${t.id}`)) && (
-              <span className="mx-1 h-4 w-px shrink-0 self-center bg-[var(--workspace-text-muted)]/60" role="separator" aria-hidden />
+              <span className="mx-1.5 h-3 w-px shrink-0 self-center bg-[var(--workspace-border)]" role="separator" aria-hidden />
             )}
             {!viewAsMenu && TYPE_LANGUAGES.filter((t) => pinnedItems.has(`type:${t.id}`)).map((item) => (
               <button
                 key={item.id}
                 type="button"
                 disabled={inputEmpty}
-                className={`${linkBtnClass} flex h-7 min-h-7 shrink-0 items-center gap-1 disabled:opacity-50 ${
-                  activeOperation === "generateTypes" && typeLanguage === item.id ? "text-primary underline" : ""
+                className={`${linkBtnClass} flex h-7 min-h-7 shrink-0 items-center gap-1 disabled:opacity-40 ${
+                  activeOperation === "generateTypes" && typeLanguage === item.id ? tbActiveClass : ""
                 }`}
                 onClick={() => {
                   setFocusedPane("output");
@@ -1948,23 +2105,23 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
           </div>
           <div className="relative flex min-h-[200px] min-h-0 flex-1 flex-col overflow-hidden">
             {output.trim() && (
-            <div className="absolute right-2 top-1/2 z-10 flex -translate-y-1/2 flex-col gap-0.5 rounded-lg border border-[var(--workspace-border)] p-0.5 bg-[var(--workspace-panel)] shadow-sm">
+            <div className="absolute right-3 top-1/2 z-20 flex -translate-y-1/2 flex-col gap-0.5 rounded-xl border border-[var(--workspace-border)]/50 bg-[var(--workspace-panel)]/90 p-1 shadow-xl backdrop-blur-md">
               <button
                 type="button"
-                className={`rounded p-1.5 shrink-0 transition-all duration-200 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] ${actionBounce === "share" ? "-translate-y-0.5" : ""}`}
+                className={`group relative flex items-center justify-center rounded-lg p-1.5 shrink-0 transition-all duration-150 text-[var(--workspace-text-muted)] hover:bg-primary/10 hover:text-primary ${actionBounce === "share" ? "scale-90" : ""}`}
                 onClick={shareWorkspace}
                 title={shareLabel}
               >
-                <ShareIcon className="h-4 w-4" />
+                <ShareIcon className="h-3.5 w-3.5" />
               </button>
               <button
                 type="button"
-                className={`rounded p-1.5 shrink-0 transition-all duration-200 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] disabled:opacity-50 ${actionBounce === "copy" ? "-translate-y-0.5" : ""}`}
+                className={`group relative flex items-center justify-center rounded-lg p-1.5 shrink-0 transition-all duration-150 text-[var(--workspace-text-muted)] hover:bg-primary/10 hover:text-primary disabled:opacity-40 ${actionBounce === "copy" ? "scale-90" : ""}`}
                 disabled={!canDownload}
                 onClick={copyOutput}
                 title={copyLabel}
               >
-                <ClipboardDocumentIcon className="h-4 w-4" />
+                <ClipboardDocumentIcon className="h-3.5 w-3.5" />
               </button>
               {isGraphView ? (
                 <Dropdown
@@ -1976,11 +2133,11 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                   trigger={
                     <button
                       type="button"
-                      className={`rounded p-1.5 shrink-0 transition-colors text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] disabled:opacity-50`}
+                      className={`flex items-center justify-center rounded-lg p-1.5 shrink-0 transition-all duration-150 text-[var(--workspace-text-muted)] hover:bg-primary/10 hover:text-primary disabled:opacity-40`}
                       disabled={!canDownload}
                       title="Download"
                     >
-                      <ArrowDownTrayIcon className="h-4 w-4" />
+                      <ArrowDownTrayIcon className="h-3.5 w-3.5" />
                     </button>
                   }
                 >
@@ -1992,24 +2149,24 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
               ) : (
                 <button
                   type="button"
-                  className={`rounded p-1.5 shrink-0 transition-colors text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] disabled:opacity-50`}
+                  className={`flex items-center justify-center rounded-lg p-1.5 shrink-0 transition-all duration-150 text-[var(--workspace-text-muted)] hover:bg-primary/10 hover:text-primary disabled:opacity-40`}
                   disabled={!canDownload}
                   onClick={() => downloadOutput()}
                   title="Download"
                 >
-                  <ArrowDownTrayIcon className="h-4 w-4" />
+                  <ArrowDownTrayIcon className="h-3.5 w-3.5" />
                 </button>
               )}
               <button
                 type="button"
-                className="rounded p-1.5 shrink-0 transition-colors text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)]"
+                className="flex items-center justify-center rounded-lg p-1.5 shrink-0 transition-all duration-150 text-[var(--workspace-text-muted)] hover:bg-primary/10 hover:text-primary"
                 onClick={() => setIsOutputMaximized((v) => !v)}
                 title={isOutputMaximized ? "Restore layout" : "Maximize output"}
               >
                 {isOutputMaximized ? (
                   <ArrowsPointingInIcon className="h-4 w-4" />
                 ) : (
-                  <ArrowsPointingOutIcon className="h-4 w-4" />
+                  <ArrowsPointingOutIcon className="h-3.5 w-3.5" />
                 )}
               </button>
             </div>
@@ -2082,82 +2239,102 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                   fontSize={editorFontSize}
                 />
               ) : (
-                <div className="flex h-full min-h-[280px] flex-col items-center justify-center gap-5 p-6 text-center overflow-y-auto bg-[var(--workspace-panel)]">
-                  <div className="flex flex-col items-center gap-3">
-                    <div className="flex items-center">
-                      <Logo size={40} className="shrink-0" />
-                      <span className="text-xl font-extrabold text-primary">ormaty</span>
+                <div className="flex h-full min-h-[280px] flex-col items-center justify-center gap-6 p-6 text-center overflow-y-auto bg-[var(--workspace-panel)]">
+                  {/* Brand + tagline */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.35 }}
+                    className="flex flex-col items-center gap-2"
+                  >
+                    <div className="flex gap-0.5 items-center">
+                      <Logo size={36} className="shrink-0" />
+                      <span className="text-xl font-extrabold tracking-tight text-primary">ormaty</span>
                     </div>
-                    <p className="max-w-lg text-sm text-[var(--workspace-text-muted)] leading-relaxed">
-                    Process everything locally—your data never leaves your browser—while you instantly format, convert, validate, and query JSON, XML, YAML, TOML, and CSV by simply pasting <kbd className="px-1.5 py-0.5 rounded text-[10px] bg-[var(--workspace-border)] font-mono">ctrl+v/cmd+v</kbd> or importing a file.
+                    <p className="max-w-md text-sm text-[var(--workspace-text-muted)] leading-relaxed">
+                      Format, convert, validate, and query structured data - everything runs locally in your browser.
                     </p>
-                    <div className="flex flex-wrap gap-x-2 gap-y-1 text-[11px] text-[var(--workspace-text-muted)] justify-center">
-                      <span>Query (JSONPath/JMESPath)</span>
-                      <span>·</span>
-                      <span>cURL → fetch API</span>
-                      <span>·</span>
-                      <span>Tree & graph & table</span>
-                      <span>·</span>
-                      <span>Schema & types</span>
-                      <span>·</span>
-                      <span>Diff & share</span>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap items-center justify-center gap-2">
-                    <button type="button" className={`${linkBtnClass} gap-1.5`} onClick={pasteFromClipboard}>
-                      <ClipboardDocumentIcon className="h-4 w-4" />
+                  </motion.div>
+
+                  {/* Quick actions */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: 0.07 }}
+                    className="flex flex-wrap items-center justify-center gap-2"
+                  >
+                    <button type="button" className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-3 py-1.5 text-xs font-medium text-[var(--workspace-text-muted)] transition-all hover:border-primary/30 hover:text-primary hover:shadow-sm" onClick={pasteFromClipboard}>
+                      <ClipboardDocumentIcon className="h-3.5 w-3.5" />
                       Paste
                     </button>
-                    <button type="button" className={`${linkBtnClass} gap-1.5`} onClick={() => document.getElementById("import-json-file")?.click()}>
-                      <DocumentArrowDownIcon className="h-4 w-4" />
-                      Import
+                    <button type="button" className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-3 py-1.5 text-xs font-medium text-[var(--workspace-text-muted)] transition-all hover:border-primary/30 hover:text-primary hover:shadow-sm" onClick={() => document.getElementById("import-json-file")?.click()}>
+                      <DocumentArrowDownIcon className="h-3.5 w-3.5" />
+                      Import file
                     </button>
-                    <span className="text-xs font-medium">or try sample</span>
-                    {FORMAT_KINDS.map((fmt) => (
+                  </motion.div>
+
+                  {/* Samples */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: 0.14 }}
+                    className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-[var(--workspace-border)] bg-[var(--workspace-background)]/60 px-5 py-3"
+                  >
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]">Try a sample</span>
+                    <div className="flex flex-wrap items-center justify-center gap-1.5">
+                      {FORMAT_KINDS.map((fmt) => (
+                        <button
+                          key={fmt}
+                          type="button"
+                          className="rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-2.5 py-1 font-mono text-[11px] font-medium text-[var(--workspace-text-muted)] transition-all hover:border-primary/40 hover:text-primary hover:shadow-sm"
+                          onClick={() => {
+                            const sample = SAMPLES[fmt];
+                            setInput(sample);
+                            pushHistory(sample);
+                            setInputFormatOverride(null);
+                            setError(null);
+                            setValidationError(null);
+                            parseOnly(sample, fmt);
+                            setFocusedPane("output");
+                            if (!isDesktopLayout) setMobileShowOutput(true);
+                          }}
+                        >
+                          {FORMAT_LABELS[fmt]}
+                        </button>
+                      ))}
                       <button
-                        key={fmt}
                         type="button"
-                        className={linkBtnClass}
+                        className="rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-2.5 py-1 font-mono text-[11px] font-medium text-[var(--workspace-text-muted)] transition-all hover:border-primary/40 hover:text-primary hover:shadow-sm"
                         onClick={() => {
-                          const sample = SAMPLES[fmt];
-                          setInput(sample);
-                          pushHistory(sample);
-                          setInputFormatOverride(null);
+                          setInput(SAMPLE_CURL);
+                          pushHistory(SAMPLE_CURL);
+                          setInputFormatOverride("curl");
                           setError(null);
                           setValidationError(null);
-                          parseOnly(sample, fmt);
+                          parseOnly(SAMPLE_CURL, "curl");
                           setFocusedPane("output");
                           if (!isDesktopLayout) setMobileShowOutput(true);
                         }}
                       >
-                        {FORMAT_LABELS[fmt]}
+                        cURL
                       </button>
-                    ))}
-                    <button
-                      type="button"
-                      className={linkBtnClass}
-                      onClick={() => {
-                        setInput(SAMPLE_CURL);
-                        pushHistory(SAMPLE_CURL);
-                        setInputFormatOverride("curl");
-                        setError(null);
-                        setValidationError(null);
-                        parseOnly(SAMPLE_CURL, "curl");
-                        setFocusedPane("output");
-                        if (!isDesktopLayout) setMobileShowOutput(true);
-                      }}
-                    >
-                      cURL
-                    </button>
-                  </div>
-                  <div className="flex flex-col gap-2 mt-4 pt-4 border-t border-[var(--workspace-border)]">
-                    <span className="text-xs font-medium opacity-70">Example gallery</span>
-                    <div className="flex flex-wrap gap-1.5">
+                    </div>
+                  </motion.div>
+
+                  {/* Example gallery */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: 0.21 }}
+                    className="flex flex-col items-center gap-2"
+                  >
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]">Example gallery</span>
+                    <div className="flex flex-wrap justify-center gap-1.5">
                       {EXAMPLES.map((ex) => (
                         <button
                           key={ex.id}
                           type="button"
-                          className={`${linkBtnClass} text-xs`}
+                          className="rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-2.5 py-1 text-[11px] font-medium text-[var(--workspace-text-muted)] transition-all hover:border-primary/40 hover:text-primary hover:shadow-sm"
                           onClick={() => {
                             setInput(ex.data);
                             pushHistory(ex.data);
@@ -2175,7 +2352,25 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                         </button>
                       ))}
                     </div>
-                  </div>
+                  </motion.div>
+
+                  {/* Capability strip */}
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.4, delay: 0.28 }}
+                    className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[10px] font-medium text-[var(--workspace-text-muted)]"
+                  >
+                    <span>JSONPath / JMESPath</span>
+                    <span className="text-[var(--workspace-border)]">·</span>
+                    <span>cURL → API</span>
+                    <span className="text-[var(--workspace-border)]">·</span>
+                    <span>Tree · Graph · Table</span>
+                    <span className="text-[var(--workspace-border)]">·</span>
+                    <span>Schema & Types</span>
+                    <span className="text-[var(--workspace-border)]">·</span>
+                    <span>Diff & Share</span>
+                  </motion.div>
                 </div>
               )
             ) : null}
@@ -2187,7 +2382,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                   className={`${outputPanelClass} min-h-0 flex-1 overflow-auto`}
                 />
               ) : (
-                <div className={`flex h-full min-h-[200px] items-center justify-center border text-sm text-base-content/70 ${outputPanelClass}`}>
+                <div className={`flex h-full min-h-[200px] items-center justify-center border text-sm text-[var(--workspace-text-muted)] ${outputPanelClass}`}>
                   Current output is not valid JSON.
                 </div>
               )
@@ -2201,7 +2396,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                   className={`${outputPanelClass} min-h-0 flex-1`}
                 />
               ) : (
-                <div className={`flex h-full min-h-[200px] items-center justify-center border text-sm text-base-content/70 ${outputPanelClass}`}>
+                <div className={`flex h-full min-h-[200px] items-center justify-center border text-sm text-[var(--workspace-text-muted)] ${outputPanelClass}`}>
                   Current output is not valid JSON.
                 </div>
               )
@@ -2216,7 +2411,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                   monacoTheme={monacoTheme}
                 />
               ) : (
-                <div className={`flex h-full min-h-[200px] items-center justify-center border text-sm text-base-content/70 ${outputPanelClass}`}>
+                <div className={`flex h-full min-h-[200px] items-center justify-center border text-sm text-[var(--workspace-text-muted)] ${outputPanelClass}`}>
                   Current output is not valid JSON.
                 </div>
               )
@@ -2229,7 +2424,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                   isDark={isDark}
                 />
               ) : (
-                <div className={`flex h-full min-h-[200px] items-center justify-center border text-sm text-base-content/70 ${outputPanelClass}`}>
+                <div className={`flex h-full min-h-[200px] items-center justify-center border text-sm text-[var(--workspace-text-muted)] ${outputPanelClass}`}>
                   Current output is not valid JSON.
                 </div>
               )
@@ -2299,7 +2494,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
       />
       {shareNotification ? (
         <div
-          className="fixed bottom-16 left-1/2 z-50 -translate-x-1/2 rounded-lg border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-3 py-2 text-xs shadow-lg"
+          className={`fixed bottom-16 left-1/2 z-50 -translate-x-1/2 rounded-lg border border-[var(--workspace-border)]/50 bg-[var(--workspace-panel)]/95 px-4 py-2 text-xs shadow-xl backdrop-blur-md`}
           role="status"
         >
           <p className={`font-medium ${shareNotification.includes("failed") ? "text-error" : "text-primary"}`}>
@@ -2312,6 +2507,13 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
           )}
         </div>
       ) : null}
+
+        <CommandPalette
+          open={commandPaletteOpen}
+          onClose={() => setCommandPaletteOpen(false)}
+          commands={commandPaletteCommands}
+          isDark={isDark}
+        />
 
         {modalKind === "validate" ? (
           <div className="modal modal-open">
