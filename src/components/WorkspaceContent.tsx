@@ -11,7 +11,9 @@ import {
   ArrowUturnLeftIcon,
   ArrowUturnRightIcon,
   ChevronDownIcon,
+  ChevronUpIcon,
   ClipboardDocumentIcon,
+  ClockIcon,
   Cog6ToothIcon,
   ComputerDesktopIcon,
   DocumentArrowDownIcon,
@@ -230,7 +232,7 @@ const TYPE_LANGUAGES: Array<{ id: TypeTargetLanguage; label: string; ext: string
   { id: "sql", label: "SQL", ext: "sql" },
 ];
 
-type OperationAction = (typeof OPERATION_ACTIONS)[number][1] | "format" | "beautify" | "sort" | "removeEmpty" | "generateTypes";
+type OperationAction = (typeof OPERATION_ACTIONS)[number][1] | "format" | "beautify" | "sort" | "sortArrays" | "dedup" | "removeEmpty" | "generateTypes";
 type OutputLanguage =
   | "json"
   | "yaml"
@@ -272,6 +274,8 @@ const EXT_BY_ACTION: Record<Exclude<OperationAction, "generateTypes"> | "parse",
   beautify: "json",
   minify: "json",
   sort: "json",
+  sortArrays: "json",
+  dedup: "json",
   removeEmpty: "json",
   flatten: "json",
   unflatten: "json",
@@ -287,6 +291,8 @@ const LANGUAGE_BY_ACTION: Record<Exclude<OperationAction, "generateTypes"> | "pa
     beautify: "json",
     minify: "json",
     sort: "json",
+    sortArrays: "json",
+    dedup: "json",
     removeEmpty: "json",
     flatten: "json",
     unflatten: "json",
@@ -371,6 +377,26 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   );
   const [liveTransform, setLiveTransform] = useState(true);
   const [editorFontSize, setEditorFontSize] = useState(13);
+  const [lineWrap, setLineWrap] = useState(true);
+  const [diffSideBySide, setDiffSideBySide] = useState(true);
+  const [showHistoryPanel, setShowHistoryPanel] = useState(false);
+  const [csvDelimiter, setCsvDelimiter] = useState(",");
+  const [isWindowFullscreen, setIsWindowFullscreen] = useState(false);
+
+  const toggleWindowFullscreen = useCallback(() => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().then(() => setIsWindowFullscreen(true)).catch(() => {});
+    } else {
+      document.exitFullscreen().then(() => setIsWindowFullscreen(false)).catch(() => {});
+    }
+  }, []);
+
+  useEffect(() => {
+    const onFsChange = () => setIsWindowFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", onFsChange);
+    return () => document.removeEventListener("fullscreenchange", onFsChange);
+  }, []);
+
   const [inputValid, setInputValid] = useState<boolean | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [undoStack, setUndoStack] = useState<string[]>([""]);
@@ -386,6 +412,8 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   const prevBeforeDiffRef = useRef<{ rightView: RightView; activeOperation: OperationAction | null; isOutputMaximized: boolean } | null>(null);
   const graphViewRef = useRef<GraphViewRef | null>(null);
   const diffEditorRef = useRef<JsonDiffEditorRef | null>(null);
+  const outputEditorApiRef = useRef<{ find(): void; focus(): void } | null>(null);
+  const inputEditorApiRef = useRef<{ find(): void; focus(): void } | null>(null);
   const diffDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sessionRestoredRef = useRef(false);
   const skipNextPersistRef = useRef(true);
@@ -437,7 +465,11 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
 
   const joinItemBorderClass =
     "[&>*:not(:last-child)]:border-r [&>*:not(:last-child)]:!border-base-300/50";
-  const dropdownPanelClass = isDark ? "bg-[#252526] text-base-content" : "bg-base-100 text-base-content";
+  const dropdownPanelClass = isDark ? "bg-[#1e1e1e] text-[var(--workspace-text)]" : "bg-white text-[var(--workspace-text)]";
+  const settingsLabelClass = "text-[11px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]";
+  const settingsSectionClass = "space-y-1.5";
+  const settingsBtnGroupClass = "flex items-center rounded-lg border border-[var(--workspace-border)] overflow-hidden divide-x divide-[var(--workspace-border)]";
+  const settingsStepBtnClass = "flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors";
   const linkBtnClass = "btn btn-xs btn-ghost rounded-md p-1 border-0 font-normal text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-border)]/50 hover:text-[var(--workspace-text)] transition-all duration-100";
   const tbActiveClass = "!bg-primary/10 !text-primary ring-1 ring-primary/20";
   const inputEmpty = !input.trim();
@@ -483,12 +515,12 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     });
   };
 
-  const moveHistory = (delta: -1 | 1) => {
-    if (delta < 0 && !canUndo) return;
-    if (delta > 0 && !canRedo) return;
-    const next = undoStack[undoIndex + delta];
+  const moveHistory = (delta: number) => {
+    const targetIdx = undoIndex + delta;
+    if (targetIdx < 0 || targetIdx >= undoStack.length) return;
+    const next = undoStack[targetIdx];
     historyLock.current = true;
-    setUndoIndex((n) => n + delta);
+    setUndoIndex(targetIdx);
     setInput(next);
     setTimeout(() => {
       historyLock.current = false;
@@ -904,8 +936,8 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
         moveHistory(1);
       }
     };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    window.addEventListener("keydown", onKeyDown, { capture: true });
+    return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
   }, [modalKind, inputEmpty, focusedPane, activeOperation]);
 
   useEffect(() => {
@@ -986,7 +1018,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
       });
     }
 
-    return run<string>("convert", { json, toFormat, formatOptions: formatOpts });
+    return run<string>("convert", { json, toFormat, formatOptions: formatOpts, csvDelimiter });
   };
 
   const parseOnly = (inputOverride?: string, formatOverride?: InputFormatKind) => {
@@ -1365,6 +1397,42 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     setFocusedPane((prev) => (prev === "input" ? "output" : prev));
   };
 
+  const copyOutputAs = async (format: "base64" | "escaped" | "uri" | "datauri") => {
+    if (!output.trim()) return;
+    try {
+      let text: string;
+      if (format === "base64") {
+        text = btoa(unescape(encodeURIComponent(output)));
+      } else if (format === "escaped") {
+        text = JSON.stringify(output);
+      } else if (format === "uri") {
+        text = encodeURIComponent(output);
+      } else {
+        text = `data:application/json;base64,${btoa(unescape(encodeURIComponent(output)))}`;
+      }
+      await navigator.clipboard.writeText(text);
+      const label = format === "base64" ? "Base64" : format === "escaped" ? "Escaped" : format === "uri" ? "URL-encoded" : "Data URI";
+      setShareNotification(`Copied as ${label}`);
+    } catch {
+      setShareNotification("Copy failed");
+    }
+    window.setTimeout(() => setShareNotification(null), 3000);
+  };
+
+  const exportHistory = () => {
+    const entries = undoStack.slice(0, undoIndex + 1).map((content, i) => ({ index: i, content }));
+    const data = JSON.stringify(entries, null, 2);
+    const blob = new Blob([data], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "formaty-history.json";
+    a.click();
+    URL.revokeObjectURL(url);
+    setShareNotification("History exported");
+    window.setTimeout(() => setShareNotification(null), 3000);
+  };
+
 
   const applyFormatWithOptions = (next: FormatOptions) => {
     setFormatOptions(next);
@@ -1510,8 +1578,13 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     { id: "ws-paste",    label: "Paste from clipboard",  category: "Workspace", shortcut: "⌘V", disabled: false, action: pasteFromClipboard },
     { id: "ws-import",   label: "Import file",           category: "Workspace", keywords: ["upload", "open", "file"], disabled: false, action: () => document.getElementById("import-json-file")?.click() },
     { id: "ws-copy",     label: "Copy output",           category: "Workspace", shortcut: "⌘C", keywords: ["clipboard"], disabled: !output.trim(), action: copyOutput },
+    { id: "ws-copy-b64", label: "Copy as Base64",        category: "Workspace", keywords: ["base64", "encode", "clipboard"], disabled: !output.trim(), action: () => copyOutputAs("base64") },
+    { id: "ws-copy-esc", label: "Copy as Escaped string", category: "Workspace", keywords: ["escaped", "string", "json string"], disabled: !output.trim(), action: () => copyOutputAs("escaped") },
+    { id: "ws-copy-uri", label: "Copy as URL-encoded",   category: "Workspace", keywords: ["url", "encoded", "percent", "uri"], disabled: !output.trim(), action: () => copyOutputAs("uri") },
+    { id: "ws-copy-dat", label: "Copy as Data URI",      category: "Workspace", keywords: ["data", "uri", "base64"], disabled: !output.trim(), action: () => copyOutputAs("datauri") },
     { id: "ws-download", label: "Download output",       category: "Workspace", keywords: ["save", "export"], disabled: !output.trim(), action: () => downloadOutput() },
     { id: "ws-share",    label: "Share workspace link",  category: "Workspace", keywords: ["link", "url"], disabled: !output.trim(), action: shareWorkspace },
+    ...(sharedLinkUrl ? [{ id: "ws-embed", label: "Copy embed / iframe URL", category: "Workspace" as const, keywords: ["embed", "iframe", "share"], disabled: false, action: async () => { await navigator.clipboard.writeText(`${sharedLinkUrl}&embed=1`); setShareNotification("Embed URL copied"); window.setTimeout(() => setShareNotification(null), 3000); } }] : []),
     { id: "ws-clear",    label: "Clear workspace",       category: "Workspace", keywords: ["reset", "new", "empty"], disabled: inputEmpty && !output.trim(), action: () => {
       setInput(""); setOutput(""); setParsedOutput(null); setError(null);
       setValidationError(null); setActiveOperation(null); setCopyState("idle");
@@ -1519,12 +1592,54 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
       if (pathname === "/playground" && searchParams?.get("id")) router.replace("/playground");
       if (!isDesktopLayout) setMobileShowOutput(true);
     } },
+    // Focus
+    { id: "focus-input",  label: "Focus input pane",  category: "Workspace", keywords: ["focus", "input", "left", "editor"], action: () => { setFocusedPane("input"); inputEditorApiRef.current?.focus(); } },
+    { id: "focus-output", label: "Focus output pane", category: "Workspace", keywords: ["focus", "output", "right", "editor"], action: () => { setFocusedPane("output"); outputEditorApiRef.current?.focus(); } },
+    { id: "search-output", label: "Find in output",   category: "Workspace", keywords: ["find", "search", "output", "ctrl+f"], disabled: !output.trim(), action: () => { setFocusedPane("output"); setTimeout(() => outputEditorApiRef.current?.find(), 50); } },
+    // History
+    { id: "hist-undo",   label: "Undo input",    category: "Workspace", shortcut: "⌘Z", keywords: ["undo", "history", "back"], disabled: !canUndo, action: () => moveHistory(-1) },
+    { id: "hist-redo",   label: "Redo input",    category: "Workspace", shortcut: "⌘⇧Z", keywords: ["redo", "history", "forward"], disabled: !canRedo, action: () => moveHistory(1) },
+    { id: "hist-browse", label: "Browse input history", category: "Workspace", keywords: ["history", "undo", "stack", "timeline"], action: () => setShowHistoryPanel(true) },
+    { id: "hist-export", label: "Export history",       category: "Workspace", keywords: ["history", "export", "download", "all"], disabled: undoStack.length <= 1, action: exportHistory },
+    // Zoom / font size
+    { id: "zoom-in",    label: `Zoom in (font ${Math.min(24, editorFontSize + 1)}px)`,  category: "Workspace", keywords: ["zoom", "font", "size", "bigger", "larger"],  disabled: editorFontSize >= 24, action: () => setEditorFontSize((s) => Math.min(24, s + 1)) },
+    { id: "zoom-out",   label: `Zoom out (font ${Math.max(10, editorFontSize - 1)}px)`, category: "Workspace", keywords: ["zoom", "font", "size", "smaller"],              disabled: editorFontSize <= 10, action: () => setEditorFontSize((s) => Math.max(10, s - 1)) },
+    { id: "zoom-reset", label: "Reset zoom (13px)",                                     category: "Workspace", keywords: ["zoom", "font", "size", "reset"],              disabled: editorFontSize === 13, action: () => setEditorFontSize(13) },
+    { id: "line-wrap",  label: lineWrap ? "Line wrap: On (turn off)" : "Line wrap: Off (turn on)", category: "Workspace", keywords: ["wrap", "line", "long", "scroll"], badge: lineWrap ? "on" : undefined, action: () => setLineWrap((v) => !v) },
+    { id: "fullscreen",        label: isOutputMaximized ? "Restore output pane" : "Maximize output pane",    category: "Workspace", keywords: ["maximize", "expand", "output", "pane"],                          action: () => setIsOutputMaximized((v) => !v) },
+    { id: "window-fullscreen", label: isWindowFullscreen ? "Exit fullscreen" : "Enter fullscreen",          category: "Workspace", keywords: ["fullscreen", "full screen", "window", "expand", "maximize"], action: toggleWindowFullscreen },
+    // Diff
+    { id: "diff-prev",      label: "Previous difference",    category: "Workspace", keywords: ["diff", "prev", "previous", "change", "navigate"], disabled: activeOperation !== "diff", action: () => diffEditorRef.current?.prevChange() },
+    { id: "diff-next",      label: "Next difference",        category: "Workspace", keywords: ["diff", "next", "change", "navigate"], disabled: activeOperation !== "diff", action: () => diffEditorRef.current?.nextChange() },
+    { id: "diff-layout",    label: diffSideBySide ? "Diff: Switch to inline view" : "Diff: Switch to side-by-side view", category: "Workspace", keywords: ["diff", "inline", "side by side", "layout"], disabled: activeOperation !== "diff", action: () => setDiffSideBySide((v) => !v) },
+    // New operations
+    { id: "op-sort-arrays", label: "Sort array items",         category: "Actions", keywords: ["sort", "arrays", "items", "order"], disabled: inputEmpty || showBusy, action: () => { setFocusedPane("output"); runOperation("sortArrays"); } },
+    { id: "op-dedup",       label: "Remove duplicate items",   category: "Actions", keywords: ["dedup", "duplicate", "unique", "array"], disabled: inputEmpty || showBusy, action: () => { setFocusedPane("output"); runOperation("dedup"); } },
+    // CSV delimiter settings
+    { id: "csv-comma",     label: "CSV delimiter: Comma (,)",     category: "Settings", keywords: ["csv", "delimiter", "comma"], badge: csvDelimiter === ","  ? "active" : undefined, action: () => setCsvDelimiter(",")  },
+    { id: "csv-tab",       label: "CSV delimiter: Tab (TSV)",     category: "Settings", keywords: ["csv", "delimiter", "tab", "tsv"], badge: csvDelimiter === "\t" ? "active" : undefined, action: () => setCsvDelimiter("\t") },
+    { id: "csv-semicolon", label: "CSV delimiter: Semicolon (;)", category: "Settings", keywords: ["csv", "delimiter", "semicolon"], badge: csvDelimiter === ";"  ? "active" : undefined, action: () => setCsvDelimiter(";")  },
+    { id: "csv-pipe",      label: "CSV delimiter: Pipe (|)",      category: "Settings", keywords: ["csv", "delimiter", "pipe"], badge: csvDelimiter === "|"  ? "active" : undefined, action: () => setCsvDelimiter("|")  },
+    // Pin/Unpin current view
+    { id: "pin-view",   label: pinnedItems.has(`view:${rightView}`) ? `Unpin current view (${rightView})` : `Pin current view (${rightView})`, category: "Settings", keywords: ["pin", "unpin", "toolbar", "view"], action: () => setPinnedItems((s) => { const n = new Set(s); n.has(`view:${rightView}`) ? n.delete(`view:${rightView}`) : n.add(`view:${rightView}`); return n; }) },
+    { id: "pin-format", label: pinnedItems.has(`fmt:${convertToFormat}`) ? `Unpin current format (${convertToFormat})` : `Pin current format (${convertToFormat})`, category: "Settings", keywords: ["pin", "unpin", "toolbar", "format"], action: () => setPinnedItems((s) => { const n = new Set(s); n.has(`fmt:${convertToFormat}`) ? n.delete(`fmt:${convertToFormat}`) : n.add(`fmt:${convertToFormat}`); return n; }) },
+    // Settings
+    { id: "set-sort-keys",    label: formatOptions.sortKeys    ? "Sort keys: On (turn off)"    : "Sort keys: Off (turn on)",    category: "Settings", keywords: ["sort", "keys", "alphabetical"],           badge: formatOptions.sortKeys    ? "on" : undefined, disabled: inputEmpty, action: () => applyFormatWithOptions({ ...formatOptions, sortKeys:    !formatOptions.sortKeys    }) },
+    { id: "set-rm-empty",     label: formatOptions.removeEmpty ? "Remove empty: On (turn off)" : "Remove empty: Off (turn on)", category: "Settings", keywords: ["remove", "empty", "null", "clean"],          badge: formatOptions.removeEmpty ? "on" : undefined, disabled: inputEmpty, action: () => applyFormatWithOptions({ ...formatOptions, removeEmpty: !formatOptions.removeEmpty }) },
+    { id: "set-quote-double", label: "Quote style: Double",   category: "Settings", keywords: ["quote", "double"],     badge: formatOptions.quoteStyle === "double" ? "active" : undefined, disabled: inputEmpty, action: () => applyFormatWithOptions({ ...formatOptions, quoteStyle: "double" }) },
+    { id: "set-quote-single", label: "Quote style: Single",   category: "Settings", keywords: ["quote", "single"],     badge: formatOptions.quoteStyle === "single" ? "active" : undefined, disabled: inputEmpty, action: () => applyFormatWithOptions({ ...formatOptions, quoteStyle: "single" }) },
+    { id: "set-indent-inc",   label: `Indent: increase (${Math.min(10, formatOptions.indentation + 1)})`, category: "Settings", keywords: ["indent", "spaces"], disabled: inputEmpty || formatOptions.indentation >= 10, action: () => applyFormatWithOptions({ ...formatOptions, indentation: Math.min(10, formatOptions.indentation + 1) }) },
+    { id: "set-indent-dec",   label: `Indent: decrease (${Math.max(0,  formatOptions.indentation - 1)})`, category: "Settings", keywords: ["indent", "spaces"], disabled: inputEmpty || formatOptions.indentation <= 0,  action: () => applyFormatWithOptions({ ...formatOptions, indentation: Math.max(0,  formatOptions.indentation - 1) }) },
+    { id: "set-indent-reset", label: "Indent: reset to 2",     category: "Settings", keywords: ["indent", "spaces", "reset"], disabled: inputEmpty || formatOptions.indentation === 2, action: () => applyFormatWithOptions({ ...formatOptions, indentation: 2 }) },
+    { id: "set-live",         label: liveTransform ? "Live transform: On (turn off)" : "Live transform: Off (turn on)", category: "Settings", keywords: ["live", "auto", "realtime", "transform"], badge: liveTransform ? "on" : undefined, action: () => setLiveTransform((v) => !v) },
+    { id: "set-viewasmenu",   label: viewAsMenu ? "View-as menu: On (use panel)" : "View-as menu: Off (use sidebar)", category: "Settings", keywords: ["menu", "view", "panel", "sidebar"], badge: viewAsMenu ? "on" : undefined, action: () => setViewAsMenu((v) => !v) },
+    { id: "set-reset",        label: "Reset all settings to default", category: "Settings", keywords: ["reset", "default", "restore"], action: () => { setFormatOptions(DEFAULT_FORMAT_OPTIONS); setConvertToFormat("json"); setRightView("raw"); setEditorFontSize(13); setPinnedItems(new Set(["fmt:json", "fmt:xml", "view:raw", "view:graph", "view:query", "action:beautify", "action:minify", "action:schema", "action:diff", "type:typescript", "type:java", "type:go", "type:python", "type:sql"])); } },
     // Theme
     { id: "theme-light",  label: "Theme: Light",  category: "Theme", badge: themeMode === "light"  ? "active" : undefined, action: () => setThemeMode("light")  },
     { id: "theme-dark",   label: "Theme: Dark",   category: "Theme", badge: themeMode === "dark"   ? "active" : undefined, action: () => setThemeMode("dark")   },
     { id: "theme-system", label: "Theme: System", category: "Theme", badge: themeMode === "system" ? "active" : undefined, action: () => setThemeMode("system") },
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  ], [inputEmpty, showBusy, convertToFormat, rightView, parsedOutput, typeLanguage, activeOperation, output, themeMode]);
+  ], [inputEmpty, showBusy, convertToFormat, rightView, parsedOutput, typeLanguage, activeOperation, output, themeMode, editorFontSize, isOutputMaximized, isWindowFullscreen, toggleWindowFullscreen, formatOptions, liveTransform, viewAsMenu, canUndo, canRedo, lineWrap, diffSideBySide, csvDelimiter, sharedLinkUrl, pinnedItems, undoStack.length]);
 
   return (
     <main
@@ -1711,9 +1826,10 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
               className="h-full"
               language={resolvedInputFormat === "toml" || resolvedInputFormat === "csv" || resolvedInputFormat === "curl" ? "plaintext" : resolvedInputFormat}
               monacoTheme={monacoTheme}
-              // placeholder="Paste or drop JSON, XML, YAML, TOML, or CSV here"
               panelTone="input"
               fontSize={editorFontSize}
+              wordWrap={lineWrap ? "on" : "off"}
+              onEditorMount={(api) => { inputEditorApiRef.current = api; }}
               onCursorChange={(line, column) => setCursorPosition({ line, column })}
             />
             {inputEmpty && (
@@ -1777,23 +1893,24 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
               side="bottom"
               align="start"
               rootClassName="shrink-0"
-              contentClassName={`dropdown-content card card-sm z-[100] w-64 sm:w-85 max-w-[90vw] shadow-xl border border-white/45 ${dropdownPanelClass}`}
+              contentClassName={`dropdown-content card card-sm z-[100] w-64 sm:w-85 max-w-[90vw] shadow-xl border border-[var(--workspace-border)] ${dropdownPanelClass}`}
               trigger={
                 <div className={`${linkBtnClass} flex h-7 min-h-7 shrink-0 items-center justify-center ${transformConfigOpen ? "text-primary" : ""}`} title="Settings">
                   <Cog6ToothIcon className="h-3.5 w-3.5" />
                 </div>
               }
             >
-              <div className="card-body p-3 text-xs max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+              <div className="card-body p-3 text-xs max-h-[85vh] overflow-y-auto space-y-3" onClick={(e) => e.stopPropagation()}>
                 <label className="flex cursor-pointer items-center gap-2 pb-2 border-b border-[var(--workspace-border)]">
                   <input type="checkbox" className="toggle toggle-sm toggle-primary" checked={viewAsMenu} onChange={(e) => setViewAsMenu(e.target.checked)} />
-                  <span className="text-xs font-medium">View as Menu items</span>
+                  <span className="text-xs font-medium text-[var(--workspace-text)]">View as Menu items</span>
                 </label>
                 {viewAsMenu ? (
-                  <p className="text-xs opacity-70 py-2">Options are now in the menu bar above. Uncheck to use the settings panel.</p>
+                  <p className="text-xs opacity-70 py-2 text-[var(--workspace-text-muted)]">Options are now in the menu bar above. Uncheck to use the settings panel.</p>
                 ) : (
                   <>
-                <p className="text-xs font-medium opacity-70">Output format</p>
+                <div className={settingsSectionClass}>
+                  <p className={settingsLabelClass}>Output format</p>
                 <div className="flex flex-wrap gap-1">
                   {FORMAT_KINDS.map((fmt) => (
                     <div key={fmt} className="flex items-center">
@@ -1806,8 +1923,9 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                     </div>
                   ))}
                 </div>
-                <div className="border-t border-[var(--workspace-border)] pt-2">
-                  <p className="text-xs font-medium opacity-70 mb-1">View</p>
+                </div>
+                <div className={`border-t border-[var(--workspace-border)] pt-3 ${settingsSectionClass}`}>
+                  <p className={settingsLabelClass}>View</p>
                   <div className="flex flex-wrap gap-1">
                     {(["raw", "tree", "graph", "query", "table"] as const).map((view) => (
                       <div key={view} className="flex items-center">
@@ -1821,8 +1939,8 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                     ))}
                   </div>
                 </div>
-                <div className="border-t border-[var(--workspace-border)] pt-2">
-                  <p className="text-xs font-medium opacity-70 mb-1">Actions</p>
+                <div className={`border-t border-[var(--workspace-border)] pt-3 ${settingsSectionClass}`}>
+                  <p className={settingsLabelClass}>Actions</p>
                   <div className="flex flex-wrap gap-1">
                     {OPERATION_ACTIONS.map(([label, action]) => (
                       <div key={action} className="flex items-center">
@@ -1834,51 +1952,51 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                     ))}
                   </div>
                 </div>
-                <div className="border-t border-[var(--workspace-border)] pt-2 flex flex-wrap gap-4 sm:gap-6">
-                  <div className="flex flex-col gap-1">
+                <div className={`border-t border-[var(--workspace-border)] pt-3 flex flex-wrap gap-4 sm:gap-6`}>
+                  <div className="flex flex-col gap-1.5">
                     <div className="flex items-center justify-between gap-1">
-                      <p className="text-xs font-medium opacity-70">Font size</p>
+                      <p className={settingsLabelClass}>Font size</p>
                       <button type="button" className={`btn btn-ghost btn-xs btn-square h-5 w-5 p-0 rounded ${pinnedItems.has("fontSize") ? "text-primary" : "opacity-40"}`} onClick={(e) => { e.stopPropagation(); setPinnedItems((s) => { const n = new Set(s); n.has("fontSize") ? n.delete("fontSize") : n.add("fontSize"); return n; }); }} title={pinnedItems.has("fontSize") ? "Unpin" : "Pin to toolbar"}><StarIcon className="h-3.5 w-3.5" /></button>
                     </div>
-                    <div className="flex items-center rounded-lg border border-[var(--workspace-border)] overflow-hidden [&>*:not(:last-child)]:border-r [&>*:not(:last-child)]:border-[var(--workspace-border)]">
-                      <button type="button" aria-label="Decrease font size" className="flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors" onClick={() => setEditorFontSize((s) => Math.max(10, s - 1))}><MinusIcon className="h-3.5 w-3.5" aria-hidden /></button>
-                      <span className="flex shrink-0 items-center justify-center px-1 py-0.5 text-xs tabular-nums text-[var(--workspace-text)] border-r border-[var(--workspace-border)] min-w-[2rem]">{editorFontSize}</span>
-                      <button type="button" aria-label="Increase font size" className="flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors" onClick={() => setEditorFontSize((s) => Math.min(24, s + 1))}><PlusIcon className="h-3.5 w-3.5" aria-hidden /></button>
-                      <button type="button" aria-label="Reset font size" className="flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors" onClick={() => setEditorFontSize(13)}><ArrowPathIcon className="h-3.5 w-3.5" aria-hidden /></button>
+                    <div className={settingsBtnGroupClass}>
+                      <button type="button" aria-label="Decrease font size" className={settingsStepBtnClass} onClick={() => setEditorFontSize((s) => Math.max(10, s - 1))}><MinusIcon className="h-3.5 w-3.5" aria-hidden /></button>
+                      <span className="flex shrink-0 items-center justify-center px-2 py-0.5 text-xs tabular-nums text-[var(--workspace-text)] min-w-[2.25rem] text-center">{editorFontSize}</span>
+                      <button type="button" aria-label="Increase font size" className={settingsStepBtnClass} onClick={() => setEditorFontSize((s) => Math.min(24, s + 1))}><PlusIcon className="h-3.5 w-3.5" aria-hidden /></button>
+                      <button type="button" aria-label="Reset font size" className={settingsStepBtnClass} onClick={() => setEditorFontSize(13)}><ArrowPathIcon className="h-3.5 w-3.5" aria-hidden /></button>
                     </div>
                   </div>
-                  <div className="flex flex-col gap-1">
+                  <div className="flex flex-col gap-1.5">
                     <div className="flex items-center justify-between gap-1">
-                      <p className="text-xs font-medium opacity-70">Indent</p>
+                      <p className={settingsLabelClass}>Indent</p>
                       <button type="button" className={`btn btn-ghost btn-xs btn-square h-5 w-5 p-0 rounded ${pinnedItems.has("indent") ? "text-primary" : "opacity-40"}`} onClick={(e) => { e.stopPropagation(); setPinnedItems((s) => { const n = new Set(s); n.has("indent") ? n.delete("indent") : n.add("indent"); return n; }); }} title={pinnedItems.has("indent") ? "Unpin" : "Pin to toolbar"}><StarIcon className="h-3.5 w-3.5" /></button>
                     </div>
-                    <div className="flex items-center rounded-lg border border-[var(--workspace-border)] overflow-hidden [&>*:not(:last-child)]:border-r [&>*:not(:last-child)]:border-[var(--workspace-border)]">
-                      <button type="button" aria-label="Decrease indent" className="flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors" onClick={() => { const v = Math.max(0, formatOptions.indentation - 1); applyFormatWithOptions({ ...formatOptions, indentation: v }); }}><MinusIcon className="h-3.5 w-3.5" aria-hidden /></button>
-                      <span className="flex shrink-0 items-center justify-center px-1 py-0.5 text-xs tabular-nums text-[var(--workspace-text)] border-r border-[var(--workspace-border)]">{formatOptions.indentation}</span>
-                      <button type="button" aria-label="Increase indent" className="flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors" onClick={() => { const v = Math.min(10, formatOptions.indentation + 1); applyFormatWithOptions({ ...formatOptions, indentation: v }); }}><PlusIcon className="h-3.5 w-3.5" aria-hidden /></button>
-                      <button type="button" aria-label="Reset indent" className="flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors" onClick={() => applyFormatWithOptions({ ...formatOptions, indentation: 2 })}><ArrowPathIcon className="h-3.5 w-3.5" aria-hidden /></button>
+                    <div className={settingsBtnGroupClass}>
+                      <button type="button" aria-label="Decrease indent" className={settingsStepBtnClass} onClick={() => { const v = Math.max(0, formatOptions.indentation - 1); applyFormatWithOptions({ ...formatOptions, indentation: v }); }}><MinusIcon className="h-3.5 w-3.5" aria-hidden /></button>
+                      <span className="flex shrink-0 items-center justify-center px-2 py-0.5 text-xs tabular-nums text-[var(--workspace-text)] min-w-[2.25rem] text-center">{formatOptions.indentation}</span>
+                      <button type="button" aria-label="Increase indent" className={settingsStepBtnClass} onClick={() => { const v = Math.min(10, formatOptions.indentation + 1); applyFormatWithOptions({ ...formatOptions, indentation: v }); }}><PlusIcon className="h-3.5 w-3.5" aria-hidden /></button>
+                      <button type="button" aria-label="Reset indent" className={settingsStepBtnClass} onClick={() => applyFormatWithOptions({ ...formatOptions, indentation: 2 })}><ArrowPathIcon className="h-3.5 w-3.5" aria-hidden /></button>
                     </div>
                   </div>
                 </div>
-                <div className="border-t border-[var(--workspace-border)] pt-2 flex flex-wrap items-center gap-3 sm:gap-4">
-                  <div className="flex flex-col gap-1">
-                    <p className="text-xs font-medium opacity-70">Quote style</p>
+                <div className={`border-t border-[var(--workspace-border)] pt-3 flex flex-wrap items-center gap-3 sm:gap-4`}>
+                  <div className="flex flex-col gap-1.5">
+                    <p className={settingsLabelClass}>Quote style</p>
                     <div className="flex flex-wrap gap-1">
                       {(["double", "single"] as const).map((q) => (
                         <button key={q} type="button" className={`${linkBtnClass} h-6 min-h-6 ${formatOptions.quoteStyle === q ? "text-primary" : ""}`} onClick={() => applyFormatWithOptions({ ...formatOptions, quoteStyle: q })}>{q === "double" ? "Double" : "Single"}</button>
                       ))}
                     </div>
                   </div>
-                  <div className="flex flex-col gap-1">
-                    <p className="text-xs font-medium opacity-70">Format options</p>
+                  <div className="flex flex-col gap-1.5">
+                    <p className={settingsLabelClass}>Format options</p>
                     <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                       <label className="flex cursor-pointer items-center gap-1.5 p-1"><input type="checkbox" className="checkbox checkbox-xs" checked={formatOptions.sortKeys} onChange={(e) => applyFormatWithOptions({ ...formatOptions, sortKeys: e.target.checked })} />Sort keys</label>
                       <label className="flex cursor-pointer items-center gap-1.5"><input type="checkbox" className="checkbox checkbox-xs" checked={formatOptions.removeEmpty} onChange={(e) => applyFormatWithOptions({ ...formatOptions, removeEmpty: e.target.checked })} />Remove empty</label>
                     </div>
                   </div>
                 </div>
-                <div className="border-t border-[var(--workspace-border)] pt-2">
-                  <p className="text-xs font-medium opacity-70 mb-1">Generate Types</p>
+                <div className={`border-t border-[var(--workspace-border)] pt-3 ${settingsSectionClass}`}>
+                  <p className={settingsLabelClass}>Generate Types</p>
                   <div className="flex flex-wrap gap-1">
                     {TYPE_LANGUAGES.map((item) => (
                       <div key={item.id} className="flex items-center">
@@ -2129,7 +2247,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                   onOpenChange={setDownloadMenuOpen}
                   side="bottom"
                   align="end"
-                  contentClassName={`rounded border p-1 shadow-xl ${toolbarBorderClass} ${dropdownPanelClass}`}
+                  contentClassName={`rounded-lg border p-1 shadow-xl ${toolbarBorderClass} ${dropdownPanelClass}`}
                   trigger={
                     <button
                       type="button"
@@ -2141,9 +2259,9 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                     </button>
                   }
                 >
-                  <div className="flex flex-col gap-0.5 p-1">
-                    <button type="button" className="btn btn-ghost btn-xs justify-start" onClick={() => downloadOutput("png")}>PNG</button>
-                    <button type="button" className="btn btn-ghost btn-xs justify-start" onClick={() => downloadOutput("jpg")}>JPG</button>
+                  <div className="flex flex-col gap-0.5">
+                    <button type="button" className={`${linkBtnClass} h-7 min-h-7 w-full justify-start px-2`} onClick={() => downloadOutput("png")}>PNG</button>
+                    <button type="button" className={`${linkBtnClass} h-7 min-h-7 w-full justify-start px-2`} onClick={() => downloadOutput("jpg")}>JPG</button>
                   </div>
                 </Dropdown>
               ) : (
@@ -2201,6 +2319,32 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                     >
                       <ArrowUturnRightIcon className="h-3.5 w-3.5" />
                     </button>
+                    <div className="mx-1 h-4 w-px shrink-0 bg-[var(--workspace-border)]" />
+                    <button
+                      type="button"
+                      title="Previous difference"
+                      className={`${linkBtnClass} btn-square h-7 min-h-7 w-7 shrink-0`}
+                      onClick={() => diffEditorRef.current?.prevChange()}
+                    >
+                      <ChevronUpIcon className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      title="Next difference"
+                      className={`${linkBtnClass} btn-square h-7 min-h-7 w-7 shrink-0`}
+                      onClick={() => diffEditorRef.current?.nextChange()}
+                    >
+                      <ChevronDownIcon className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      title={diffSideBySide ? "Switch to inline view" : "Switch to side-by-side view"}
+                      className={`${linkBtnClass} h-7 min-h-7 shrink-0 px-1.5`}
+                      onClick={() => setDiffSideBySide((v) => !v)}
+                    >
+                      {diffSideBySide ? "Inline" : "Side-by-side"}
+                    </button>
+                    <div className="mx-1 h-4 w-px shrink-0 bg-[var(--workspace-border)]" />
                     <button
                       type="button"
                       title="Paste"
@@ -2219,6 +2363,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                     language="json"
                     monacoTheme={monacoTheme}
                     fontSize={editorFontSize}
+                    renderSideBySide={diffSideBySide}
                     originalEditable
                     modifiedEditable
                     onOriginalChange={handleDiffLeftChange}
@@ -2237,6 +2382,8 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                   monacoTheme={monacoTheme}
                   panelTone="output"
                   fontSize={editorFontSize}
+                  wordWrap={lineWrap ? "on" : "off"}
+                  onEditorMount={(api) => { outputEditorApiRef.current = api; }}
                 />
               ) : (
                 <div className="flex h-full min-h-[280px] flex-col items-center justify-center gap-6 p-6 text-center overflow-y-auto bg-[var(--workspace-panel)]">
@@ -2514,6 +2661,57 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
           commands={commandPaletteCommands}
           isDark={isDark}
         />
+
+        {/* History Panel */}
+        {showHistoryPanel && (
+          <div className="fixed inset-0 z-[200] flex items-stretch justify-end" onClick={() => setShowHistoryPanel(false)}>
+            <div
+              className={`flex h-full w-full max-w-sm flex-col shadow-2xl border-l ${isDark ? "bg-[#1a1a1a] border-[#2a2a2a]" : "bg-white border-[#e0e0e0]"}`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className={`flex shrink-0 items-center justify-between border-b px-4 py-3 ${isDark ? "border-[#2a2a2a]" : "border-[#e0e0e0]"}`}>
+                <div className="flex items-center gap-2">
+                  <ClockIcon className="h-4 w-4 text-primary" />
+                  <span className="text-sm font-semibold text-[var(--workspace-text)]">Input History</span>
+                  <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${isDark ? "bg-white/10 text-white/50" : "bg-black/10 text-black/50"}`}>{undoIndex + 1}/{undoStack.length}</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button type="button" className={`${linkBtnClass} h-7 min-h-7`} onClick={exportHistory}>Export</button>
+                  <button type="button" className={`${linkBtnClass} btn-square h-7 min-h-7 w-7`} onClick={() => setShowHistoryPanel(false)}><XMarkIcon className="h-4 w-4" /></button>
+                </div>
+              </div>
+              <div className="flex-1 overflow-y-auto">
+                {[...undoStack].reverse().map((content, reversedIdx) => {
+                  const idx = undoStack.length - 1 - reversedIdx;
+                  const isCurrent = idx === undoIndex;
+                  return (
+                    <button
+                      key={idx}
+                      type="button"
+                      className={`flex w-full flex-col items-start gap-1 border-b px-4 py-3 text-left transition-colors ${isDark ? "border-[#2a2a2a]" : "border-[#f0f0f0]"} ${isCurrent ? "bg-primary/10" : isDark ? "hover:bg-white/[0.03]" : "hover:bg-black/[0.03]"}`}
+                      onClick={() => {
+                        const delta = idx - undoIndex;
+                        if (delta !== 0) moveHistory(delta as -1 | 1);
+                        setShowHistoryPanel(false);
+                      }}
+                    >
+                      <div className="flex w-full items-center gap-2">
+                        {isCurrent && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />}
+                        <span className={`text-[11px] font-medium ${isCurrent ? "text-primary" : "text-[var(--workspace-text-muted)]"}`}>
+                          {isCurrent ? "Current" : `History ${idx + 1}`}
+                        </span>
+                        <span className={`ml-auto text-[10px] ${isDark ? "text-white/30" : "text-black/30"}`}>{getSizeFormatted(content)}</span>
+                      </div>
+                      <span className="line-clamp-2 font-mono text-[11px] text-[var(--workspace-text-muted)]">
+                        {content.slice(0, 120) || "(empty)"}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
 
         {modalKind === "validate" ? (
           <div className="modal modal-open">

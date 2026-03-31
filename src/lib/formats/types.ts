@@ -10,6 +10,7 @@ export interface FormatStringifyOptions {
   quoteStyle?: "single" | "double";
   sortKeys?: boolean;
   minify?: boolean;
+  csvDelimiter?: string;
 }
 
 export interface FormatAdapter {

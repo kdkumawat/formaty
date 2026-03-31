@@ -17,6 +17,8 @@ interface JsonEditorProps {
   hideLineNumbers?: boolean;
   fontSize?: number;
   onCursorChange?: (line: number, column: number) => void;
+  wordWrap?: "on" | "off";
+  onEditorMount?: (api: { find(): void; focus(): void }) => void;
 }
 
 export function JsonEditor({
@@ -32,17 +34,11 @@ export function JsonEditor({
   panelTone = "input",
   fontSize = 13,
   onCursorChange,
+  wordWrap = "on",
+  onEditorMount,
 }: JsonEditorProps) {
   const editorRef = React.useRef<editor.IStandaloneCodeEditor | null>(null);
   const resolvedTheme = monacoTheme === "vs-dark" ? "formaty-dark" : "formaty-light";
-
-  const skeleton = (
-    <div className="flex h-full w-full flex-col gap-2 p-4">
-      {[1, 2, 3, 4, 5, 6, 7].map((i) => (
-        <div key={i} className="h-4 animate-pulse rounded bg-base-content/10" style={{ width: `${60 + (i % 3) * 20}%` }} />
-      ))}
-    </div>
-  );
 
   return (
     <div
@@ -52,7 +48,7 @@ export function JsonEditor({
     >
       <Editor
         height="100%"
-        loading={skeleton}
+        loading={null}
         defaultLanguage={language}
         theme={resolvedTheme}
         value={value}
@@ -86,7 +82,7 @@ export function JsonEditor({
           automaticLayout: true,
           padding: { top: 6, bottom: 6 },
           scrollBeyondLastLine: false,
-          wordWrap: "on",
+          wordWrap,
           scrollbar: {
             verticalScrollbarSize: 10,
             horizontalScrollbarSize: 10,
@@ -111,6 +107,12 @@ export function JsonEditor({
         onChange={(next) => onChange(next ?? "")}
         onMount={(editor) => {
           editorRef.current = editor;
+          if (onEditorMount) {
+            onEditorMount({
+              find: () => editor.trigger("keyboard", "actions.find", null),
+              focus: () => editor.focus(),
+            });
+          }
           if (onCursorChange) {
             editor.onDidChangeCursorPosition((e) => {
               onCursorChange(e.position.lineNumber, e.position.column);

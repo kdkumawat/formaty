@@ -10,6 +10,8 @@ import {
   removeEmptyDeep,
   searchJson,
   sortKeysDeep,
+  sortArraysDeep,
+  deduplicateArraysDeep,
   toCsv,
   toXml,
   toYaml,
@@ -25,6 +27,8 @@ type WorkerAction =
   | "parseFormat"
   | "search"
   | "sort"
+  | "sortArrays"
+  | "dedup"
   | "removeEmpty"
   | "flatten"
   | "unflatten"
@@ -76,6 +80,12 @@ ctx.onmessage = (event: MessageEvent<WorkerRequest>) => {
       case "sort":
         result = sortKeysDeep(payload.json as JsonValue);
         break;
+      case "sortArrays":
+        result = sortArraysDeep(payload.json as JsonValue);
+        break;
+      case "dedup":
+        result = deduplicateArraysDeep(payload.json as JsonValue);
+        break;
       case "removeEmpty":
         result = removeEmptyDeep(payload.json as JsonValue);
         break;
@@ -124,13 +134,14 @@ ctx.onmessage = (event: MessageEvent<WorkerRequest>) => {
         const json = payload.json as JsonValue;
         const toFormat = payload.toFormat as FormatKind | undefined;
         const formatOptions = payload.formatOptions as FormatStringifyOptions | undefined;
+        const csvDelimiter = (payload.csvDelimiter as string | undefined) ?? ",";
         if (toFormat) {
-          result = stringifyOutput(json, toFormat, formatOptions);
+          result = stringifyOutput(json, toFormat, { ...formatOptions, csvDelimiter });
         } else {
           const kind = payload.kind as string;
           if (kind === "yaml") result = toYaml(json);
           else if (kind === "xml") result = toXml(json);
-          else if (kind === "csv") result = toCsv(json);
+          else if (kind === "csv") result = toCsv(json, csvDelimiter);
           else result = stringifyOutput(json, kind as FormatKind);
         }
         break;
