@@ -39,7 +39,7 @@ export default function NotFound() {
       <div className="flex w-full max-w-md flex-col gap-5 rounded-xl border border-[var(--workspace-border)] bg-[var(--workspace-panel)] p-6">
         <div>
           <p className="mb-3 text-sm font-medium text-[var(--workspace-text)]">
-            Your data stays in your browser only — formaty runs locally
+            Your data stays in your browser only - formaty runs locally
           </p>
           <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs text-[var(--workspace-text-muted)]">
             <span>• Format & convert JSON, XML, YAML, TOML, CSV</span>

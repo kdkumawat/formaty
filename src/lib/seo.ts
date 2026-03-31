@@ -61,11 +61,11 @@ export const TOOL_PAGES: Record<ToolRoute, ToolPageConfig> = {
     description:
       "Beautify and validate JSON instantly. Free online JSON formatter with syntax highlighting, minify, and validation. No data leaves your browser.",
     h1: "JSON Formatter",
-    content: `JSON is the standard for API responses and config files. Raw JSON from APIs often arrives minified or poorly formatted—hard to read and debug. A JSON formatter beautifies and indents your data so you can inspect structure, spot errors, and understand nested objects quickly.
+    content: `JSON is the standard for API responses and config files. Raw JSON from APIs often arrives minified or poorly formatted-hard to read and debug. A JSON formatter beautifies and indents your data so you can inspect structure, spot errors, and understand nested objects quickly.
 
 Formatting messy JSON improves readability. Indentation helps trace nested objects and arrays. Syntax highlighting makes keys, values, and types stand out. Validation catches trailing commas, missing quotes, and invalid structures before your code runs.
 
-Use cases: debugging API responses, inspecting webhook payloads, cleaning up config files, preparing JSON for documentation. Paste your data, get formatted output in one click. No signup, no server round-trip—everything runs locally in your browser.`,
+Use cases: debugging API responses, inspecting webhook payloads, cleaning up config files, preparing JSON for documentation. Paste your data, get formatted output in one click. No signup, no server round-trip-everything runs locally in your browser.`,
     inputExample: '{"id":1,"name":"test","nested":{"key":"value"}}',
     outputExample: `{
   "id": 1,
@@ -88,7 +88,7 @@ Use cases: debugging API responses, inspecting webhook payloads, cleaning up con
     description:
       "Explore JSON in tree view. Free online JSON viewer with expandable nodes, search, and copy. Inspect structured data instantly.",
     h1: "JSON Viewer",
-    content: `Large JSON blobs are hard to navigate as raw text. A JSON viewer renders your data as a hierarchical tree—expand and collapse nodes, drill into nested objects, and find values quickly.
+    content: `Large JSON blobs are hard to navigate as raw text. A JSON viewer renders your data as a hierarchical tree-expand and collapse nodes, drill into nested objects, and find values quickly.
 
 Tree view is ideal for API responses, config files, and log payloads. Click to expand arrays and objects. Copy paths or values with one click. Search across keys and values.
 
@@ -109,7 +109,7 @@ Use cases: inspecting API responses, exploring configuration, debugging webhook 
     description:
       "Compare JSON files instantly. Free online JSON diff tool with side-by-side view and highlighting. No data leaves your device.",
     h1: "JSON Diff",
-    content: `Comparing JSON manually is error-prone. A JSON diff tool highlights differences between two versions—added, removed, and changed keys and values.
+    content: `Comparing JSON manually is error-prone. A JSON diff tool highlights differences between two versions-added, removed, and changed keys and values.
 
 Useful when comparing API responses before and after changes, validating config migrations, or reviewing schema updates. Side-by-side diff shows exactly what changed.
 
@@ -132,7 +132,7 @@ Use cases: API version comparison, config migration checks, schema evolution, de
     h1: "JSON to TypeScript",
     content: `Typing API responses and config objects by hand is tedious. A JSON-to-TypeScript tool infers types from sample data and generates interfaces or type aliases.
 
-Paste a JSON sample—API response, config, webhook payload—and get TypeScript definitions. Supports optional properties, unions, and nested structures. Also outputs Python, Go, Java, and more.
+Paste a JSON sample-API response, config, webhook payload-and get TypeScript definitions. Supports optional properties, unions, and nested structures. Also outputs Python, Go, Java, and more.
 
 Use cases: typing API clients, generating DTOs, documenting schemas, onboarding new endpoints. One paste, instant types. No server upload.`,
     inputExample: '{"id":1,"email":"a@b.com","roles":["admin"]}',
@@ -193,7 +193,7 @@ Use cases: understanding API schemas, documenting data models, spotting circular
     description:
       "Import cURL and inspect API responses. Paste cURL, fetch JSON, format and query. Free developer tool.",
     h1: "API Import (cURL)",
-    content: `Testing APIs often starts with a cURL command from docs or Postman. An API import tool lets you paste cURL, execute the request, and inspect the response—formatted, validated, queryable.
+    content: `Testing APIs often starts with a cURL command from docs or Postman. An API import tool lets you paste cURL, execute the request, and inspect the response-formatted, validated, queryable.
 
 No need to switch to another app. Paste cURL, hit run, get JSON in the editor. Then format, query with JSONPath, or generate types from the response.
 
@@ -216,7 +216,7 @@ Use cases: quick API checks, debugging webhooks, inspecting third-party response
     h1: "JSON Schema Generator",
     content: `JSON Schema validates structure, types, and constraints. Writing schemas by hand is slow. A schema generator infers a schema from sample JSON.
 
-Paste one or more samples—API responses, configs—and get a JSON Schema. Use it for validation, documentation, or code generation.
+Paste one or more samples-API responses, configs-and get a JSON Schema. Use it for validation, documentation, or code generation.
 
 Use cases: validating API contracts, documenting schemas, generating OpenAPI, onboarding. Paste data, get schema. Client-side only.`,
     inputExample: '{"id":1,"name":"test","active":true}',

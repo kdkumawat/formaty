@@ -37,7 +37,7 @@ export default function DocsPage() {
           <h2 className="mb-3 text-lg font-medium">Overview</h2>
           <p className="mb-3 leading-relaxed">
             formaty is a local-first data toolkit for working with JSON, XML, YAML, TOML, and CSV.
-            All processing runs in your browser — no data is sent to any server.
+            All processing runs in your browser - no data is sent to any server.
           </p>
           <p className="leading-relaxed">
             Format, validate, transform, diff, and convert between data formats. Query data with JSONPath
@@ -49,22 +49,22 @@ export default function DocsPage() {
         <section className="mb-8">
           <h2 className="mb-3 text-lg font-medium">Keyboard Shortcuts</h2>
           <ul className="list-inside list-disc space-y-1">
-            <li><strong>Ctrl+V / Cmd+V</strong> — Paste from clipboard (when input is empty, replaces content; when input has content, paste at cursor)</li>
-            <li><strong>Ctrl+Enter / Cmd+Enter</strong> — Parse and transform</li>
-            <li><strong>Ctrl+Z</strong> — Undo</li>
-            <li><strong>Ctrl+Shift+Z</strong> — Redo</li>
+            <li><strong>Ctrl+V / Cmd+V</strong> - Paste from clipboard (when input is empty, replaces content; when input has content, paste at cursor)</li>
+            <li><strong>Ctrl+Enter / Cmd+Enter</strong> - Parse and transform</li>
+            <li><strong>Ctrl+Z</strong> - Undo</li>
+            <li><strong>Ctrl+Shift+Z</strong> - Redo</li>
           </ul>
         </section>
 
         <section className="mb-8">
           <h2 className="mb-3 text-lg font-medium">Input & Output Formats</h2>
           <ul className="list-inside list-disc space-y-1">
-            <li><strong>JSON</strong> — Parse, format, validate, minify</li>
-            <li><strong>XML</strong> — Parse and convert to/from other formats</li>
-            <li><strong>YAML</strong> — Parse and convert</li>
-            <li><strong>TOML</strong> — Parse and convert</li>
-            <li><strong>CSV</strong> — Parse and convert (array of objects)</li>
-            <li><strong>cURL</strong> — Paste a curl command; formaty executes it and renders the API response</li>
+            <li><strong>JSON</strong> - Parse, format, validate, minify</li>
+            <li><strong>XML</strong> - Parse and convert to/from other formats</li>
+            <li><strong>YAML</strong> - Parse and convert</li>
+            <li><strong>TOML</strong> - Parse and convert</li>
+            <li><strong>CSV</strong> - Parse and convert (array of objects)</li>
+            <li><strong>cURL</strong> - Paste a curl command; formaty executes it and renders the API response</li>
           </ul>
           <p className="mt-3 leading-relaxed">
             Input format is auto-detected when you paste or import. Override it via the input format dropdown.
@@ -78,19 +78,19 @@ export default function DocsPage() {
             Use the <strong>Query</strong> view to run JSONPath or JMESPath queries on your data. Results update live.
           </p>
           <ul className="list-inside list-disc space-y-1">
-            <li><strong>JSONPath</strong> — e.g. <code className="rounded bg-[var(--workspace-panel)] px-1">$.users[?(@.age &gt; 25)]</code></li>
-            <li><strong>JMESPath</strong> — e.g. <code className="rounded bg-[var(--workspace-panel)] px-1">users[?age &gt; `25`]</code></li>
+            <li><strong>JSONPath</strong> - e.g. <code className="rounded bg-[var(--workspace-panel)] px-1">$.users[?(@.age &gt; 25)]</code></li>
+            <li><strong>JMESPath</strong> - e.g. <code className="rounded bg-[var(--workspace-panel)] px-1">users[?age &gt; `25`]</code></li>
           </ul>
         </section>
 
         <section className="mb-8">
           <h2 className="mb-3 text-lg font-medium">Output Views</h2>
           <ul className="list-inside list-disc space-y-1">
-            <li><strong>Raw</strong> — Code editor with syntax highlighting, line numbers, copy</li>
-            <li><strong>Tree</strong> — Expandable tree view of the structure</li>
-            <li><strong>Graph</strong> — Interactive graph visualization (JSON only)</li>
-            <li><strong>Query</strong> — JSONPath/JMESPath query playground with live results</li>
-            <li><strong>Table</strong> — Tabular view for arrays of objects (CSV-like)</li>
+            <li><strong>Raw</strong> - Code editor with syntax highlighting, line numbers, copy</li>
+            <li><strong>Tree</strong> - Expandable tree view of the structure</li>
+            <li><strong>Graph</strong> - Interactive graph visualization (JSON only)</li>
+            <li><strong>Query</strong> - JSONPath/JMESPath query playground with live results</li>
+            <li><strong>Table</strong> - Tabular view for arrays of objects (CSV-like)</li>
           </ul>
           <p className="mt-3 leading-relaxed">
             Use the star icon next to any view to pin it to the toolbar for quick switching.
@@ -155,22 +155,22 @@ export default function DocsPage() {
         <section className="mb-8">
           <h2 className="mb-3 text-lg font-medium">Format Options</h2>
           <ul className="list-inside list-disc space-y-1">
-            <li><strong>Indent</strong> — 0–10 spaces</li>
-            <li><strong>Quote style</strong> — Double or single quotes for JSON strings</li>
-            <li><strong>Sort keys</strong> — Alphabetize object keys in output</li>
-            <li><strong>Remove empty</strong> — Strip null and empty values</li>
+            <li><strong>Indent</strong> - 0–10 spaces</li>
+            <li><strong>Quote style</strong> - Double or single quotes for JSON strings</li>
+            <li><strong>Sort keys</strong> - Alphabetize object keys in output</li>
+            <li><strong>Remove empty</strong> - Strip null and empty values</li>
           </ul>
         </section>
 
         <section className="mb-8">
           <h2 className="mb-3 text-lg font-medium">Share & Export</h2>
           <ul className="list-inside list-disc space-y-1">
-            <li><strong>Share</strong> — Save your playground to the cloud and get a short link at <code className="rounded bg-[var(--workspace-panel)] px-1">/playground?id={'{id}'}</code>. Recipients see the same input, output, view mode (raw/graph/table/tree/query), format, and type language. Your local preferences are not overwritten.</li>
-            <li><strong>Copy</strong> — Copy output to clipboard</li>
-            <li><strong>Download</strong> — Download output as a file</li>
+            <li><strong>Share</strong> - Save your playground to the cloud and get a short link at <code className="rounded bg-[var(--workspace-panel)] px-1">/playground?id={'{id}'}</code>. Recipients see the same input, output, view mode (raw/graph/table/tree/query), format, and type language. Your local preferences are not overwritten.</li>
+            <li><strong>Copy</strong> - Copy output to clipboard</li>
+            <li><strong>Download</strong> - Download output as a file</li>
           </ul>
           <p className="mt-3 leading-relaxed">
-            To stop sharing, click the disable icon next to the link — the link is removed and others will see a &quot;not found&quot; message.
+            To stop sharing, click the disable icon next to the link - the link is removed and others will see a &quot;not found&quot; message.
           </p>
         </section>
 
