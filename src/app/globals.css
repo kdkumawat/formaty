@@ -10,11 +10,11 @@
 
 /* Workspace design tokens */
 :root {
-  --workspace-background: #f8f8f8;
+  --workspace-background: #f5f5f5;
   --workspace-panel: #ffffff;
-  --workspace-border: #e8e8e8;
+  --workspace-border: #dedede;
   --workspace-text: #0a0a0a;
-  --workspace-text-muted: #6b6b6b;
+  --workspace-text-muted: #4a4a4a;
   --workspace-primary: oklch(var(--p));
   --glow-color: rgba(124, 58, 237, 0.35);
 }
@@ -22,18 +22,18 @@
 [data-theme="dark"] {
   --workspace-background: #0d0d0d;
   --workspace-panel: #141414;
-  --workspace-border: #252525;
-  --workspace-text: #ececec;
-  --workspace-text-muted: #858585;
+  --workspace-border: #282828;
+  --workspace-text: #f0f0f0;
+  --workspace-text-muted: #9a9a9a;
   --glow-color: rgba(124, 58, 237, 0.25);
 }
 
 [data-theme="light"] {
-  --workspace-background: #f8f8f8;
+  --workspace-background: #f5f5f5;
   --workspace-panel: #ffffff;
-  --workspace-border: #e8e8e8;
+  --workspace-border: #dedede;
   --workspace-text: #0a0a0a;
-  --workspace-text-muted: #6b6b6b;
+  --workspace-text-muted: #4a4a4a;
   --glow-color: rgba(124, 58, 237, 0.35);
 }
 
@@ -144,12 +144,22 @@ body {
 .monaco-editor .monaco-scrollable-element > .scrollbar.horizontal { height: 10px; }
 
 /* ── Custom scrollbar (Webkit) ───────────────────────────── */
-::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #d0d0d0; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #bbb; }
-[data-theme="dark"] ::-webkit-scrollbar-thumb { background: #333; }
-[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: #4a4a4a; }
+::-webkit-scrollbar-thumb { background: #c8c8c8; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
+[data-theme="dark"] ::-webkit-scrollbar-thumb { background: #383838; }
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: #505050; }
+
+/* ── Focus ring ──────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid rgba(124, 58, 237, 0.6);
+  outline-offset: 2px;
+}
+input:focus-visible,
+textarea:focus-visible {
+  outline: none;
+}
 
 /* ── Toolbar active state ────────────────────────────────── */
 @keyframes toolbar-pop {

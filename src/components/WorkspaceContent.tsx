@@ -28,6 +28,7 @@ import {
   XMarkIcon,
   XCircleIcon,
   LinkSlashIcon,
+  ViewColumnsIcon,
 } from "@heroicons/react/24/outline";
 import { JsonDiffEditor, type JsonDiffEditorRef } from "@/components/JsonDiffEditor";
 import { JsonEditor } from "@/components/JsonEditor";
@@ -253,6 +254,7 @@ type ThemeMode = "system" | "dark" | "light";
 type ModalKind = "validate" | "diff" | null;
 type RightView = "raw" | "tree" | "graph" | "query" | "table";
 type QuoteStyle = "double" | "single";
+type Tab = { id: string; label: string };
 type FormatOptions = {
   indentation: number;
   quoteStyle: QuoteStyle;
@@ -383,6 +385,21 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   const [csvDelimiter, setCsvDelimiter] = useState(",");
   const [isWindowFullscreen, setIsWindowFullscreen] = useState(false);
 
+  // Multiple tabs
+  const [tabs, setTabs] = useState<Tab[]>([{ id: "t1", label: "Tab 1" }]);
+  const [activeTabId, setActiveTabId] = useState("t1");
+  const [showTabs, setShowTabs] = useState(false);
+  const tabCounterRef = useRef(1);
+  // Recent command palette actions
+  const [recentActions, setRecentActions] = useState<string[]>([]);
+  // Split input
+  const [splitInputOpen, setSplitInputOpen] = useState(false);
+  const [splitInput2, setSplitInput2] = useState("");
+  const [splitRatio, setSplitRatio] = useState(50);
+  const [isSplitResizing, setIsSplitResizing] = useState(false);
+  // Auto-format on paste
+  const [autoFormatOnPaste, setAutoFormatOnPaste] = useState(true);
+
   const toggleWindowFullscreen = useCallback(() => {
     if (!document.fullscreenElement) {
       document.documentElement.requestFullscreen().then(() => setIsWindowFullscreen(true)).catch(() => {});
@@ -412,8 +429,11 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   const prevBeforeDiffRef = useRef<{ rightView: RightView; activeOperation: OperationAction | null; isOutputMaximized: boolean } | null>(null);
   const graphViewRef = useRef<GraphViewRef | null>(null);
   const diffEditorRef = useRef<JsonDiffEditorRef | null>(null);
-  const outputEditorApiRef = useRef<{ find(): void; focus(): void } | null>(null);
-  const inputEditorApiRef = useRef<{ find(): void; focus(): void } | null>(null);
+  const outputEditorApiRef = useRef<{ find(): void; focus(): void; collapseAll(): void; expandAll(): void } | null>(null);
+  const inputEditorApiRef = useRef<{ find(): void; focus(): void; collapseAll(): void; expandAll(): void } | null>(null);
+  const splitInput2ApiRef = useRef<{ find(): void; focus(): void; collapseAll(): void; expandAll(): void } | null>(null);
+  const tabSnapshotsRef = useRef<Map<string, { input: string; inputFormatOverride: InputFormatKind | null; undoStack: string[]; undoIndex: number; output: string; parsedOutput: JsonValue | null; outputExt: string; outputLanguage: OutputLanguage; activeOperation: OperationAction | null; error: string | null; convertToFormat: FormatKind; typeLanguage: TypeTargetLanguage; rightView: RightView }>>(new Map());
+  const splitContainerInputRef = useRef<HTMLDivElement | null>(null);
   const diffDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sessionRestoredRef = useRef(false);
   const skipNextPersistRef = useRef(true);
@@ -465,13 +485,19 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
 
   const joinItemBorderClass =
     "[&>*:not(:last-child)]:border-r [&>*:not(:last-child)]:!border-base-300/50";
-  const dropdownPanelClass = isDark ? "bg-[#1e1e1e] text-[var(--workspace-text)]" : "bg-white text-[var(--workspace-text)]";
-  const settingsLabelClass = "text-[11px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]";
-  const settingsSectionClass = "space-y-1.5";
-  const settingsBtnGroupClass = "flex items-center rounded-lg border border-[var(--workspace-border)] overflow-hidden divide-x divide-[var(--workspace-border)]";
-  const settingsStepBtnClass = "flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors";
-  const linkBtnClass = "btn btn-xs btn-ghost rounded-md p-1 border-0 font-normal text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-border)]/50 hover:text-[var(--workspace-text)] transition-all duration-100";
-  const tbActiveClass = "!bg-primary/10 !text-primary ring-1 ring-primary/20";
+  const dropdownPanelClass = isDark ? "bg-[#1a1a1a]/98 backdrop-blur-xl text-[#e8e8e8]" : "bg-white/98 backdrop-blur-xl text-[#1a1a1a]";
+  const settingsLabelClass = isDark ? "text-[10px] font-bold uppercase tracking-[0.1em] text-primary/80" : "text-[10px] font-bold uppercase tracking-[0.1em] text-primary/65";
+  const settingsSectionClass = "space-y-2";
+  const settingsBtnGroupClass = isDark
+    ? "flex items-center rounded-lg border border-white/[0.1] overflow-hidden divide-x divide-white/[0.08] bg-white/[0.04]"
+    : "flex items-center rounded-lg border border-[var(--workspace-border)]/60 overflow-hidden divide-x divide-[var(--workspace-border)]/40 bg-[var(--workspace-background)]/50";
+  const settingsStepBtnClass = isDark
+    ? "flex h-7 w-7 shrink-0 items-center justify-center p-1 text-white/50 hover:bg-primary/15 hover:text-primary active:scale-95 transition-all duration-100"
+    : "flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-primary/10 hover:text-primary active:scale-95 transition-all duration-100";
+  const linkBtnClass = isDark
+    ? "btn btn-xs btn-ghost rounded-md px-1.5 py-1 border-0 font-medium text-[#b0b0b0] hover:bg-white/[0.1] hover:text-[#e8e8e8] transition-all duration-100"
+    : "btn btn-xs btn-ghost rounded-md px-1.5 py-1 border-0 font-medium text-[#3a3a3a] hover:bg-black/[0.07] hover:text-[#0a0a0a] transition-all duration-100";
+  const tbActiveClass = "!bg-primary/12 !text-primary font-semibold";
   const inputEmpty = !input.trim();
   useEffect(() => {
     if (inputEmpty) setCursorPosition(null);
@@ -527,6 +553,83 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     }, 0);
   };
 
+  const switchToTab = (tabId: string) => {
+    if (tabId === activeTabId) return;
+    tabSnapshotsRef.current.set(activeTabId, { input, inputFormatOverride, undoStack, undoIndex, output, parsedOutput, outputExt, outputLanguage, activeOperation, error, convertToFormat, typeLanguage, rightView });
+    const snap = tabSnapshotsRef.current.get(tabId) ?? { input: "", inputFormatOverride: null, undoStack: [""], undoIndex: 0, output: "", parsedOutput: null, outputExt: "json", outputLanguage: "json" as OutputLanguage, activeOperation: null, error: null, convertToFormat: "json" as FormatKind, typeLanguage: "typescript" as TypeTargetLanguage, rightView: "raw" as RightView };
+    historyLock.current = true;
+    setActiveTabId(tabId);
+    setInput(snap.input);
+    setInputFormatOverride(snap.inputFormatOverride);
+    setUndoStack(snap.undoStack);
+    setUndoIndex(snap.undoIndex);
+    setOutput(snap.output);
+    setParsedOutput(snap.parsedOutput);
+    setOutputExt(snap.outputExt);
+    setOutputLanguage(snap.outputLanguage);
+    setActiveOperation(snap.activeOperation);
+    setError(snap.error);
+    setValidationError(null);
+    setConvertToFormat(snap.convertToFormat);
+    setTypeLanguage(snap.typeLanguage);
+    setRightView(snap.rightView);
+    setTimeout(() => { historyLock.current = false; }, 0);
+  };
+
+  const addTab = () => {
+    tabSnapshotsRef.current.set(activeTabId, { input, inputFormatOverride, undoStack, undoIndex, output, parsedOutput, outputExt, outputLanguage, activeOperation, error, convertToFormat, typeLanguage, rightView });
+    const newId = `t${Date.now()}`;
+    tabCounterRef.current += 1;
+    setTabs((prev) => [...prev, { id: newId, label: `Tab ${tabCounterRef.current}` }]);
+    setActiveTabId(newId);
+    historyLock.current = true;
+    setInput("");
+    setInputFormatOverride(null);
+    setUndoStack([""]);
+    setUndoIndex(0);
+    setOutput("");
+    setParsedOutput(null);
+    setOutputExt("json");
+    setOutputLanguage("json");
+    setError(null);
+    setValidationError(null);
+    setActiveOperation(null);
+    setConvertToFormat("json");
+    setRightView("raw");
+    setTimeout(() => { historyLock.current = false; }, 0);
+  };
+
+  const closeTab = (tabId: string) => {
+    if (tabs.length <= 1) return;
+    const tabIdx = tabs.findIndex((t) => t.id === tabId);
+    tabSnapshotsRef.current.delete(tabId);
+    const newTabs = tabs.filter((t) => t.id !== tabId);
+    if (tabId === activeTabId) {
+      const nextTab = newTabs[Math.max(0, tabIdx - 1)];
+      const snap = tabSnapshotsRef.current.get(nextTab.id) ?? { input: "", inputFormatOverride: null, undoStack: [""], undoIndex: 0, output: "", parsedOutput: null, outputExt: "json", outputLanguage: "json" as OutputLanguage, activeOperation: null, error: null, convertToFormat: "json" as FormatKind, typeLanguage: "typescript" as TypeTargetLanguage, rightView: "raw" as RightView };
+      setTabs(newTabs);
+      setActiveTabId(nextTab.id);
+      historyLock.current = true;
+      setInput(snap.input);
+      setInputFormatOverride(snap.inputFormatOverride);
+      setUndoStack(snap.undoStack);
+      setUndoIndex(snap.undoIndex);
+      setOutput(snap.output);
+      setParsedOutput(snap.parsedOutput);
+      setOutputExt(snap.outputExt);
+      setOutputLanguage(snap.outputLanguage);
+      setActiveOperation(snap.activeOperation);
+      setError(snap.error);
+      setValidationError(null);
+      setConvertToFormat(snap.convertToFormat);
+      setTypeLanguage(snap.typeLanguage);
+      setRightView(snap.rightView);
+      setTimeout(() => { historyLock.current = false; }, 0);
+    } else {
+      setTabs(newTabs);
+    }
+  };
+
   useEffect(() => {
     try {
       const s = localStorage.getItem("formaty-session");
@@ -553,8 +656,8 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     const style = document.getElementById("formaty-theme-inline");
     if (style) {
       style.textContent = resolvedTheme === "dark"
-        ? "html,body{--workspace-background:#0d0d0d;--workspace-panel:#141414;--workspace-border:#252525;--workspace-text:#ececec;--workspace-text-muted:#a3a3a3}"
-        : "html,body{--workspace-background:#f8f8f8;--workspace-panel:#ffffff;--workspace-border:#e8e8e8;--workspace-text:#0a0a0a;--workspace-text-muted:#545454}";
+        ? "html,body{--workspace-background:#0d0d0d;--workspace-panel:#141414;--workspace-border:#282828;--workspace-text:#f0f0f0;--workspace-text-muted:#9a9a9a}"
+        : "html,body{--workspace-background:#f5f5f5;--workspace-panel:#ffffff;--workspace-border:#dedede;--workspace-text:#0a0a0a;--workspace-text-muted:#4a4a4a}";
     }
   }, [resolvedTheme, themeSynced]);
 
@@ -723,7 +826,12 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
         viewAsMenu?: boolean;
         mobileShowOutput?: boolean;
         activeOperation?: OperationAction;
-      pinnedItems?: string[];
+        pinnedItems?: string[];
+        tabs?: Tab[];
+        activeTabId?: string;
+        tabCounter?: number;
+        tabSnapshots?: Record<string, unknown>;
+        showTabs?: boolean;
       };
     if (data.input) setInput(data.input);
     if (data.output) setOutput(data.output);
@@ -736,8 +844,28 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
       if (typeof data.liveTransform === "boolean") setLiveTransform(data.liveTransform);
       if (typeof data.viewAsMenu === "boolean") setViewAsMenu(data.viewAsMenu);
       if (typeof data.mobileShowOutput === "boolean") setMobileShowOutput(data.mobileShowOutput);
+      if (typeof data.showTabs === "boolean") setShowTabs(data.showTabs);
       if (data.activeOperation) setActiveOperation(data.activeOperation);
       if (Array.isArray(data.pinnedItems)) setPinnedItems(new Set(data.pinnedItems));
+      // Restore tabs
+      if (Array.isArray(data.tabs) && data.tabs.length > 0) {
+        setTabs(data.tabs);
+        if (typeof data.tabCounter === "number") tabCounterRef.current = data.tabCounter;
+        if (data.activeTabId && data.tabs.some((t: Tab) => t.id === data.activeTabId)) {
+          setActiveTabId(data.activeTabId);
+        } else {
+          setActiveTabId(data.tabs[0].id);
+        }
+        if (data.tabSnapshots && typeof data.tabSnapshots === "object") {
+          const map = new Map<string, typeof tabSnapshotsRef extends React.MutableRefObject<Map<string, infer V>> ? V : never>();
+          for (const [k, v] of Object.entries(data.tabSnapshots)) {
+            if (v && typeof v === "object") {
+              map.set(k, v as typeof map extends Map<string, infer V> ? V : never);
+            }
+          }
+          tabSnapshotsRef.current = map;
+        }
+      }
       sessionRestoredRef.current = true;
       if (data.formatOptions) {
         const nextIndentation = Number(data.formatOptions.indentation);
@@ -758,6 +886,11 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
       skipNextPersistRef.current = false;
       return;
     }
+    // Build full tab snapshots for persistence: save current tab state too
+    const allSnapshots: Record<string, unknown> = {};
+    tabSnapshotsRef.current.forEach((snap, id) => { allSnapshots[id] = snap; });
+    // Overwrite current tab with live state
+    allSnapshots[activeTabId] = { input, inputFormatOverride, undoStack: undoStack.slice(-20), undoIndex: Math.min(undoIndex, 19), output, parsedOutput: null, outputExt, outputLanguage, activeOperation, error: null, convertToFormat, typeLanguage, rightView };
     localStorage.setItem(
       "formaty-session",
       JSON.stringify({
@@ -775,9 +908,14 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
         mobileShowOutput,
         activeOperation,
         pinnedItems: Array.from(pinnedItems),
+        tabs,
+        activeTabId,
+        showTabs,
+        tabCounter: tabCounterRef.current,
+        tabSnapshots: allSnapshots,
       }),
     );
-  }, [input, output, split, themeMode, typeLanguage, rightView, formatOptions, convertToFormat, liveTransform, editorFontSize, viewAsMenu, mobileShowOutput, activeOperation, pinnedItems]);
+  }, [input, output, split, themeMode, typeLanguage, rightView, formatOptions, convertToFormat, liveTransform, editorFontSize, viewAsMenu, mobileShowOutput, activeOperation, pinnedItems, tabs, activeTabId, inputFormatOverride, undoStack, undoIndex, outputExt, outputLanguage]);
 
   useEffect(() => {
     if (!output.trim()) {
@@ -966,7 +1104,28 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   }, [isResizing]);
 
   useEffect(() => {
-    if (!modalKind) return;
+    if (!isSplitResizing) return;
+    const onMouseMove = (event: MouseEvent) => {
+      const container = splitContainerInputRef.current;
+      if (!container) return;
+      const rect = container.getBoundingClientRect();
+      const next = ((event.clientX - rect.left) / rect.width) * 100;
+      setSplitRatio(Math.max(20, Math.min(80, Math.round(next))));
+    };
+    const onMouseUp = () => setIsSplitResizing(false);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+    return () => {
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+  }, [isSplitResizing]);
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setModalKind(null);
@@ -1478,12 +1637,22 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
         diffEditorRef.current.pasteIntoFocusedEditor(text);
         return;
       }
-      setInput(text);
-      pushHistory(text);
+      const fmt = detectFormat(text);
+      let finalText = text;
+      if (autoFormatOnPaste && text.trim() && fmt !== "curl") {
+        try {
+          const json = await run<JsonValue>("parseFormat", { input: text, format: fmt });
+          finalText = await convertJsonToOutput(json, { toFormat: fmt as FormatKind });
+        } catch {
+          finalText = text;
+        }
+      }
+      setInput(finalText);
+      pushHistory(finalText);
       setInputFormatOverride(null);
       setError(null);
       setValidationError(null);
-      parseOnly(text, detectFormat(text));
+      parseOnly(finalText, fmt);
       setFocusedPane("output");
       if (!isDesktopLayout) setMobileShowOutput(true);
     } catch {
@@ -1638,8 +1807,19 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     { id: "theme-light",  label: "Theme: Light",  category: "Theme", badge: themeMode === "light"  ? "active" : undefined, action: () => setThemeMode("light")  },
     { id: "theme-dark",   label: "Theme: Dark",   category: "Theme", badge: themeMode === "dark"   ? "active" : undefined, action: () => setThemeMode("dark")   },
     { id: "theme-system", label: "Theme: System", category: "Theme", badge: themeMode === "system" ? "active" : undefined, action: () => setThemeMode("system") },
+    // Editor: fold / unfold
+    { id: "fold-all",   label: "Fold all  (collapse top-level keys)", category: "Workspace", keywords: ["fold", "collapse", "all", "keys"], disabled: inputEmpty, action: () => inputEditorApiRef.current?.collapseAll() },
+    { id: "unfold-all", label: "Unfold all (expand top-level keys)",  category: "Workspace", keywords: ["unfold", "expand", "all", "keys"],  disabled: inputEmpty, action: () => inputEditorApiRef.current?.expandAll()   },
+    // Split input
+    { id: "split-input", label: splitInputOpen ? "Close split input pane" : "Open split input pane", category: "Workspace", keywords: ["split", "input", "two", "pane", "side by side"], badge: splitInputOpen ? "on" : undefined, action: () => setSplitInputOpen((v) => !v) },
+    // Tabs
+    { id: "tab-toggle", label: showTabs ? "Disable multi-tab mode" : "Enable multi-tab mode", category: "Workspace", keywords: ["tab", "tabs", "multi", "mode", "enable", "disable"], badge: showTabs ? "on" : undefined, action: () => setShowTabs((v) => !v) },
+    { id: "tab-new",   label: "New tab",           category: "Workspace", keywords: ["tab", "new", "document", "add"], disabled: !showTabs, action: addTab },
+    { id: "tab-close", label: "Close current tab", category: "Workspace", keywords: ["tab", "close", "remove"], disabled: !showTabs || tabs.length <= 1, action: () => closeTab(activeTabId) },
+    // Auto-format on paste
+    { id: "auto-fmt-paste", label: autoFormatOnPaste ? "Auto-format on paste: On (turn off)" : "Auto-format on paste: Off (turn on)", category: "Settings", keywords: ["auto", "format", "paste", "beautify", "pretty"], badge: autoFormatOnPaste ? "on" : undefined, action: () => setAutoFormatOnPaste((v) => !v) },
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  ], [inputEmpty, showBusy, convertToFormat, rightView, parsedOutput, typeLanguage, activeOperation, output, themeMode, editorFontSize, isOutputMaximized, isWindowFullscreen, toggleWindowFullscreen, formatOptions, liveTransform, viewAsMenu, canUndo, canRedo, lineWrap, diffSideBySide, csvDelimiter, sharedLinkUrl, pinnedItems, undoStack.length]);
+  ], [inputEmpty, showBusy, convertToFormat, rightView, parsedOutput, typeLanguage, activeOperation, output, themeMode, editorFontSize, isOutputMaximized, isWindowFullscreen, toggleWindowFullscreen, formatOptions, liveTransform, viewAsMenu, canUndo, canRedo, lineWrap, diffSideBySide, csvDelimiter, sharedLinkUrl, pinnedItems, undoStack.length, tabs.length, activeTabId, splitInputOpen, autoFormatOnPaste, showTabs]);
 
   return (
     <main
@@ -1690,7 +1870,9 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
       >
         {!isOutputMaximized && (!isDesktopLayout ? !mobileShowOutput : true) && (isDesktopLayout || output.trim() || !inputEmpty) && (
         <div
-          className={`flex min-h-0 flex-col overflow-hidden bg-[var(--workspace-background)] transition-opacity duration-200 ${
+          className={`flex min-h-0 overflow-hidden bg-[var(--workspace-background)] transition-opacity duration-200 ${
+            isDesktopLayout && showTabs ? "flex-row" : "flex-col"
+          } ${
             isDesktopLayout ? "shrink-0" : "min-h-0 flex-1"
           } ${isDesktopLayout && focusedPane === "output" ? "opacity-70" : "opacity-100"}`}
           style={isDesktopLayout ? { width: `${split}%`, minWidth: 160 } : undefined}
@@ -1705,6 +1887,47 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
               <ArrowRightCircleIcon className="h-4 w-4 shrink-0" />
             </button>
           )}
+          {isDesktopLayout && showTabs && (
+            <div className="flex w-7 shrink-0 flex-col overflow-y-auto border-r border-[var(--workspace-border)] bg-[var(--workspace-panel)] pb-1 pt-1">
+              {tabs.map((tab) => (
+                <div
+                  key={tab.id}
+                  role="tab"
+                  tabIndex={0}
+                  title={tab.label}
+                  className={`group relative flex cursor-pointer items-center justify-center py-2.5 transition-all duration-150 ${activeTabId === tab.id ? "bg-primary/10 text-primary" : "text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)]/60 hover:text-[var(--workspace-text)]"}`}
+                  onClick={() => switchToTab(tab.id)}
+                  onKeyDown={(e) => e.key === "Enter" && switchToTab(tab.id)}
+                >
+                  {activeTabId === tab.id && (
+                    <span className="absolute inset-y-1 left-0 w-[2px] rounded-full bg-primary" />
+                  )}
+                  <span className="truncate font-mono text-[10px] font-semibold tracking-wider" style={{ writingMode: "vertical-rl", textOrientation: "mixed", maxHeight: 72 }}>
+                    {tab.label}
+                  </span>
+                  {tabs.length > 1 && (
+                    <button
+                      type="button"
+                      className="absolute -right-0.5 -top-0.5 hidden h-3.5 w-3.5 items-center justify-center rounded-full bg-[var(--workspace-border)] text-[var(--workspace-text-muted)] group-hover:flex hover:bg-red-500/20 hover:text-red-400"
+                      onClick={(e) => { e.stopPropagation(); closeTab(tab.id); }}
+                      aria-label={`Close ${tab.label}`}
+                    >
+                      <XMarkIcon className="h-2 w-2" />
+                    </button>
+                  )}
+                </div>
+              ))}
+              <button
+                type="button"
+                className="mt-0.5 flex items-center justify-center py-2 text-[var(--workspace-text-muted)] transition-all duration-100 hover:bg-primary/5 hover:text-primary"
+                onClick={addTab}
+                title="New tab"
+              >
+                <PlusIcon className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <div
             className={`flex shrink-0 flex-wrap items-center gap-0.5 border-b px-1.5 py-1 text-xs sm:flex-nowrap sm:overflow-x-auto ${inputEditorBgClass} text-[var(--workspace-text-muted)]`}
           >
@@ -1785,20 +2008,20 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
               side="bottom"
               align="start"
               rootClassName="shrink-0"
-              contentClassName={`dropdown-content z-[100] min-w-[7rem] p-1 shadow-xl rounded-lg border ${toolbarBorderClass} ${dropdownPanelClass}`}
+              contentClassName={`dropdown-content z-[100] min-w-[7rem] p-1.5 shadow-2xl rounded-xl border border-[var(--workspace-border)]/50 ${dropdownPanelClass}`}
               trigger={
                 <div className={`${linkBtnClass} flex h-7 min-h-7 shrink-0 items-center gap-1 ${inputFormatOpen ? "text-primary" : ""}`} title="Input format">
-                  <span className="truncate">{getInputFormatLabel(resolvedInputFormat)}</span>
+                  <span className="truncate font-medium">{getInputFormatLabel(resolvedInputFormat)}</span>
                   <ChevronDownIcon className="h-3 w-3 shrink-0" />
                 </div>
               }
             >
-              <div className="flex flex-wrap gap-0.5 p-1" onClick={(e) => e.stopPropagation()}>
+              <div className="flex flex-col gap-0.5 p-0.5" onClick={(e) => e.stopPropagation()}>
                     {INPUT_FORMAT_KINDS.map((fmt) => (
                   <button
                     key={fmt}
                     type="button"
-                    className={`${linkBtnClass} h-6 min-h-6 px-1.5 ${resolvedInputFormat === fmt ? "text-primary" : ""}`}
+                    className={`${linkBtnClass} h-7 min-h-7 px-2.5 text-[11px] font-medium w-full text-left ${resolvedInputFormat === fmt ? "!text-primary !bg-primary/10" : ""}`}
                     onClick={() => {
                       onInputFormatChange(fmt);
                       setInputFormatOpen(false);
@@ -1810,61 +2033,126 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
               </div>
             </Dropdown>
             </div>
+            <div className="flex shrink-0 items-center gap-1 hidden">
+              <button
+                type="button"
+                title={splitInputOpen ? "Close split pane" : "Split input pane"}
+                className={`${linkBtnClass} btn-square h-7 min-h-7 w-7 shrink-0 ${splitInputOpen ? "text-primary" : ""}`}
+                onClick={() => setSplitInputOpen((v) => !v)}
+              >
+                <ViewColumnsIcon className="h-3.5 w-3.5" />
+              </button>
+            </div>
           </div>
-          <div
-            className="relative min-h-0 flex-1 overflow-hidden cursor-text"
-            onClick={() => setFocusedPane("input")}
-            onMouseEnter={() => setFocusedPane("input")}
-          >
-            <JsonEditor
-              value={input}
-              onChange={(next) => {
-                setInput(next);
-                pushHistory(next);
-                setFocusedPane("input");
-              }}
-              className="h-full"
-              language={resolvedInputFormat === "toml" || resolvedInputFormat === "csv" || resolvedInputFormat === "curl" ? "plaintext" : resolvedInputFormat}
-              monacoTheme={monacoTheme}
-              panelTone="input"
-              fontSize={editorFontSize}
-              wordWrap={lineWrap ? "on" : "off"}
-              onEditorMount={(api) => { inputEditorApiRef.current = api; }}
-              onCursorChange={(line, column) => setCursorPosition({ line, column })}
-            />
-            {inputEmpty && (
-              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3 p-8 text-center select-none">
-                <div className="rounded-xl border border-dashed border-[var(--workspace-border)] bg-[var(--workspace-panel)]/50 px-6 py-4 backdrop-blur-sm">
-                  <div className="mb-2 flex flex-wrap items-center justify-center gap-1.5">
-                    {["JSON", "XML", "YAML", "TOML", "CSV", "cURL"].map((fmt) => (
-                      <span
-                        key={fmt}
-                        className="rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-2 py-0.5 font-mono text-[11px] text-[var(--workspace-text-muted)]"
-                      >
-                        {fmt}
-                      </span>
-                    ))}
-                  </div>
-                  <p className="text-sm text-[var(--workspace-text-muted)]">
-                    Paste or drop your data{" "}
-                    <kbd className="rounded border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-1.5 py-0.5 font-mono text-[10px]">
-                      ⌘V
-                    </kbd>
-                  </p>
-                </div>
+          {splitInputOpen && isDesktopLayout ? (
+            <div
+              ref={splitContainerInputRef}
+              className="flex min-h-0 flex-1 overflow-hidden"
+              onMouseEnter={() => setFocusedPane("input")}
+            >
+              <div
+                className="relative min-h-0 overflow-hidden cursor-text shrink-0"
+                style={{ width: `${splitRatio}%` }}
+                onClick={() => setFocusedPane("input")}
+              >
+                <JsonEditor
+                  value={input}
+                  onChange={(next) => { setInput(next); pushHistory(next); setFocusedPane("input"); }}
+                  className="h-full"
+                  language={resolvedInputFormat === "toml" || resolvedInputFormat === "csv" || resolvedInputFormat === "curl" ? "plaintext" : resolvedInputFormat}
+                  monacoTheme={monacoTheme}
+                  panelTone="input"
+                  fontSize={editorFontSize}
+                  wordWrap={lineWrap ? "on" : "off"}
+                  onEditorMount={(api) => { inputEditorApiRef.current = api; }}
+                  onCursorChange={(line, column) => setCursorPosition({ line, column })}
+                  placeholder="Left input…"
+                />
               </div>
-            )}
-          </div>
+              <div
+                role="separator"
+                aria-orientation="vertical"
+                className="group relative flex shrink-0 cursor-col-resize justify-center"
+                onMouseDown={() => setIsSplitResizing(true)}
+              >
+                <div className="absolute inset-y-0 left-1/2 w-px -translate-x-px bg-[var(--workspace-border)] transition-all duration-200 group-hover:w-[2px] group-hover:bg-gradient-to-b group-hover:from-transparent group-hover:via-primary group-hover:to-transparent group-hover:opacity-100 group-hover:[box-shadow:0_0_8px_rgba(124,58,237,0.4)]" />
+              </div>
+              <div
+                className="relative min-h-0 flex-1 overflow-hidden cursor-text"
+                onClick={() => setFocusedPane("input")}
+              >
+                <JsonEditor
+                  value={splitInput2}
+                  onChange={setSplitInput2}
+                  className="h-full"
+                  language="json"
+                  monacoTheme={monacoTheme}
+                  panelTone="input"
+                  fontSize={editorFontSize}
+                  wordWrap={lineWrap ? "on" : "off"}
+                  onEditorMount={(api) => { splitInput2ApiRef.current = api; }}
+                  placeholder="Right input…"
+                />
+              </div>
+            </div>
+          ) : (
+            <div
+              className="relative min-h-0 flex-1 overflow-hidden cursor-text"
+              onClick={() => setFocusedPane("input")}
+              onMouseEnter={() => setFocusedPane("input")}
+            >
+              <JsonEditor
+                value={input}
+                onChange={(next) => {
+                  setInput(next);
+                  pushHistory(next);
+                  setFocusedPane("input");
+                }}
+                className="h-full"
+                language={resolvedInputFormat === "toml" || resolvedInputFormat === "csv" || resolvedInputFormat === "curl" ? "plaintext" : resolvedInputFormat}
+                monacoTheme={monacoTheme}
+                panelTone="input"
+                fontSize={editorFontSize}
+                wordWrap={lineWrap ? "on" : "off"}
+                onEditorMount={(api) => { inputEditorApiRef.current = api; }}
+                onCursorChange={(line, column) => setCursorPosition({ line, column })}
+              />
+              {inputEmpty && (
+                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3 p-8 text-center select-none">
+                  <div className="rounded-xl border border-dashed border-[var(--workspace-border)] bg-[var(--workspace-panel)]/50 px-6 py-4 backdrop-blur-sm">
+                    <div className="mb-2 flex flex-wrap items-center justify-center gap-1.5">
+                      {["JSON", "XML", "YAML", "TOML", "CSV", "cURL"].map((fmt) => (
+                        <span
+                          key={fmt}
+                          className="rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-2 py-0.5 font-mono text-[11px] text-[var(--workspace-text-muted)]"
+                        >
+                          {fmt}
+                        </span>
+                      ))}
+                    </div>
+                    <p className="text-sm text-[var(--workspace-text-muted)]">
+                      Paste or drop your data{" "}
+                      <kbd className="rounded border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-1.5 py-0.5 font-mono text-[10px]">
+                        ⌘V
+                      </kbd>
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
         </div>
         )}
         {isDesktopLayout && !isOutputMaximized && (isDesktopLayout || output.trim() || !inputEmpty) && (
           <div
             role="separator"
             aria-orientation="vertical"
-            className="group relative flex shrink-0 cursor-col-resize justify-center transition-colors"
+            className="group relative flex shrink-0 cursor-col-resize items-stretch justify-center"
+            style={{ width: 9, marginLeft: -4, marginRight: -4, zIndex: 10 }}
             onMouseDown={() => setIsResizing(true)}
           >
-            <div className="absolute inset-y-0 left-1/2 w-px -translate-x-px bg-[var(--workspace-border)] transition-all duration-200 group-hover:w-[2px] group-hover:bg-gradient-to-b group-hover:from-transparent group-hover:via-primary group-hover:to-transparent group-hover:opacity-100 group-hover:[box-shadow:0_0_8px_rgba(124,58,237,0.4)]" />
+            <div className="pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-[var(--workspace-border)] transition-all duration-150 group-hover:w-[3px] group-hover:bg-primary/60 group-hover:shadow-[0_0_6px_rgba(124,58,237,0.35)] group-active:w-[3px] group-active:bg-primary group-active:shadow-[0_0_8px_rgba(124,58,237,0.5)]" />
           </div>
         )}
         <div
@@ -1893,197 +2181,203 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
               side="bottom"
               align="start"
               rootClassName="shrink-0"
-              contentClassName={`dropdown-content card card-sm z-[100] w-64 sm:w-85 max-w-[90vw] shadow-xl border border-[var(--workspace-border)] ${dropdownPanelClass}`}
+              contentClassName={`dropdown-content z-[100] w-72 sm:w-[22rem] max-w-[90vw] shadow-2xl rounded-xl border border-[var(--workspace-border)]/50 ${dropdownPanelClass}`}
               trigger={
                 <div className={`${linkBtnClass} flex h-7 min-h-7 shrink-0 items-center justify-center ${transformConfigOpen ? "text-primary" : ""}`} title="Settings">
                   <Cog6ToothIcon className="h-3.5 w-3.5" />
                 </div>
               }
             >
-              <div className="card-body p-3 text-xs max-h-[85vh] overflow-y-auto space-y-3" onClick={(e) => e.stopPropagation()}>
-                <label className="flex cursor-pointer items-center gap-2 pb-2 border-b border-[var(--workspace-border)]">
+              <div className="p-3 text-xs max-h-[85vh] overflow-y-auto space-y-3" onClick={(e) => e.stopPropagation()}>
+                <label className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-2 transition-colors hover:bg-primary/5">
                   <input type="checkbox" className="toggle toggle-sm toggle-primary" checked={viewAsMenu} onChange={(e) => setViewAsMenu(e.target.checked)} />
                   <span className="text-xs font-medium text-[var(--workspace-text)]">View as Menu items</span>
                 </label>
                 {viewAsMenu ? (
-                  <p className="text-xs opacity-70 py-2 text-[var(--workspace-text-muted)]">Options are now in the menu bar above. Uncheck to use the settings panel.</p>
+                  <p className="text-xs opacity-70 py-2 px-2 text-[var(--workspace-text-muted)]">Options are now in the menu bar above. Uncheck to use the settings panel.</p>
                 ) : (
                   <>
                 <div className={settingsSectionClass}>
                   <p className={settingsLabelClass}>Output format</p>
-                <div className="flex flex-wrap gap-1">
+                <div className="flex flex-wrap gap-0.5">
                   {FORMAT_KINDS.map((fmt) => (
                     <div key={fmt} className="flex items-center">
-                      <button type="button" disabled={inputEmpty} className={`${linkBtnClass} h-6 min-h-6 disabled:opacity-50 ${convertToFormat === fmt ? "text-primary" : ""}`} onClick={() => { setFocusedPane("output"); runConvert(fmt); }}>
+                      <button type="button" disabled={inputEmpty} className={`${linkBtnClass} h-7 min-h-7 px-2 text-[11px] font-medium disabled:opacity-40 ${convertToFormat === fmt ? "!text-primary !bg-primary/10" : ""}`} onClick={() => { setFocusedPane("output"); runConvert(fmt); }}>
                         {FORMAT_LABELS[fmt]}
                       </button>
-                      <button type="button" className={`btn btn-ghost btn-xs btn-square h-5 w-5 p-0 rounded ${pinnedItems.has(`fmt:${fmt}`) ? "text-primary" : "opacity-40"}`} onClick={(e) => { e.stopPropagation(); setPinnedItems((s) => { const n = new Set(s); n.has(`fmt:${fmt}`) ? n.delete(`fmt:${fmt}`) : n.add(`fmt:${fmt}`); return n; }); }} title={pinnedItems.has(`fmt:${fmt}`) ? "Unpin" : "Pin to toolbar"}>
-                        <StarIcon className={`h-3.5 w-3.5 ${pinnedItems.has(`fmt:${fmt}`) ? "text-primary" : "opacity-40"}`} />
+                      <button type="button" className={`btn btn-ghost btn-xs btn-square h-5 w-5 p-0 rounded-full transition-all ${pinnedItems.has(`fmt:${fmt}`) ? "text-primary scale-110" : "opacity-40 hover:opacity-70"}`} onClick={(e) => { e.stopPropagation(); setPinnedItems((s) => { const n = new Set(s); n.has(`fmt:${fmt}`) ? n.delete(`fmt:${fmt}`) : n.add(`fmt:${fmt}`); return n; }); }} title={pinnedItems.has(`fmt:${fmt}`) ? "Unpin" : "Pin to toolbar"}>
+                        <StarIcon className="h-3 w-3" />
                       </button>
                     </div>
                   ))}
                 </div>
                 </div>
-                <div className={`border-t border-[var(--workspace-border)] pt-3 ${settingsSectionClass}`}>
+                <div className="h-px bg-gradient-to-r from-transparent via-[var(--workspace-border)] to-transparent" />
+                <div className={settingsSectionClass}>
                   <p className={settingsLabelClass}>View</p>
-                  <div className="flex flex-wrap gap-1">
+                  <div className="flex flex-wrap gap-0.5">
                     {(["raw", "tree", "graph", "query", "table"] as const).map((view) => (
                       <div key={view} className="flex items-center">
-                        <button type="button" disabled={inputEmpty || ((view === "tree" || view === "graph" || view === "query" || view === "table") && !parsedOutput)} className={`${linkBtnClass} h-6 min-h-6 disabled:opacity-50 ${rightView === view ? "text-primary" : ""}`} onClick={() => { setRightView(view); setFocusedPane("output"); }}>
+                        <button type="button" disabled={inputEmpty || ((view === "tree" || view === "graph" || view === "query" || view === "table") && !parsedOutput)} className={`${linkBtnClass} h-7 min-h-7 px-2 text-[11px] font-medium disabled:opacity-40 ${rightView === view ? "!text-primary !bg-primary/10" : ""}`} onClick={() => { setRightView(view); setFocusedPane("output"); }}>
                           {view[0].toUpperCase() + view.slice(1)}
                         </button>
-                        <button type="button" className={`btn btn-ghost btn-xs btn-square h-5 w-5 p-0 rounded ${pinnedItems.has(`view:${view}`) ? "text-primary" : "opacity-40"}`} onClick={(e) => { e.stopPropagation(); setPinnedItems((s) => { const n = new Set(s); n.has(`view:${view}`) ? n.delete(`view:${view}`) : n.add(`view:${view}`); return n; }); }} title={pinnedItems.has(`view:${view}`) ? "Unpin" : "Pin to toolbar"}>
-                          <StarIcon className={`h-3.5 w-3.5 ${pinnedItems.has(`view:${view}`) ? "text-primary" : "opacity-40"}`} />
+                        <button type="button" className={`btn btn-ghost btn-xs btn-square h-5 w-5 p-0 rounded-full transition-all ${pinnedItems.has(`view:${view}`) ? "text-primary scale-110" : "opacity-40 hover:opacity-70"}`} onClick={(e) => { e.stopPropagation(); setPinnedItems((s) => { const n = new Set(s); n.has(`view:${view}`) ? n.delete(`view:${view}`) : n.add(`view:${view}`); return n; }); }} title={pinnedItems.has(`view:${view}`) ? "Unpin" : "Pin to toolbar"}>
+                          <StarIcon className="h-3 w-3" />
                         </button>
                       </div>
                     ))}
                   </div>
                 </div>
-                <div className={`border-t border-[var(--workspace-border)] pt-3 ${settingsSectionClass}`}>
+                <div className="h-px bg-gradient-to-r from-transparent via-[var(--workspace-border)] to-transparent" />
+                <div className={settingsSectionClass}>
                   <p className={settingsLabelClass}>Actions</p>
-                  <div className="flex flex-wrap gap-1">
+                  <div className="flex flex-wrap gap-0.5">
                     {OPERATION_ACTIONS.map(([label, action]) => (
                       <div key={action} className="flex items-center">
-                        <button type="button" disabled={showBusy || (action !== "diff" && inputEmpty)} className={`${linkBtnClass} h-6 min-h-6 disabled:opacity-50 ${activeOperation === action ? "text-primary" : ""}`} onClick={() => runOperation(action)}>{label}</button>
-                        <button type="button" className={`btn btn-ghost btn-xs btn-square h-5 w-5 p-0 rounded ${pinnedItems.has(`action:${action}`) ? "text-primary" : "opacity-40"}`} onClick={(e) => { e.stopPropagation(); setPinnedItems((s) => { const n = new Set(s); n.has(`action:${action}`) ? n.delete(`action:${action}`) : n.add(`action:${action}`); return n; }); }} title={pinnedItems.has(`action:${action}`) ? "Unpin" : "Pin to toolbar"}>
-                          <StarIcon className={`h-3.5 w-3.5 ${pinnedItems.has(`action:${action}`) ? "text-primary" : "opacity-40"}`} />
+                        <button type="button" disabled={showBusy || (action !== "diff" && inputEmpty)} className={`${linkBtnClass} h-7 min-h-7 px-2 text-[11px] font-medium disabled:opacity-40 ${activeOperation === action ? "!text-primary !bg-primary/10" : ""}`} onClick={() => runOperation(action)}>{label}</button>
+                        <button type="button" className={`btn btn-ghost btn-xs btn-square h-5 w-5 p-0 rounded-full transition-all ${pinnedItems.has(`action:${action}`) ? "text-primary scale-110" : "opacity-40 hover:opacity-70"}`} onClick={(e) => { e.stopPropagation(); setPinnedItems((s) => { const n = new Set(s); n.has(`action:${action}`) ? n.delete(`action:${action}`) : n.add(`action:${action}`); return n; }); }} title={pinnedItems.has(`action:${action}`) ? "Unpin" : "Pin to toolbar"}>
+                          <StarIcon className="h-3 w-3" />
                         </button>
                       </div>
                     ))}
                   </div>
                 </div>
-                <div className={`border-t border-[var(--workspace-border)] pt-3 flex flex-wrap gap-4 sm:gap-6`}>
+                <div className="h-px bg-gradient-to-r from-transparent via-[var(--workspace-border)] to-transparent" />
+                <div className="grid grid-cols-2 gap-4">
                   <div className="flex flex-col gap-1.5">
                     <div className="flex items-center justify-between gap-1">
                       <p className={settingsLabelClass}>Font size</p>
-                      <button type="button" className={`btn btn-ghost btn-xs btn-square h-5 w-5 p-0 rounded ${pinnedItems.has("fontSize") ? "text-primary" : "opacity-40"}`} onClick={(e) => { e.stopPropagation(); setPinnedItems((s) => { const n = new Set(s); n.has("fontSize") ? n.delete("fontSize") : n.add("fontSize"); return n; }); }} title={pinnedItems.has("fontSize") ? "Unpin" : "Pin to toolbar"}><StarIcon className="h-3.5 w-3.5" /></button>
+                      <button type="button" className={`btn btn-ghost btn-xs btn-square h-5 w-5 p-0 rounded-full transition-all ${pinnedItems.has("fontSize") ? "text-primary scale-110" : "opacity-40 hover:opacity-70"}`} onClick={(e) => { e.stopPropagation(); setPinnedItems((s) => { const n = new Set(s); n.has("fontSize") ? n.delete("fontSize") : n.add("fontSize"); return n; }); }} title={pinnedItems.has("fontSize") ? "Unpin" : "Pin to toolbar"}><StarIcon className="h-3 w-3" /></button>
                     </div>
                     <div className={settingsBtnGroupClass}>
                       <button type="button" aria-label="Decrease font size" className={settingsStepBtnClass} onClick={() => setEditorFontSize((s) => Math.max(10, s - 1))}><MinusIcon className="h-3.5 w-3.5" aria-hidden /></button>
-                      <span className="flex shrink-0 items-center justify-center px-2 py-0.5 text-xs tabular-nums text-[var(--workspace-text)] min-w-[2.25rem] text-center">{editorFontSize}</span>
+                      <span className={`flex shrink-0 items-center justify-center px-2 py-0.5 text-xs tabular-nums min-w-[2.25rem] text-center font-medium ${isDark ? "text-white/90" : "text-[var(--workspace-text)]"}`}>{editorFontSize}</span>
                       <button type="button" aria-label="Increase font size" className={settingsStepBtnClass} onClick={() => setEditorFontSize((s) => Math.min(24, s + 1))}><PlusIcon className="h-3.5 w-3.5" aria-hidden /></button>
-                      <button type="button" aria-label="Reset font size" className={settingsStepBtnClass} onClick={() => setEditorFontSize(13)}><ArrowPathIcon className="h-3.5 w-3.5" aria-hidden /></button>
+                      <button type="button" aria-label="Reset font size" className={settingsStepBtnClass} onClick={() => setEditorFontSize(13)}><ArrowPathIcon className="h-3 w-3" aria-hidden /></button>
                     </div>
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <div className="flex items-center justify-between gap-1">
                       <p className={settingsLabelClass}>Indent</p>
-                      <button type="button" className={`btn btn-ghost btn-xs btn-square h-5 w-5 p-0 rounded ${pinnedItems.has("indent") ? "text-primary" : "opacity-40"}`} onClick={(e) => { e.stopPropagation(); setPinnedItems((s) => { const n = new Set(s); n.has("indent") ? n.delete("indent") : n.add("indent"); return n; }); }} title={pinnedItems.has("indent") ? "Unpin" : "Pin to toolbar"}><StarIcon className="h-3.5 w-3.5" /></button>
+                      <button type="button" className={`btn btn-ghost btn-xs btn-square h-5 w-5 p-0 rounded-full transition-all ${pinnedItems.has("indent") ? "text-primary scale-110" : "opacity-40 hover:opacity-70"}`} onClick={(e) => { e.stopPropagation(); setPinnedItems((s) => { const n = new Set(s); n.has("indent") ? n.delete("indent") : n.add("indent"); return n; }); }} title={pinnedItems.has("indent") ? "Unpin" : "Pin to toolbar"}><StarIcon className="h-3 w-3" /></button>
                     </div>
                     <div className={settingsBtnGroupClass}>
                       <button type="button" aria-label="Decrease indent" className={settingsStepBtnClass} onClick={() => { const v = Math.max(0, formatOptions.indentation - 1); applyFormatWithOptions({ ...formatOptions, indentation: v }); }}><MinusIcon className="h-3.5 w-3.5" aria-hidden /></button>
-                      <span className="flex shrink-0 items-center justify-center px-2 py-0.5 text-xs tabular-nums text-[var(--workspace-text)] min-w-[2.25rem] text-center">{formatOptions.indentation}</span>
+                      <span className={`flex shrink-0 items-center justify-center px-2 py-0.5 text-xs tabular-nums min-w-[2.25rem] text-center font-medium ${isDark ? "text-white/90" : "text-[var(--workspace-text)]"}`}>{formatOptions.indentation}</span>
                       <button type="button" aria-label="Increase indent" className={settingsStepBtnClass} onClick={() => { const v = Math.min(10, formatOptions.indentation + 1); applyFormatWithOptions({ ...formatOptions, indentation: v }); }}><PlusIcon className="h-3.5 w-3.5" aria-hidden /></button>
-                      <button type="button" aria-label="Reset indent" className={settingsStepBtnClass} onClick={() => applyFormatWithOptions({ ...formatOptions, indentation: 2 })}><ArrowPathIcon className="h-3.5 w-3.5" aria-hidden /></button>
+                      <button type="button" aria-label="Reset indent" className={settingsStepBtnClass} onClick={() => applyFormatWithOptions({ ...formatOptions, indentation: 2 })}><ArrowPathIcon className="h-3 w-3" aria-hidden /></button>
                     </div>
                   </div>
                 </div>
-                <div className={`border-t border-[var(--workspace-border)] pt-3 flex flex-wrap items-center gap-3 sm:gap-4`}>
+                <div className="h-px bg-gradient-to-r from-transparent via-[var(--workspace-border)] to-transparent" />
+                <div className="grid grid-cols-2 gap-4">
                   <div className="flex flex-col gap-1.5">
                     <p className={settingsLabelClass}>Quote style</p>
-                    <div className="flex flex-wrap gap-1">
+                    <div className="flex gap-0.5">
                       {(["double", "single"] as const).map((q) => (
-                        <button key={q} type="button" className={`${linkBtnClass} h-6 min-h-6 ${formatOptions.quoteStyle === q ? "text-primary" : ""}`} onClick={() => applyFormatWithOptions({ ...formatOptions, quoteStyle: q })}>{q === "double" ? "Double" : "Single"}</button>
+                        <button key={q} type="button" className={`${linkBtnClass} h-7 min-h-7 px-2.5 text-[11px] font-medium ${formatOptions.quoteStyle === q ? "!text-primary !bg-primary/10" : ""}`} onClick={() => applyFormatWithOptions({ ...formatOptions, quoteStyle: q })}>{q === "double" ? '"Double"' : "'Single'"}</button>
                       ))}
                     </div>
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <p className={settingsLabelClass}>Format options</p>
-                    <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                      <label className="flex cursor-pointer items-center gap-1.5 p-1"><input type="checkbox" className="checkbox checkbox-xs" checked={formatOptions.sortKeys} onChange={(e) => applyFormatWithOptions({ ...formatOptions, sortKeys: e.target.checked })} />Sort keys</label>
-                      <label className="flex cursor-pointer items-center gap-1.5"><input type="checkbox" className="checkbox checkbox-xs" checked={formatOptions.removeEmpty} onChange={(e) => applyFormatWithOptions({ ...formatOptions, removeEmpty: e.target.checked })} />Remove empty</label>
+                    <div className="flex flex-col gap-1">
+                      <label className="flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 transition-colors hover:bg-primary/5"><input type="checkbox" className="checkbox checkbox-xs checkbox-primary" checked={formatOptions.sortKeys} onChange={(e) => applyFormatWithOptions({ ...formatOptions, sortKeys: e.target.checked })} /><span className="text-[11px]">Sort keys</span></label>
+                      <label className="flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 transition-colors hover:bg-primary/5"><input type="checkbox" className="checkbox checkbox-xs checkbox-primary" checked={formatOptions.removeEmpty} onChange={(e) => applyFormatWithOptions({ ...formatOptions, removeEmpty: e.target.checked })} /><span className="text-[11px]">Remove empty</span></label>
                     </div>
                   </div>
                 </div>
-                <div className={`border-t border-[var(--workspace-border)] pt-3 ${settingsSectionClass}`}>
+                <div className="h-px bg-gradient-to-r from-transparent via-[var(--workspace-border)] to-transparent" />
+                <div className={settingsSectionClass}>
                   <p className={settingsLabelClass}>Generate Types</p>
-                  <div className="flex flex-wrap gap-1">
+                  <div className="flex flex-wrap gap-0.5">
                     {TYPE_LANGUAGES.map((item) => (
                       <div key={item.id} className="flex items-center">
-                        <button type="button" disabled={inputEmpty} className={`${linkBtnClass} h-6 min-h-6 disabled:opacity-50 ${typeLanguage === item.id ? "text-primary" : ""}`} onClick={() => { setFocusedPane("output"); setActiveOperation("generateTypes"); executeOperation("generateTypes", { typeLanguage: item.id }); }}>{item.label}</button>
-                        <button type="button" className={`btn btn-ghost btn-xs btn-square h-5 w-5 p-0 rounded ${pinnedItems.has(`type:${item.id}`) ? "text-primary" : "opacity-40"}`} onClick={(e) => { e.stopPropagation(); setPinnedItems((s) => { const n = new Set(s); n.has(`type:${item.id}`) ? n.delete(`type:${item.id}`) : n.add(`type:${item.id}`); return n; }); }} title={pinnedItems.has(`type:${item.id}`) ? "Unpin" : "Pin to toolbar"}><StarIcon className={`h-3.5 w-3.5 ${pinnedItems.has(`type:${item.id}`) ? "text-primary" : "opacity-40"}`} /></button>
+                        <button type="button" disabled={inputEmpty} className={`${linkBtnClass} h-7 min-h-7 px-2 text-[11px] font-medium disabled:opacity-40 ${typeLanguage === item.id ? "!text-primary !bg-primary/10" : ""}`} onClick={() => { setFocusedPane("output"); setActiveOperation("generateTypes"); executeOperation("generateTypes", { typeLanguage: item.id }); }}>{item.label}</button>
+                        <button type="button" className={`btn btn-ghost btn-xs btn-square h-5 w-5 p-0 rounded-full transition-all ${pinnedItems.has(`type:${item.id}`) ? "text-primary scale-110" : "opacity-40 hover:opacity-70"}`} onClick={(e) => { e.stopPropagation(); setPinnedItems((s) => { const n = new Set(s); n.has(`type:${item.id}`) ? n.delete(`type:${item.id}`) : n.add(`type:${item.id}`); return n; }); }} title={pinnedItems.has(`type:${item.id}`) ? "Unpin" : "Pin to toolbar"}><StarIcon className="h-3 w-3" /></button>
                       </div>
                     ))}
                   </div>
                 </div>
-                <div className="border-t border-[var(--workspace-border)] pt-2">
-                  <button type="button" className={`${linkBtnClass} flex w-full items-center justify-center gap-1.5 py-1.5`} onClick={() => { setFormatOptions(DEFAULT_FORMAT_OPTIONS); setConvertToFormat("json"); setRightView("raw"); setEditorFontSize(13); setPinnedItems(new Set(["fmt:json", "fmt:xml", "view:raw", "view:graph", "view:query", "action:beautify", "action:minify", "action:schema", "action:diff", "type:typescript", "type:java", "type:go", "type:python", "type:sql"])); }}>
-                    <ArrowPathIcon className="h-3.5 w-3.5" />Reset to default
-                  </button>
-                </div>
+                <div className="h-px bg-gradient-to-r from-transparent via-[var(--workspace-border)] to-transparent" />
+                <button type="button" className="flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-[11px] font-medium text-[var(--workspace-text-muted)] transition-all hover:bg-primary/8 hover:text-primary" onClick={() => { setFormatOptions(DEFAULT_FORMAT_OPTIONS); setConvertToFormat("json"); setRightView("raw"); setEditorFontSize(13); setPinnedItems(new Set(["fmt:json", "fmt:xml", "view:raw", "view:graph", "view:query", "action:beautify", "action:minify", "action:schema", "action:diff", "type:typescript", "type:java", "type:go", "type:python", "type:sql"])); }}>
+                  <ArrowPathIcon className="h-3.5 w-3.5" />Reset to default
+                </button>
                   </>
                 )}
               </div>
             </Dropdown>
             {viewAsMenu && (
               <>
-            <Dropdown open={formatMenuOpen} onOpenChange={setFormatMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`dropdown-content z-[100] min-w-[7rem] p-1 shadow-xl rounded-lg border ${toolbarBorderClass} ${dropdownPanelClass}`} trigger={<div className={`${linkBtnClass} flex h-7 min-h-7 shrink-0 items-center gap-1 ${formatMenuOpen ? "text-primary" : ""}`} title="Format"><span>Format</span><ChevronDownIcon className="h-3 w-3" /></div>}>
-              <div className="flex flex-wrap gap-0.5 p-1" onClick={(e) => e.stopPropagation()}>
+            <Dropdown open={formatMenuOpen} onOpenChange={setFormatMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`dropdown-content z-[100] min-w-[7rem] p-1.5 shadow-2xl rounded-xl border border-[var(--workspace-border)]/50 ${dropdownPanelClass}`} trigger={<div className={`${linkBtnClass} flex h-7 min-h-7 shrink-0 items-center gap-1 ${formatMenuOpen ? "text-primary" : ""}`} title="Format"><span className="font-medium">Format</span><ChevronDownIcon className="h-3 w-3" /></div>}>
+              <div className="flex flex-col gap-0.5 p-0.5" onClick={(e) => e.stopPropagation()}>
                 {FORMAT_KINDS.map((fmt) => (
-                  <button key={fmt} type="button" disabled={inputEmpty} className={`${linkBtnClass} h-6 min-h-6 px-1.5 ${convertToFormat === fmt ? "text-primary" : ""}`} onClick={() => { setFocusedPane("output"); runConvert(fmt); setFormatMenuOpen(false); }}>{FORMAT_LABELS[fmt]}</button>
+                  <button key={fmt} type="button" disabled={inputEmpty} className={`${linkBtnClass} h-7 min-h-7 px-2.5 text-[11px] font-medium w-full text-left disabled:opacity-40 ${convertToFormat === fmt ? "!text-primary !bg-primary/10" : ""}`} onClick={() => { setFocusedPane("output"); runConvert(fmt); setFormatMenuOpen(false); }}>{FORMAT_LABELS[fmt]}</button>
                 ))}
               </div>
             </Dropdown>
-            <Dropdown open={viewMenuOpen} onOpenChange={setViewMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`dropdown-content z-[100] min-w-[10rem] p-1.5 shadow-xl rounded-lg border ${toolbarBorderClass} ${dropdownPanelClass}`} trigger={<div className={`${linkBtnClass} flex h-7 min-h-7 shrink-0 items-center gap-1 ${viewMenuOpen ? "text-primary" : ""}`} title="View"><span>View</span><ChevronDownIcon className="h-3 w-3" /></div>}>
-              <div className="max-h-[50vh] overflow-y-auto space-y-2" onClick={(e) => e.stopPropagation()}>
+            <Dropdown open={viewMenuOpen} onOpenChange={setViewMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`dropdown-content z-[100] min-w-[14rem] p-3 shadow-2xl rounded-xl border border-[var(--workspace-border)]/50 ${dropdownPanelClass}`} trigger={<div className={`${linkBtnClass} flex h-7 min-h-7 shrink-0 items-center gap-1 ${viewMenuOpen ? "text-primary" : ""}`} title="View"><span className="font-medium">View</span><ChevronDownIcon className="h-3 w-3" /></div>}>
+              <div className="space-y-3" onClick={(e) => e.stopPropagation()}>
                 <div>
-                  <p className="text-[10px] font-medium opacity-60 mb-1">View mode</p>
+                  <p className={`${settingsLabelClass} mb-1.5`}>View mode</p>
                   <div className="flex flex-wrap gap-0.5">
                     {(["raw", "tree", "graph", "query", "table"] as const).map((view) => (
-                      <button key={view} type="button" disabled={inputEmpty || ((view === "tree" || view === "graph" || view === "query" || view === "table") && !parsedOutput)} className={`${linkBtnClass} h-6 min-h-6 px-1.5 disabled:opacity-50 ${rightView === view ? "text-primary" : ""}`} onClick={() => { setRightView(view); setFocusedPane("output"); setViewMenuOpen(false); }}>{view[0].toUpperCase() + view.slice(1)}</button>
+                      <button key={view} type="button" disabled={inputEmpty || ((view === "tree" || view === "graph" || view === "query" || view === "table") && !parsedOutput)} className={`${linkBtnClass} h-7 min-h-7 px-2 text-[11px] font-medium disabled:opacity-40 ${rightView === view ? "!text-primary !bg-primary/10" : ""}`} onClick={() => { setRightView(view); setFocusedPane("output"); setViewMenuOpen(false); }}>{view[0].toUpperCase() + view.slice(1)}</button>
                     ))}
                   </div>
                 </div>
-                <div className="flex flex-wrap gap-3 pt-1 border-t border-[var(--workspace-border)]">
+                <div className="h-px bg-gradient-to-r from-transparent via-[var(--workspace-border)] to-transparent" />
+                <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <p className="text-[10px] font-medium opacity-60 mb-0.5">Font size</p>
-                    <div className="flex items-center gap-0.5">
-                      <button type="button" className={`${linkBtnClass} btn-square h-6 w-6 p-0`} onClick={() => setEditorFontSize((s) => Math.max(10, s - 1))}><MinusIcon className="h-3 w-3" /></button>
-                      <span className="text-xs tabular-nums px-1 min-w-[1.5rem]">{editorFontSize}</span>
-                      <button type="button" className={`${linkBtnClass} btn-square h-6 w-6 p-0`} onClick={() => setEditorFontSize((s) => Math.min(24, s + 1))}><PlusIcon className="h-3 w-3" /></button>
-                      <button type="button" className={`${linkBtnClass} h-6 min-h-6 text-[10px]`} onClick={() => setEditorFontSize(13)}>Reset</button>
+                    <p className={`${settingsLabelClass} mb-1`}>Font size</p>
+                    <div className={settingsBtnGroupClass}>
+                      <button type="button" className={settingsStepBtnClass} onClick={() => setEditorFontSize((s) => Math.max(10, s - 1))}><MinusIcon className="h-3 w-3" /></button>
+                      <span className={`flex shrink-0 items-center justify-center px-1.5 text-xs tabular-nums font-medium min-w-[2rem] text-center ${isDark ? "text-white/90" : "text-[var(--workspace-text)]"}`}>{editorFontSize}</span>
+                      <button type="button" className={settingsStepBtnClass} onClick={() => setEditorFontSize((s) => Math.min(24, s + 1))}><PlusIcon className="h-3 w-3" /></button>
+                      <button type="button" className={`${settingsStepBtnClass} text-[9px] font-medium`} onClick={() => setEditorFontSize(13)}><ArrowPathIcon className="h-3 w-3" /></button>
                     </div>
                   </div>
                   <div>
-                    <p className="text-[10px] font-medium opacity-60 mb-0.5">Indent</p>
-                    <div className="flex items-center gap-0.5">
-                      <button type="button" className={`${linkBtnClass} btn-square h-6 w-6 p-0`} onClick={() => { const v = Math.max(0, formatOptions.indentation - 1); applyFormatWithOptions({ ...formatOptions, indentation: v }); }}><MinusIcon className="h-3 w-3" /></button>
-                      <span className="text-xs tabular-nums px-1 min-w-[1.5rem]">{formatOptions.indentation}</span>
-                      <button type="button" className={`${linkBtnClass} btn-square h-6 w-6 p-0`} onClick={() => { const v = Math.min(10, formatOptions.indentation + 1); applyFormatWithOptions({ ...formatOptions, indentation: v }); }}><PlusIcon className="h-3 w-3" /></button>
-                      <button type="button" className={`${linkBtnClass} h-6 min-h-6 text-[10px]`} onClick={() => applyFormatWithOptions({ ...formatOptions, indentation: 2 })}>Reset</button>
+                    <p className={`${settingsLabelClass} mb-1`}>Indent</p>
+                    <div className={settingsBtnGroupClass}>
+                      <button type="button" className={settingsStepBtnClass} onClick={() => { const v = Math.max(0, formatOptions.indentation - 1); applyFormatWithOptions({ ...formatOptions, indentation: v }); }}><MinusIcon className="h-3 w-3" /></button>
+                      <span className={`flex shrink-0 items-center justify-center px-1.5 text-xs tabular-nums font-medium min-w-[2rem] text-center ${isDark ? "text-white/90" : "text-[var(--workspace-text)]"}`}>{formatOptions.indentation}</span>
+                      <button type="button" className={settingsStepBtnClass} onClick={() => { const v = Math.min(10, formatOptions.indentation + 1); applyFormatWithOptions({ ...formatOptions, indentation: v }); }}><PlusIcon className="h-3 w-3" /></button>
+                      <button type="button" className={`${settingsStepBtnClass} text-[9px] font-medium`} onClick={() => applyFormatWithOptions({ ...formatOptions, indentation: 2 })}><ArrowPathIcon className="h-3 w-3" /></button>
                     </div>
                   </div>
                 </div>
-                <div className="flex flex-wrap gap-3 pt-1 border-t border-[var(--workspace-border)]">
+                <div className="h-px bg-gradient-to-r from-transparent via-[var(--workspace-border)] to-transparent" />
+                <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <p className="text-[10px] font-medium opacity-60 mb-0.5">Quote style</p>
+                    <p className={`${settingsLabelClass} mb-1`}>Quote style</p>
                     <div className="flex gap-0.5">
                       {(["double", "single"] as const).map((q) => (
-                        <button key={q} type="button" className={`${linkBtnClass} h-6 min-h-6 px-1.5 ${formatOptions.quoteStyle === q ? "text-primary" : ""}`} onClick={() => applyFormatWithOptions({ ...formatOptions, quoteStyle: q })}>{q === "double" ? "Double" : "Single"}</button>
+                        <button key={q} type="button" className={`${linkBtnClass} h-7 min-h-7 px-2 text-[11px] font-medium ${formatOptions.quoteStyle === q ? "!text-primary !bg-primary/10" : ""}`} onClick={() => applyFormatWithOptions({ ...formatOptions, quoteStyle: q })}>{q === "double" ? '"Double"' : "'Single'"}</button>
                       ))}
                     </div>
                   </div>
                   <div>
-                    <p className="text-[10px] font-medium opacity-60 mb-0.5">Format options</p>
-                    <div className="flex gap-1">
-                      <button type="button" className={`${linkBtnClass} h-6 min-h-6 px-1.5 ${formatOptions.sortKeys ? "text-primary" : ""}`} onClick={() => applyFormatWithOptions({ ...formatOptions, sortKeys: !formatOptions.sortKeys })}>Sort keys</button>
-                      <button type="button" className={`${linkBtnClass} h-6 min-h-6 px-1.5 ${formatOptions.removeEmpty ? "text-primary" : ""}`} onClick={() => applyFormatWithOptions({ ...formatOptions, removeEmpty: !formatOptions.removeEmpty })}>Remove empty</button>
+                    <p className={`${settingsLabelClass} mb-1`}>Format options</p>
+                    <div className="flex flex-col gap-0.5">
+                      <button type="button" className={`${linkBtnClass} h-7 min-h-7 px-2 text-[11px] font-medium text-left ${formatOptions.sortKeys ? "!text-primary !bg-primary/10" : ""}`} onClick={() => applyFormatWithOptions({ ...formatOptions, sortKeys: !formatOptions.sortKeys })}>Sort keys</button>
+                      <button type="button" className={`${linkBtnClass} h-7 min-h-7 px-2 text-[11px] font-medium text-left ${formatOptions.removeEmpty ? "!text-primary !bg-primary/10" : ""}`} onClick={() => applyFormatWithOptions({ ...formatOptions, removeEmpty: !formatOptions.removeEmpty })}>Remove empty</button>
                     </div>
                   </div>
                 </div>
               </div>
             </Dropdown>
-            <Dropdown open={actionsMenuOpen} onOpenChange={setActionsMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`dropdown-content z-[100] min-w-[6.5rem] p-1 shadow-xl rounded-lg border ${toolbarBorderClass} ${dropdownPanelClass}`} trigger={<div className={`${linkBtnClass} flex h-7 min-h-7 shrink-0 items-center gap-1 ${actionsMenuOpen ? "text-primary" : ""}`} title="Actions"><span>Actions</span><ChevronDownIcon className="h-3 w-3" /></div>}>
-              <div className="flex flex-wrap gap-0.5 p-1" onClick={(e) => e.stopPropagation()}>
+            <Dropdown open={actionsMenuOpen} onOpenChange={setActionsMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`dropdown-content z-[100] min-w-[7rem] p-1.5 shadow-2xl rounded-xl border border-[var(--workspace-border)]/50 ${dropdownPanelClass}`} trigger={<div className={`${linkBtnClass} flex h-7 min-h-7 shrink-0 items-center gap-1 ${actionsMenuOpen ? "text-primary" : ""}`} title="Actions"><span className="font-medium">Actions</span><ChevronDownIcon className="h-3 w-3" /></div>}>
+              <div className="flex flex-col gap-0.5 p-0.5" onClick={(e) => e.stopPropagation()}>
                 {OPERATION_ACTIONS.map(([label, action]) => (
-                  <button key={action} type="button" disabled={showBusy || (action !== "diff" && inputEmpty)} className={`${linkBtnClass} h-6 min-h-6 px-1.5 disabled:opacity-50 ${activeOperation === action ? "text-primary" : ""}`} onClick={() => { runOperation(action); setActionsMenuOpen(false); }}>{label}</button>
+                  <button key={action} type="button" disabled={showBusy || (action !== "diff" && inputEmpty)} className={`${linkBtnClass} h-7 min-h-7 px-2.5 text-[11px] font-medium w-full text-left disabled:opacity-40 ${activeOperation === action ? "!text-primary !bg-primary/10" : ""}`} onClick={() => { runOperation(action); setActionsMenuOpen(false); }}>{label}</button>
                 ))}
               </div>
             </Dropdown>
-            <Dropdown open={typesMenuOpen} onOpenChange={setTypesMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`dropdown-content z-[100] min-w-[6rem] max-h-[50vh] overflow-y-auto p-1 shadow-xl rounded-lg border ${toolbarBorderClass} ${dropdownPanelClass}`} trigger={<div className={`${linkBtnClass} flex h-7 min-h-7 shrink-0 items-center gap-1 ${typesMenuOpen ? "text-primary" : ""}`} title="Generate Types"><span>Types</span><ChevronDownIcon className="h-3 w-3" /></div>}>
-              <div className="flex flex-wrap gap-0.5 p-1" onClick={(e) => e.stopPropagation()}>
+            <Dropdown open={typesMenuOpen} onOpenChange={setTypesMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`dropdown-content z-[100] min-w-[8rem] max-h-[50vh] overflow-y-auto p-1.5 shadow-2xl rounded-xl border border-[var(--workspace-border)]/50 ${dropdownPanelClass}`} trigger={<div className={`${linkBtnClass} flex h-7 min-h-7 shrink-0 items-center gap-1 ${typesMenuOpen ? "text-primary" : ""}`} title="Generate Types"><span className="font-medium">Types</span><ChevronDownIcon className="h-3 w-3" /></div>}>
+              <div className="flex flex-col gap-0.5 p-0.5" onClick={(e) => e.stopPropagation()}>
                 {TYPE_LANGUAGES.map((item) => (
-                  <button key={item.id} type="button" disabled={inputEmpty} className={`${linkBtnClass} h-6 min-h-6 px-1.5 disabled:opacity-50 ${typeLanguage === item.id ? "text-primary" : ""}`} onClick={() => { setFocusedPane("output"); setActiveOperation("generateTypes"); executeOperation("generateTypes", { typeLanguage: item.id }); setTypesMenuOpen(false); }}>{item.label}</button>
+                  <button key={item.id} type="button" disabled={inputEmpty} className={`${linkBtnClass} h-7 min-h-7 px-2.5 text-[11px] font-medium w-full text-left disabled:opacity-40 ${typeLanguage === item.id ? "!text-primary !bg-primary/10" : ""}`} onClick={() => { setFocusedPane("output"); setActiveOperation("generateTypes"); executeOperation("generateTypes", { typeLanguage: item.id }); setTypesMenuOpen(false); }}>{item.label}</button>
                 ))}
               </div>
             </Dropdown>
@@ -2247,7 +2541,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                   onOpenChange={setDownloadMenuOpen}
                   side="bottom"
                   align="end"
-                  contentClassName={`rounded-lg border p-1 shadow-xl ${toolbarBorderClass} ${dropdownPanelClass}`}
+                  contentClassName={`rounded-xl border border-[var(--workspace-border)]/50 p-1.5 shadow-2xl ${dropdownPanelClass}`}
                   trigger={
                     <button
                       type="button"
@@ -2260,8 +2554,8 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                   }
                 >
                   <div className="flex flex-col gap-0.5">
-                    <button type="button" className={`${linkBtnClass} h-7 min-h-7 w-full justify-start px-2`} onClick={() => downloadOutput("png")}>PNG</button>
-                    <button type="button" className={`${linkBtnClass} h-7 min-h-7 w-full justify-start px-2`} onClick={() => downloadOutput("jpg")}>JPG</button>
+                    <button type="button" className={`${linkBtnClass} h-7 min-h-7 w-full justify-start px-2.5 text-[11px] font-medium`} onClick={() => downloadOutput("png")}>PNG</button>
+                    <button type="button" className={`${linkBtnClass} h-7 min-h-7 w-full justify-start px-2.5 text-[11px] font-medium`} onClick={() => downloadOutput("jpg")}>JPG</button>
                   </div>
                 </Dropdown>
               ) : (
@@ -2590,6 +2884,13 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
         cursorPosition={cursorPosition ? `Ln ${cursorPosition.line}, Col ${cursorPosition.column}` : undefined}
         indentSize={formatOptions.indentation}
         encoding="UTF-8"
+        rightActions={
+          <span className="flex shrink-0 items-center gap-1 font-mono text-[11px] tracking-wide text-[var(--workspace-text-muted)]">
+            <span className="font-semibold text-[var(--workspace-text)]">{getInputFormatLabel(resolvedInputFormat)}</span>
+            <span className="text-primary">→</span>
+            <span className="font-semibold text-[var(--workspace-text)]">{activeOperation === "generateTypes" ? selectedTypeLanguageLabel : FORMAT_LABELS[convertToFormat]}</span>
+          </span>
+        }
         sharedLink={
           sharedLinkUrl ? (
             <span className="flex shrink-0 items-center gap-1">
@@ -2660,23 +2961,30 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
           onClose={() => setCommandPaletteOpen(false)}
           commands={commandPaletteCommands}
           isDark={isDark}
+          recentIds={recentActions}
+          onExecute={(id) => {
+            setRecentActions((prev) => {
+              const next = [id, ...prev.filter((x) => x !== id)].slice(0, 3);
+              return next;
+            });
+          }}
         />
 
         {/* History Panel */}
         {showHistoryPanel && (
           <div className="fixed inset-0 z-[200] flex items-stretch justify-end" onClick={() => setShowHistoryPanel(false)}>
             <div
-              className={`flex h-full w-full max-w-sm flex-col shadow-2xl border-l ${isDark ? "bg-[#1a1a1a] border-[#2a2a2a]" : "bg-white border-[#e0e0e0]"}`}
+              className={`flex h-full w-full max-w-sm flex-col shadow-2xl shadow-black/20 border-l ${isDark ? "bg-[#141414]/95 backdrop-blur-xl border-white/[0.06]" : "bg-white/95 backdrop-blur-xl border-black/[0.06]"}`}
               onClick={(e) => e.stopPropagation()}
             >
-              <div className={`flex shrink-0 items-center justify-between border-b px-4 py-3 ${isDark ? "border-[#2a2a2a]" : "border-[#e0e0e0]"}`}>
+              <div className={`flex shrink-0 items-center justify-between border-b px-4 py-3 ${isDark ? "border-white/[0.06]" : "border-black/[0.06]"}`}>
                 <div className="flex items-center gap-2">
                   <ClockIcon className="h-4 w-4 text-primary" />
-                  <span className="text-sm font-semibold text-[var(--workspace-text)]">Input History</span>
-                  <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${isDark ? "bg-white/10 text-white/50" : "bg-black/10 text-black/50"}`}>{undoIndex + 1}/{undoStack.length}</span>
+                  <span className="text-sm font-semibold tracking-wide text-[var(--workspace-text)]">Input History</span>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium tabular-nums ${isDark ? "bg-white/[0.06] text-white/40" : "bg-black/[0.04] text-black/40"}`}>{undoIndex + 1}/{undoStack.length}</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <button type="button" className={`${linkBtnClass} h-7 min-h-7`} onClick={exportHistory}>Export</button>
+                  <button type="button" className={`${linkBtnClass} h-7 min-h-7 text-[11px] font-medium`} onClick={exportHistory}>Export</button>
                   <button type="button" className={`${linkBtnClass} btn-square h-7 min-h-7 w-7`} onClick={() => setShowHistoryPanel(false)}><XMarkIcon className="h-4 w-4" /></button>
                 </div>
               </div>
@@ -2688,7 +2996,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                     <button
                       key={idx}
                       type="button"
-                      className={`flex w-full flex-col items-start gap-1 border-b px-4 py-3 text-left transition-colors ${isDark ? "border-[#2a2a2a]" : "border-[#f0f0f0]"} ${isCurrent ? "bg-primary/10" : isDark ? "hover:bg-white/[0.03]" : "hover:bg-black/[0.03]"}`}
+                      className={`flex w-full flex-col items-start gap-1 border-b px-4 py-3 text-left transition-all duration-100 ${isDark ? "border-white/[0.04]" : "border-black/[0.04]"} ${isCurrent ? "bg-primary/10" : isDark ? "hover:bg-white/[0.03]" : "hover:bg-black/[0.02]"}`}
                       onClick={() => {
                         const delta = idx - undoIndex;
                         if (delta !== 0) moveHistory(delta as -1 | 1);

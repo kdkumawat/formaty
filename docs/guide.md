@@ -2,7 +2,7 @@
 
 ## Overview
 
-formaty is a local-first data toolkit for working with JSON, XML, YAML, TOML, and CSV. All processing runs in your browser — no data is sent to any server.
+formaty is a local-first data toolkit for working with JSON, XML, YAML, TOML, and CSV. All processing runs in your browser - no data is sent to any server.
 
 Format, validate, transform, diff, and convert between data formats. Query data with JSONPath or JMESPath. Paste cURL commands to fetch API responses. Generate type definitions for TypeScript, Python, Go, Java, and more. View data as a tree, graph, or table.
 
@@ -80,15 +80,15 @@ Star languages to pin them to the output toolbar for one-click generation.
 
 Diff compares two JSON documents. Paste the second document in the right editor pane when diff mode is active.
 
-- **Side-by-side view** — changes displayed in two columns (default)
-- **Inline view** — toggle with the "Inline" / "Side-by-side" button in the diff toolbar
-- **Previous / Next difference** — navigate between individual changes using the ↑ ↓ buttons in the diff toolbar, or via the command palette
+- **Side-by-side view** - changes displayed in two columns (default)
+- **Inline view** - toggle with the "Inline" / "Side-by-side" button in the diff toolbar
+- **Previous / Next difference** - navigate between individual changes using the ↑ ↓ buttons in the diff toolbar, or via the command palette
 
 ---
 
 ## Command Palette (`⌘K` / `Ctrl+K`)
 
-Press `⌘K` (or `Ctrl+K` on Windows/Linux) anywhere in the workspace — even while the editor is focused — to open the command palette. Search and run any action without touching the mouse.
+Press `⌘K` (or `Ctrl+K` on Windows/Linux) anywhere in the workspace - even while the editor is focused - to open the command palette. Search and run any action without touching the mouse.
 
 ### Categories
 
@@ -109,10 +109,10 @@ Press `⌘K` (or `Ctrl+K` on Windows/Linux) anywhere in the workspace — even w
 
 From the command palette (`⌘K`), search "copy as" to copy the output in multiple encodings:
 
-- **Base64** — `btoa(output)`
-- **Escaped string** — output wrapped in a JSON string literal
-- **URL-encoded** — percent-encoded for use in query parameters
-- **Data URI** — `data:application/json;base64,...`
+- **Base64** - `btoa(output)`
+- **Escaped string** - output wrapped in a JSON string literal
+- **URL-encoded** - percent-encoded for use in query parameters
+- **Data URI** - `data:application/json;base64,...`
 
 ---
 
@@ -120,18 +120,18 @@ From the command palette (`⌘K`), search "copy as" to copy the output in multip
 
 Every paste, import, or keystroke batch is tracked in an undo stack (up to 100 entries).
 
-- **Undo / Redo** — `Ctrl+Z` / `Ctrl+Shift+Z`, or via the toolbar arrows, or via the command palette
-- **Browse history** — Open the history panel from the command palette → "Browse input history". Click any entry to restore it.
-- **Export history** — Download all undo entries as a JSON file via command palette → "Export history"
+- **Undo / Redo** - `Ctrl+Z` / `Ctrl+Shift+Z`, or via the toolbar arrows, or via the command palette
+- **Browse history** - Open the history panel from the command palette → "Browse input history". Click any entry to restore it.
+- **Export history** - Download all undo entries as a JSON file via command palette → "Export history"
 
 ---
 
 ## Share & Export
 
-- **Share** — Save your playground to the cloud and get a short link (`/playground?id=...`). Recipients see the same input, output, view mode, format, and type language. Your local preferences are not overwritten.
-- **Embed / iframe URL** — After sharing, open the command palette and run "Copy embed / iframe URL" to get a shareable read-only embed URL.
-- **Copy** — Copy output to clipboard
-- **Download** — Download output as a file (extension matches output format)
+- **Share** - Save your playground to the cloud and get a short link (`/playground?id=...`). Recipients see the same input, output, view mode, format, and type language. Your local preferences are not overwritten.
+- **Embed / iframe URL** - After sharing, open the command palette and run "Copy embed / iframe URL" to get a shareable read-only embed URL.
+- **Copy** - Copy output to clipboard
+- **Download** - Download output as a file (extension matches output format)
 
 To stop sharing, click the disable icon next to the link.
 
@@ -163,7 +163,7 @@ You can also pin/unpin from the command palette → "Pin current view" / "Pin cu
 
 ## Privacy & Local-First
 
-formaty runs entirely in your browser. **Your data stays on your screen** — no input or output is sent to any server except when you explicitly click Share. Session state (pinned items, theme, etc.) is stored in localStorage. Shared links can be disabled at any time.
+formaty runs entirely in your browser. **Your data stays on your screen** - no input or output is sent to any server except when you explicitly click Share. Session state (pinned items, theme, etc.) is stored in localStorage. Shared links can be disabled at any time.
 
 
 ## Input & Output Formats
