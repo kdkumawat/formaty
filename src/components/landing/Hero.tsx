@@ -6,25 +6,89 @@ import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowRightIcon, BoltIcon } from "@heroicons/react/24/outline";
 
-type OutputMode = "typescript" | "yaml" | "xml" | "json" | "graph";
-
-const OUTPUT_MODES: OutputMode[] = ["typescript", "yaml", "xml", "json", "graph"];
-
-const MODE_META: Record<OutputMode, { label: string; labelColor: string; statusLabel: string; statusColor: string }> = {
-  typescript: { label: "TYPESCRIPT",   labelColor: "text-violet-500",  statusLabel: "JSON \u2192 TypeScript", statusColor: "text-violet-500" },
-  yaml:       { label: "YAML",         labelColor: "text-lime-600",    statusLabel: "JSON \u2192 YAML",       statusColor: "text-lime-600" },
-  xml:        { label: "XML",          labelColor: "text-red-500",     statusLabel: "JSON \u2192 XML",        statusColor: "text-red-500" },
-  json:       { label: "FORMATTED",    labelColor: "text-amber-500",   statusLabel: "JSON Beautify",         statusColor: "text-amber-500" },
-  graph:      { label: "GRAPH VIEW",   labelColor: "text-emerald-500", statusLabel: "Graph View",            statusColor: "text-emerald-500" },
+// Each slide: {inputLabel, inputColor, outputLabel, outputColor, statusText, InputPane, OutputPane}
+type Slide = {
+  id: string;
+  inputLabel: string;
+  inputColor: string;
+  outputLabel: string;
+  outputColor: string;
+  statusText: string;
+  InputPane: () => React.JSX.Element;
+  OutputPane: () => React.JSX.Element;
 };
 
-function TypeScriptPane() {
+/* ─── Input Panes ───────────────────────────────────── */
+function JsonInput() {
+  return (
+    <pre className="font-mono text-[11px] leading-[1.8]">
+      <span className="text-[var(--workspace-text)]">{"{"}</span>{"\n"}
+      {"  "}<span className="text-sky-500">"id"</span><span className="text-[var(--workspace-text)]">: </span><span className="text-amber-500">42</span><span className="text-[var(--workspace-text)]">,</span>{"\n"}
+      {"  "}<span className="text-sky-500">"name"</span><span className="text-[var(--workspace-text)]">: </span><span className="text-emerald-500">"Alice"</span><span className="text-[var(--workspace-text)]">,</span>{"\n"}
+      {"  "}<span className="text-sky-500">"roles"</span><span className="text-[var(--workspace-text)]">: [</span>{"\n"}
+      {"    "}<span className="text-emerald-500">"admin"</span><span className="text-[var(--workspace-text)]">,</span>{"\n"}
+      {"    "}<span className="text-emerald-500">"dev"</span>{"\n"}
+      {"  "}<span className="text-[var(--workspace-text)]">]</span>{"\n"}
+      <span className="text-[var(--workspace-text)]">{"}"}</span>
+    </pre>
+  );
+}
+
+function XmlInput() {
+  return (
+    <pre className="font-mono text-[11px] leading-[1.8]">
+      <span className="text-[var(--workspace-text-muted)]">{"<?"}xml version="1.0"{"?>"}</span>{"\n"}
+      <span className="text-[var(--workspace-text)]">{"<"}</span><span className="text-sky-500">product</span><span className="text-[var(--workspace-text)]">{">"}</span>{"\n"}
+      {"  "}<span className="text-[var(--workspace-text)]">{"<"}</span><span className="text-sky-500">sku</span><span className="text-[var(--workspace-text)]">{">"}</span><span className="text-amber-500">X-42</span><span className="text-[var(--workspace-text)]">{"</"}</span><span className="text-sky-500">sku</span><span className="text-[var(--workspace-text)]">{">"}</span>{"\n"}
+      {"  "}<span className="text-[var(--workspace-text)]">{"<"}</span><span className="text-sky-500">price</span><span className="text-[var(--workspace-text)]">{">"}</span><span className="text-amber-500">29.99</span><span className="text-[var(--workspace-text)]">{"</"}</span><span className="text-sky-500">price</span><span className="text-[var(--workspace-text)]">{">"}</span>{"\n"}
+      {"  "}<span className="text-[var(--workspace-text)]">{"<"}</span><span className="text-sky-500">inStock</span><span className="text-[var(--workspace-text)]">{">"}</span><span className="text-violet-400">true</span><span className="text-[var(--workspace-text)]">{"</"}</span><span className="text-sky-500">inStock</span><span className="text-[var(--workspace-text)]">{">"}</span>{"\n"}
+      <span className="text-[var(--workspace-text)]">{"</"}</span><span className="text-sky-500">product</span><span className="text-[var(--workspace-text)]">{">"}</span>
+    </pre>
+  );
+}
+
+function YamlInput() {
+  return (
+    <pre className="font-mono text-[11px] leading-[1.8]">
+      <span className="text-sky-500">server</span><span className="text-[var(--workspace-text)]">:</span>{"\n"}
+      {"  "}<span className="text-sky-500">host</span><span className="text-[var(--workspace-text)]">: </span><span className="text-emerald-500">api.example.com</span>{"\n"}
+      {"  "}<span className="text-sky-500">port</span><span className="text-[var(--workspace-text)]">: </span><span className="text-amber-500">8080</span>{"\n"}
+      {"  "}<span className="text-sky-500">tls</span><span className="text-[var(--workspace-text)]">: </span><span className="text-violet-400">true</span>{"\n"}
+      <span className="text-sky-500">timeout</span><span className="text-[var(--workspace-text)]">: </span><span className="text-amber-500">30</span>
+    </pre>
+  );
+}
+
+function CurlInput() {
+  return (
+    <pre className="font-mono text-[10px] leading-[1.85] break-all">
+      <span className="text-[var(--workspace-text-muted)]">$</span>{" "}
+      <span className="text-violet-400">curl</span>{" "}
+      <span className="text-sky-400">-X GET</span>{" "}
+      <span className="text-emerald-500 break-all">{"\""}https://api.github.com{"\n"}{"  "}/users/octocat{"\""}
+      </span>{"\n"}
+      <span className="text-[var(--workspace-text-muted)]">  -H </span>
+      <span className="text-amber-500">"Accept:{"\n"}{"    "}application/json"</span>
+    </pre>
+  );
+}
+
+function CsvInput() {
+  return (
+    <pre className="font-mono text-[11px] leading-[1.9]">
+      <span className="text-sky-500 font-semibold">name</span><span className="text-[var(--workspace-text-muted)]">,</span><span className="text-sky-500 font-semibold">score</span><span className="text-[var(--workspace-text-muted)]">,</span><span className="text-sky-500 font-semibold">level</span>{"\n"}
+      <span className="text-emerald-500">Alice</span><span className="text-[var(--workspace-text-muted)]">,</span><span className="text-amber-500">98</span><span className="text-[var(--workspace-text-muted)]">,</span><span className="text-violet-400">gold</span>{"\n"}
+      <span className="text-emerald-500">Bob</span><span className="text-[var(--workspace-text-muted)]">,</span><span className="text-amber-500">72</span><span className="text-[var(--workspace-text-muted)]">,</span><span className="text-violet-400">silver</span>{"\n"}
+      <span className="text-emerald-500">Carol</span><span className="text-[var(--workspace-text-muted)]">,</span><span className="text-amber-500">85</span><span className="text-[var(--workspace-text-muted)]">,</span><span className="text-violet-400">gold</span>
+    </pre>
+  );
+}
+
+/* ─── Output Panes ───────────────────────────────────── */
+function TypeScriptOut() {
   return (
     <pre className="font-mono text-[11px] leading-[1.8]">
       <span className="text-violet-400">interface </span><span className="text-sky-400">Root </span><span className="text-[var(--workspace-text)]">{"{"}</span>{"\n"}
-      {"  "}<span className="text-[var(--workspace-text)]">user: </span><span className="text-sky-400">User</span><span className="text-[var(--workspace-text)]">;</span>{"\n"}
-      <span className="text-[var(--workspace-text)]">{"}"}</span>{"\n\n"}
-      <span className="text-violet-400">interface </span><span className="text-sky-400">User </span><span className="text-[var(--workspace-text)]">{"{"}</span>{"\n"}
       {"  "}<span className="text-[var(--workspace-text)]">id: </span><span className="text-amber-400">number</span><span className="text-[var(--workspace-text)]">;</span>{"\n"}
       {"  "}<span className="text-[var(--workspace-text)]">name: </span><span className="text-amber-400">string</span><span className="text-[var(--workspace-text)]">;</span>{"\n"}
       {"  "}<span className="text-[var(--workspace-text)]">roles: </span><span className="text-amber-400">string</span><span className="text-[var(--workspace-text)]">[];</span>{"\n"}
@@ -33,99 +97,116 @@ function TypeScriptPane() {
   );
 }
 
-function YamlPane() {
+function XmlToYamlOut() {
   return (
     <pre className="font-mono text-[11px] leading-[1.8]">
-      <span className="text-sky-500">user</span><span className="text-[var(--workspace-text)]">:</span>{"\n"}
-      {"  "}<span className="text-sky-500">id</span><span className="text-[var(--workspace-text)]">: </span><span className="text-amber-500">42</span>{"\n"}
-      {"  "}<span className="text-sky-500">name</span><span className="text-[var(--workspace-text)]">: </span><span className="text-emerald-500">Alice</span>{"\n"}
-      {"  "}<span className="text-sky-500">roles</span><span className="text-[var(--workspace-text)]">:</span>{"\n"}
-      {"    "}<span className="text-[var(--workspace-text)]">- </span><span className="text-emerald-500">admin</span>{"\n"}
-      {"    "}<span className="text-[var(--workspace-text)]">- </span><span className="text-emerald-500">dev</span>
+      <span className="text-sky-500">product</span><span className="text-[var(--workspace-text)]">:</span>{"\n"}
+      {"  "}<span className="text-sky-500">sku</span><span className="text-[var(--workspace-text)]">: </span><span className="text-emerald-500">X-42</span>{"\n"}
+      {"  "}<span className="text-sky-500">price</span><span className="text-[var(--workspace-text)]">: </span><span className="text-amber-500">29.99</span>{"\n"}
+      {"  "}<span className="text-sky-500">inStock</span><span className="text-[var(--workspace-text)]">: </span><span className="text-violet-400">true</span>
     </pre>
   );
 }
 
-function XmlPane() {
+function YamlToTomlOut() {
   return (
     <pre className="font-mono text-[11px] leading-[1.8]">
-      <span className="text-[var(--workspace-text-muted)]">{"<?"}xml version="1.0"{"?>"}</span>{"\n"}
-      <span className="text-[var(--workspace-text)]">{"<"}</span><span className="text-sky-500">root</span><span className="text-[var(--workspace-text)]">{">"}</span>{"\n"}
-      {"  "}<span className="text-[var(--workspace-text)]">{"<"}</span><span className="text-sky-500">user</span><span className="text-[var(--workspace-text)]">{">"}</span>{"\n"}
-      {"    "}<span className="text-[var(--workspace-text)]">{"<"}</span><span className="text-sky-500">id</span><span className="text-[var(--workspace-text)]">{">"}</span><span className="text-amber-500">42</span><span className="text-[var(--workspace-text)]">{"</"}</span><span className="text-sky-500">id</span><span className="text-[var(--workspace-text)]">{">"}</span>{"\n"}
-      {"    "}<span className="text-[var(--workspace-text)]">{"<"}</span><span className="text-sky-500">name</span><span className="text-[var(--workspace-text)]">{">"}</span><span className="text-emerald-500">Alice</span><span className="text-[var(--workspace-text)]">{"</"}</span><span className="text-sky-500">name</span><span className="text-[var(--workspace-text)]">{">"}</span>{"\n"}
-      {"  "}<span className="text-[var(--workspace-text)]">{"</"}</span><span className="text-sky-500">user</span><span className="text-[var(--workspace-text)]">{">"}</span>{"\n"}
-      <span className="text-[var(--workspace-text)]">{"</"}</span><span className="text-sky-500">root</span><span className="text-[var(--workspace-text)]">{">"}</span>
+      <span className="text-[var(--workspace-text-muted)]">[server]</span>{"\n"}
+      <span className="text-sky-400">host</span><span className="text-[var(--workspace-text)]"> = </span><span className="text-emerald-500">"api.example.com"</span>{"\n"}
+      <span className="text-sky-400">port</span><span className="text-[var(--workspace-text)]"> = </span><span className="text-amber-500">8080</span>{"\n"}
+      <span className="text-sky-400">tls</span><span className="text-[var(--workspace-text)]"> = </span><span className="text-violet-400">true</span>{"\n"}
+      <span className="text-sky-400">timeout</span><span className="text-[var(--workspace-text)]"> = </span><span className="text-amber-500">30</span>
     </pre>
   );
 }
 
-function JsonFormattedPane() {
+function CurlToJsonOut() {
   return (
     <pre className="font-mono text-[11px] leading-[1.8]">
       <span className="text-[var(--workspace-text)]">{"{"}</span>{"\n"}
-      {"  "}<span className="text-sky-500">"user"</span><span className="text-[var(--workspace-text)]">: {"{"}</span>{"\n"}
-      {"    "}<span className="text-sky-500">"id"</span><span className="text-[var(--workspace-text)]">: </span><span className="text-amber-500">42</span><span className="text-[var(--workspace-text)]">,</span>{"\n"}
-      {"    "}<span className="text-sky-500">"name"</span><span className="text-[var(--workspace-text)]">: </span><span className="text-emerald-500">"Alice"</span><span className="text-[var(--workspace-text)]">,</span>{"\n"}
-      {"    "}<span className="text-sky-500">"roles"</span><span className="text-[var(--workspace-text)]">: [</span><span className="text-emerald-500">"admin"</span><span className="text-[var(--workspace-text)]">, </span><span className="text-emerald-500">"dev"</span><span className="text-[var(--workspace-text)]">]</span>{"\n"}
-      {"  "}<span className="text-[var(--workspace-text)]">{"}"}</span>{"\n"}
+      {"  "}<span className="text-sky-500">"login"</span><span className="text-[var(--workspace-text)]">: </span><span className="text-emerald-500">"octocat"</span><span className="text-[var(--workspace-text)]">,</span>{"\n"}
+      {"  "}<span className="text-sky-500">"id"</span><span className="text-[var(--workspace-text)]">: </span><span className="text-amber-500">583231</span><span className="text-[var(--workspace-text)]">,</span>{"\n"}
+      {"  "}<span className="text-sky-500">"type"</span><span className="text-[var(--workspace-text)]">: </span><span className="text-emerald-500">"User"</span>{"\n"}
       <span className="text-[var(--workspace-text)]">{"}"}</span>
     </pre>
   );
 }
 
-function GraphPane() {
+function CsvTableOut() {
   return (
-    <div className="flex h-full min-h-[130px] flex-col items-center justify-center gap-3 py-2">
-      {/* Simple SVG graph diagram */}
-      <svg width="180" height="120" viewBox="0 0 180 120" fill="none" aria-hidden>
-        {/* Edges */}
-        <line x1="90" y1="28" x2="42" y2="72" stroke="currentColor" strokeWidth="1.5" strokeOpacity="0.25" />
-        <line x1="90" y1="28" x2="138" y2="72" stroke="currentColor" strokeWidth="1.5" strokeOpacity="0.25" />
-        <line x1="42" y1="72" x2="20" y2="108" stroke="currentColor" strokeWidth="1.5" strokeOpacity="0.25" />
-        <line x1="42" y1="72" x2="64" y2="108" stroke="currentColor" strokeWidth="1.5" strokeOpacity="0.25" />
-        {/* Root node */}
-        <circle cx="90" cy="24" r="18" fill="rgba(124,58,237,0.15)" stroke="rgba(124,58,237,0.6)" strokeWidth="1.5" />
-        <text x="90" y="28" textAnchor="middle" fontSize="9" fill="rgba(124,58,237,0.9)" fontFamily="monospace">user</text>
-        {/* Child: id */}
-        <circle cx="42" cy="74" r="15" fill="rgba(245,158,11,0.12)" stroke="rgba(245,158,11,0.5)" strokeWidth="1.5" />
-        <text x="42" y="78" textAnchor="middle" fontSize="9" fill="rgba(245,158,11,0.9)" fontFamily="monospace">id</text>
-        {/* Child: roles */}
-        <circle cx="138" cy="74" r="18" fill="rgba(16,185,129,0.12)" stroke="rgba(16,185,129,0.5)" strokeWidth="1.5" />
-        <text x="138" y="78" textAnchor="middle" fontSize="9" fill="rgba(16,185,129,0.9)" fontFamily="monospace">roles</text>
-        {/* Leaf: admin */}
-        <circle cx="20" cy="108" r="14" fill="rgba(14,165,233,0.12)" stroke="rgba(14,165,233,0.4)" strokeWidth="1.5" />
-        <text x="20" y="112" textAnchor="middle" fontSize="8" fill="rgba(14,165,233,0.9)" fontFamily="monospace">adm</text>
-        {/* Leaf: dev */}
-        <circle cx="64" cy="108" r="14" fill="rgba(14,165,233,0.12)" stroke="rgba(14,165,233,0.4)" strokeWidth="1.5" />
-        <text x="64" y="112" textAnchor="middle" fontSize="8" fill="rgba(14,165,233,0.9)" fontFamily="monospace">dev</text>
-      </svg>
-      <p className="font-mono text-[10px] font-medium text-emerald-500">Interactive Graph View</p>
+    <div className="overflow-hidden rounded-md border border-[var(--workspace-border)] text-[10.5px]">
+      <table className="w-full border-collapse font-mono">
+        <thead>
+          <tr className="border-b border-[var(--workspace-border)] bg-[var(--workspace-background)]">
+            {["name","score","level"].map(h => (
+              <th key={h} className="px-2 py-1 text-left font-bold text-[var(--workspace-text-muted)]">{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {[["Alice","98","gold"],["Bob","72","silver"],["Carol","85","gold"]].map((row, i) => (
+            <tr key={i} className="border-b border-[var(--workspace-border)]/50">
+              <td className="px-2 py-1 text-emerald-500">{row[0]}</td>
+              <td className="px-2 py-1 text-amber-500">{row[1]}</td>
+              <td className="px-2 py-1 text-violet-400">{row[2]}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
 
-const OUTPUT_PANES: Record<OutputMode, () => React.JSX.Element> = {
-  typescript: TypeScriptPane,
-  yaml: YamlPane,
-  xml: XmlPane,
-  json: JsonFormattedPane,
-  graph: GraphPane,
-};
+const SLIDES: Slide[] = [
+  {
+    id: "json-ts",
+    inputLabel: "JSON", inputColor: "text-amber-500",
+    outputLabel: "TypeScript", outputColor: "text-violet-500",
+    statusText: "JSON → TypeScript types",
+    InputPane: JsonInput, OutputPane: TypeScriptOut,
+  },
+  {
+    id: "xml-yaml",
+    inputLabel: "XML", inputColor: "text-red-500",
+    outputLabel: "YAML", outputColor: "text-lime-600",
+    statusText: "XML → YAML convert",
+    InputPane: XmlInput, OutputPane: XmlToYamlOut,
+  },
+  {
+    id: "yaml-toml",
+    inputLabel: "YAML", inputColor: "text-lime-600",
+    outputLabel: "TOML", outputColor: "text-teal-500",
+    statusText: "YAML → TOML convert",
+    InputPane: YamlInput, OutputPane: YamlToTomlOut,
+  },
+  {
+    id: "curl-json",
+    inputLabel: "cURL", inputColor: "text-sky-500",
+    outputLabel: "JSON", outputColor: "text-amber-500",
+    statusText: "cURL → Live API response",
+    InputPane: CurlInput, OutputPane: CurlToJsonOut,
+  },
+  {
+    id: "csv-table",
+    inputLabel: "CSV", inputColor: "text-blue-500",
+    outputLabel: "Table View", outputColor: "text-emerald-500",
+    statusText: "CSV → Table view",
+    InputPane: CsvInput, OutputPane: CsvTableOut,
+  },
+];
 
 export function Hero() {
-  const [modeIndex, setModeIndex] = useState(0);
+  const [slideIdx, setSlideIdx] = useState(0);
 
   useEffect(() => {
     const id = setInterval(() => {
-      setModeIndex((i) => (i + 1) % OUTPUT_MODES.length);
-    }, 3200);
+      setSlideIdx((i) => (i + 1) % SLIDES.length);
+    }, 3400);
     return () => clearInterval(id);
   }, []);
 
-  const mode = OUTPUT_MODES[modeIndex];
-  const meta = MODE_META[mode];
-  const OutputPane = OUTPUT_PANES[mode];
+  const slide = SLIDES[slideIdx];
+  const { InputPane, OutputPane } = slide;
 
   return (
     <section className="relative flex min-h-[82vh] items-center overflow-hidden bg-[var(--workspace-background)] px-4 py-12 md:py-20">
@@ -162,7 +243,7 @@ export function Hero() {
             className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/[0.07] px-3.5 py-1.5 text-xs font-semibold text-primary shadow-sm shadow-primary/10"
           >
             <BoltIcon className="h-3 w-3" aria-hidden />
-            No signup - Runs locally - Always free
+            No signup · Runs locally · Always free
           </motion.div>
 
           {/* Headline */}
@@ -186,7 +267,7 @@ export function Hero() {
           >
             Format, convert, diff, query, and visualize{" "}
             <span className="font-semibold text-[var(--workspace-text)]">
-              JSON · XML · YAML · TOML · CSV
+              JSON · XML · YAML · TOML · CSV · cURL
             </span>{" "}
             - one workspace, zero installs.
           </motion.p>
@@ -216,7 +297,7 @@ export function Hero() {
             </Link>
           </motion.div>
 
-          {/* Format pills - per-format colors */}
+          {/* Format pills - with active slide highlighted */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -224,16 +305,16 @@ export function Hero() {
             className="flex flex-wrap items-center justify-center gap-1.5 lg:justify-start"
           >
             {[
-              { label: "JSON",       color: "text-amber-500 border-amber-500/25 bg-amber-500/5" },
-              { label: "XML",        color: "text-red-500 border-red-500/25 bg-red-500/5" },
-              { label: "YAML",       color: "text-lime-600 border-lime-600/25 bg-lime-600/5" },
-              { label: "TOML",       color: "text-teal-500 border-teal-500/25 bg-teal-500/5" },
-              { label: "CSV",        color: "text-sky-500 border-sky-500/25 bg-sky-500/5" },
-              { label: "TypeScript", color: "text-blue-500 border-blue-500/25 bg-blue-500/5" },
-            ].map(({ label, color }) => (
+              { label: "JSON",       id: "json-ts",   color: "text-amber-500 border-amber-500/25 bg-amber-500/5",   activeColor: "text-amber-600 border-amber-500/60 bg-amber-500/15 scale-105" },
+              { label: "XML",        id: "xml-yaml",  color: "text-red-500 border-red-500/25 bg-red-500/5",         activeColor: "text-red-600 border-red-500/60 bg-red-500/15 scale-105" },
+              { label: "YAML",       id: "yaml-toml", color: "text-lime-600 border-lime-600/25 bg-lime-600/5",       activeColor: "text-lime-700 border-lime-600/60 bg-lime-600/15 scale-105" },
+              { label: "cURL",       id: "curl-json", color: "text-sky-500 border-sky-500/25 bg-sky-500/5",         activeColor: "text-sky-600 border-sky-500/60 bg-sky-500/15 scale-105" },
+              { label: "CSV",        id: "csv-table", color: "text-blue-500 border-blue-500/25 bg-blue-500/5",      activeColor: "text-blue-600 border-blue-500/60 bg-blue-500/15 scale-105" },
+              { label: "TypeScript", id: "json-ts",   color: "text-violet-500 border-violet-500/25 bg-violet-500/5", activeColor: "text-violet-600 border-violet-500/60 bg-violet-500/15 scale-105" },
+            ].map(({ label, id, color, activeColor }) => (
               <span
                 key={label}
-                className={`rounded-md border px-2.5 py-0.5 font-mono text-[11px] font-medium ${color}`}
+                className={`inline-flex items-center rounded-md border px-2.5 py-0.5 font-mono text-[11px] font-medium transition-all duration-300 ${slide.id === id ? activeColor : color}`}
               >
                 {label}
               </span>
@@ -277,45 +358,44 @@ export function Hero() {
                 <span className="ml-3 font-mono text-xs text-[var(--workspace-text-muted)]">
                   formaty - playground
                 </span>
-                <span className="ml-auto flex items-center gap-1 font-mono text-[10px] font-medium text-emerald-500">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                <span className="ml-auto flex items-center gap-1 font-mono text-[10px] font-semibold text-emerald-500">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
                   Valid
                 </span>
               </div>
 
               {/* Split code panes */}
               <div className="grid grid-cols-2 divide-x divide-[var(--workspace-border)]">
-                {/* Input pane - static JSON */}
-                <div className="p-4">
-                  <p className="mb-2.5 font-mono text-[10px] font-semibold uppercase tracking-widest text-[var(--workspace-text-muted)]">
-                    JSON Input
-                  </p>
-                  <pre className="font-mono text-[11px] leading-[1.8]">
-                    <span className="text-[var(--workspace-text)]">{"{"}</span>{"\n"}
-                    {"  "}<span className="text-sky-500">"user"</span><span className="text-[var(--workspace-text)]">: {"{"}</span>{"\n"}
-                    {"    "}<span className="text-sky-500">"id"</span><span className="text-[var(--workspace-text)]">: </span><span className="text-amber-500">42</span><span className="text-[var(--workspace-text)]">,</span>{"\n"}
-                    {"    "}<span className="text-sky-500">"name"</span><span className="text-[var(--workspace-text)]">: </span><span className="text-emerald-500">"Alice"</span><span className="text-[var(--workspace-text)]">,</span>{"\n"}
-                    {"    "}<span className="text-sky-500">"roles"</span><span className="text-[var(--workspace-text)]">: [</span>{"\n"}
-                    {"      "}<span className="text-emerald-500">"admin"</span><span className="text-[var(--workspace-text)]">,</span>{"\n"}
-                    {"      "}<span className="text-emerald-500">"dev"</span>{"\n"}
-                    {"    "}<span className="text-[var(--workspace-text)]">]</span>{"\n"}
-                    {"  "}<span className="text-[var(--workspace-text)]">{"}"}</span>{"\n"}
-                    <span className="text-[var(--workspace-text)]">{"}"}</span>
-                  </pre>
-                </div>
-
-                {/* Output pane - cycles through modes */}
-                <div className="relative overflow-hidden p-4">
+                {/* Input pane - cycles through input formats */}
+                <div className="h-[200px] overflow-hidden p-4">
                   <AnimatePresence mode="wait">
                     <motion.div
-                      key={mode}
+                      key={slide.id + "-in"}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -8 }}
+                      transition={{ duration: 0.25 }}
+                    >
+                      <p className={`mb-2.5 font-mono text-[10px] font-bold uppercase tracking-widest ${slide.inputColor}`}>
+                        {slide.inputLabel}
+                      </p>
+                      <InputPane />
+                    </motion.div>
+                  </AnimatePresence>
+                </div>
+
+                {/* Output pane - cycles through output modes */}
+                <div className="relative h-[200px] overflow-hidden p-4">
+                  <AnimatePresence mode="wait">
+                    <motion.div
+                      key={slide.id + "-out"}
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -8 }}
                       transition={{ duration: 0.28 }}
                     >
-                      <p className={`mb-2.5 font-mono text-[10px] font-semibold uppercase tracking-widest ${meta.labelColor}`}>
-                        {meta.label}
+                      <p className={`mb-2.5 font-mono text-[10px] font-bold uppercase tracking-widest ${slide.outputColor}`}>
+                        {slide.outputLabel}
                       </p>
                       <OutputPane />
                     </motion.div>
@@ -325,38 +405,34 @@ export function Hero() {
 
               {/* Status bar footer */}
               <div className="flex items-center gap-2 border-t border-[var(--workspace-border)] bg-[var(--workspace-background)] px-4 py-1.5">
-                <span className="font-mono text-[10px] text-[var(--workspace-text-muted)]">258 B</span>
-                <span className="select-none text-[var(--workspace-border)]">·</span>
-                <span className="font-mono text-[10px] text-[var(--workspace-text-muted)]">10 lines</span>
+                <span className="font-mono text-[10px] text-[var(--workspace-text-muted)]">auto-detect</span>
                 <span className="select-none text-[var(--workspace-border)]">·</span>
                 <span className="font-mono text-[10px] text-[var(--workspace-text-muted)]">UTF-8</span>
                 <AnimatePresence mode="wait">
                   <motion.span
-                    key={mode}
+                    key={slide.id}
                     initial={{ opacity: 0, x: 6 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -6 }}
                     transition={{ duration: 0.2 }}
-                    className={`ml-auto font-mono text-[10px] font-semibold ${meta.statusColor}`}
+                    className="ml-auto flex items-center gap-1.5 font-mono text-[10px] font-semibold"
                   >
-                    {meta.statusLabel}
+                    <span className={slide.inputColor}>{slide.inputLabel}</span>
+                    <span className="text-primary">→</span>
+                    <span className={slide.outputColor}>{slide.outputLabel}</span>
                   </motion.span>
                 </AnimatePresence>
               </div>
 
-              {/* Mode indicator dots */}
+              {/* Slide indicator dots */}
               <div className="flex items-center justify-center gap-1.5 border-t border-[var(--workspace-border)] bg-[var(--workspace-background)] py-2">
-                {OUTPUT_MODES.map((m, i) => (
+                {SLIDES.map((s, i) => (
                   <button
-                    key={m}
+                    key={s.id}
                     type="button"
-                    aria-label={`Switch to ${m} view`}
-                    onClick={() => setModeIndex(i)}
-                    className={`h-1.5 rounded-full transition-all duration-300 ${
-                      i === modeIndex
-                        ? "w-4 bg-primary"
-                        : "w-1.5 bg-[var(--workspace-border)] hover:bg-[var(--workspace-text-muted)]"
-                    }`}
+                    aria-label={`Show ${s.inputLabel} → ${s.outputLabel}`}
+                    className={`h-1.5 rounded-full transition-all duration-300 ${i === slideIdx ? "w-4 bg-primary" : "w-1.5 bg-[var(--workspace-border)] hover:bg-primary/40"}`}
+                    onClick={() => setSlideIdx(i)}
                   />
                 ))}
               </div>
@@ -368,4 +444,16 @@ export function Hero() {
   );
 }
 
-// removed old static Hero export
+
+type OutputMode = "typescript" | "yaml" | "xml" | "json" | "graph";
+
+const OUTPUT_MODES: OutputMode[] = ["typescript", "yaml", "xml", "json", "graph"];
+
+const MODE_META: Record<OutputMode, { label: string; labelColor: string; statusLabel: string; statusColor: string }> = {
+  typescript: { label: "TYPESCRIPT",   labelColor: "text-violet-500",  statusLabel: "JSON \u2192 TypeScript", statusColor: "text-violet-500" },
+  yaml:       { label: "YAML",         labelColor: "text-lime-600",    statusLabel: "JSON \u2192 YAML",       statusColor: "text-lime-600" },
+  xml:        { label: "XML",          labelColor: "text-red-500",     statusLabel: "JSON \u2192 XML",        statusColor: "text-red-500" },
+  json:       { label: "FORMATTED",    labelColor: "text-amber-500",   statusLabel: "JSON Beautify",         statusColor: "text-amber-500" },
+  graph:      { label: "GRAPH VIEW",   labelColor: "text-emerald-500", statusLabel: "Graph View",            statusColor: "text-emerald-500" },
+};
+

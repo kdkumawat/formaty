@@ -18,7 +18,7 @@ interface JsonEditorProps {
   fontSize?: number;
   onCursorChange?: (line: number, column: number) => void;
   wordWrap?: "on" | "off";
-  onEditorMount?: (api: { find(): void; focus(): void }) => void;
+  onEditorMount?: (api: { find(): void; focus(): void; collapseAll(): void; expandAll(): void }) => void;
 }
 
 export function JsonEditor({
@@ -111,6 +111,8 @@ export function JsonEditor({
             onEditorMount({
               find: () => editor.trigger("keyboard", "actions.find", null),
               focus: () => editor.focus(),
+              collapseAll: () => editor.trigger("keyboard", "editor.foldAll", null),
+              expandAll: () => editor.trigger("keyboard", "editor.unfoldAll", null),
             });
           }
           if (onCursorChange) {

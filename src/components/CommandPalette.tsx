@@ -32,9 +32,12 @@ interface CommandPaletteProps {
   onClose: () => void;
   commands: Command[];
   isDark: boolean;
+  recentIds?: string[];
+  onExecute?: (id: string) => void;
 }
 
 const CATEGORY_ORDER = [
+  "Recent",
   "Actions",
   "Convert to",
   "View as",
@@ -48,6 +51,7 @@ const CATEGORY_ORDER = [
 function groupCommands(
   commands: Command[],
   query: string,
+  recentIds: string[] = [],
 ): Array<{ category: string; items: Command[] }> {
   const q = query.trim().toLowerCase();
 
@@ -62,6 +66,19 @@ function groupCommands(
     : commands.filter((c) => !c.disabled || c.category === "Actions");
 
   const byCategory = new Map<string, Command[]>();
+
+  // Add recent items at the top when there's no query
+  if (!q && recentIds.length > 0) {
+    const recentItems: Command[] = [];
+    for (const id of recentIds) {
+      const cmd = filtered.find((c) => c.id === id && !c.disabled);
+      if (cmd) recentItems.push(cmd);
+    }
+    if (recentItems.length > 0) {
+      byCategory.set("Recent", recentItems);
+    }
+  }
+
   for (const cmd of filtered) {
     const list = byCategory.get(cmd.category) ?? [];
     list.push(cmd);
@@ -85,13 +102,15 @@ export function CommandPalette({
   onClose,
   commands,
   isDark,
+  recentIds = [],
+  onExecute,
 }: CommandPaletteProps) {
   const [query, setQuery] = useState("");
   const [activeIdx, setActiveIdx] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  const groups = useMemo(() => groupCommands(commands, query), [commands, query]);
+  const groups = useMemo(() => groupCommands(commands, query, recentIds), [commands, query, recentIds]);
   const flat = useMemo(() => groups.flatMap((g) => g.items), [groups]);
 
   // Reset state when opening
@@ -116,9 +135,10 @@ export function CommandPalette({
     (cmd: Command) => {
       if (cmd.disabled) return;
       onClose();
+      onExecute?.(cmd.id);
       cmd.action();
     },
-    [onClose],
+    [onClose, onExecute],
   );
 
   const onKeyDown = useCallback(
@@ -150,19 +170,19 @@ export function CommandPalette({
     setActiveIdx(0);
   }, [query]);
 
-  const borderColor = isDark ? "border-[#2a2a2a]" : "border-[#e0e0e0]";
-  const bg = isDark ? "bg-[#1a1a1a]" : "bg-white";
-  const inputBg = isDark ? "bg-[#111111]" : "bg-[#f7f7f7]";
-  const textMuted = isDark ? "text-[#888]" : "text-[#888]";
-  const categoryColor = isDark ? "text-[#555]" : "text-[#bbb]";
-  const hoverBg = isDark ? "hover:bg-white/[0.03]" : "hover:bg-black/[0.03]";
+  const borderColor = isDark ? "border-white/[0.08]" : "border-black/[0.06]";
+  const bg = isDark ? "bg-[#141414]/95 backdrop-blur-xl" : "bg-white/95 backdrop-blur-xl";
+  const inputBg = isDark ? "bg-white/[0.05]" : "bg-black/[0.02]";
+  const textMuted = isDark ? "text-white/50" : "text-black/35";
+  const categoryColor = isDark ? "text-primary/60" : "text-primary/40";
+  const hoverBg = isDark ? "hover:bg-white/[0.07]" : "hover:bg-black/[0.03]";
   const activeBg = "bg-primary/10";
   const activeText = "text-primary";
   const dotActive = "bg-primary";
-  const dotInactive = isDark ? "bg-white/20" : "bg-black/15";
+  const dotInactive = isDark ? "bg-white/15" : "bg-black/10";
   const textColor = isDark ? "text-[#e8e8e8]" : "text-[#1a1a1a]";
-  const badgeBg = isDark ? "bg-[#2a2a2a] text-[#666] border-[#333]" : "bg-[#efefef] text-[#999] border-[#e0e0e0]";
-  const activeBadgeBg = "bg-primary/15 text-primary/80 border-primary/25";
+  const badgeBg = isDark ? "bg-white/[0.08] text-white/45 border-white/[0.08]" : "bg-black/[0.04] text-black/30 border-black/[0.06]";
+  const activeBadgeBg = "bg-primary/15 text-primary/70 border-primary/20";
 
   let flatIdx = 0;
 
@@ -188,7 +208,7 @@ export function CommandPalette({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.97, y: -8 }}
             transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
-            className={`fixed left-1/2 top-[12%] z-[201] w-full max-w-[560px] -translate-x-1/2 overflow-hidden rounded-2xl border shadow-2xl ${bg} ${borderColor}`}
+            className={`fixed left-1/2 top-[12%] z-[201] w-full max-w-[560px] -translate-x-1/2 overflow-hidden rounded-2xl border shadow-2xl shadow-black/20 ${bg} ${borderColor}`}
             style={{ maxHeight: "min(520px, 80dvh)" }}
             onKeyDown={onKeyDown}
           >
@@ -204,7 +224,7 @@ export function CommandPalette({
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search commands…"
-                className={`min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:${textMuted} ${textColor}`}
+                className={`min-w-0 flex-1 bg-transparent text-sm font-medium tracking-wide outline-none placeholder:${textMuted} ${textColor}`}
               />
               {query ? (
                 <button
@@ -236,7 +256,7 @@ export function CommandPalette({
                 <div className="py-1.5">
                   {groups.map((group) => (
                     <div key={group.category}>
-                      <div className={`px-4 py-1.5 text-[10px] font-semibold uppercase tracking-widest ${categoryColor}`}>
+                      <div className={`px-4 py-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] ${categoryColor}`}>
                         {group.category}
                       </div>
                       {group.items.map((cmd) => {
@@ -250,7 +270,7 @@ export function CommandPalette({
                             disabled={cmd.disabled}
                             onMouseEnter={() => setActiveIdx(myIdx)}
                             onClick={() => execute(cmd)}
-                            className={`flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm transition-all disabled:opacity-40 ${
+                            className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] transition-all duration-100 disabled:opacity-40 ${
                               isActive ? `${activeBg} ${activeText}` : `${hoverBg} ${textColor}`
                             }`}
                           >
@@ -288,21 +308,21 @@ export function CommandPalette({
             </div>
 
             {/* Footer hint */}
-            <div className={`flex items-center gap-3 border-t px-4 py-2 text-[10px] ${borderColor} ${textMuted}`}>
+            <div className={`flex items-center gap-4 border-t px-4 py-2 text-[10px] tracking-wide ${borderColor} ${textMuted}`}>
               <span className="flex items-center gap-1">
-                <kbd className={`rounded border px-1 py-0.5 font-mono ${badgeBg}`}>↑↓</kbd>
+                <kbd className={`rounded-md border px-1.5 py-0.5 font-mono text-[9px] ${badgeBg}`}>↑↓</kbd>
                 navigate
               </span>
               <span className="flex items-center gap-1">
-                <kbd className={`rounded border px-1 py-0.5 font-mono ${badgeBg}`}>↵</kbd>
+                <kbd className={`rounded-md border px-1.5 py-0.5 font-mono text-[9px] ${badgeBg}`}>↵</kbd>
                 run
               </span>
               <span className="flex items-center gap-1">
-                <kbd className={`rounded border px-1 py-0.5 font-mono ${badgeBg}`}>ESC</kbd>
+                <kbd className={`rounded-md border px-1.5 py-0.5 font-mono text-[9px] ${badgeBg}`}>ESC</kbd>
                 close
               </span>
               <span className="ml-auto flex items-center gap-1">
-                <kbd className={`rounded border px-1 py-0.5 font-mono ${badgeBg}`}>⌘K</kbd>
+                <kbd className={`rounded-md border px-1.5 py-0.5 font-mono text-[9px] ${badgeBg}`}>⌘K</kbd>
                 open
               </span>
             </div>
