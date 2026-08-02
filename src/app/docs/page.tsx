@@ -455,15 +455,19 @@ export default function DocsPage() {
           </Section>
 
           {/* ── Diff ── */}
-          <Section id="diff" query={query} keywords={["diff","compare","delta","side-by-side","inline","navigate","changes","two documents","delta"]}>
+          <Section id="diff" query={query} keywords={["diff","compare","delta","side-by-side","inline","navigate","changes","two documents","delta","paths","hunks","swap","whitespace","report","stats"]}>
             <SectionTitle id="diff">Diff &amp; Compare</SectionTitle>
-            <p className="mb-4 text-sm leading-relaxed text-[var(--workspace-text-muted)]">Compare two documents side-by-side with full change highlighting.</p>
+            <p className="mb-4 text-sm leading-relaxed text-[var(--workspace-text-muted)]">
+              Compare two documents full-width with line highlighting, path-level JSON stats, and exportable reports.
+            </p>
             <ul className="space-y-2 text-sm text-[var(--workspace-text-muted)]">
-              <li><strong className="text-[var(--workspace-text)]">Enter diff mode</strong> &mdash; Actions &rarr; "Diff / Compare JSON" or command palette &rarr; "Diff".</li>
-              <li><strong className="text-[var(--workspace-text)]">Side-by-side view</strong> &mdash; Two editable panes showing additions (green) and removals (red), default mode.</li>
-              <li><strong className="text-[var(--workspace-text)]">Inline view</strong> &mdash; Toggle with the "Inline" button in the diff toolbar.</li>
-              <li><strong className="text-[var(--workspace-text)]">Navigate diffs</strong> &mdash; Use the arrow buttons in the toolbar or search "diff next" / "diff prev" in the command palette.</li>
-              <li><strong className="text-[var(--workspace-text)]">Exit diff</strong> &mdash; Command palette &rarr; "Exit Diff mode".</li>
+              <li><strong className="text-[var(--workspace-text)]">Enter diff mode</strong> &mdash; Actions &rarr; "Diff / Compare JSON" or command palette &rarr; "Diff". The main input panel hides so you only see left/right panes.</li>
+              <li><strong className="text-[var(--workspace-text)]">Counts &amp; navigation</strong> &mdash; Toolbar shows <em>current/total</em> line hunks, <span className="text-emerald-600">+lines</span> / <span className="text-red-500">−lines</span>, and JSON path totals (+ added, − removed, ~ changed). Jump with the arrow buttons or palette "diff next" / "diff prev".</li>
+              <li><strong className="text-[var(--workspace-text)]">Side-by-side / Inline</strong> &mdash; Toggle layout; optional <strong>Trim WS</strong> ignores leading/trailing whitespace on lines.</li>
+              <li><strong className="text-[var(--workspace-text)]">Path list</strong> &mdash; "Paths" opens a structural change list (filter All / + / − / ~). Requires valid JSON on both sides.</li>
+              <li><strong className="text-[var(--workspace-text)]">Swap, beautify, paste</strong> &mdash; Swap left↔right, beautify both sides, paste into the focused pane. Undo/redo work per pane (Ctrl+Z / Ctrl+Y).</li>
+              <li><strong className="text-[var(--workspace-text)]">Export</strong> &mdash; Copy left/right, path list, or a full report; download <code className="text-[var(--workspace-text)]">formaty-diff-report.json</code>.</li>
+              <li><strong className="text-[var(--workspace-text)]">Exit</strong> &mdash; "Exit Diff" in the toolbar or command palette &rarr; "Exit Diff mode".</li>
             </ul>
           </Section>
 
