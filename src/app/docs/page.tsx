@@ -455,19 +455,26 @@ export default function DocsPage() {
           </Section>
 
           {/* ── Diff ── */}
-          <Section id="diff" query={query} keywords={["diff","compare","delta","side-by-side","inline","navigate","changes","two documents","delta","paths","hunks","swap","whitespace","report","stats"]}>
+          <Section id="diff" query={query} keywords={["diff","compare","delta","side-by-side","inline","navigate","changes","two documents","delta","paths","hunks","swap","whitespace","report","stats","list","set","sql","in","common","intersection"]}>
             <SectionTitle id="diff">Diff &amp; Compare</SectionTitle>
             <p className="mb-4 text-sm leading-relaxed text-[var(--workspace-text-muted)]">
-              Compare two documents full-width with line highlighting, path-level JSON stats, and exportable reports.
+              Two modes: <strong className="text-[var(--workspace-text)]">Document</strong> (text/JSON line + path diff) and{" "}
+              <strong className="text-[var(--workspace-text)]">List / Set</strong> (common / only-left / only-right with SQL <code className="text-[var(--workspace-text)]">IN</code> export).
             </p>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--workspace-text-muted)]">Document mode</p>
+            <ul className="mb-4 space-y-2 text-sm text-[var(--workspace-text-muted)]">
+              <li><strong className="text-[var(--workspace-text)]">Enter</strong> &mdash; Actions &rarr; Diff, or palette &rarr; Diff. Full-width left/right panes (main input hidden).</li>
+              <li><strong className="text-[var(--workspace-text)]">Counts</strong> &mdash; <em>current/total</em> hunks, +/− lines, JSON path totals. Navigate with arrows or palette.</li>
+              <li><strong className="text-[var(--workspace-text)]">Tools</strong> &mdash; Inline layout, Trim WS, Paths panel, swap, beautify, paste, export report.</li>
+            </ul>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--workspace-text-muted)]">List / Set mode</p>
             <ul className="space-y-2 text-sm text-[var(--workspace-text-muted)]">
-              <li><strong className="text-[var(--workspace-text)]">Enter diff mode</strong> &mdash; Actions &rarr; "Diff / Compare JSON" or command palette &rarr; "Diff". The main input panel hides so you only see left/right panes.</li>
-              <li><strong className="text-[var(--workspace-text)]">Counts &amp; navigation</strong> &mdash; Toolbar shows <em>current/total</em> line hunks, <span className="text-emerald-600">+lines</span> / <span className="text-red-500">−lines</span>, and JSON path totals (+ added, − removed, ~ changed). Jump with the arrow buttons or palette "diff next" / "diff prev".</li>
-              <li><strong className="text-[var(--workspace-text)]">Side-by-side / Inline</strong> &mdash; Toggle layout; optional <strong>Trim WS</strong> ignores leading/trailing whitespace on lines.</li>
-              <li><strong className="text-[var(--workspace-text)]">Path list</strong> &mdash; "Paths" opens a structural change list (filter All / + / − / ~). Requires valid JSON on both sides.</li>
-              <li><strong className="text-[var(--workspace-text)]">Swap, beautify, paste</strong> &mdash; Swap left↔right, beautify both sides, paste into the focused pane. Undo/redo work per pane (Ctrl+Z / Ctrl+Y).</li>
-              <li><strong className="text-[var(--workspace-text)]">Export</strong> &mdash; Copy left/right, path list, or a full report; download <code className="text-[var(--workspace-text)]">formaty-diff-report.json</code>.</li>
-              <li><strong className="text-[var(--workspace-text)]">Exit</strong> &mdash; "Exit Diff" in the toolbar or command palette &rarr; "Exit Diff mode".</li>
+              <li><strong className="text-[var(--workspace-text)]">Switch</strong> &mdash; Toolbar tab <em>List / Set</em> (or palette &rarr; &quot;Diff: List / set mode&quot;).</li>
+              <li><strong className="text-[var(--workspace-text)]">Buckets</strong> &mdash; Common, Only left, Only right, Union, Symmetric diff, Left/Right duplicates — with live counts.</li>
+              <li><strong className="text-[var(--workspace-text)]">Parse</strong> &mdash; Auto / newline / comma / semicolon / pipe / whitespace / JSON array; toggles for trim, skip empty, ignore case, strip quotes, normalize numbers.</li>
+              <li><strong className="text-[var(--workspace-text)]">Sort</strong> &mdash; Original, A→Z, Z→A, numeric, by frequency.</li>
+              <li><strong className="text-[var(--workspace-text)]">Export</strong> &mdash; SQL <code className="text-[var(--workspace-text)]">IN</code> with single/double/unquoted, full <code className="text-[var(--workspace-text)]">column IN (…)</code> / <code className="text-[var(--workspace-text)]">NOT IN</code>, JSON array, CSV, YAML, JS/Python lists, regex alternation. One-click quick buttons + download.</li>
+              <li><strong className="text-[var(--workspace-text)]">Sample</strong> &mdash; Empty state offers sample fruit lists to try common vs left-only vs right-only.</li>
             </ul>
           </Section>
 

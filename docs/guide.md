@@ -78,11 +78,24 @@ Star languages to pin them to the output toolbar for one-click generation.
 
 ## Diff
 
-Diff compares two JSON documents. Paste the second document in the right editor pane when diff mode is active.
+Diff has two modes (switch in the toolbar):
 
-- **Side-by-side view** - changes displayed in two columns (default)
-- **Inline view** - toggle with the "Inline" / "Side-by-side" button in the diff toolbar
-- **Previous / Next difference** - navigate between individual changes using the ↑ ↓ buttons in the diff toolbar, or via the command palette
+### Document mode
+Compares two text/JSON documents full-width (main input panel is hidden).
+
+- **Side-by-side / Inline** - layout toggle in the toolbar
+- **Counts** - current/total hunks, +/− lines, JSON path totals
+- **Paths** - structural key/path change list (valid JSON on both sides)
+- **Trim WS, swap, beautify, export report**
+
+### List / Set mode
+Compare two lists (ids, emails, tags, etc.) for common / only-left / only-right.
+
+- **Parse** - auto, newline, comma, semicolon, pipe, whitespace, or JSON array
+- **Normalize** - trim, skip empty, ignore case, strip quotes, normalize numbers
+- **Buckets** - Common, Only left, Only right, Union, Symmetric, duplicates
+- **Export** - SQL `IN` / `NOT IN` (with column name), JSON, CSV, YAML, JS/Python lists, regex
+- **Sort** - A→Z, numeric, frequency
 
 ---
 
@@ -247,7 +260,8 @@ Click the chevron next to the Transform button to open the config panel. From th
 
 ## Diff
 
-Diff compares two JSON documents. Paste the second document in the modal and run. Output shows a side-by-side view with additions and removals highlighted.
+**Document mode** — side-by-side text/JSON diff with path stats and export.  
+**List / Set mode** — intersection/difference of two lists with SQL `IN` and other exports.
 
 ## Share URL
 

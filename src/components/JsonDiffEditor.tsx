@@ -1,7 +1,7 @@
 "use client";
 
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { DiffEditor } from "@monaco-editor/react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef } from "react";
+import { DiffEditor, type DiffOnMount } from "@monaco-editor/react";
 import type { editor } from "monaco-editor";
 import type { LineDiffStats } from "@/lib/json/diff";
 
@@ -90,9 +90,14 @@ function computeLineStats(changes: editor.ILineChange[] | null): LineDiffStats {
 }
 
 /**
- * Monaco DiffEditor from @monaco-editor/react calls model.setValue() whenever the
- * `original` prop changes, which wipes the undo stack. We keep stable prop values
- * for the DiffEditor and only push external updates, so typing does not destroy undo.
+ * Live-friendly DiffEditor wrapper.
+ *
+ * @monaco-editor/react calls model.setValue() whenever `original` / `modified` props
+ * change, which both wipes undo and can lag decorations by a keystroke when React
+ * state is used as a controlled value. We therefore:
+ *  - pass props only as the initial seed (stable after mount)
+ *  - apply external updates via model.setValue on the live models
+ *  - let typing update models natively so diff highlights stay live
  */
 export const JsonDiffEditor = forwardRef<JsonDiffEditorRef, JsonDiffEditorProps>(function JsonDiffEditor(
   {
@@ -115,6 +120,7 @@ export const JsonDiffEditor = forwardRef<JsonDiffEditorRef, JsonDiffEditorProps>
   ref,
 ) {
   const diffEditorRef = useRef<editor.IStandaloneDiffEditor | null>(null);
+  const monacoRef = useRef<typeof import("monaco-editor") | null>(null);
   const onOriginalChangeRef = useRef(onOriginalChange);
   const onModifiedChangeRef = useRef(onModifiedChange);
   const onLineStatsChangeRef = useRef(onLineStatsChange);
@@ -124,30 +130,20 @@ export const JsonDiffEditor = forwardRef<JsonDiffEditorRef, JsonDiffEditorProps>
   onLineStatsChangeRef.current = onLineStatsChange;
   onNavChangeRef.current = onNavChange;
 
-  const [editorOriginal, setEditorOriginal] = useState(original);
-  const [editorModified, setEditorModified] = useState(modified);
-  const lastEmittedOriginal = useRef(original);
-  const lastEmittedModified = useRef(modified);
-  const statsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    if (original === lastEmittedOriginal.current) return;
-    lastEmittedOriginal.current = original;
-    setEditorOriginal(original);
-  }, [original]);
-
-  useEffect(() => {
-    if (modified === lastEmittedModified.current) return;
-    lastEmittedModified.current = modified;
-    setEditorModified(modified);
-  }, [modified]);
+  // Values last known to match the live models (typing + external)
+  const lastOriginalRef = useRef(original);
+  const lastModifiedRef = useRef(modified);
+  // Seed values frozen for the DiffEditor React props (never updated after first paint
+  // of this instance — remount via parent key if a full reset is required)
+  const seedOriginalRef = useRef(original);
+  const seedModifiedRef = useRef(modified);
+  const mountedRef = useRef(false);
 
   const emitStatsAndNav = useCallback(() => {
     const ed = diffEditorRef.current;
     if (!ed) return;
     const changes = ed.getLineChanges();
-    const stats = computeLineStats(changes);
-    onLineStatsChangeRef.current?.(stats);
+    onLineStatsChangeRef.current?.(computeLineStats(changes));
 
     const modEditor = ed.getModifiedEditor();
     const currentLine = modEditor.getPosition()?.lineNumber ?? 0;
@@ -156,41 +152,89 @@ export const JsonDiffEditor = forwardRef<JsonDiffEditorRef, JsonDiffEditorProps>
       onNavChangeRef.current?.({ current: 0, total: 0 });
       return;
     }
-    // Find nearest change at or after cursor; else last change before cursor
     let idx = list.findIndex((c) => c.modifiedStartLineNumber >= currentLine);
-    if (idx < 0) {
-      // cursor past all changes — use last
-      idx = list.length - 1;
-    } else if (idx > 0 && list[idx].modifiedStartLineNumber > currentLine) {
-      // if not exactly on a change, prefer previous if cursor is between
+    if (idx < 0) idx = list.length - 1;
+    else if (idx > 0 && list[idx].modifiedStartLineNumber > currentLine) {
       const prev = list[idx - 1];
       if (prev.modifiedEndLineNumber > 0 && currentLine <= prev.modifiedEndLineNumber) {
         idx = idx - 1;
-      } else if (currentLine < list[idx].modifiedStartLineNumber && idx > 0) {
-        // between hunks — show upcoming as current for "N of M" feel when navigating
       }
     }
-    // Clamp: if on a pure deletion (modifiedStartLineNumber can be 0-ish), still count
     onNavChangeRef.current?.({ current: idx + 1, total: list.length });
   }, []);
 
-  const scheduleStats = useCallback(() => {
-    if (statsTimerRef.current) clearTimeout(statsTimerRef.current);
-    statsTimerRef.current = setTimeout(() => {
-      statsTimerRef.current = null;
-      emitStatsAndNav();
-    }, 80);
-  }, [emitStatsAndNav]);
-
-  useEffect(() => () => {
-    if (statsTimerRef.current) clearTimeout(statsTimerRef.current);
+  const applyExternalValue = useCallback((side: "original" | "modified", value: string) => {
+    const ed = diffEditorRef.current;
+    if (!ed) return;
+    const model = side === "original" ? ed.getModel()?.original : ed.getModel()?.modified;
+    if (!model) return;
+    if (model.getValue() === value) return;
+    // setValue resets that side's undo stack — only used for external sync (swap, paste from parent, enter-diff)
+    model.setValue(value);
   }, []);
 
-  // Recompute when layout / ignore-whitespace option changes (Monaco recomputes async)
+  // External prop sync (parent state changed, not from our own typing)
   useEffect(() => {
-    const t = setTimeout(emitStatsAndNav, 120);
-    return () => clearTimeout(t);
-  }, [renderSideBySide, ignoreTrimWhitespace, editorOriginal, editorModified, emitStatsAndNav]);
+    if (!mountedRef.current) {
+      lastOriginalRef.current = original;
+      return;
+    }
+    if (original === lastOriginalRef.current) return;
+    lastOriginalRef.current = original;
+    applyExternalValue("original", original);
+  }, [original, applyExternalValue]);
+
+  useEffect(() => {
+    if (!mountedRef.current) {
+      lastModifiedRef.current = modified;
+      return;
+    }
+    if (modified === lastModifiedRef.current) return;
+    lastModifiedRef.current = modified;
+    applyExternalValue("modified", modified);
+  }, [modified, applyExternalValue]);
+
+  // Language / theme / options updates without touching model text
+  useEffect(() => {
+    const ed = diffEditorRef.current;
+    const monaco = monacoRef.current;
+    if (!ed || !monaco) return;
+    const model = ed.getModel();
+    if (!model) return;
+    monaco.editor.setModelLanguage(model.original, language);
+    monaco.editor.setModelLanguage(model.modified, language);
+  }, [language]);
+
+  useEffect(() => {
+    const monaco = monacoRef.current;
+    if (monaco) monaco.editor.setTheme(monacoTheme);
+  }, [monacoTheme]);
+
+  const editorOptions = useMemo(
+    () => ({
+      readOnly: !(originalEditable || modifiedEditable),
+      automaticLayout: true,
+      scrollBeyondLastLine: false,
+      renderSideBySide,
+      minimap: { enabled: false },
+      wordWrap: "on" as const,
+      fontSize,
+      originalEditable,
+      diffWordWrap: "on" as const,
+      ignoreTrimWhitespace,
+      renderIndicators: true,
+      renderMarginRevertIcon: originalEditable || modifiedEditable,
+      enableSplitViewResizing: true,
+    }),
+    [originalEditable, modifiedEditable, renderSideBySide, fontSize, ignoreTrimWhitespace],
+  );
+
+  useEffect(() => {
+    diffEditorRef.current?.updateOptions(editorOptions);
+    // Diff recompute is async after option changes
+    const t = window.setTimeout(emitStatsAndNav, 50);
+    return () => window.clearTimeout(t);
+  }, [editorOptions, emitStatsAndNav]);
 
   const getFocusedEditor = useCallback((): editor.IStandaloneCodeEditor | null => {
     const ed = diffEditorRef.current;
@@ -208,50 +252,44 @@ export const JsonDiffEditor = forwardRef<JsonDiffEditorRef, JsonDiffEditorProps>
     return mod;
   }, []);
 
-  const getPreferredEditor = useCallback(
-    (preferUndo: boolean): editor.IStandaloneCodeEditor | null => {
-      const ed = diffEditorRef.current;
-      if (!ed) return null;
-      const orig = ed.getOriginalEditor();
-      const mod = ed.getModifiedEditor();
-      if (document.activeElement) {
-        const origDom = orig.getContainerDomNode?.();
-        const modDom = mod.getContainerDomNode?.();
-        if (origDom?.contains(document.activeElement)) return orig;
-        if (modDom?.contains(document.activeElement)) return mod;
-      }
-      if (preferUndo) {
-        if (orig.getModel()?.canUndo()) return orig;
-        if (mod.getModel()?.canUndo()) return mod;
-      } else {
-        if (orig.getModel()?.canRedo()) return orig;
-        if (mod.getModel()?.canRedo()) return mod;
-      }
-      return mod;
-    },
-    [],
-  );
+  const getPreferredEditor = useCallback((preferUndo: boolean): editor.IStandaloneCodeEditor | null => {
+    const ed = diffEditorRef.current;
+    if (!ed) return null;
+    const orig = ed.getOriginalEditor();
+    const mod = ed.getModifiedEditor();
+    if (document.activeElement) {
+      const origDom = orig.getContainerDomNode?.();
+      const modDom = mod.getContainerDomNode?.();
+      if (origDom?.contains(document.activeElement)) return orig;
+      if (modDom?.contains(document.activeElement)) return mod;
+    }
+    if (preferUndo) {
+      if (orig.getModel()?.canUndo()) return orig;
+      if (mod.getModel()?.canUndo()) return mod;
+    } else {
+      if (orig.getModel()?.canRedo()) return orig;
+      if (mod.getModel()?.canRedo()) return mod;
+    }
+    return mod;
+  }, []);
 
-  const goToChangeIndex = useCallback(
-    (indexZeroBased: number) => {
-      const ed = diffEditorRef.current;
-      if (!ed) return;
-      const changes = ed.getLineChanges();
-      if (!changes || changes.length === 0) return;
-      const i = ((indexZeroBased % changes.length) + changes.length) % changes.length;
-      const target = changes[i];
-      const modEditor = ed.getModifiedEditor();
-      const line =
-        target.modifiedStartLineNumber > 0
-          ? target.modifiedStartLineNumber
-          : Math.max(1, target.originalStartLineNumber);
-      modEditor.revealLineInCenter(line);
-      modEditor.setPosition({ lineNumber: line, column: 1 });
-      modEditor.focus();
-      onNavChangeRef.current?.({ current: i + 1, total: changes.length });
-    },
-    [],
-  );
+  const goToChangeIndex = useCallback((indexZeroBased: number) => {
+    const ed = diffEditorRef.current;
+    if (!ed) return;
+    const changes = ed.getLineChanges();
+    if (!changes || changes.length === 0) return;
+    const i = ((indexZeroBased % changes.length) + changes.length) % changes.length;
+    const target = changes[i];
+    const modEditor = ed.getModifiedEditor();
+    const line =
+      target.modifiedStartLineNumber > 0
+        ? target.modifiedStartLineNumber
+        : Math.max(1, target.originalStartLineNumber);
+    modEditor.revealLineInCenter(line);
+    modEditor.setPosition({ lineNumber: line, column: 1 });
+    modEditor.focus();
+    onNavChangeRef.current?.({ current: i + 1, total: changes.length });
+  }, []);
 
   useImperativeHandle(
     ref,
@@ -300,8 +338,7 @@ export const JsonDiffEditor = forwardRef<JsonDiffEditorRef, JsonDiffEditorProps>
         if (!ed) return;
         const changes = ed.getLineChanges();
         if (!changes || changes.length === 0) return;
-        const modEditor = ed.getModifiedEditor();
-        const currentLine = modEditor.getPosition()?.lineNumber ?? 0;
+        const currentLine = ed.getModifiedEditor().getPosition()?.lineNumber ?? 0;
         const nextIdx = changes.findIndex((c) => c.modifiedStartLineNumber > currentLine);
         goToChangeIndex(nextIdx >= 0 ? nextIdx : 0);
       },
@@ -310,8 +347,7 @@ export const JsonDiffEditor = forwardRef<JsonDiffEditorRef, JsonDiffEditorProps>
         if (!ed) return;
         const changes = ed.getLineChanges();
         if (!changes || changes.length === 0) return;
-        const modEditor = ed.getModifiedEditor();
-        const currentLine = modEditor.getPosition()?.lineNumber ?? 0;
+        const currentLine = ed.getModifiedEditor().getPosition()?.lineNumber ?? 0;
         let prevIdx = -1;
         for (let i = changes.length - 1; i >= 0; i--) {
           if (changes[i].modifiedStartLineNumber < currentLine) {
@@ -331,10 +367,10 @@ export const JsonDiffEditor = forwardRef<JsonDiffEditorRef, JsonDiffEditorProps>
         return computeLineStats(diffEditorRef.current?.getLineChanges() ?? null);
       },
       getOriginalValue() {
-        return diffEditorRef.current?.getOriginalEditor().getModel()?.getValue() ?? lastEmittedOriginal.current;
+        return diffEditorRef.current?.getOriginalEditor().getModel()?.getValue() ?? lastOriginalRef.current;
       },
       getModifiedValue() {
-        return diffEditorRef.current?.getModifiedEditor().getModel()?.getValue() ?? lastEmittedModified.current;
+        return diffEditorRef.current?.getModifiedEditor().getModel()?.getValue() ?? lastModifiedRef.current;
       },
       focusOriginal() {
         diffEditorRef.current?.getOriginalEditor().focus();
@@ -343,63 +379,90 @@ export const JsonDiffEditor = forwardRef<JsonDiffEditorRef, JsonDiffEditorProps>
         diffEditorRef.current?.getModifiedEditor().focus();
       },
       setBoth(nextOriginal: string, nextModified: string) {
-        lastEmittedOriginal.current = nextOriginal;
-        lastEmittedModified.current = nextModified;
-        setEditorOriginal(nextOriginal);
-        setEditorModified(nextModified);
+        lastOriginalRef.current = nextOriginal;
+        lastModifiedRef.current = nextModified;
+        applyExternalValue("original", nextOriginal);
+        applyExternalValue("modified", nextModified);
+        window.setTimeout(emitStatsAndNav, 30);
       },
     }),
-    [getFocusedEditor, getPreferredEditor, goToChangeIndex],
+    [getFocusedEditor, getPreferredEditor, goToChangeIndex, applyExternalValue, emitStatsAndNav],
   );
 
-  const handleMount = useCallback(
-    (ed: editor.IStandaloneDiffEditor) => {
+  const disposablesRef = useRef<{ dispose: () => void }[]>([]);
+
+  const handleMount = useCallback<DiffOnMount>(
+    (ed, monaco) => {
+      // Dispose previous listeners if remounting
+      disposablesRef.current.forEach((d) => d.dispose());
+      disposablesRef.current = [];
+
       diffEditorRef.current = ed;
-      const model = ed.getModel();
-      if (!model) return;
+      monacoRef.current = monaco as unknown as typeof import("monaco-editor");
+      mountedRef.current = true;
+      lastOriginalRef.current = ed.getOriginalEditor().getModel()?.getValue() ?? seedOriginalRef.current;
+      lastModifiedRef.current = ed.getModifiedEditor().getModel()?.getValue() ?? seedModifiedRef.current;
+
       const disposables: { dispose: () => void }[] = [];
+      const model = ed.getModel();
 
-      const onContent = () => scheduleStats();
-      if (model.original) {
-        disposables.push(model.original.onDidChangeContent(onContent));
-        if (originalEditable) {
-          disposables.push(
-            model.original.onDidChangeContent(() => {
-              const value = model.original.getValue();
-              lastEmittedOriginal.current = value;
-              onOriginalChangeRef.current?.(value);
-            }),
-          );
-        }
-      }
-      if (model.modified) {
-        disposables.push(model.modified.onDidChangeContent(onContent));
-        if (modifiedEditable) {
-          disposables.push(
-            model.modified.onDidChangeContent(() => {
-              const value = model.modified.getValue();
-              lastEmittedModified.current = value;
-              onModifiedChangeRef.current?.(value);
-            }),
-          );
-        }
-      }
-
-      const modEditor = ed.getModifiedEditor();
-      disposables.push(modEditor.onDidChangeCursorPosition(() => scheduleStats()));
-
-      // Initial stats after Monaco computes diff
-      setTimeout(() => emitStatsAndNav(), 100);
-
-      return () => {
-        diffEditorRef.current = null;
-        disposables.forEach((d) => d.dispose());
+      // Prefer Monaco's own "diff finished" event for live stats/highlights
+      const anyEd = ed as editor.IStandaloneDiffEditor & {
+        onDidUpdateDiff?: (listener: () => void) => { dispose: () => void };
       };
+      if (typeof anyEd.onDidUpdateDiff === "function") {
+        disposables.push(anyEd.onDidUpdateDiff(() => emitStatsAndNav()));
+      }
+
+      if (model?.original) {
+        disposables.push(
+          model.original.onDidChangeContent(() => {
+            const value = model.original.getValue();
+            lastOriginalRef.current = value;
+            onOriginalChangeRef.current?.(value);
+            // Fallback if onDidUpdateDiff is unavailable
+            window.setTimeout(emitStatsAndNav, 0);
+          }),
+        );
+      }
+      if (model?.modified) {
+        disposables.push(
+          model.modified.onDidChangeContent(() => {
+            const value = model.modified.getValue();
+            lastModifiedRef.current = value;
+            onModifiedChangeRef.current?.(value);
+            window.setTimeout(emitStatsAndNav, 0);
+          }),
+        );
+      }
+
+      disposables.push(ed.getModifiedEditor().onDidChangeCursorPosition(() => emitStatsAndNav()));
+      disposablesRef.current = disposables;
+
+      try {
+        if (model) {
+          monaco.editor.setModelLanguage(model.original, language);
+          monaco.editor.setModelLanguage(model.modified, language);
+        }
+        monaco.editor.setTheme(monacoTheme);
+      } catch {
+        /* ignore */
+      }
+
+      window.setTimeout(emitStatsAndNav, 50);
     },
-    [originalEditable, modifiedEditable, scheduleStats, emitStatsAndNav],
+    [emitStatsAndNav],
   );
 
-  const bothEditable = originalEditable || modifiedEditable;
+  useEffect(
+    () => () => {
+      mountedRef.current = false;
+      disposablesRef.current.forEach((d) => d.dispose());
+      disposablesRef.current = [];
+      diffEditorRef.current = null;
+    },
+    [],
+  );
 
   return (
     <div
@@ -407,26 +470,13 @@ export const JsonDiffEditor = forwardRef<JsonDiffEditorRef, JsonDiffEditorProps>
     >
       <DiffEditor
         height="100%"
-        original={editorOriginal}
-        modified={editorModified}
+        // Stable seeds — never feed live React state back into these props
+        original={seedOriginalRef.current}
+        modified={seedModifiedRef.current}
         language={language}
         theme={monacoTheme}
         onMount={handleMount}
-        options={{
-          readOnly: !bothEditable,
-          automaticLayout: true,
-          scrollBeyondLastLine: false,
-          renderSideBySide,
-          minimap: { enabled: false },
-          wordWrap: "on",
-          fontSize,
-          originalEditable,
-          diffWordWrap: "on",
-          ignoreTrimWhitespace,
-          renderIndicators: true,
-          renderMarginRevertIcon: bothEditable,
-          enableSplitViewResizing: true,
-        }}
+        options={editorOptions}
       />
     </div>
   );

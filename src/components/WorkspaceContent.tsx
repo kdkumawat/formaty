@@ -33,6 +33,7 @@ import {
   ViewColumnsIcon,
 } from "@heroicons/react/24/outline";
 import { JsonDiffEditor, type DiffNavState, type JsonDiffEditorRef } from "@/components/JsonDiffEditor";
+import { ListComparePanel } from "@/components/ListComparePanel";
 import { JsonEditor } from "@/components/JsonEditor";
 import { GraphView, type GraphViewRef } from "@/components/GraphView";
 import { TreeView } from "@/components/TreeView";
@@ -270,6 +271,41 @@ type FormatOptions = {
   removeEmpty: boolean;
 };
 
+/**
+ * Detect leftover internal path-diff payloads that used to be written into the main
+ * output panel (including concatenated duplicates stuck in localStorage).
+ */
+function isStaleDiffOutput(text: string | null | undefined): boolean {
+  if (!text || !text.trim()) return false;
+  const t = text.trim();
+  if (t.includes("Structural path diff requires valid JSON")) return true;
+  if (t.includes('"leftValid"') && t.includes('"rightValid"') && t.includes('"note"')) return true;
+  // Former structural report shape written only for visual-diff bookkeeping
+  if (
+    t.includes('"summary"') &&
+    t.includes('"changes"') &&
+    (t.includes('"truncated"') || t.includes('"added"')) &&
+    t.includes('"path"') &&
+    t.includes('"change"')
+  ) {
+    // Heuristic: only treat as stale if it looks like our internal export (not user data)
+    try {
+      const first = t.startsWith("{") ? JSON.parse(t.slice(0, t.indexOf("}\n{") > 0 ? t.indexOf("}\n{") + 1 : undefined)) : null;
+      if (first && typeof first === "object" && first !== null && "summary" in first && "changes" in first) {
+        return true;
+      }
+    } catch {
+      /* fall through */
+    }
+  }
+  return false;
+}
+
+function cleanSessionOutput(text: string | null | undefined): string {
+  if (!text) return "";
+  return isStaleDiffOutput(text) ? "" : text;
+}
+
 const EXT_BY_FORMAT: Record<FormatKind, string> = {
   json: "json",
   xml: "xml",
@@ -395,6 +431,8 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   const [diffLineStats, setDiffLineStats] = useState<LineDiffStats | null>(null);
   const [diffNav, setDiffNav] = useState<DiffNavState>({ current: 0, total: 0 });
   const [diffActionFlash, setDiffActionFlash] = useState<string | null>(null);
+  /** Document = Monaco text/JSON diff; List = set/list compare for SQL IN etc. */
+  const [diffKind, setDiffKind] = useState<"document" | "list">("document");
   const [showHistoryPanel, setShowHistoryPanel] = useState(false);
   const [csvDelimiter, setCsvDelimiter] = useState(",");
   const [isWindowFullscreen, setIsWindowFullscreen] = useState(false);
@@ -440,7 +478,15 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const historyLock = useRef(false);
   const splitContainerRef = useRef<HTMLDivElement | null>(null);
-  const prevBeforeDiffRef = useRef<{ rightView: RightView; activeOperation: OperationAction | null; isOutputMaximized: boolean } | null>(null);
+  const prevBeforeDiffRef = useRef<{
+    rightView: RightView;
+    activeOperation: OperationAction | null;
+    isOutputMaximized: boolean;
+    output: string;
+    parsedOutput: JsonValue | null;
+    outputExt: string;
+    outputLanguage: OutputLanguage;
+  } | null>(null);
   const graphViewRef = useRef<GraphViewRef | null>(null);
   const diffEditorRef = useRef<JsonDiffEditorRef | null>(null);
   const outputEditorApiRef = useRef<{ find(): void; focus(): void; collapseAll(): void; expandAll(): void } | null>(null);
@@ -499,6 +545,28 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     if (!diffLeftInput.trim() && !diffRightInput.trim()) return emptyDiffSummary();
     return summarizeDiffFromText(diffLeftInput, diffRightInput);
   }, [isDiffMode, diffLeftInput, diffRightInput]);
+
+  /** Monaco language: JSON highlighting only when both sides parse as JSON. */
+  const documentDiffLanguage = useMemo(() => {
+    const ok = (t: string) => {
+      const s = t.trim();
+      if (!s) return true;
+      try {
+        JSON.parse(s);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    return ok(diffLeftInput) && ok(diffRightInput) ? "json" : "plaintext";
+  }, [diffLeftInput, diffRightInput]);
+
+  // Paths panel only applies to JSON — close it for plain text
+  useEffect(() => {
+    if (isDiffMode && structuralDiff === null && diffShowPaths) {
+      setDiffShowPaths(false);
+    }
+  }, [isDiffMode, structuralDiff, diffShowPaths]);
 
   const filteredDiffRows = useMemo(() => {
     if (!structuralDiff) return [];
@@ -868,7 +936,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
         showTabs?: boolean;
       };
     if (data.input) setInput(data.input);
-    if (data.output) setOutput(data.output);
+    if (data.output) setOutput(cleanSessionOutput(data.output));
     if (typeof data.split === "number") setSplit(data.split);
     if (data.themeMode) setThemeMode(data.themeMode);
     if (data.typeLanguage) setTypeLanguage(data.typeLanguage);
@@ -894,7 +962,9 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
           const map = new Map<string, typeof tabSnapshotsRef extends React.MutableRefObject<Map<string, infer V>> ? V : never>();
           for (const [k, v] of Object.entries(data.tabSnapshots)) {
             if (v && typeof v === "object") {
-              map.set(k, v as typeof map extends Map<string, infer V> ? V : never);
+              const snap = { ...(v as object) } as { output?: string };
+              if (isStaleDiffOutput(snap.output)) snap.output = "";
+              map.set(k, snap as typeof map extends Map<string, infer V> ? V : never);
             }
           }
           tabSnapshotsRef.current = map;
@@ -923,13 +993,14 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     // Build full tab snapshots for persistence: save current tab state too
     const allSnapshots: Record<string, unknown> = {};
     tabSnapshotsRef.current.forEach((snap, id) => { allSnapshots[id] = snap; });
+    const persistOutput = cleanSessionOutput(output);
     // Overwrite current tab with live state
-    allSnapshots[activeTabId] = { input, inputFormatOverride, undoStack: undoStack.slice(-20), undoIndex: Math.min(undoIndex, 19), output, parsedOutput: null, outputExt, outputLanguage, activeOperation, error: null, convertToFormat, typeLanguage, rightView };
+    allSnapshots[activeTabId] = { input, inputFormatOverride, undoStack: undoStack.slice(-20), undoIndex: Math.min(undoIndex, 19), output: persistOutput, parsedOutput: null, outputExt, outputLanguage, activeOperation, error: null, convertToFormat, typeLanguage, rightView };
     localStorage.setItem(
       "formaty-session",
       JSON.stringify({
         input,
-        output,
+        output: persistOutput,
         split,
         themeMode,
         typeLanguage,
@@ -956,6 +1027,12 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
       setParsedOutput(null);
       return;
     }
+    // Purge leftover path-diff notes still sitting in state / session
+    if (!isDiffMode && isStaleDiffOutput(output)) {
+      setOutput("");
+      setParsedOutput(null);
+      return;
+    }
     try {
       if (outputLanguage === "json") {
         setParsedOutput(JSON.parse(output) as JsonValue);
@@ -967,7 +1044,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     } catch {
       setParsedOutput(null);
     }
-  }, [output, outputLanguage]);
+  }, [output, outputLanguage, isDiffMode]);
 
   useEffect(() => {
     if (!sessionRestoredRef.current || !input.trim() || !activeOperation) return;
@@ -1083,8 +1160,9 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
       }
       if (modalKind) return;
       if (activeOperation === "diff") {
-        // Route undo/redo to the diff panes (works even when toolbar has focus).
-        // Paste is left to Monaco when an editor is focused.
+        // List mode uses plain textareas — let the browser handle undo/paste.
+        if (diffKind === "list") return;
+        // Document mode: route undo/redo to Monaco diff panes.
         if (event.key.toLowerCase() === "z" && !event.shiftKey) {
           event.preventDefault();
           diffEditorRef.current?.undo();
@@ -1126,7 +1204,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     };
     window.addEventListener("keydown", onKeyDown, { capture: true });
     return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
-  }, [modalKind, inputEmpty, focusedPane, activeOperation]);
+  }, [modalKind, inputEmpty, focusedPane, activeOperation, diffKind]);
 
   useEffect(() => {
     if (!isResizing) return;
@@ -1284,39 +1362,10 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     void (async () => {
       try {
         if (action === "diff") {
-          const leftText = options?.leftText ?? diffLeftInput;
-          const rightText = options?.rightText ?? diffRightInput;
-          if (!leftText.trim() && !rightText.trim()) {
-            setBusy(false);
-            setParsedOutput(null);
-            return;
-          }
+          // Visual diff + path stats live in Diff UI only — never overwrite the main output
+          // panel (that left a leftover `{...}` path-diff JSON after exiting).
           setRightView("raw");
-          const summary = summarizeDiffFromText(leftText, rightText);
-          if (summary) {
-            const out = await convertJsonToOutput({
-              summary: {
-                total: summary.total,
-                added: summary.added,
-                removed: summary.removed,
-                changed: summary.changed,
-                truncated: summary.truncated,
-              },
-              changes: summary.rows,
-            } as unknown as JsonValue);
-            setOutputData(out, action);
-            setParsedOutput(summary.rows as unknown as JsonValue);
-          } else {
-            // Invalid JSON on one/both sides — still keep visual line-diff; store a note in output
-            const note = {
-              note: "Structural path diff requires valid JSON on both sides.",
-              leftValid: (() => { try { if (leftText.trim()) JSON.parse(leftText); return true; } catch { return !leftText.trim(); } })(),
-              rightValid: (() => { try { if (rightText.trim()) JSON.parse(rightText); return true; } catch { return !rightText.trim(); } })(),
-            };
-            const out = await convertJsonToOutput(note as unknown as JsonValue);
-            setOutputData(out, action);
-            setParsedOutput(null);
-          }
+          setBusy(false);
           return;
         }
 
@@ -1574,27 +1623,55 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     }
     if (action === "diff") {
       if (activeOperation === "diff") {
-        // Exit diff mode and restore prior layout / operation
+        // Exit diff mode and restore prior layout / operation / output
         const prev = prevBeforeDiffRef.current;
         prevBeforeDiffRef.current = null;
         if (prev) {
           setRightView(prev.rightView);
-          setActiveOperation(prev.activeOperation);
           setIsOutputMaximized(prev.isOutputMaximized);
+          const stale = isStaleDiffOutput(prev.output);
+          if (stale) {
+            setOutput("");
+            setParsedOutput(null);
+          } else {
+            setOutput(prev.output);
+            setParsedOutput(prev.parsedOutput);
+          }
+          setOutputExt(prev.outputExt);
+          setOutputLanguage(prev.outputLanguage);
+          setActiveOperation(prev.activeOperation);
           if (prev.activeOperation === "format") {
             runConvert(convertToFormat);
           } else if (prev.activeOperation === "generateTypes") {
             executeOperation("generateTypes", { typeLanguage });
-          } else if (prev.activeOperation) {
+          } else if (prev.activeOperation && prev.activeOperation !== "diff") {
             executeOperation(prev.activeOperation);
+          } else if (stale && input.trim()) {
+            // No prior op but junk was in output — rebuild from input
+            runConvert(convertToFormat);
           }
         } else {
           setActiveOperation(null);
           setIsOutputMaximized(false);
+          if (isStaleDiffOutput(output)) {
+            setOutput("");
+            setParsedOutput(null);
+            if (input.trim()) runConvert(convertToFormat);
+          }
         }
         return;
       }
-      prevBeforeDiffRef.current = { rightView, activeOperation, isOutputMaximized };
+      // Never snapshot stale path-diff JSON as the "pre-diff" output
+      const snapshotOutput = cleanSessionOutput(output);
+      prevBeforeDiffRef.current = {
+        rightView,
+        activeOperation,
+        isOutputMaximized,
+        output: snapshotOutput,
+        parsedOutput: isStaleDiffOutput(output) ? null : parsedOutput,
+        outputExt,
+        outputLanguage,
+      };
       setIsOutputMaximized(true);
       setRightView("raw");
       setActiveOperation("diff");
@@ -1606,15 +1683,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
         setDiffLeftInput(input);
         setDiffRightInput("");
       }
-      setBusy(true);
-      if (input.trim() || diffLeftInput.trim() || diffRightInput.trim()) {
-        executeOperation("diff", {
-          leftText: input.trim() ? input : diffLeftInput,
-          rightText: input.trim() ? "" : diffRightInput,
-        });
-      } else {
-        setBusy(false);
-      }
+      setBusy(false);
       return;
     }
     executeOperation(action);
@@ -1965,7 +2034,9 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     { id: "diff-copy-left", label: "Diff: Copy left", category: "Workspace", keywords: ["diff", "copy", "left", "original"], disabled: activeOperation !== "diff", action: () => void copyDiffText("left") },
     { id: "diff-copy-right",label: "Diff: Copy right", category: "Workspace", keywords: ["diff", "copy", "right", "modified"], disabled: activeOperation !== "diff", action: () => void copyDiffText("right") },
     { id: "diff-copy-report", label: "Diff: Copy full report", category: "Workspace", keywords: ["diff", "copy", "report", "export", "summary"], disabled: activeOperation !== "diff", action: () => void copyDiffText("report") },
-    { id: "diff-download",  label: "Diff: Download report", category: "Workspace", keywords: ["diff", "download", "export", "report", "json"], disabled: activeOperation !== "diff", action: downloadDiffReport },
+    { id: "diff-download",  label: "Diff: Download report", category: "Workspace", keywords: ["diff", "download", "export", "report", "json"], disabled: activeOperation !== "diff" || diffKind !== "document", action: downloadDiffReport },
+    { id: "diff-kind-doc",  label: "Diff: Document mode (text/JSON)", category: "Workspace", keywords: ["diff", "document", "text", "json", "monaco"], disabled: activeOperation !== "diff", action: () => setDiffKind("document") },
+    { id: "diff-kind-list", label: "Diff: List / set mode (SQL IN)", category: "Workspace", keywords: ["diff", "list", "set", "common", "sql", "in", "intersection", "compare lists"], disabled: activeOperation !== "diff", action: () => setDiffKind("list") },
     // New operations
     { id: "op-sort-arrays", label: "Sort array items",         category: "Actions", keywords: ["sort", "arrays", "items", "order"], disabled: inputEmpty || showBusy, action: () => { setFocusedPane("output"); runOperation("sortArrays"); } },
     { id: "op-dedup",       label: "Remove duplicate items",   category: "Actions", keywords: ["dedup", "duplicate", "unique", "array"], disabled: inputEmpty || showBusy, action: () => { setFocusedPane("output"); runOperation("dedup"); } },
@@ -2004,7 +2075,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     // Auto-format on paste
     { id: "auto-fmt-paste", label: autoFormatOnPaste ? "Auto-format on paste: On (turn off)" : "Auto-format on paste: Off (turn on)", category: "Settings", keywords: ["auto", "format", "paste", "beautify", "pretty"], badge: autoFormatOnPaste ? "on" : undefined, action: () => setAutoFormatOnPaste((v) => !v) },
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  ], [inputEmpty, showBusy, convertToFormat, rightView, parsedOutput, typeLanguage, activeOperation, output, themeMode, editorFontSize, isOutputMaximized, isWindowFullscreen, toggleWindowFullscreen, formatOptions, liveTransform, viewAsMenu, canUndo, canRedo, lineWrap, diffSideBySide, diffIgnoreWhitespace, diffShowPaths, csvDelimiter, sharedLinkUrl, pinnedItems, undoStack.length, tabs.length, activeTabId, splitInputOpen, autoFormatOnPaste, showTabs, swapDiffSides, beautifyDiffSides, copyDiffText, downloadDiffReport]);
+  ], [inputEmpty, showBusy, convertToFormat, rightView, parsedOutput, typeLanguage, activeOperation, output, themeMode, editorFontSize, isOutputMaximized, isWindowFullscreen, toggleWindowFullscreen, formatOptions, liveTransform, viewAsMenu, canUndo, canRedo, lineWrap, diffSideBySide, diffIgnoreWhitespace, diffShowPaths, diffKind, csvDelimiter, sharedLinkUrl, pinnedItems, undoStack.length, tabs.length, activeTabId, splitInputOpen, autoFormatOnPaste, showTabs, swapDiffSides, beautifyDiffSides, copyDiffText, downloadDiffReport]);
 
   return (
     <main
@@ -2049,15 +2120,55 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
         </div>
       )}
 
+      {/* Outer: tab rail (sidebar) + workspace. Tabs must never sit in a column stack with the editors. */}
+      <div className="flex min-h-0 flex-1 flex-row overflow-hidden">
+        {isDesktopLayout && showTabs && (
+          <div className="flex h-full w-7 shrink-0 flex-col overflow-y-auto border-r border-[var(--workspace-border)] bg-[var(--workspace-panel)] pb-1 pt-1">
+            {tabs.map((tab) => (
+              <div
+                key={tab.id}
+                role="tab"
+                tabIndex={0}
+                title={tab.label}
+                className={`group relative flex cursor-pointer items-center justify-center py-2.5 transition-all duration-150 ${activeTabId === tab.id ? "bg-primary/10 text-primary" : "text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)]/60 hover:text-[var(--workspace-text)]"}`}
+                onClick={() => switchToTab(tab.id)}
+                onKeyDown={(e) => e.key === "Enter" && switchToTab(tab.id)}
+              >
+                {activeTabId === tab.id && (
+                  <span className="absolute inset-y-1 left-0 w-[2px] rounded-full bg-primary" />
+                )}
+                <span className="truncate font-mono text-[10px] font-semibold tracking-wider" style={{ writingMode: "vertical-rl", textOrientation: "mixed", maxHeight: 72 }}>
+                  {tab.label}
+                </span>
+                {tabs.length > 1 && (
+                  <button
+                    type="button"
+                    className="absolute -right-0.5 -top-0.5 hidden h-3.5 w-3.5 items-center justify-center rounded-full bg-[var(--workspace-border)] text-[var(--workspace-text-muted)] group-hover:flex hover:bg-red-500/20 hover:text-red-400"
+                    onClick={(e) => { e.stopPropagation(); closeTab(tab.id); }}
+                    aria-label={`Close ${tab.label}`}
+                  >
+                    <XMarkIcon className="h-2 w-2" />
+                  </button>
+                )}
+              </div>
+            ))}
+            <button
+              type="button"
+              className="mt-0.5 flex items-center justify-center py-2 text-[var(--workspace-text-muted)] transition-all duration-100 hover:bg-primary/5 hover:text-primary"
+              onClick={addTab}
+              title="New tab"
+            >
+              <PlusIcon className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
       <div
         ref={splitContainerRef}
-        className={`flex min-h-0 flex-1 overflow-hidden ${isDesktopLayout && !hideInputPanel ? "flex-row" : "flex-col"}`}
+        className={`flex min-h-0 min-w-0 flex-1 overflow-hidden ${isDesktopLayout && !hideInputPanel ? "flex-row" : "flex-col"}`}
       >
         {!hideInputPanel && (!isDesktopLayout ? !mobileShowOutput : true) && (isDesktopLayout || output.trim() || !inputEmpty) && (
         <div
-          className={`flex min-h-0 overflow-hidden bg-[var(--workspace-background)] transition-opacity duration-200 ${
-            isDesktopLayout && showTabs ? "flex-row" : "flex-col"
-          } ${
+          className={`flex min-h-0 overflow-hidden bg-[var(--workspace-background)] transition-opacity duration-200 flex-col ${
             isDesktopLayout ? "shrink-0" : "min-h-0 flex-1"
           } ${isDesktopLayout && focusedPane === "output" ? "opacity-70" : "opacity-100"}`}
           style={isDesktopLayout ? { width: `${split}%`, minWidth: 160 } : undefined}
@@ -2071,46 +2182,6 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
               View output
               <ArrowRightCircleIcon className="h-4 w-4 shrink-0" />
             </button>
-          )}
-          {isDesktopLayout && showTabs && (
-            <div className="flex w-7 shrink-0 flex-col overflow-y-auto border-r border-[var(--workspace-border)] bg-[var(--workspace-panel)] pb-1 pt-1">
-              {tabs.map((tab) => (
-                <div
-                  key={tab.id}
-                  role="tab"
-                  tabIndex={0}
-                  title={tab.label}
-                  className={`group relative flex cursor-pointer items-center justify-center py-2.5 transition-all duration-150 ${activeTabId === tab.id ? "bg-primary/10 text-primary" : "text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)]/60 hover:text-[var(--workspace-text)]"}`}
-                  onClick={() => switchToTab(tab.id)}
-                  onKeyDown={(e) => e.key === "Enter" && switchToTab(tab.id)}
-                >
-                  {activeTabId === tab.id && (
-                    <span className="absolute inset-y-1 left-0 w-[2px] rounded-full bg-primary" />
-                  )}
-                  <span className="truncate font-mono text-[10px] font-semibold tracking-wider" style={{ writingMode: "vertical-rl", textOrientation: "mixed", maxHeight: 72 }}>
-                    {tab.label}
-                  </span>
-                  {tabs.length > 1 && (
-                    <button
-                      type="button"
-                      className="absolute -right-0.5 -top-0.5 hidden h-3.5 w-3.5 items-center justify-center rounded-full bg-[var(--workspace-border)] text-[var(--workspace-text-muted)] group-hover:flex hover:bg-red-500/20 hover:text-red-400"
-                      onClick={(e) => { e.stopPropagation(); closeTab(tab.id); }}
-                      aria-label={`Close ${tab.label}`}
-                    >
-                      <XMarkIcon className="h-2 w-2" />
-                    </button>
-                  )}
-                </div>
-              ))}
-              <button
-                type="button"
-                className="mt-0.5 flex items-center justify-center py-2 text-[var(--workspace-text-muted)] transition-all duration-100 hover:bg-primary/5 hover:text-primary"
-                onClick={addTab}
-                title="New tab"
-              >
-                <PlusIcon className="h-3.5 w-3.5" />
-              </button>
-            </div>
           )}
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <div
@@ -2781,12 +2852,76 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
             ) : rightView === "raw" ? (
               isDiffMode ? (
                 <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
-                  {/* Diff toolbar */}
-                  <div className={`flex shrink-0 flex-wrap items-center gap-1 border-b px-1.5 py-1 ${outputPanelClass}`}>
-                    <span className="mr-0.5 shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+                  {diffKind === "list" ? (
+                    <ListComparePanel
+                      left={diffLeftInput}
+                      right={diffRightInput}
+                      onLeftChange={setDiffLeftInput}
+                      onRightChange={setDiffRightInput}
+                      linkBtnClass={linkBtnClass}
+                      panelClass={outputPanelClass}
+                      isDark={isDark}
+                      leadingControls={
+                        <>
+                          <span className="shrink-0 rounded bg-primary/10 px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+                            Diff
+                          </span>
+                          <div className="flex shrink-0 overflow-hidden rounded-md border border-[var(--workspace-border)]">
+                            <button
+                              type="button"
+                              className="h-6 min-h-6 px-1.5 text-[10px] font-medium text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)]"
+                              onClick={() => setDiffKind("document")}
+                              title="Document text/JSON diff"
+                            >
+                              Doc
+                            </button>
+                            <button
+                              type="button"
+                              className="h-6 min-h-6 border-l border-[var(--workspace-border)] bg-primary/15 px-1.5 text-[10px] font-medium text-primary"
+                              title="List / set compare"
+                            >
+                              List
+                            </button>
+                          </div>
+                          <div className="mx-0.5 h-3.5 w-px shrink-0 bg-[var(--workspace-border)]" />
+                        </>
+                      }
+                      trailingControls={
+                        <button
+                          type="button"
+                          title="Exit diff mode"
+                          className={`${linkBtnClass} h-6 min-h-6 shrink-0 px-1.5 text-[10px] text-primary`}
+                          onClick={() => runOperation("diff")}
+                        >
+                          Exit
+                        </button>
+                      }
+                    />
+                  ) : (
+                  <>
+                  {/* Document diff toolbar (includes mode switch — one bar only) */}
+                  <div className={`flex shrink-0 flex-wrap items-center gap-1 border-b px-1.5 py-0.5 ${outputPanelClass}`}>
+                    <span className="shrink-0 rounded bg-primary/10 px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
                       Diff
                     </span>
-
+                    <div className="flex shrink-0 overflow-hidden rounded-md border border-[var(--workspace-border)]">
+                      <button
+                        type="button"
+                        className="h-6 min-h-6 bg-primary/15 px-1.5 text-[10px] font-medium text-primary"
+                        title="Document text/JSON diff"
+                      >
+                        Doc
+                      </button>
+                      <button
+                        type="button"
+                        className="h-6 min-h-6 border-l border-[var(--workspace-border)] px-1.5 text-[10px] font-medium text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)]"
+                        onClick={() => setDiffKind("list")}
+                        title="List / set compare"
+                      >
+                        List
+                      </button>
+                    </div>
+                    <div className="mx-0.5 h-3.5 w-px shrink-0 bg-[var(--workspace-border)]" />
                     {/* Change navigation + counts */}
                     <div className="flex shrink-0 items-center gap-0.5 rounded-lg border border-[var(--workspace-border)]/60 px-0.5">
                       <button
@@ -2834,9 +2969,9 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                       </span>
                     ) : null}
 
-                    {/* Structural JSON path stats */}
+                    {/* Structural JSON path stats — only when both sides are valid JSON (optional extra) */}
                     {structuralDiff && structuralDiff.total > 0 && (
-                      <div className="hidden md:flex shrink-0 items-center gap-1 text-[10px] font-medium tabular-nums" title="JSON path-level changes">
+                      <div className="hidden md:flex shrink-0 items-center gap-1 text-[10px] font-medium tabular-nums" title="JSON path-level changes (optional when both sides are JSON)">
                         <span className="text-[var(--workspace-text-muted)]">paths:</span>
                         {structuralDiff.added > 0 && (
                           <span className="rounded bg-emerald-500/15 px-1 py-0.5 text-emerald-600 dark:text-emerald-400">+{structuralDiff.added}</span>
@@ -2851,11 +2986,6 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                           <span className="text-[var(--workspace-text-muted)]" title="Path list capped at 2000">…</span>
                         )}
                       </div>
-                    )}
-                    {structuralDiff === null && (diffLeftInput.trim() || diffRightInput.trim()) && (
-                      <span className="hidden sm:inline shrink-0 text-[10px] text-amber-600 dark:text-amber-400" title="Path-level stats need valid JSON on both sides">
-                        Invalid JSON
-                      </span>
                     )}
 
                     <div className="mx-0.5 h-4 w-px shrink-0 bg-[var(--workspace-border)]" />
@@ -2903,18 +3033,20 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                     >
                       <ArrowsRightLeftIcon className="h-3.5 w-3.5" />
                     </button>
-                    <button
-                      type="button"
-                      title="Toggle JSON path change list"
-                      className={`${linkBtnClass} h-7 min-h-7 shrink-0 gap-1 px-1.5 ${diffShowPaths ? "text-primary !bg-primary/10" : ""}`}
-                      onClick={() => setDiffShowPaths((v) => !v)}
-                    >
-                      <ListBulletIcon className="h-3.5 w-3.5 shrink-0" />
-                      <span className="hidden sm:inline">Paths</span>
-                      {structuralDiff && structuralDiff.total > 0 && (
-                        <span className="tabular-nums opacity-80">{structuralDiff.total}</span>
-                      )}
-                    </button>
+                    {structuralDiff !== null && (
+                      <button
+                        type="button"
+                        title="JSON path change list (when both sides are valid JSON)"
+                        className={`${linkBtnClass} h-7 min-h-7 shrink-0 gap-1 px-1.5 ${diffShowPaths ? "text-primary !bg-primary/10" : ""}`}
+                        onClick={() => setDiffShowPaths((v) => !v)}
+                      >
+                        <ListBulletIcon className="h-3.5 w-3.5 shrink-0" />
+                        <span className="hidden sm:inline">Paths</span>
+                        {structuralDiff.total > 0 && (
+                          <span className="tabular-nums opacity-80">{structuralDiff.total}</span>
+                        )}
+                      </button>
+                    )}
 
                     <div className="mx-0.5 h-4 w-px shrink-0 bg-[var(--workspace-border)]" />
 
@@ -2967,38 +3099,38 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                     {diffActionFlash && (
                       <span className="shrink-0 text-[10px] font-medium text-primary animate-pulse">{diffActionFlash}</span>
                     )}
-
                     <span className="flex-1" />
                     <button
                       type="button"
                       title="Exit diff mode"
-                      className={`${linkBtnClass} h-7 min-h-7 shrink-0 px-2 text-primary`}
+                      className={`${linkBtnClass} h-6 min-h-6 shrink-0 px-1.5 text-[10px] text-primary`}
                       onClick={() => runOperation("diff")}
                     >
-                      Exit Diff
+                      Exit
                     </button>
                   </div>
 
                   <div className="flex min-h-0 flex-1 overflow-hidden">
                     <div className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden ${diffShowPaths ? "" : "w-full"}`}>
                       {diffSideBySide && (
-                        <div className={`flex shrink-0 border-b text-[10px] font-medium uppercase tracking-wide ${outputPanelClass}`}>
-                          <div className="flex flex-1 items-center gap-1.5 border-r border-[var(--workspace-border)] px-2 py-1 text-[var(--workspace-text-muted)]">
+                        <div className={`flex h-5 shrink-0 border-b text-[10px] font-medium ${outputPanelClass}`}>
+                          <div className="flex flex-1 items-center gap-1 border-r border-[var(--workspace-border)] px-2 text-[var(--workspace-text-muted)]">
                             <span className="h-1.5 w-1.5 rounded-full bg-red-400/80" />
-                            Left · Original
+                            Left
                           </div>
-                          <div className="flex flex-1 items-center gap-1.5 px-2 py-1 text-[var(--workspace-text-muted)]">
+                          <div className="flex flex-1 items-center gap-1 px-2 text-[var(--workspace-text-muted)]">
                             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400/80" />
-                            Right · Modified
+                            Right
                           </div>
                         </div>
                       )}
                       <JsonDiffEditor
+                        key={`diff-doc-${activeTabId}`}
                         ref={diffEditorRef}
                         original={diffLeftInput}
                         modified={diffRightInput}
                         className="h-full min-h-0 flex-1"
-                        language="json"
+                        language={documentDiffLanguage}
                         monacoTheme={monacoTheme}
                         fontSize={editorFontSize}
                         renderSideBySide={diffSideBySide}
@@ -3055,7 +3187,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                         <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
                           {structuralDiff === null ? (
                             <p className="px-2 py-3 text-[11px] leading-relaxed text-[var(--workspace-text-muted)]">
-                              Path-level diff needs valid JSON on both sides. Line highlighting still works for any text.
+                              Path list is available when both sides are valid JSON. Text/line diff works for any content.
                             </p>
                           ) : filteredDiffRows.length === 0 ? (
                             <p className="px-2 py-3 text-[11px] text-[var(--workspace-text-muted)]">
@@ -3126,6 +3258,8 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                       </div>
                     )}
                   </div>
+                  </>
+                  )}
                 </div>
               ) : output.trim() ? (
                 <JsonEditor
@@ -3334,6 +3468,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
             ) : null}
           </div>
         </div>
+      </div>
       </div>
 
       <StatusBar
