@@ -25,12 +25,12 @@ const CONVERSIONS = [
 
 const CMD_ITEMS = [
   { label: "Beautify", category: "Actions", active: true },
+  { label: "Tool: Compare", category: "Workspace" },
+  { label: "Tool: Utils", category: "Workspace" },
   { label: "Convert to YAML", category: "Convert to" },
-  { label: "View: Graph", category: "View as" },
-  { label: "Generate TypeScript types", category: "Generate Types" },
-  { label: "Minify", category: "Actions" },
   { label: "View: Table", category: "View as" },
-  { label: "Load GitHub API sample", category: "Samples" },
+  { label: "Generate TypeScript types", category: "Generate Types" },
+  { label: "Load Table sample", category: "Samples" },
 ];
 
 const FEATURES = [

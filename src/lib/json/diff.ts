@@ -1,4 +1,4 @@
-import type { JsonValue } from "@/lib/json/core";
+import { parseJsonInput, type JsonValue } from "@/lib/json/core";
 
 export interface DiffRow {
   path: string;
@@ -122,12 +122,12 @@ export function summarizeDiff(left: JsonValue, right: JsonValue): DiffSummary {
   };
 }
 
-/** Parse JSON text safely; returns null if invalid or empty. */
+/** Parse JSON text safely; returns null if invalid or empty. Accepts loose single-quoted form. */
 export function tryParseJson(text: string): JsonValue | null {
   const t = text.trim();
   if (!t) return null;
   try {
-    return JSON.parse(t) as JsonValue;
+    return parseJsonInput(t);
   } catch {
     return null;
   }

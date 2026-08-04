@@ -26,7 +26,7 @@ export function mapStateToPayload(state: WorkspaceState): PlaygroundApiPayload {
   };
 }
 
-const TYPE_LANGS = ["typescript", "java", "csharp", "python", "go", "protobuf", "kotlin", "swift", "rust", "sql"] as const;
+const TYPE_LANGS = ["typescript", "zod", "java", "csharp", "python", "pydantic", "go", "protobuf", "kotlin", "swift", "rust", "sql"] as const;
 
 export function mapPayloadToState(payload: PlaygroundApiPayload): WorkspaceState {
   const opts = payload.options ?? {};

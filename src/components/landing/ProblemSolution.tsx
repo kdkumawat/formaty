@@ -20,16 +20,16 @@ const CAPABILITIES = [
   },
   {
     icon: ArrowsRightLeftIcon,
-    label: "Convert Formats",
-    desc: "Between all major formats",
-    route: "/json-to-yaml",
+    label: "Convert & Compare",
+    desc: "Formats, document diff, lists",
+    route: "/json-diff",
     color: "text-sky-500 bg-sky-500/10 border-sky-500/20",
   },
   {
     icon: MagnifyingGlassIcon,
-    label: "Query Data",
-    desc: "JSONPath & JMESPath",
-    route: "/jsonpath-tester",
+    label: "Query & Utils",
+    desc: "JSONPath, UUID, Base64, JWT…",
+    route: "/playground",
     color: "text-violet-500 bg-violet-500/10 border-violet-500/20",
   },
   {

@@ -14,6 +14,9 @@ export async function generateStaticParams() {
   return ALL_TOOL_ROUTES.map((route) => ({ tool: route }));
 }
 
+/** With `output: "export"`, unknown paths must 404 — not try to render on demand. */
+export const dynamicParams = false;
+
 export async function generateMetadata({
   params,
 }: {

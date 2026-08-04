@@ -157,6 +157,57 @@ function CsvTableOut() {
   );
 }
 
+function CompareIn() {
+  return (
+    <pre className="font-mono text-[10px] leading-[1.75]">
+      <span className="text-[var(--workspace-text-muted)]">// Left · Right</span>{"\n"}
+      <span className="text-red-400/90">{"{"} id: 1, role: </span><span className="text-emerald-500">&quot;admin&quot;</span> <span className="text-red-400/90">{"}"}</span>{"\n"}
+      <span className="text-emerald-500/90">{"{"} id: 1, role: </span><span className="text-emerald-500">&quot;owner&quot;</span><span className="text-emerald-500/90">, active: true {"}"}</span>{"\n"}
+      <span className="mt-1 block text-[var(--workspace-text-muted)]">or list: a,b,c  vs  b,c,d</span>
+    </pre>
+  );
+}
+
+function CompareOut() {
+  return (
+    <pre className="font-mono text-[10px] leading-[1.75]">
+      <span className="rounded bg-emerald-500/15 px-1 text-emerald-600">+1</span>{" "}
+      <span className="rounded bg-red-500/15 px-1 text-red-600">−1</span>{" "}
+      <span className="rounded bg-amber-500/15 px-1 text-amber-700">~1</span>
+      {"\n"}
+      <span className="text-amber-500">~ </span><span className="text-sky-500">role</span>
+      <span className="text-[var(--workspace-text-muted)]"> admin → owner</span>{"\n"}
+      <span className="text-emerald-500">+ </span><span className="text-sky-500">active</span>
+      <span className="text-[var(--workspace-text-muted)]"> true</span>{"\n"}
+      <span className="text-[var(--workspace-text-muted)]">Lists → SQL IN (…)</span>
+    </pre>
+  );
+}
+
+function UtilsIn() {
+  return (
+    <pre className="font-mono text-[10px] leading-[1.75] break-all">
+      <span className="text-[var(--workspace-text-muted)]">// JWT · Base64 · UUID</span>{"\n"}
+      <span className="text-violet-400">eyJhbGciOi…</span>
+      <span className="text-[var(--workspace-text-muted)]">.payload.</span>
+      <span className="text-violet-400">sig</span>{"\n"}
+      <span className="text-emerald-500">Hello, Formaty!</span>{"\n"}
+      <span className="text-[var(--workspace-text-muted)]">count: 3 → generate</span>
+    </pre>
+  );
+}
+
+function UtilsOut() {
+  return (
+    <pre className="font-mono text-[10px] leading-[1.75]">
+      <span className="text-sky-500">&quot;sub&quot;</span><span className="text-[var(--workspace-text)]">: </span><span className="text-emerald-500">&quot;123&quot;</span>{"\n"}
+      <span className="text-violet-400">SGVsbG8sIEZvcm1hdHkh</span>{"\n"}
+      <span className="text-emerald-500">a1b2c3d4-…-7890</span>{"\n"}
+      <span className="text-emerald-500">b2c3d4e5-…-8901</span>
+    </pre>
+  );
+}
+
 const SLIDES: Slide[] = [
   {
     id: "json-ts",
@@ -164,6 +215,20 @@ const SLIDES: Slide[] = [
     outputLabel: "TypeScript", outputColor: "text-violet-500",
     statusText: "JSON → TypeScript types",
     InputPane: JsonInput, OutputPane: TypeScriptOut,
+  },
+  {
+    id: "compare",
+    inputLabel: "Left / Right", inputColor: "text-rose-500",
+    outputLabel: "Diff + Lists", outputColor: "text-emerald-500",
+    statusText: "Compare: document paths + list SQL IN",
+    InputPane: CompareIn, OutputPane: CompareOut,
+  },
+  {
+    id: "utils",
+    inputLabel: "Utils in", inputColor: "text-violet-500",
+    outputLabel: "Decoded / IDs", outputColor: "text-sky-500",
+    statusText: "Utils: JWT decode · Base64 · UUID",
+    InputPane: UtilsIn, OutputPane: UtilsOut,
   },
   {
     id: "xml-yaml",
@@ -265,11 +330,11 @@ export function Hero() {
             transition={{ duration: 0.5, delay: 0.14 }}
             className="mx-auto max-w-lg text-base leading-relaxed text-[var(--workspace-text-muted)] lg:mx-0 lg:text-lg"
           >
-            Format, convert, diff, query, and visualize{" "}
+            Format, convert, compare, and developer utils for{" "}
             <span className="font-semibold text-[var(--workspace-text)]">
               JSON · XML · YAML · TOML · CSV · cURL
-            </span>{" "}
-            - one workspace, zero installs.
+            </span>
+            {" "}— UUID, Base64, JWT, hash, and more. One workspace, zero installs.
           </motion.p>
 
           {/* CTA row */}
@@ -306,6 +371,8 @@ export function Hero() {
           >
             {[
               { label: "JSON",       id: "json-ts",   color: "text-amber-500 border-amber-500/25 bg-amber-500/5",   activeColor: "text-amber-600 border-amber-500/60 bg-amber-500/15 scale-105" },
+              { label: "Compare",    id: "compare",   color: "text-rose-500 border-rose-500/25 bg-rose-500/5",     activeColor: "text-rose-600 border-rose-500/60 bg-rose-500/15 scale-105" },
+              { label: "Utils",      id: "utils",     color: "text-violet-500 border-violet-500/25 bg-violet-500/5", activeColor: "text-violet-600 border-violet-500/60 bg-violet-500/15 scale-105" },
               { label: "XML",        id: "xml-yaml",  color: "text-red-500 border-red-500/25 bg-red-500/5",         activeColor: "text-red-600 border-red-500/60 bg-red-500/15 scale-105" },
               { label: "YAML",       id: "yaml-toml", color: "text-lime-600 border-lime-600/25 bg-lime-600/5",       activeColor: "text-lime-700 border-lime-600/60 bg-lime-600/15 scale-105" },
               { label: "cURL",       id: "curl-json", color: "text-sky-500 border-sky-500/25 bg-sky-500/5",         activeColor: "text-sky-600 border-sky-500/60 bg-sky-500/15 scale-105" },

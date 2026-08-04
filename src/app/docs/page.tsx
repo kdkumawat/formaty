@@ -16,6 +16,7 @@ const NAV_SECTIONS = [
   { id: "query",     label: "Query" },
   { id: "options",   label: "Options" },
   { id: "diff",      label: "Diff" },
+  { id: "utils",     label: "Utils" },
   { id: "palette",   label: "Command Palette" },
   { id: "copy-as",   label: "Copy As" },
   { id: "history",   label: "History" },
@@ -278,12 +279,17 @@ export default function DocsPage() {
           <Section id="workspace" query={query} keywords={["workspace","pane","splitter","resize","live transform","auto-format","paste","import","font size","fullscreen","maximize","split input","settings","editor","drag"]}>
             <SectionTitle id="workspace">Workspace</SectionTitle>
             <p className="mb-4 text-sm text-[var(--workspace-text-muted)]">
-              The playground is split into an <strong className="text-[var(--workspace-text)]">input pane</strong> (left) and an{" "}
-              <strong className="text-[var(--workspace-text)]">output pane</strong> (right), separated by a draggable splitter.
+              Three tools share one chrome: <strong className="text-[var(--workspace-text)]">Transform</strong>,{" "}
+              <strong className="text-[var(--workspace-text)]">Compare</strong>, and{" "}
+              <strong className="text-[var(--workspace-text)]">Utils</strong>. Transform uses a split input/output layout;
+              Compare and Utils go full-width. Sub-modes (Document / Lists, UUID / Base64 / …) stay on the same toolbar row.
             </p>
             <TableWrap>
               <THead cols={["Feature", "Details"]} />
               <tbody className="divide-y divide-[var(--workspace-border)]/50">
+                <Row label="Transform" value="Format, convert, views, types — classic left input / right output." />
+                <Row label="Compare" value="Document text/JSON diff or list/set compare (SQL IN export)." />
+                <Row label="Utils" value="UUID, Base64, JWT, hash, time, URL, case, hex, password, and more — each tool keeps its own state." />
                 <Row label="Drag splitter" value="Click and drag the center divider to resize input/output panes to any ratio." />
                 <Row label="Live transform" value="When enabled, output updates instantly as you type. Toggle via command palette." />
                 <Row label="Auto-format on paste" value="Automatically beautifies data when you paste into the input editor. Toggle via settings." />
@@ -294,7 +300,8 @@ export default function DocsPage() {
                 <Row label="Focus panes" value='Keyboard-navigate between panes: command palette "Focus input pane" / "Focus output pane".' />
                 <Row label="Editor font size" value='Increase / decrease via command palette "Font size +" / "Font size -".' />
                 <Row label="Line wrap" value="Toggle long-line wrapping in the Monaco editor via command palette." />
-                <Row label="Samples" value='Load built-in examples: GitHub API, Stripe webhook, Kubernetes manifest, OpenAPI schema. Search "load" or "sample" in the command palette.' />
+                <Row label="Samples" value='Load built-in examples: JSON, Table (array of objects), cURL, GitHub API, Stripe, K8s, OpenAPI. On parse errors, use Clear or Load table sample.' />
+                <Row label="Loose JSON" value="Single-quoted keys/strings and trailing commas are accepted when possible (e.g. Python-style dicts)." />
               </tbody>
             </TableWrap>
           </Section>
@@ -376,7 +383,7 @@ export default function DocsPage() {
                 { name: "Tree",  desc: "Expandable/collapsible explorer of the full data structure." },
                 { name: "Graph", desc: "Interactive node graph — zoom, pan, drag to explore relationships." },
                 { name: "Query", desc: "JSONPath / JMESPath live filter with highlighted matching nodes." },
-                { name: "Table", desc: "Tabular grid for arrays of objects — ideal for CSV or flat data." },
+                { name: "Table", desc: "Tabular grid for arrays of objects — load the Table sample, or paste [{\"id\":1},…]. Sort, search, and hide columns." },
               ].map(({ name, desc }) => (
                 <div key={name} className="rounded-xl border border-[var(--workspace-border)] bg-[var(--workspace-panel)] p-4">
                   <p className="mb-1 font-bold text-[var(--workspace-text)]">{name}</p>
@@ -388,7 +395,7 @@ export default function DocsPage() {
           </Section>
 
           {/* ── Type Gen ── */}
-          <Section id="types" query={query} keywords={["types","typescript","java","csharp","python","go","kotlin","swift","rust","sql","protobuf","generate","interface","struct","type generation"]}>
+          <Section id="types" query={query} keywords={["types","typescript","zod","java","csharp","python","pydantic","go","kotlin","swift","rust","sql","protobuf","generate","interface","struct","type generation"]}>
             <SectionTitle id="types">Type Generation</SectionTitle>
             <p className="mb-4 text-sm leading-relaxed text-[var(--workspace-text-muted)]">
               Generate strongly-typed interfaces and structs from your JSON data. Search{" "}
@@ -478,6 +485,39 @@ export default function DocsPage() {
             </ul>
           </Section>
 
+          {/* ── Utils ── */}
+          <Section id="utils" query={query} keywords={["utils","uuid","base64","jwt","hash","sha","time","timestamp","url","encode","decode","hex","password","case","html","escape","stats","generator","devtools"]}>
+            <SectionTitle id="utils">Utils</SectionTitle>
+            <p className="mb-4 text-sm leading-relaxed text-[var(--workspace-text-muted)]">
+              Switch the workspace tool to <strong className="text-[var(--workspace-text)]">Utils</strong> for common developer helpers.
+              Each tool keeps its own input/output state, sample data, and options. Tools sit on the same toolbar row as Transform and Compare.
+            </p>
+            <TableWrap>
+              <THead cols={["Tool", "What it does"]} />
+              <tbody className="divide-y divide-[var(--workspace-border)]/50">
+                <Row label="UUID" value="Generate v4 UUIDs (count 1–50) with copy-per-id, or NIL UUID." />
+                <Row label="Base64" value="Encode / decode with auto-detect or forced mode." />
+                <Row label="JWT" value="Decode header + payload (no signature verification)." />
+                <Row label="Hash" value="SHA-256 or SHA-1 hex digest of any text." />
+                <Row label="Time" value="Unix ↔ ISO conversion; empty input shows current now." />
+                <Row label="URL" value="Percent-encode / decode with auto-detect." />
+                <Row label="Case" value="snake, kebab, camel, pascal, constant, slug, title, reverse, trim…" />
+                <Row label="Hex" value="UTF-8 text ↔ hex bytes." />
+                <Row label="Number" value="Decimal / hex / binary / octal conversion." />
+                <Row label="Escape" value="JSON string escape / unescape." />
+                <Row label="HTML" value="HTML entity encode / decode." />
+                <Row label="Password" value="Cryptographically random passwords (configurable length)." />
+                <Row label="Stats" value="Lines, words, characters, and byte counts." />
+              </tbody>
+            </TableWrap>
+            <p className="mt-3 text-sm text-[var(--workspace-text-muted)]">
+              Output updates <strong className="text-[var(--workspace-text)]">live</strong> as you type (no Run required).
+              Use <strong className="text-[var(--workspace-text)]">Sample</strong> for example input and the reset icon to clear the active tool.
+              Each workspace tab remembers its Utils tool and I/O independently.
+              All processing stays in your browser.
+            </p>
+          </Section>
+
           {/* ── Command Palette ── */}
           <Section id="palette" query={query} keywords={["command palette","palette","search","cmd k","ctrl k","recent","shortcut","all commands"]}>
             <SectionTitle id="palette">Command Palette</SectionTitle>
@@ -491,7 +531,7 @@ export default function DocsPage() {
                 <Row label="Actions" value="Beautify, Minify, Flatten, Unflatten, Sort arrays, Remove duplicates, Diff, Generate Schema, Validate..." />
                 <Row label="Convert to" value="JSON, YAML, XML, TOML, CSV" />
                 <Row label="View as" value="Raw, Tree, Graph, Query, Table" />
-                <Row label="Generate Types" value="TypeScript, Go, Python, Java, C#, Rust, Kotlin, Swift, Protobuf, SQL..." />
+                <Row label="Generate Types" value="TypeScript, Zod, Go, Python, Pydantic, Java, C#, Rust, Kotlin, Swift, Protobuf, SQL..." />
                 <Row label="Samples" value="Load JSON / YAML / CSV / cURL samples; GitHub API, Stripe, K8s, OpenAPI examples" />
                 <Row label="Settings" value="Sort keys, Remove empty, Quote style, Indent, CSV delimiter, Live transform, Auto-format on paste, Line wrap, Font size..." />
                 <Row label="Workspace" value="Paste, Import file, Copy output, Download, Share, Browse history, Multi-tab, Find in output, Fullscreen, Maximize output, Focus pane..." />
@@ -538,11 +578,12 @@ export default function DocsPage() {
           <Section id="share" query={query} keywords={["share","export","download","embed","iframe","link","url","copy","cloud","disable"]}>
             <SectionTitle id="share">Share &amp; Export</SectionTitle>
             <ul className="space-y-3 text-sm text-[var(--workspace-text-muted)]">
-              <li><strong className="text-[var(--workspace-text)]">Share</strong> &mdash; Save the current workspace to cloud and generate a short link. Recipients see the same input, output, format and view settings. Command palette &rarr; "Share workspace link".</li>
+              <li><strong className="text-[var(--workspace-text)]">Share</strong> &mdash; Confirms first (only action that can leave your device), then saves a short link. Recipients see the same input/output/settings. Toolbar or command palette.</li>
               <li><strong className="text-[var(--workspace-text)]">Embed</strong> &mdash; After sharing, command palette &rarr; "Copy embed / iframe URL" for a read-only embeddable frame.</li>
-              <li><strong className="text-[var(--workspace-text)]">Disable sharing</strong> &mdash; Click the x icon next to the shared link indicator in the status bar.</li>
-              <li><strong className="text-[var(--workspace-text)]">Download</strong> &mdash; Saves output as a file (extension matches output format). Command palette &rarr; "Download output".</li>
-              <li><strong className="text-[var(--workspace-text)]">Copy</strong> &mdash; Copy output text via the floating button, the status bar icon, or <Kbd>Cmd C</Kbd>.</li>
+              <li><strong className="text-[var(--workspace-text)]">Disable sharing</strong> &mdash; Click the disable icon next to the shared link in the status bar.</li>
+              <li><strong className="text-[var(--workspace-text)]">Download</strong> &mdash; Saves output as a file (or graph as PNG/JPG). Output toolbar or command palette.</li>
+              <li><strong className="text-[var(--workspace-text)]">Copy / Copy as</strong> &mdash; Output toolbar (never covers text). Copy as Base64, escaped, URL-encoded, or Data URI. Optional draggable floating bar in Settings.</li>
+              <li><strong className="text-[var(--workspace-text)]">Use output as input</strong> &mdash; Chain transforms (toolbar back-arrow or command palette).</li>
             </ul>
           </Section>
 
@@ -578,12 +619,12 @@ export default function DocsPage() {
           <Section id="privacy" query={query} keywords={["privacy","local","browser","data","server","localstorage","share","secure","offline"]}>
             <SectionTitle id="privacy">Privacy &amp; Local-First</SectionTitle>
             <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/5 p-5 text-sm leading-relaxed text-[var(--workspace-text-muted)]">
-              <p className="mb-2 font-bold text-emerald-600">Your data never leaves your browser</p>
+              <p className="mb-2 font-bold text-emerald-600">Local-first by default</p>
               <p>
-                formaty processes everything locally using a Web Worker. No input, output, or transform result is ever
-                sent to any server &mdash; except when you explicitly click{" "}
-                <strong className="text-[var(--workspace-text)]">Share</strong>. Session state (pinned items, theme, tabs, settings)
-                is stored in localStorage. Shared links can be disabled at any time from the status bar.
+                formaty processes everything locally using a Web Worker. No input, output, or transform result is sent
+                to any server &mdash; except when you explicitly click{" "}
+                <strong className="text-[var(--workspace-text)]">Share</strong> and confirm the privacy dialog.
+                Session state (pinned items, theme, tabs, settings) is stored in localStorage. Shared links can be disabled from the status bar.
               </p>
             </div>
           </Section>

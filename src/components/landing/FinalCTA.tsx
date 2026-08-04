@@ -40,7 +40,7 @@ export function FinalCTA() {
           <span className="gradient-text">Right now.</span>
         </h2>
         <p className="text-base text-[var(--workspace-text-muted)] md:text-lg">
-          No install. No sign-up. No data leaves your browser.
+          Format · Convert · Compare · Utils — no install, no sign-up, nothing leaves your browser.
         </p>
         <div className="flex flex-wrap items-center justify-center gap-3">
           <Link

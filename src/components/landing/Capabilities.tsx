@@ -14,9 +14,10 @@ const OPERATIONS = [
   "Flatten",
   "Unflatten",
   "Validate",
-  "Diff",
+  "Compare",
   "Schema",
   "Type generation",
+  "Utils (UUID, Base64, JWT…)",
 ];
 
 const VIEWS = [
@@ -24,6 +25,8 @@ const VIEWS = [
   { name: "Graph view", route: "/graph-viewer" },
   { name: "Table view", route: "/playground" },
   { name: "JSONPath / JMESPath", route: "/jsonpath-tester" },
+  { name: "Document / list compare", route: "/json-diff" },
+  { name: "Utils (UUID, JWT, Base64…)", route: "/playground" },
 ];
 
 const TYPE_LANGS = [

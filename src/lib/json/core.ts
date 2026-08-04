@@ -19,9 +19,11 @@ export interface SearchMatch {
 
 export type TypeTargetLanguage =
   | "typescript"
+  | "zod"
   | "java"
   | "csharp"
   | "python"
+  | "pydantic"
   | "go"
   | "protobuf"
   | "kotlin"
@@ -29,8 +31,81 @@ export type TypeTargetLanguage =
   | "rust"
   | "sql";
 
+/**
+ * Convert Python/JS-style single-quoted strings to double-quoted JSON strings.
+ * Leaves already double-quoted segments intact; strips trailing commas.
+ */
+function normalizeLooseJson(input: string): string {
+  let out = "";
+  let i = 0;
+  const n = input.length;
+  while (i < n) {
+    const c = input[i];
+    if (c === '"') {
+      out += c;
+      i++;
+      while (i < n) {
+        if (input[i] === "\\") {
+          out += input[i] + (input[i + 1] ?? "");
+          i += 2;
+          continue;
+        }
+        out += input[i];
+        if (input[i] === '"') {
+          i++;
+          break;
+        }
+        i++;
+      }
+      continue;
+    }
+    if (c === "'") {
+      out += '"';
+      i++;
+      while (i < n) {
+        if (input[i] === "\\") {
+          const next = input[i + 1];
+          if (next === "'") {
+            out += "'";
+            i += 2;
+            continue;
+          }
+          out += input[i] + (next ?? "");
+          i += 2;
+          continue;
+        }
+        if (input[i] === "'") {
+          out += '"';
+          i++;
+          break;
+        }
+        if (input[i] === '"') {
+          out += '\\"';
+          i++;
+          continue;
+        }
+        out += input[i];
+        i++;
+      }
+      continue;
+    }
+    out += c;
+    i++;
+  }
+  return out.replace(/,\s*([\]}])/g, "$1");
+}
+
+/** Parse JSON; accepts common loose forms (single quotes, trailing commas). */
 export function parseJsonInput(input: string): JsonValue {
-  return JSON.parse(input) as JsonValue;
+  try {
+    return JSON.parse(input) as JsonValue;
+  } catch (strictErr) {
+    try {
+      return JSON.parse(normalizeLooseJson(input)) as JsonValue;
+    } catch {
+      throw strictErr;
+    }
+  }
 }
 
 export interface FormatJsonOptions {
@@ -404,6 +479,26 @@ export function generateTypes(
   });
 
   const mapType = (type: string): string => {
+    if (language === "zod") {
+      if (type.endsWith("[]")) return `z.array(${mapType(type.slice(0, -2))})`;
+      if (type === "string") return "z.string()";
+      if (type === "number") return "z.number()";
+      if (type === "boolean") return "z.boolean()";
+      if (type === "null") return "z.null()";
+      if (type === "Record<string, unknown>") return "z.record(z.string(), z.unknown())";
+      if (type === "unknown[]") return "z.array(z.unknown())";
+      return `${type}Schema`;
+    }
+    if (language === "pydantic") {
+      if (type.endsWith("[]")) return `list[${mapType(type.slice(0, -2))}]`;
+      if (type === "string") return "str";
+      if (type === "number") return "float";
+      if (type === "boolean") return "bool";
+      if (type === "null") return "None";
+      if (type === "Record<string, unknown>") return "dict[str, Any]";
+      if (type === "unknown[]") return "list[Any]";
+      return type;
+    }
     if (language === "python") {
       if (type.endsWith("[]")) return `list[${mapType(type.slice(0, -2))}]`;
       if (type === "string") return "str";
@@ -699,6 +794,41 @@ export function generateTypes(
       "-- INSERT DATA",
       ...insertStatements,
     ].join("\n");
+  }
+
+  if (language === "zod") {
+    if (!entries.length) {
+      return `import { z } from "zod";\n\nexport const ${rootName}Schema = z.unknown();\nexport type ${rootName} = z.infer<typeof ${rootName}Schema>;`;
+    }
+    // Emit nested schemas first (interfaces appear in discovery order; reverse for deps)
+    const schemaBlocks = entries
+      .map(
+        ([name, fields]) =>
+          `export const ${name}Schema = z.object({\n${fields
+            .map((f) => `  ${/^[$A-Z_][0-9A-Z_$]*$/i.test(f.name) ? f.name : JSON.stringify(f.name)}: ${mapType(f.type)},`)
+            .join("\n")}\n});`,
+      )
+      .join("\n\n");
+    const typeBlocks = entries
+      .map(([name]) => `export type ${name} = z.infer<typeof ${name}Schema>;`)
+      .join("\n");
+    return `import { z } from "zod";\n\n${schemaBlocks}\n\n${typeBlocks}`;
+  }
+
+  if (language === "pydantic") {
+    if (!entries.length) {
+      return `from pydantic import BaseModel\nfrom typing import Any\n\nclass ${rootName}(BaseModel):\n    pass`;
+    }
+    return `from pydantic import BaseModel, Field\nfrom typing import Any, Optional\n\n${entries
+      .map(
+        ([name, fields]) =>
+          `class ${name}(BaseModel):\n${
+            fields.length
+              ? fields.map((f) => `    ${f.name}: ${mapType(f.type)}`).join("\n")
+              : "    pass"
+          }`,
+      )
+      .join("\n\n")}`;
   }
 
   if (language === "java") {

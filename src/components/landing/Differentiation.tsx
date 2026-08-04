@@ -12,10 +12,10 @@ const BEFORE = [
 ];
 
 const AFTER = [
-  "One paste → format, convert, diff",
+  "One paste → format, convert, compare",
   "Built-in YAML / XML / TOML / CSV support",
-  "Query instantly with JSONPath & JMESPath",
-  "Visualize as tree, table, or graph",
+  "Utils: UUID, Base64, JWT, hash, time…",
+  "Query with JSONPath & JMESPath; table view",
   "Generate TypeScript types in one click",
 ];
 

@@ -25,12 +25,12 @@ export const viewport: Viewport = {
 
 const SITE_URL = process.env.SITE_URL || "https://formaty.dev";
 const SITE_NAME = "Formaty";
-const SITE_TITLE = "Formaty - Developer Data Toolkit | JSON, XML, YAML, CSV Formatter & Converter";
+const SITE_TITLE = "Formaty - Format, Convert, Compare & Utils | JSON, XML, YAML Toolkit";
 const CREATOR_NAME = "Kuldeep Kumawat";
 const CREATOR_X = "https://x.com/kuldeep_kumawat";
 const CREATOR_LINKEDIN = "https://www.linkedin.com/in/kdkumawat";
 const SITE_DESCRIPTION =
-  "Format, convert, validate, query, and visualize JSON, XML, YAML, TOML, CSV. Import cURL, inspect API responses, generate types. Works in browser-no data leaves your device. The most complete developer data tool online.";
+  "Format, convert, compare, and developer utils for JSON, XML, YAML, TOML, CSV. UUID, Base64, JWT, hash, URL encode, and more. Import cURL, query with JSONPath, generate types. Runs in your browser — no data leaves your device.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -45,6 +45,8 @@ export const metadata: Metadata = {
     "JSON validator",
     "JSON beautifier",
     "JSON diff",
+    "JSON compare",
+    "list compare",
     "JSON query",
     "JSONPath",
     "JMESPath",
@@ -58,10 +60,18 @@ export const metadata: Metadata = {
     "TOML formatter",
     "CSV formatter",
     "cURL to JSON",
+    "UUID generator",
+    "Base64 encode decode",
+    "JWT decoder",
+    "SHA-256 hash",
+    "URL encode decode",
+    "timestamp converter",
+    "developer utils",
     "JSON XML YAML converter",
     "data format converter",
     "JSON tree viewer",
     "JSON graph viewer",
+    "JSON table view",
     "JSON tools online",
     "developer tools",
     "local-first",

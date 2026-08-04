@@ -38,13 +38,14 @@ interface CommandPaletteProps {
 
 const CATEGORY_ORDER = [
   "Recent",
+  "Workspace",
+  "Utils",
   "Actions",
   "Convert to",
   "View as",
   "Generate Types",
   "Samples",
   "Settings",
-  "Workspace",
   "Theme",
 ];
 

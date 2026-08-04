@@ -2,9 +2,21 @@
 
 ## Overview
 
-formaty is a local-first data toolkit for working with JSON, XML, YAML, TOML, and CSV. All processing runs in your browser - no data is sent to any server.
+formaty is a local-first data toolkit for working with JSON, XML, YAML, TOML, and CSV. All processing runs in your browser — no data is sent to any server unless you explicitly share a link.
 
-Format, validate, transform, diff, and convert between data formats. Query data with JSONPath or JMESPath. Paste cURL commands to fetch API responses. Generate type definitions for TypeScript, Python, Go, Java, and more. View data as a tree, graph, or table.
+Three workspace tools share one chrome: **Transform** (format / convert / views / types), **Compare** (document or list/set), and **Utils** (UUID, Base64, JWT, hash, time, URL, and more). Query with JSONPath or JMESPath. Paste cURL commands to fetch API responses. Generate types for TypeScript, Zod, Python, Pydantic, Go, Java, and more.
+
+---
+
+## Workspace tools
+
+| Tool | Description |
+|------|-------------|
+| **Transform** | Left input / right output — format, convert, views, types |
+| **Compare** | Full-width Document diff or List/Set compare (Document \| Lists on the same toolbar row) |
+| **Utils** | Full-width developer helpers; tool tabs (UUID, Base64, …) sit on the same row as Transform \| Compare \| Utils |
+
+On parse errors, use **Clear** or **Load table sample** in the error panel. JSON accepts common loose forms (single quotes, trailing commas) when possible.
 
 ---
 
@@ -12,14 +24,14 @@ Format, validate, transform, diff, and convert between data formats. Query data 
 
 | Format | Support |
 |--------|----------|
-| **JSON** | Parse, format, validate, minify |
+| **JSON** | Parse, format, validate, minify (loose single-quoted form accepted when possible) |
 | **XML** | Parse and convert to/from other formats |
 | **YAML** | Parse and convert |
 | **TOML** | Parse and convert |
 | **CSV** | Parse and convert (array of objects); configurable delimiter |
 | **cURL** | Paste a curl command; formaty executes it and renders the API response |
 
-Input format is auto-detected when you paste or import. Override it via the input format dropdown in the status bar.
+Input format is auto-detected when you paste or import. Override it via the input format dropdown in the status bar. Empty workspace includes a **Table** sample (array of objects).
 
 ---
 
@@ -35,7 +47,8 @@ Input format is auto-detected when you paste or import. Override it via the inpu
 | **Remove duplicate items** | Deduplicate array values recursively |
 | **Generate JSON Schema** | Infer a JSON Schema from sample data |
 | **Validate against Schema** | Validate input against a JSON Schema (paste schema in modal) |
-| **Diff / Compare** | Compare two JSON documents with highlighted changes |
+
+Compare and Utils are first-class tools (not nested under Actions).
 
 ---
 
@@ -44,22 +57,22 @@ Input format is auto-detected when you paste or import. Override it via the inpu
 | View | Description |
 |------|-------------|
 | **Raw** | Code editor with syntax highlighting, line numbers, copy |
-| **Tree** | Expandable tree view of the structure |
-| **Graph** | Interactive graph visualization |
-| **Query** | JSONPath / JMESPath playground with live results |
-| **Table** | Tabular view for arrays of objects |
+| **Tree** | Expandable tree — copy path/value, expand/collapse all |
+| **Graph** | Interactive graph visualization (best for medium payloads) |
+| **Query** | JSONPath / JMESPath playground with samples, history, promote result |
+| **Table** | Tabular view for **arrays of objects** — sort, search, hide columns |
 
-Star any view to pin it to the toolbar for quick switching.
+Use **Use output as input** (toolbar arrow) to chain workflows (e.g. convert → types → query).
 
 ---
 
 ## Type Generation
 
-Generate type definitions from your JSON data. Supported languages:
+Supported targets:
 
-TypeScript, Java, C#, Python, Go, Protobuf, Kotlin, Swift, Rust, SQL
+TypeScript, **Zod**, Java, C#, Python, **Pydantic**, Go, Protobuf, Kotlin, Swift, Rust, SQL
 
-Star languages to pin them to the output toolbar for one-click generation.
+Star languages in settings to pin them when using the expanded toolbar.
 
 ---
 
@@ -67,86 +80,95 @@ Star languages to pin them to the output toolbar for one-click generation.
 
 | Option | Description |
 |--------|-------------|
-| **Indent** | 0–10 spaces. Use − / + buttons or reset |
+| **Indent** | 0–10 spaces |
 | **Quote style** | Double or single quotes for JSON strings |
 | **Sort keys** | Alphabetize object keys in output |
 | **Remove empty** | Strip null and empty values |
-| **CSV delimiter** | Comma (default), Tab (TSV), Semicolon, or Pipe |
-| **Line wrap** | Wrap long lines in the editor (toggle in command palette) |
+| **CSV delimiter** | Comma, Tab, Semicolon, or Pipe |
+| **Line wrap** | Wrap long lines in the editor |
+| **Floating actions** | Optional draggable Share/Copy chip (default is toolbar — never covers text) |
 
 ---
 
-## Diff
-
-Diff has two modes (switch in the toolbar):
+## Diff & Compare
 
 ### Document mode
-Compares two text/JSON documents full-width (main input panel is hidden).
+Compares two text/JSON documents full-width.
 
-- **Side-by-side / Inline** - layout toggle in the toolbar
-- **Counts** - current/total hunks, +/− lines, JSON path totals
-- **Paths** - structural key/path change list (valid JSON on both sides)
-- **Trim WS, swap, beautify, export report**
+- Side-by-side / Inline layout
+- Hunk counts, +/− lines, JSON path totals
+- Trim WS, swap, beautify, export report
+- Reset clears both sides (same toolbar style as Utils)
 
 ### List / Set mode
-Compare two lists (ids, emails, tags, etc.) for common / only-left / only-right.
+Compare two lists for common / only-left / only-right.
 
-- **Parse** - auto, newline, comma, semicolon, pipe, whitespace, or JSON array
-- **Normalize** - trim, skip empty, ignore case, strip quotes, normalize numbers
-- **Buckets** - Common, Only left, Only right, Union, Symmetric, duplicates
-- **Export** - SQL `IN` / `NOT IN` (with column name), JSON, CSV, YAML, JS/Python lists, regex
-- **Sort** - A→Z, numeric, frequency
+- Parse: auto, newline, comma, semicolon, pipe, whitespace, or JSON array
+- Export: SQL `IN` / `NOT IN`, JSON, CSV, YAML, JS/Python lists, regex
+
+---
+
+## Utils
+
+Developer helpers that run entirely in the browser. Each tool has its own input/output state and a **Sample** button.
+
+| Tool | Description |
+|------|-------------|
+| **UUID** | Generate v4 UUIDs (count 1–50), copy per id, or NIL |
+| **Base64** | Encode / decode (auto or forced) |
+| **JWT** | Decode header + payload (no verify) |
+| **Hash** | SHA-256 / SHA-1 hex |
+| **Time** | Unix ↔ ISO; empty = now |
+| **URL** | Percent-encode / decode |
+| **Case** | snake, kebab, camel, pascal, constant, slug, … |
+| **Hex** | Text ↔ hex |
+| **Number** | Dec / hex / binary / octal |
+| **Escape** | JSON string escape / unescape |
+| **HTML** | Entity encode / decode |
+| **Password** | Cryptographically random passwords |
+| **Stats** | Lines, words, characters, bytes |
+
+Most tools update **live** as you type (no Run button). UUID / Password regenerate when you change count/length or press **New**. Sample and Reset live in the input header.
+
+Each workspace tab keeps its own Utils tool selection and I/O. Document vs Lists for Compare is also remembered per tab.
+
+---
+
+## Share
+
+Share always asks for confirmation. With multi-tab enabled, a **Share all tabs** checkbox includes every tab’s transform input/output, Compare sides, and Utils state.
 
 ---
 
 ## Command Palette (`⌘K` / `Ctrl+K`)
 
-Press `⌘K` (or `Ctrl+K` on Windows/Linux) anywhere in the workspace - even while the editor is focused - to open the command palette. Search and run any action without touching the mouse.
-
-### Categories
+Search and run any action without the mouse.
 
 | Category | Examples |
 |----------|----------|
-| **Actions** | Beautify, Minify, Flatten, Sort arrays, Remove duplicates, Diff… |
+| **Actions** | Beautify, Minify, Flatten, Diff… |
 | **Convert to** | JSON, YAML, XML, TOML, CSV |
 | **View as** | Raw, Tree, Graph, Query, Table |
-| **Generate Types** | TypeScript, Go, Python, Java, C#, Rust… |
-| **Samples** | Load JSON / YAML / CSV sample, GitHub API example, Stripe webhook… |
-| **Settings** | Sort keys, Remove empty, Quote style, Indent, CSV delimiter, Line wrap, Live transform, Pin/Unpin |
-| **Workspace** | Copy output, Copy as Base64/Escaped/URL-encoded/Data URI, Download, Share, Browse history, Export history, Focus input/output, Find in output, Undo/Redo |
-| **Theme** | Light, Dark, System |
+| **Generate Types** | TypeScript, Zod, Go, Pydantic… |
+| **Samples** | Load sample formats, API examples |
+| **Settings** | Sort keys, indent, line wrap, menus |
+| **Workspace** | Copy, Copy as…, Download, Share, Use output as input, History |
 
 ---
 
-## Copy As
+## Output actions (toolbar)
 
-From the command palette (`⌘K`), search "copy as" to copy the output in multiple encodings:
+Share, Copy, Copy as (Base64 / escaped / URL / Data URI), Download, Maximize, and **Use output as input** sit on the **right side of the output toolbar** so they never cover editor text. Optionally enable a **draggable floating bar** in Settings.
 
-- **Base64** - `btoa(output)`
-- **Escaped string** - output wrapped in a JSON string literal
-- **URL-encoded** - percent-encoded for use in query parameters
-- **Data URI** - `data:application/json;base64,...`
+**Share** always asks for confirmation — it is the only path that can leave your device.
 
 ---
 
 ## Input History
 
-Every paste, import, or keystroke batch is tracked in an undo stack (up to 100 entries).
-
-- **Undo / Redo** - `Ctrl+Z` / `Ctrl+Shift+Z`, or via the toolbar arrows, or via the command palette
-- **Browse history** - Open the history panel from the command palette → "Browse input history". Click any entry to restore it.
-- **Export history** - Download all undo entries as a JSON file via command palette → "Export history"
-
----
-
-## Share & Export
-
-- **Share** - Save your playground to the cloud and get a short link (`/playground?id=...`). Recipients see the same input, output, view mode, format, and type language. Your local preferences are not overwritten.
-- **Embed / iframe URL** - After sharing, open the command palette and run "Copy embed / iframe URL" to get a shareable read-only embed URL.
-- **Copy** - Copy output to clipboard
-- **Download** - Download output as a file (extension matches output format)
-
-To stop sharing, click the disable icon next to the link.
+- **Undo / Redo** — `Ctrl+Z` / `Ctrl+Shift+Z`
+- **Browse history** — Command palette → “Browse input history”
+- **Export history** — Download undo stack as JSON
 
 ---
 
@@ -154,122 +176,27 @@ To stop sharing, click the disable icon next to the link.
 
 | Shortcut | Action |
 |----------|--------|
-| `⌘K` / `Ctrl+K` | Open command palette |
+| `⌘K` / `Ctrl+K` | Command palette |
 | `⌘Z` / `Ctrl+Z` | Undo input |
 | `⌘⇧Z` / `Ctrl+Shift+Z` | Redo input |
-| `⌘V` / `Ctrl+V` | Paste from clipboard |
-| `⌘C` / `Ctrl+C` | Copy output |
 | `⌘Enter` / `Ctrl+Enter` | Parse and transform |
-| `ESC` | Close command palette |
-| `↑` / `↓` (palette) | Navigate commands |
-| `↵` (palette) | Run selected command |
+| `ESC` | Close palette / modals |
 
 ---
 
 ## Toolbar & Pinning
 
-Every option (output format, view, action, indent, type language) has a star icon. Click it to pin the item to the top toolbar. Pinned items persist in your session (stored in localStorage).
+Default chrome uses **compact menus** (Format · View · Actions · Types). Uncheck “Compact menus” in Settings to pin favorites on the toolbar. Pins persist in `localStorage`.
 
-You can also pin/unpin from the command palette → "Pin current view" / "Pin current format".
+---
+
+## Large files
+
+- **~400KB+**: tree shows a caution; graph warns about performance
+- **~2MB+**: tree/graph disabled; live transform auto-off — use Raw + Query
 
 ---
 
 ## Privacy & Local-First
 
-formaty runs entirely in your browser. **Your data stays on your screen** - no input or output is sent to any server except when you explicitly click Share. Session state (pinned items, theme, etc.) is stored in localStorage. Shared links can be disabled at any time.
-
-
-## Input & Output Formats
-
-| Format | Support |
-|--------|---------|
-| **JSON** | Parse, format, validate, minify |
-| **XML** | Parse and convert to/from other formats |
-| **YAML** | Parse and convert |
-| **TOML** | Parse and convert |
-| **CSV** | Parse and convert (array of objects) |
-
-Input format is auto-detected when you paste or import. Override it via the status bar dropdown (bottom left). Output format is selected in the Transform config or toolbar.
-
-## Transform Actions
-
-| Action | Description |
-|--------|-------------|
-| **Beautify** | Pretty-print with indentation |
-| **Format** | Pretty-print with configurable indent (0–10 spaces) |
-| **Minify** | Remove whitespace and newlines |
-| **Flatten** | Convert nested objects to dot-notation keys (e.g. `a.b.c`) |
-| **Unflatten** | Expand dot-notation keys back to nested objects |
-| **Schema** | Generate JSON Schema from sample data |
-| **Validate** | Validate input against a JSON Schema (paste schema in modal) |
-| **Diff** | Compare two JSON documents side-by-side with highlighting |
-
-## Output Views
-
-- **Raw** - Code editor with syntax highlighting, line numbers, copy
-- **Tree** - Expandable tree view of the structure
-- **Graph** - Interactive graph visualization (all formats)
-
-Use the star icon next to any view to pin it to the toolbar for quick switching.
-
-## Type Generation
-
-Generate type definitions from your JSON data. Supported languages:
-
-TypeScript, Java, C#, Python, Go, Protobuf, Kotlin, Swift, Rust, SQL
-
-Star languages in the Transform config to pin them to the output toolbar. Each starred language appears as its own button for one-click generation.
-
-## Format Options
-
-- **Indent** - 0–10 spaces. Use − / + buttons or reset to default (2)
-- **Quote style** - Double or single quotes for JSON strings
-- **Sort keys** - Alphabetize object keys in output
-- **Remove empty** - Strip null and empty values
-
-## Toolbar & Pinning
-
-Click the star icon next to any option (output format, view, action, indent, type language) to pin it to the top toolbar. Pinned items persist in your session (stored in localStorage).
-
-This lets you customize the toolbar with your most-used actions for faster workflow.
-
-## Share & Export
-
-- **Share** - Save your playground to the cloud and get a short link (`/playground?id=...`). Anyone with the link sees the same input, output, view mode (raw/graph/table/tree/query), format, and settings. Your local preferences are not overwritten when viewing a shared link.
-- **Copy** - Copy output to clipboard
-- **Download** - Download output as a file with the appropriate extension
-
-## Keyboard & Input
-
-- **Undo / Redo** - Ctrl+Z, Ctrl+Shift+Z
-- **Paste** - Paste from clipboard (auto-detects format)
-- **Import** - Drop or select .json, .yaml, .xml, .toml, .csv files
-- **Live Transform** - Toggle in status bar to auto-transform on input change
-
-## Privacy & Local-First
-
-formaty runs entirely in your browser. **Your data stays on your screen** - no input or output is sent to servers except when you explicitly share a link. Session state (pinned items, theme, etc.) is stored in localStorage. Shared links are stored temporarily; you can disable them at any time.
-
-## Transform Config
-
-Click the chevron next to the Transform button to open the config panel. From there you can select output format, view, run actions, adjust indent, set quote style, toggle sort keys/remove empty, and generate types. Use the star icon to pin options to the toolbar.
-
-## Schema & Validate
-
-**Schema** generates a JSON Schema from your input. **Validate** checks your input against a schema - paste the schema in the modal and run. Errors show in the status bar.
-
-## Diff
-
-**Document mode** — side-by-side text/JSON diff with path stats and export.  
-**List / Set mode** — intersection/difference of two lists with SQL `IN` and other exports.
-
-## Share URL
-
-Share saves your playground to the cloud and generates a short link at `/playground?id={id}`. Anyone with the link sees:
-
-- Input and output
-- View mode (raw, tree, graph, query, table)
-- Output format (JSON, XML, YAML, etc.) and type language (TypeScript, Java, etc.) when applicable
-- Split ratio and live-transform setting
-
-Your own settings (theme, pinned items, etc.) are not changed when you open a shared link. To stop sharing, click the disable icon next to the link - the link is removed and others will see a "not found" message.
+formaty runs in your browser. **Your data stays on screen** unless you click Share and confirm. Session prefs (theme, pins, menus) use `localStorage`. Shared links can be disabled from the status bar.

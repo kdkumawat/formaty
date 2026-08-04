@@ -50,7 +50,8 @@
 }
 
 html {
-  font-size: 100%;
+  /* Slightly larger base for readability in dense tool UIs */
+  font-size: 106%;
 }
 
 html,
@@ -150,6 +151,22 @@ body {
 ::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
 [data-theme="dark"] ::-webkit-scrollbar-thumb { background: #383838; }
 [data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: #505050; }
+
+/* Clickable controls always show pointer */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+a[href],
+summary,
+label[for],
+input[type="checkbox"],
+input[type="radio"],
+select {
+  cursor: pointer;
+}
+button:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
+}
 
 /* ── Focus ring ──────────────────────────────────────────── */
 :focus-visible {

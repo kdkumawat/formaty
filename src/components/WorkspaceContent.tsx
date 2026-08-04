@@ -32,8 +32,18 @@ import {
   LinkSlashIcon,
   ViewColumnsIcon,
 } from "@heroicons/react/24/outline";
+import { StarIcon as StarSolidIcon } from "@heroicons/react/24/solid";
 import { JsonDiffEditor, type DiffNavState, type JsonDiffEditorRef } from "@/components/JsonDiffEditor";
-import { ListComparePanel } from "@/components/ListComparePanel";
+import { ListComparePanel, type ListCompareExport } from "@/components/ListComparePanel";
+import {
+  UtilsPanel,
+  applyUtilSample,
+  defaultUtilToolState,
+  type UtilTab,
+  type UtilsStateMap,
+} from "@/components/UtilsPanel";
+import { UTIL_TABS } from "@/lib/utils/devtools";
+import { parseJsonInput } from "@/lib/json/core";
 import { JsonEditor } from "@/components/JsonEditor";
 import { GraphView, type GraphViewRef } from "@/components/GraphView";
 import { TreeView } from "@/components/TreeView";
@@ -43,7 +53,13 @@ import {
   Dropdown,
   getSizeFormatted,
   Header as WorkspaceHeader,
+  OutputActionBar,
   StatusBar,
+  formatCopyAsText,
+  DEFAULT_COPY_AS_OPTIONS,
+  LIST_COPY_AS_OPTIONS,
+  UUID_COPY_AS_OPTIONS,
+  type CopyAsFormat,
 } from "@/components/workspace";
 import { Logo } from "@/components/Logo";
 import {
@@ -77,6 +93,14 @@ const SAMPLE_JSON = `{
     { "day": "tue", "count": 1290 }
   ]
 }`;
+
+/** Array of objects — best starting point for Table view */
+const SAMPLE_JSON_TABLE = `[
+  { "id": 1, "name": "Alice", "role": "admin", "active": true, "score": 98 },
+  { "id": 2, "name": "Bob", "role": "dev", "active": true, "score": 87 },
+  { "id": 3, "name": "Carol", "role": "viewer", "active": false, "score": 72 },
+  { "id": 4, "name": "Dave", "role": "dev", "active": true, "score": 91 }
+]`;
 
 const SAMPLE_XML = `<?xml version="1.0" encoding="UTF-8"?>
 <root>
@@ -216,6 +240,7 @@ const SAMPLES: Record<FormatKind, string> = {
   csv: SAMPLE_CSV,
 };
 
+/** Transform actions only — Compare is a separate workspace tool (not nested here). */
 const OPERATION_ACTIONS = [
   ["Beautify", "beautify"],
   ["Minify", "minify"],
@@ -223,7 +248,6 @@ const OPERATION_ACTIONS = [
   ["Unflatten", "unflatten"],
   ["Schema", "schema"],
   ["Validate", "validate"],
-  ["Diff", "diff"],
 ] as const;
 
 const FORMAT_KINDS: FormatKind[] = ["json", "xml", "yaml", "toml", "csv"];
@@ -231,9 +255,11 @@ const INPUT_FORMAT_KINDS: InputFormatKind[] = [...FORMAT_KINDS, "curl"];
 
 const TYPE_LANGUAGES: Array<{ id: TypeTargetLanguage; label: string; ext: string }> = [
   { id: "typescript", label: "TypeScript", ext: "ts" },
+  { id: "zod", label: "Zod", ext: "ts" },
   { id: "java", label: "Java", ext: "java" },
   { id: "csharp", label: "C#", ext: "cs" },
   { id: "python", label: "Python", ext: "py" },
+  { id: "pydantic", label: "Pydantic", ext: "py" },
   { id: "go", label: "Go", ext: "go" },
   { id: "protobuf", label: "Protobuf", ext: "proto" },
   { id: "kotlin", label: "Kotlin", ext: "kt" },
@@ -242,7 +268,22 @@ const TYPE_LANGUAGES: Array<{ id: TypeTargetLanguage; label: string; ext: string
   { id: "sql", label: "SQL", ext: "sql" },
 ];
 
-type OperationAction = (typeof OPERATION_ACTIONS)[number][1] | "format" | "beautify" | "sort" | "sortArrays" | "dedup" | "removeEmpty" | "generateTypes";
+/** Soft caps for heavy views (bytes of input text). */
+const LARGE_INPUT_BYTES = 400 * 1024;
+const HUGE_INPUT_BYTES = 2 * 1024 * 1024;
+
+/** Includes "diff" / "utils" for first-class tools (not transform OPERATION_ACTIONS menus). */
+type OperationAction =
+  | (typeof OPERATION_ACTIONS)[number][1]
+  | "format"
+  | "beautify"
+  | "sort"
+  | "sortArrays"
+  | "dedup"
+  | "removeEmpty"
+  | "generateTypes"
+  | "diff"
+  | "utils";
 type OutputLanguage =
   | "json"
   | "yaml"
@@ -314,7 +355,7 @@ const EXT_BY_FORMAT: Record<FormatKind, string> = {
   csv: "csv",
 };
 
-const EXT_BY_ACTION: Record<Exclude<OperationAction, "generateTypes"> | "parse", string> = {
+const EXT_BY_ACTION: Record<Exclude<OperationAction, "generateTypes" | "utils"> | "parse", string> = {
   parse: "json",
   format: "json",
   beautify: "json",
@@ -330,7 +371,7 @@ const EXT_BY_ACTION: Record<Exclude<OperationAction, "generateTypes"> | "parse",
   diff: "json",
 };
 
-const LANGUAGE_BY_ACTION: Record<Exclude<OperationAction, "generateTypes"> | "parse", OutputLanguage> =
+const LANGUAGE_BY_ACTION: Record<Exclude<OperationAction, "generateTypes" | "utils"> | "parse", OutputLanguage> =
   {
     parse: "json",
     format: "json",
@@ -349,10 +390,12 @@ const LANGUAGE_BY_ACTION: Record<Exclude<OperationAction, "generateTypes"> | "pa
 
 const LANGUAGE_BY_TYPE_TARGET: Record<TypeTargetLanguage, OutputLanguage> = {
   typescript: "typescript",
+  zod: "typescript",
   sql: "sql",
   java: "java",
   csharp: "csharp",
   python: "python",
+  pydantic: "python",
   go: "go",
   protobuf: "plaintext",
   kotlin: "kotlin",
@@ -387,6 +430,12 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [activeOperation, setActiveOperation] = useState<OperationAction | null>(null);
+  const [utilTab, setUtilTab] = useState<UtilTab>("uuid");
+  const [utilsByTool, setUtilsByTool] = useState<UtilsStateMap>({});
+  const [shareAllTabs, setShareAllTabs] = useState(false);
+  const [listToolbarHost, setListToolbarHost] = useState<HTMLElement | null>(null);
+  /** Active list-compare result for shared OutputActionBar copy/download */
+  const [listCompareExport, setListCompareExport] = useState<ListCompareExport | null>(null);
   const [themeMode, setThemeMode] = useState<ThemeMode>("system");
   const [systemDark, setSystemDark] = useState(false);
   const [themeSynced, setThemeSynced] = useState(false);
@@ -413,16 +462,20 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   const [inputFormatOverride, setInputFormatOverride] = useState<InputFormatKind | null>(null);
   const [inputFormatOpen, setInputFormatOpen] = useState(false);
   const [transformConfigOpen, setTransformConfigOpen] = useState(false);
-  const [viewAsMenu, setViewAsMenu] = useState(false);
+  /** Menu-first chrome by default — cleaner for new users; uncheck in settings for pinned toolbar. */
+  const [viewAsMenu, setViewAsMenu] = useState(true);
   const [formatMenuOpen, setFormatMenuOpen] = useState(false);
   const [viewMenuOpen, setViewMenuOpen] = useState(false);
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
   const [typesMenuOpen, setTypesMenuOpen] = useState(false);
   const [pinnedItems, setPinnedItems] = useState<Set<string>>(
-    () => new Set(["fmt:json", "fmt:xml", "view:raw", "view:graph", "view:query", "action:beautify", "action:minify", "action:schema", "action:diff", "type:typescript", "type:java", "type:go", "type:python", "type:sql"])
+    () => new Set(["fmt:json", "view:raw", "view:query", "action:beautify", "action:minify", "type:typescript", "type:zod"])
   );
+  const [shareConfirmOpen, setShareConfirmOpen] = useState(false);
+  const [showFirstRunHint, setShowFirstRunHint] = useState(false);
+
   const [liveTransform, setLiveTransform] = useState(true);
-  const [editorFontSize, setEditorFontSize] = useState(13);
+  const [editorFontSize, setEditorFontSize] = useState(14);
   const [lineWrap, setLineWrap] = useState(true);
   const [diffSideBySide, setDiffSideBySide] = useState(true);
   const [diffIgnoreWhitespace, setDiffIgnoreWhitespace] = useState(false);
@@ -489,10 +542,120 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   } | null>(null);
   const graphViewRef = useRef<GraphViewRef | null>(null);
   const diffEditorRef = useRef<JsonDiffEditorRef | null>(null);
-  const outputEditorApiRef = useRef<{ find(): void; focus(): void; collapseAll(): void; expandAll(): void } | null>(null);
-  const inputEditorApiRef = useRef<{ find(): void; focus(): void; collapseAll(): void; expandAll(): void } | null>(null);
-  const splitInput2ApiRef = useRef<{ find(): void; focus(): void; collapseAll(): void; expandAll(): void } | null>(null);
-  const tabSnapshotsRef = useRef<Map<string, { input: string; inputFormatOverride: InputFormatKind | null; undoStack: string[]; undoIndex: number; output: string; parsedOutput: JsonValue | null; outputExt: string; outputLanguage: OutputLanguage; activeOperation: OperationAction | null; error: string | null; convertToFormat: FormatKind; typeLanguage: TypeTargetLanguage; rightView: RightView }>>(new Map());
+  const outputEditorApiRef = useRef<{ find(): void; focus(): void; collapseAll(): void; expandAll(): void; goToLine(line: number, column?: number): void } | null>(null);
+  const inputEditorApiRef = useRef<{ find(): void; focus(): void; collapseAll(): void; expandAll(): void; goToLine(line: number, column?: number): void } | null>(null);
+  const splitInput2ApiRef = useRef<{ find(): void; focus(): void; collapseAll(): void; expandAll(): void; goToLine(line: number, column?: number): void } | null>(null);
+  type TabSnapshot = {
+    input: string;
+    inputFormatOverride: InputFormatKind | null;
+    undoStack: string[];
+    undoIndex: number;
+    output: string;
+    parsedOutput: JsonValue | null;
+    outputExt: string;
+    outputLanguage: OutputLanguage;
+    activeOperation: OperationAction | null;
+    error: string | null;
+    convertToFormat: FormatKind;
+    typeLanguage: TypeTargetLanguage;
+    rightView: RightView;
+    /** Per-tab Compare state (never shared across tabs). */
+    diffLeftInput: string;
+    diffRightInput: string;
+    diffKind: "document" | "list";
+    isOutputMaximized: boolean;
+    /** Per-tab Utils selection + each util tool’s own I/O. */
+    utilTab: UtilTab;
+    utilsByTool: UtilsStateMap;
+  };
+  const emptyTabSnapshot = (): TabSnapshot => ({
+    input: "",
+    inputFormatOverride: null,
+    undoStack: [""],
+    undoIndex: 0,
+    output: "",
+    parsedOutput: null,
+    outputExt: "json",
+    outputLanguage: "json",
+    activeOperation: null,
+    error: null,
+    convertToFormat: "json",
+    typeLanguage: "typescript",
+    rightView: "raw",
+    diffLeftInput: "",
+    diffRightInput: "",
+    diffKind: "document",
+    isOutputMaximized: false,
+    utilTab: "uuid",
+    utilsByTool: {},
+  });
+  const captureTabSnapshot = (): TabSnapshot => ({
+    input,
+    inputFormatOverride,
+    undoStack,
+    undoIndex,
+    output,
+    parsedOutput,
+    outputExt,
+    outputLanguage,
+    activeOperation,
+    error,
+    convertToFormat,
+    typeLanguage,
+    rightView,
+    diffLeftInput,
+    diffRightInput,
+    diffKind,
+    isOutputMaximized,
+    utilTab,
+    utilsByTool,
+  });
+  const applyTabSnapshot = (snap: TabSnapshot) => {
+    setInput(snap.input);
+    setInputFormatOverride(snap.inputFormatOverride);
+    setUndoStack(snap.undoStack);
+    setUndoIndex(snap.undoIndex);
+    setOutput(cleanSessionOutput(snap.output));
+    setParsedOutput(snap.parsedOutput);
+    setOutputExt(snap.outputExt);
+    setOutputLanguage(snap.outputLanguage);
+    setActiveOperation(snap.activeOperation);
+    setError(snap.error);
+    setValidationError(null);
+    setConvertToFormat(snap.convertToFormat);
+    setTypeLanguage(snap.typeLanguage);
+    setRightView(snap.rightView);
+    setDiffLeftInput(snap.diffLeftInput ?? "");
+    setDiffRightInput(snap.diffRightInput ?? "");
+    setDiffKind(snap.diffKind ?? "document");
+    setIsOutputMaximized(
+      Boolean(snap.isOutputMaximized) ||
+        snap.activeOperation === "diff" ||
+        snap.activeOperation === "utils",
+    );
+    setUtilTab(snap.utilTab ?? "uuid");
+    setUtilsByTool(snap.utilsByTool ?? {});
+    setDiffLineStats(null);
+    setDiffNav({ current: 0, total: 0 });
+    // Recover structured views after tab switch / Compare exit
+    if (snap.parsedOutput == null) {
+      const cleaned = cleanSessionOutput(snap.output);
+      const source = cleaned?.trim() ? cleaned : snap.input;
+      if (source?.trim()) {
+        try {
+          setParsedOutput(parseJsonInput(source));
+        } catch {
+          try {
+            const fmt = detectFormat(source);
+            if (fmt !== "curl") setParsedOutput(parseInput(source, fmt) as JsonValue);
+          } catch {
+            /* leave null */
+          }
+        }
+      }
+    }
+  };
+  const tabSnapshotsRef = useRef<Map<string, TabSnapshot>>(new Map());
   const splitContainerInputRef = useRef<HTMLDivElement | null>(null);
   const diffDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sessionRestoredRef = useRef(false);
@@ -538,7 +701,8 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   const canRedo = undoIndex < undoStack.length - 1;
   /** Diff mode always uses full-width left/right panes (no main input panel). */
   const isDiffMode = activeOperation === "diff";
-  const hideInputPanel = isOutputMaximized || isDiffMode;
+  const isUtilsMode = activeOperation === "utils";
+  const hideInputPanel = isOutputMaximized || isDiffMode || isUtilsMode;
 
   const structuralDiff = useMemo((): DiffSummary | null => {
     if (!isDiffMode) return null;
@@ -546,13 +710,13 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     return summarizeDiffFromText(diffLeftInput, diffRightInput);
   }, [isDiffMode, diffLeftInput, diffRightInput]);
 
-  /** Monaco language: JSON highlighting only when both sides parse as JSON. */
+  /** Monaco language: JSON highlighting only when both sides parse as JSON (loose OK). */
   const documentDiffLanguage = useMemo(() => {
     const ok = (t: string) => {
       const s = t.trim();
       if (!s) return true;
       try {
-        JSON.parse(s);
+        parseJsonInput(s);
         return true;
       } catch {
         return false;
@@ -561,12 +725,13 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     return ok(diffLeftInput) && ok(diffRightInput) ? "json" : "plaintext";
   }, [diffLeftInput, diffRightInput]);
 
-  // Paths panel only applies to JSON — close it for plain text
+  const canShowPathDiff = structuralDiff !== null;
+  // Close paths panel when leaving document compare (list mode / other tools)
   useEffect(() => {
-    if (isDiffMode && structuralDiff === null && diffShowPaths) {
+    if ((!isDiffMode || diffKind !== "document") && diffShowPaths) {
       setDiffShowPaths(false);
     }
-  }, [isDiffMode, structuralDiff, diffShowPaths]);
+  }, [isDiffMode, diffKind, diffShowPaths]);
 
   const filteredDiffRows = useMemo(() => {
     if (!structuralDiff) return [];
@@ -582,6 +747,9 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   const shareLabel = shareState === "done" ? "Copied" : shareState === "error" ? "Failed" : "Share";
   const inputLineCount = input.split("\n").length;
   const inputSizeFormatted = getSizeFormatted(input);
+  const inputByteSize = useMemo(() => (input ? new Blob([input]).size : 0), [input]);
+  const isLargeInput = inputByteSize >= LARGE_INPUT_BYTES;
+  const isHugeInput = inputByteSize >= HUGE_INPUT_BYTES;
   const selectedTypeLanguageLabel =
     TYPE_LANGUAGES.find((item) => item.id === typeLanguage)?.label ?? "Language";
 
@@ -590,20 +758,38 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   const dropdownPanelClass = isDark ? "bg-[#1a1a1a]/98 backdrop-blur-xl text-[#e8e8e8]" : "bg-white/98 backdrop-blur-xl text-[#1a1a1a]";
   const settingsLabelClass = isDark ? "text-[10px] font-bold uppercase tracking-[0.1em] text-primary/80" : "text-[10px] font-bold uppercase tracking-[0.1em] text-primary/65";
   const settingsSectionClass = "space-y-2";
-  const settingsBtnGroupClass = isDark
-    ? "flex items-center rounded-lg border border-white/[0.1] overflow-hidden divide-x divide-white/[0.08] bg-white/[0.04]"
-    : "flex items-center rounded-lg border border-[var(--workspace-border)]/60 overflow-hidden divide-x divide-[var(--workspace-border)]/40 bg-[var(--workspace-background)]/50";
-  const settingsStepBtnClass = isDark
-    ? "flex h-7 w-7 shrink-0 items-center justify-center p-1 text-white/50 hover:bg-primary/15 hover:text-primary active:scale-95 transition-all duration-100"
-    : "flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-primary/10 hover:text-primary active:scale-95 transition-all duration-100";
+  const settingsBtnGroupClass =
+    "inline-flex w-fit max-w-full items-center overflow-hidden rounded-lg border border-[var(--workspace-border)]/60 divide-x divide-[var(--workspace-border)]/40 bg-[var(--workspace-background)]/60";
+  const settingsStepBtnClass =
+    "flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] transition-all duration-100 hover:bg-primary/10 hover:text-primary active:scale-95";
+  const pinStarClass = (on: boolean) =>
+    `inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition-all ${
+      on
+        ? "text-amber-500 hover:bg-amber-500/10"
+        : "text-[var(--workspace-text-muted)]/55 hover:bg-primary/10 hover:text-primary"
+    }`;
+  const toolbarSep = (
+    <span className="mx-1 h-4 w-px shrink-0 self-center bg-[var(--workspace-border)]" role="separator" aria-hidden />
+  );
   const linkBtnClass = isDark
-    ? "btn btn-xs btn-ghost rounded-md px-1.5 py-1 border-0 font-medium text-[#b0b0b0] hover:bg-white/[0.1] hover:text-[#e8e8e8] transition-all duration-100"
-    : "btn btn-xs btn-ghost rounded-md px-1.5 py-1 border-0 font-medium text-[#3a3a3a] hover:bg-black/[0.07] hover:text-[#0a0a0a] transition-all duration-100";
+    ? "btn btn-xs btn-ghost cursor-pointer rounded-md px-1.5 py-1 border-0 font-medium text-[#b0b0b0] hover:bg-white/[0.1] hover:text-[#e8e8e8] transition-all duration-100"
+    : "btn btn-xs btn-ghost cursor-pointer rounded-md px-1.5 py-1 border-0 font-medium text-[#3a3a3a] hover:bg-black/[0.07] hover:text-[#0a0a0a] transition-all duration-100";
   const tbActiveClass = "!bg-primary/12 !text-primary font-semibold";
   const inputEmpty = !input.trim();
   useEffect(() => {
     if (inputEmpty) setCursorPosition(null);
   }, [inputEmpty]);
+
+  // Large payloads: keep raw editing snappy — turn off live transform automatically
+  useEffect(() => {
+    if (isHugeInput && liveTransform) {
+      setLiveTransform(false);
+      setShareNotification("Live transform off for large files");
+      window.setTimeout(() => setShareNotification(null), 3000);
+    }
+    // Only react to size crossing the threshold, not liveTransform toggles
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isHugeInput]);
 
   const detectedInputFormat = useMemo(() => detectFormat(input), [input]);
   const resolvedInputFormat: InputFormatKind = inputFormatOverride ?? detectedInputFormat;
@@ -657,47 +843,24 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
 
   const switchToTab = (tabId: string) => {
     if (tabId === activeTabId) return;
-    tabSnapshotsRef.current.set(activeTabId, { input, inputFormatOverride, undoStack, undoIndex, output, parsedOutput, outputExt, outputLanguage, activeOperation, error, convertToFormat, typeLanguage, rightView });
-    const snap = tabSnapshotsRef.current.get(tabId) ?? { input: "", inputFormatOverride: null, undoStack: [""], undoIndex: 0, output: "", parsedOutput: null, outputExt: "json", outputLanguage: "json" as OutputLanguage, activeOperation: null, error: null, convertToFormat: "json" as FormatKind, typeLanguage: "typescript" as TypeTargetLanguage, rightView: "raw" as RightView };
+    tabSnapshotsRef.current.set(activeTabId, captureTabSnapshot());
+    const snap = tabSnapshotsRef.current.get(tabId) ?? emptyTabSnapshot();
     historyLock.current = true;
     setActiveTabId(tabId);
-    setInput(snap.input);
-    setInputFormatOverride(snap.inputFormatOverride);
-    setUndoStack(snap.undoStack);
-    setUndoIndex(snap.undoIndex);
-    setOutput(snap.output);
-    setParsedOutput(snap.parsedOutput);
-    setOutputExt(snap.outputExt);
-    setOutputLanguage(snap.outputLanguage);
-    setActiveOperation(snap.activeOperation);
-    setError(snap.error);
-    setValidationError(null);
-    setConvertToFormat(snap.convertToFormat);
-    setTypeLanguage(snap.typeLanguage);
-    setRightView(snap.rightView);
+    applyTabSnapshot(snap);
+    prevBeforeDiffRef.current = null;
     setTimeout(() => { historyLock.current = false; }, 0);
   };
 
   const addTab = () => {
-    tabSnapshotsRef.current.set(activeTabId, { input, inputFormatOverride, undoStack, undoIndex, output, parsedOutput, outputExt, outputLanguage, activeOperation, error, convertToFormat, typeLanguage, rightView });
+    tabSnapshotsRef.current.set(activeTabId, captureTabSnapshot());
     const newId = `t${Date.now()}`;
     tabCounterRef.current += 1;
     setTabs((prev) => [...prev, { id: newId, label: `Tab ${tabCounterRef.current}` }]);
     setActiveTabId(newId);
     historyLock.current = true;
-    setInput("");
-    setInputFormatOverride(null);
-    setUndoStack([""]);
-    setUndoIndex(0);
-    setOutput("");
-    setParsedOutput(null);
-    setOutputExt("json");
-    setOutputLanguage("json");
-    setError(null);
-    setValidationError(null);
-    setActiveOperation(null);
-    setConvertToFormat("json");
-    setRightView("raw");
+    applyTabSnapshot(emptyTabSnapshot());
+    prevBeforeDiffRef.current = null;
     setTimeout(() => { historyLock.current = false; }, 0);
   };
 
@@ -708,24 +871,12 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     const newTabs = tabs.filter((t) => t.id !== tabId);
     if (tabId === activeTabId) {
       const nextTab = newTabs[Math.max(0, tabIdx - 1)];
-      const snap = tabSnapshotsRef.current.get(nextTab.id) ?? { input: "", inputFormatOverride: null, undoStack: [""], undoIndex: 0, output: "", parsedOutput: null, outputExt: "json", outputLanguage: "json" as OutputLanguage, activeOperation: null, error: null, convertToFormat: "json" as FormatKind, typeLanguage: "typescript" as TypeTargetLanguage, rightView: "raw" as RightView };
+      const snap = tabSnapshotsRef.current.get(nextTab.id) ?? emptyTabSnapshot();
       setTabs(newTabs);
       setActiveTabId(nextTab.id);
       historyLock.current = true;
-      setInput(snap.input);
-      setInputFormatOverride(snap.inputFormatOverride);
-      setUndoStack(snap.undoStack);
-      setUndoIndex(snap.undoIndex);
-      setOutput(snap.output);
-      setParsedOutput(snap.parsedOutput);
-      setOutputExt(snap.outputExt);
-      setOutputLanguage(snap.outputLanguage);
-      setActiveOperation(snap.activeOperation);
-      setError(snap.error);
-      setValidationError(null);
-      setConvertToFormat(snap.convertToFormat);
-      setTypeLanguage(snap.typeLanguage);
-      setRightView(snap.rightView);
+      applyTabSnapshot(snap);
+      prevBeforeDiffRef.current = null;
       setTimeout(() => { historyLock.current = false; }, 0);
     } else {
       setTabs(newTabs);
@@ -738,6 +889,11 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
       if (s) {
         const d = JSON.parse(s) as { themeMode?: ThemeMode };
         if (d.themeMode === "dark" || d.themeMode === "light" || d.themeMode === "system") setThemeMode(d.themeMode);
+      }
+    } catch {}
+    try {
+      if (localStorage.getItem("formaty-onboarded") !== "1") {
+        setShowFirstRunHint(true);
       }
     } catch {}
     setSystemDark(window.matchMedia("(prefers-color-scheme: dark)").matches);
@@ -968,6 +1124,18 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
             }
           }
           tabSnapshotsRef.current = map;
+          const activeId =
+            data.activeTabId && data.tabs.some((t: Tab) => t.id === data.activeTabId)
+              ? data.activeTabId
+              : data.tabs[0].id;
+          const activeSnap = map.get(activeId) as TabSnapshot | undefined;
+          if (activeSnap) {
+            if (activeSnap.utilTab) setUtilTab(activeSnap.utilTab);
+            if (activeSnap.utilsByTool) setUtilsByTool(activeSnap.utilsByTool);
+            if (activeSnap.diffKind) setDiffKind(activeSnap.diffKind);
+            if (typeof activeSnap.diffLeftInput === "string") setDiffLeftInput(activeSnap.diffLeftInput);
+            if (typeof activeSnap.diffRightInput === "string") setDiffRightInput(activeSnap.diffRightInput);
+          }
         }
       }
       sessionRestoredRef.current = true;
@@ -995,7 +1163,14 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     tabSnapshotsRef.current.forEach((snap, id) => { allSnapshots[id] = snap; });
     const persistOutput = cleanSessionOutput(output);
     // Overwrite current tab with live state
-    allSnapshots[activeTabId] = { input, inputFormatOverride, undoStack: undoStack.slice(-20), undoIndex: Math.min(undoIndex, 19), output: persistOutput, parsedOutput: null, outputExt, outputLanguage, activeOperation, error: null, convertToFormat, typeLanguage, rightView };
+    allSnapshots[activeTabId] = {
+      ...captureTabSnapshot(),
+      undoStack: undoStack.slice(-20),
+      undoIndex: Math.min(undoIndex, 19),
+      output: persistOutput,
+      parsedOutput: null,
+      error: null,
+    };
     localStorage.setItem(
       "formaty-session",
       JSON.stringify({
@@ -1010,6 +1185,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
         liveTransform,
         editorFontSize,
         viewAsMenu,
+
         mobileShowOutput,
         activeOperation,
         pinnedItems: Array.from(pinnedItems),
@@ -1020,31 +1196,83 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
         tabSnapshots: allSnapshots,
       }),
     );
-  }, [input, output, split, themeMode, typeLanguage, rightView, formatOptions, convertToFormat, liveTransform, editorFontSize, viewAsMenu, mobileShowOutput, activeOperation, pinnedItems, tabs, activeTabId, inputFormatOverride, undoStack, undoIndex, outputExt, outputLanguage]);
+  }, [input, output, split, themeMode, typeLanguage, rightView, formatOptions, convertToFormat, liveTransform, editorFontSize, viewAsMenu, mobileShowOutput, activeOperation, pinnedItems, tabs, activeTabId, inputFormatOverride, undoStack, undoIndex, outputExt, outputLanguage, diffLeftInput, diffRightInput, diffKind, isOutputMaximized, utilTab, utilsByTool]);
 
+  // Prefer structured parse for views (table/tree/graph/query)
   useEffect(() => {
+    // While Compare/Utils own the main pane, keep transform parsed data intact
+    if (isDiffMode || isUtilsMode) return;
     if (!output.trim()) {
+      // Fall back to input so Table/Tree still work after Compare if output was empty
+      if (input.trim()) {
+        try {
+          setParsedOutput(parseJsonInput(input));
+          return;
+        } catch {
+          try {
+            const fmt = detectFormat(input);
+            if (fmt !== "curl") {
+              setParsedOutput(parseInput(input, fmt) as JsonValue);
+              return;
+            }
+          } catch {
+            /* fall through */
+          }
+        }
+      }
       setParsedOutput(null);
       return;
     }
     // Purge leftover path-diff notes still sitting in state / session
-    if (!isDiffMode && isStaleDiffOutput(output)) {
+    if (isStaleDiffOutput(output)) {
       setOutput("");
       setParsedOutput(null);
       return;
     }
+    let parsed: JsonValue | null = null;
     try {
-      if (outputLanguage === "json") {
-        setParsedOutput(JSON.parse(output) as JsonValue);
-      } else if (["xml", "yaml", "toml", "csv"].includes(outputLanguage)) {
-        setParsedOutput(parseInput(output, outputLanguage as FormatKind) as JsonValue);
-      } else {
-        setParsedOutput(null);
-      }
+      parsed = parseJsonInput(output);
     } catch {
-      setParsedOutput(null);
+      try {
+        if (["xml", "yaml", "toml", "csv"].includes(outputLanguage)) {
+          parsed = parseInput(output, outputLanguage as FormatKind) as JsonValue;
+        }
+      } catch {
+        parsed = null;
+      }
     }
-  }, [output, outputLanguage, isDiffMode]);
+    // Last resort: parse input (e.g. after tool switch left output empty)
+    if (parsed == null && input.trim()) {
+      try {
+        parsed = parseJsonInput(input);
+      } catch {
+        try {
+          const fmt = detectFormat(input);
+          if (fmt !== "curl") parsed = parseInput(input, fmt) as JsonValue;
+        } catch {
+          parsed = null;
+        }
+      }
+    }
+    setParsedOutput(parsed);
+  }, [output, outputLanguage, isDiffMode, isUtilsMode, input]);
+
+  // Auto-select Table once when a new array-of-objects lands on default Raw view
+  const lastAutoTableKeyRef = useRef("");
+  useEffect(() => {
+    if (isDiffMode || isUtilsMode || !parsedOutput) return;
+    if (rightView !== "raw") return; // respect explicit view choices
+    if (
+      Array.isArray(parsedOutput) &&
+      parsedOutput.length > 0 &&
+      parsedOutput.every((x) => x !== null && typeof x === "object" && !Array.isArray(x))
+    ) {
+      const key = `${parsedOutput.length}:${Object.keys(parsedOutput[0] as object).slice(0, 8).join(",")}`;
+      if (lastAutoTableKeyRef.current === key) return;
+      lastAutoTableKeyRef.current = key;
+      setRightView("table");
+    }
+  }, [parsedOutput, rightView, isDiffMode, isUtilsMode]);
 
   useEffect(() => {
     if (!sessionRestoredRef.current || !input.trim() || !activeOperation) return;
@@ -1139,7 +1367,15 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
           setOutputExt(EXT_BY_FORMAT[convertToFormat]);
           setOutputLanguage(convertToFormat);
           setParsedOutput(json);
-          setActiveOperation(null);
+          // Keep Transform mode (don't clobber Compare/Utils)
+          setActiveOperation((op) => (op === "diff" || op === "utils" ? op : null));
+          if (
+            Array.isArray(json) &&
+            json.length > 0 &&
+            json.every((x) => x !== null && typeof x === "object" && !Array.isArray(x))
+          ) {
+            setRightView("table");
+          }
         })
         .catch(() => { /* validation shows invalid */ })
         .finally(() => setBusy(false));
@@ -1364,7 +1600,6 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
         if (action === "diff") {
           // Visual diff + path stats live in Diff UI only — never overwrite the main output
           // panel (that left a leftover `{...}` path-diff JSON after exiting).
-          setRightView("raw");
           setBusy(false);
           return;
         }
@@ -1621,14 +1856,18 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
       setModalValue(schemaInput);
       return;
     }
-    if (action === "diff") {
+    if (action === "utils") {
+      if (activeOperation === "utils") {
+        setActiveOperation(null);
+        setIsOutputMaximized(false);
+        return;
+      }
+      // Leave compare if open, then open utils full-width
       if (activeOperation === "diff") {
-        // Exit diff mode and restore prior layout / operation / output
         const prev = prevBeforeDiffRef.current;
         prevBeforeDiffRef.current = null;
         if (prev) {
           setRightView(prev.rightView);
-          setIsOutputMaximized(prev.isOutputMaximized);
           const stale = isStaleDiffOutput(prev.output);
           if (stale) {
             setOutput("");
@@ -1639,52 +1878,116 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
           }
           setOutputExt(prev.outputExt);
           setOutputLanguage(prev.outputLanguage);
-          setActiveOperation(prev.activeOperation);
-          if (prev.activeOperation === "format") {
-            runConvert(convertToFormat);
-          } else if (prev.activeOperation === "generateTypes") {
-            executeOperation("generateTypes", { typeLanguage });
-          } else if (prev.activeOperation && prev.activeOperation !== "diff") {
-            executeOperation(prev.activeOperation);
-          } else if (stale && input.trim()) {
-            // No prior op but junk was in output — rebuild from input
-            runConvert(convertToFormat);
+        }
+      }
+      setIsOutputMaximized(true);
+      setActiveOperation("utils");
+      setError(null);
+      setBusy(false);
+      return;
+    }
+    if (action === "diff") {
+      if (activeOperation === "diff") {
+        // Exit Compare → restore Transform layout/output; keep this tab's left/right for next Compare visit
+        const prev = prevBeforeDiffRef.current;
+        prevBeforeDiffRef.current = null;
+        if (prev) {
+          setRightView(prev.rightView);
+          setIsOutputMaximized(prev.isOutputMaximized);
+          const stale = isStaleDiffOutput(prev.output);
+          if (stale) {
+            setOutput("");
+            setParsedOutput(null);
+          } else {
+            const restoredOut = prev.output || "";
+            setOutput(restoredOut);
+            let restoredParsed = prev.parsedOutput;
+            if (restoredParsed == null) {
+              const src = restoredOut.trim() || input.trim();
+              if (src) {
+                try {
+                  restoredParsed = parseJsonInput(src);
+                } catch {
+                  try {
+                    const fmt = detectFormat(src);
+                    if (fmt !== "curl") restoredParsed = parseInput(src, fmt) as JsonValue;
+                  } catch {
+                    restoredParsed = null;
+                  }
+                }
+              }
+            }
+            setParsedOutput(restoredParsed);
           }
+          setOutputExt(prev.outputExt);
+          setOutputLanguage(prev.outputLanguage);
+          setActiveOperation(prev.activeOperation === "utils" ? null : prev.activeOperation);
         } else {
           setActiveOperation(null);
           setIsOutputMaximized(false);
           if (isStaleDiffOutput(output)) {
             setOutput("");
             setParsedOutput(null);
-            if (input.trim()) runConvert(convertToFormat);
+          } else if (parsedOutput == null && (output.trim() || input.trim())) {
+            const src = output.trim() || input;
+            try {
+              setParsedOutput(parseJsonInput(src));
+            } catch {
+              /* keep */
+            }
           }
         }
         return;
       }
-      // Never snapshot stale path-diff JSON as the "pre-diff" output
+      // Enter Compare — preserve Transform state; do not wipe existing compare panes
+      if (activeOperation === "utils") {
+        setActiveOperation(null);
+      }
       const snapshotOutput = cleanSessionOutput(output);
+      // Prefer live parsed data; re-parse input/output if needed so Table restores after exit
+      let snapParsed = isStaleDiffOutput(output) ? null : parsedOutput;
+      if (snapParsed == null) {
+        const src = snapshotOutput.trim() || input.trim();
+        if (src) {
+          try {
+            snapParsed = parseJsonInput(src);
+          } catch {
+            try {
+              const fmt = detectFormat(src);
+              if (fmt !== "curl") snapParsed = parseInput(src, fmt) as JsonValue;
+            } catch {
+              snapParsed = null;
+            }
+          }
+        }
+      }
       prevBeforeDiffRef.current = {
         rightView,
-        activeOperation,
-        isOutputMaximized,
-        output: snapshotOutput,
-        parsedOutput: isStaleDiffOutput(output) ? null : parsedOutput,
+        activeOperation: activeOperation === "utils" ? null : activeOperation,
+        isOutputMaximized: activeOperation === "utils" ? false : isOutputMaximized,
+        output: snapshotOutput || (input.trim() ? input : ""),
+        parsedOutput: snapParsed,
         outputExt,
         outputLanguage,
       };
       setIsOutputMaximized(true);
-      setRightView("raw");
+      // Keep rightView (e.g. table) in state — Compare renders when isDiffMode, independent of view
       setActiveOperation("diff");
       setError(null);
       setDiffLineStats(null);
       setDiffNav({ current: 0, total: 0 });
       setDiffPathFilter("all");
-      if (input.trim()) {
+      // Only seed from transform input when both compare panes are empty (new session / tab)
+      if (!diffLeftInput.trim() && !diffRightInput.trim() && input.trim()) {
         setDiffLeftInput(input);
         setDiffRightInput("");
       }
       setBusy(false);
       return;
+    }
+    // Transform ops leave Utils
+    if (activeOperation === "utils") {
+      setIsOutputMaximized(false);
     }
     executeOperation(action);
   };
@@ -1721,20 +2024,60 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     setDownloadMenuOpen(false);
   };
 
+  const requestShare = () => {
+    // Updating an existing share still re-uploads payload — always confirm once per open.
+    setShareConfirmOpen(true);
+  };
+
   const shareWorkspace = async () => {
+    setShareConfirmOpen(false);
     setActionBounce("share");
     setTimeout(() => setActionBounce(null), 300);
-    const workspaceState = {
+    // Flush active tab into snapshot map before packaging multi-tab share
+    tabSnapshotsRef.current.set(activeTabId, captureTabSnapshot());
+    const includeAllTabs = shareAllTabs && showTabs && tabs.length > 1;
+    const workspaceState: import("@/lib/shareState").WorkspaceState & {
+      tabs?: Tab[];
+      activeTabId?: string;
+      showTabs?: boolean;
+      tabSnapshots?: Record<string, TabSnapshot>;
+      diffLeftInput?: string;
+      diffRightInput?: string;
+      diffKind?: "document" | "list";
+      utilTab?: UtilTab;
+    } = {
       input,
       convertToFormat,
       liveTransform,
-      output,
+      output: cleanSessionOutput(output),
       outputFormat: ["json", "xml", "yaml", "toml", "csv"].includes(outputLanguage) ? (outputLanguage as FormatKind) : undefined,
-      outputLanguage,
+      outputLanguage: outputLanguage as import("@/lib/shareState").OutputDisplayKind,
       typeLanguage,
       viewMode: rightView,
       split,
+      activeOperation:
+        activeOperation === "diff" || activeOperation === "utils" || activeOperation === null
+          ? undefined
+          : (activeOperation as import("@/lib/shareState").OperationAction),
+      diffLeftInput,
+      diffRightInput,
+      diffKind,
+      utilTab,
     };
+    if (includeAllTabs) {
+      const all: Record<string, TabSnapshot> = {};
+      tabSnapshotsRef.current.forEach((snap, id) => {
+        all[id] = {
+          ...snap,
+          output: cleanSessionOutput(snap.output),
+          parsedOutput: snap.parsedOutput,
+        };
+      });
+      workspaceState.tabs = tabs;
+      workspaceState.activeTabId = activeTabId;
+      workspaceState.showTabs = true;
+      workspaceState.tabSnapshots = all;
+    }
     let id: string | null = null;
     if (sharedLinkId) {
       const ok = await updatePlayground(sharedLinkId, workspaceState);
@@ -1755,13 +2098,32 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     try {
       await navigator.clipboard.writeText(url);
       setShareState("done");
-      setShareNotification(url);
+      setShareNotification(
+        includeAllTabs
+          ? `Link copied (${tabs.length} tabs)`
+          : url,
+      );
       window.setTimeout(() => setShareNotification(null), 4000);
     } catch {
       setShareState("error");
     }
     window.setTimeout(() => setShareState("idle"), 1400);
   };
+
+  const useOutputAsInput = useCallback(() => {
+    if (!output.trim()) return;
+    setInput(output);
+    pushHistory(output);
+    setInputFormatOverride(null);
+    setError(null);
+    setValidationError(null);
+    setFocusedPane("input");
+    setRightView("raw");
+    setActiveOperation(null);
+    setShareNotification("Output moved to input");
+    window.setTimeout(() => setShareNotification(null), 2500);
+    if (!isDesktopLayout) setMobileShowOutput(false);
+  }, [output, isDesktopLayout]);
 
   const copyOutput = async () => {
     setActionBounce("copy");
@@ -1802,27 +2164,122 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     setFocusedPane((prev) => (prev === "input" ? "output" : prev));
   };
 
-  const copyOutputAs = async (format: "base64" | "escaped" | "uri" | "datauri") => {
-    if (!output.trim()) return;
-    try {
-      let text: string;
-      if (format === "base64") {
-        text = btoa(unescape(encodeURIComponent(output)));
-      } else if (format === "escaped") {
-        text = JSON.stringify(output);
-      } else if (format === "uri") {
-        text = encodeURIComponent(output);
-      } else {
-        text = `data:application/json;base64,${btoa(unescape(encodeURIComponent(output)))}`;
+  const getActiveOutputText = useCallback((): string => {
+    if (isUtilsMode) {
+      const s = utilsByTool[utilTab];
+      if (s?.uuidList && s.uuidList.length > 0) return s.uuidList.join("\n");
+      return s?.output ?? "";
+    }
+    if (isDiffMode) {
+      if (diffKind === "list") return listCompareExport?.text ?? "";
+      try {
+        const left = diffEditorRef.current?.getOriginalValue() ?? diffLeftInput;
+        const right = diffEditorRef.current?.getModifiedValue() ?? diffRightInput;
+        return formatDiffReport(
+          left,
+          right,
+          structuralDiff ?? summarizeDiffFromText(left, right),
+          diffLineStats ?? diffEditorRef.current?.getLineStats() ?? null,
+        );
+      } catch {
+        return diffRightInput || diffLeftInput;
       }
+    }
+    return output;
+  }, [
+    isUtilsMode,
+    isDiffMode,
+    utilTab,
+    utilsByTool,
+    diffKind,
+    listCompareExport,
+    diffLeftInput,
+    diffRightInput,
+    structuralDiff,
+    diffLineStats,
+    output,
+  ]);
+
+  const copyOutputAs = async (format: CopyAsFormat) => {
+    const raw = getActiveOutputText();
+    if (!raw.trim()) return;
+    try {
+      const text = formatCopyAsText(raw, format);
       await navigator.clipboard.writeText(text);
-      const label = format === "base64" ? "Base64" : format === "escaped" ? "Escaped" : format === "uri" ? "URL-encoded" : "Data URI";
-      setShareNotification(`Copied as ${label}`);
+      setShareNotification("Copied");
     } catch {
       setShareNotification("Copy failed");
     }
     window.setTimeout(() => setShareNotification(null), 3000);
   };
+
+  const handleWorkspaceReset = useCallback(() => {
+    if (isUtilsMode) {
+      setUtilsByTool((prev) => ({
+        ...prev,
+        [utilTab]: {
+          ...defaultUtilToolState(utilTab),
+          input: "",
+          output: "",
+          uuidList: [],
+          touched: true,
+        },
+      }));
+      setShareNotification("Reset");
+      window.setTimeout(() => setShareNotification(null), 1500);
+      return;
+    }
+    if (isDiffMode) {
+      if (diffKind === "list") {
+        setDiffLeftInput("");
+        setDiffRightInput("");
+        setListCompareExport(null);
+      } else {
+        clearDiffSide("both");
+      }
+      setShareNotification("Reset");
+      window.setTimeout(() => setShareNotification(null), 1500);
+      return;
+    }
+    setInput("");
+    setOutput("");
+    setParsedOutput(null);
+    setError(null);
+    setValidationError(null);
+    setActiveOperation(null);
+    setCopyState("idle");
+    setSharedLinkId(null);
+    setSharedLinkUrl(null);
+    isViewingSharedRef.current = false;
+    if (pathname === "/playground" && searchParams?.get("id")) router.replace("/playground");
+    setShareNotification("Reset");
+    window.setTimeout(() => setShareNotification(null), 1500);
+  }, [
+    isUtilsMode,
+    isDiffMode,
+    utilTab,
+    diffKind,
+    clearDiffSide,
+    pathname,
+    searchParams,
+    router,
+  ]);
+
+  const loadUtilSampleFromToolbar = useCallback(() => {
+    setUtilsByTool((prev) => ({
+      ...prev,
+      [utilTab]: applyUtilSample(utilTab, prev[utilTab]),
+    }));
+    setShareNotification("Sample loaded");
+    window.setTimeout(() => setShareNotification(null), 1500);
+  }, [utilTab]);
+
+  const activeCopyAsOptions = useMemo(() => {
+    if (isUtilsMode && utilTab === "uuid") return UUID_COPY_AS_OPTIONS;
+    if (isUtilsMode) return [...DEFAULT_COPY_AS_OPTIONS, ...UUID_COPY_AS_OPTIONS.filter((o) => o.id === "newline" || o.id === "comma")];
+    if (isDiffMode && diffKind === "list") return LIST_COPY_AS_OPTIONS;
+    return DEFAULT_COPY_AS_OPTIONS;
+  }, [isUtilsMode, utilTab, isDiffMode, diffKind]);
 
   const exportHistory = () => {
     const entries = undoStack.slice(0, undoIndex + 1).map((content, i) => ({ index: i, content }));
@@ -1840,7 +2297,9 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
 
 
   const applyFormatWithOptions = (next: FormatOptions) => {
+    // Always persist prefs; never kick out of Compare for a settings tweak
     setFormatOptions(next);
+    if (activeOperation === "diff") return;
     setFocusedPane("output");
     setActiveOperation("format");
     executeOperation("format", { formatOptions: next });
@@ -1928,7 +2387,21 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     { id: "op-unflatten", label: "Unflatten",            category: "Actions", keywords: ["nested", "expand"], disabled: inputEmpty || showBusy, action: () => runOperation("unflatten") },
     { id: "op-schema",    label: "Generate JSON Schema", category: "Actions", keywords: ["schema", "types", "infer"], disabled: inputEmpty || showBusy, action: () => runOperation("schema") },
     { id: "op-validate",  label: "Validate against Schema", category: "Actions", keywords: ["validate", "check"], disabled: inputEmpty || showBusy, action: () => runOperation("validate") },
-    { id: "op-diff",      label: activeOperation === "diff" ? "Exit Diff mode" : "Diff / Compare JSON", category: "Actions", keywords: ["diff", "compare", "delta"], disabled: showBusy, action: () => runOperation("diff") },
+    { id: "tool-transform", label: "Tool: Transform", category: "Workspace", keywords: ["format", "convert", "tool"], badge: !isDiffMode && !isUtilsMode ? "active" : undefined, action: () => { if (isDiffMode) runOperation("diff"); else if (isUtilsMode) runOperation("utils"); } },
+    { id: "tool-compare",   label: isDiffMode ? "Tool: Compare (active)" : "Tool: Compare", category: "Workspace", keywords: ["diff", "compare", "list", "document", "tool"], badge: isDiffMode ? "active" : undefined, action: () => { if (!isDiffMode) runOperation("diff"); } },
+    { id: "tool-utils",     label: isUtilsMode ? "Tool: Utils (active)" : "Tool: Utils", category: "Workspace", keywords: ["uuid", "base64", "jwt", "hash", "generator", "util", "password", "hex"], badge: isUtilsMode ? "active" : undefined, action: () => { if (!isUtilsMode) runOperation("utils"); } },
+    ...UTIL_TABS.map((t) => ({
+      id: `util-${t.id}`,
+      label: `Utils: ${t.label}`,
+      category: "Utils" as const,
+      keywords: [t.id, t.label.toLowerCase(), "utils", "devtools"],
+      badge: isUtilsMode && utilTab === t.id ? "active" : undefined,
+      action: () => {
+        if (!isUtilsMode) runOperation("utils");
+        setUtilTab(t.id);
+      },
+    })),
+    { id: "op-diff",        label: isDiffMode ? "Exit Compare mode" : "Open Compare", category: "Workspace", keywords: ["diff", "compare", "delta"], disabled: showBusy, action: () => runOperation("diff") },
     // Convert to
     { id: "fmt-json",  label: "Convert to JSON",  category: "Convert to", keywords: ["json"],  badge: convertToFormat === "json"  ? "active" : undefined, disabled: inputEmpty, action: () => { setFocusedPane("output"); runConvert("json");  } },
     { id: "fmt-yaml",  label: "Convert to YAML",  category: "Convert to", keywords: ["yaml"],  badge: convertToFormat === "yaml"  ? "active" : undefined, disabled: inputEmpty, action: () => { setFocusedPane("output"); runConvert("yaml");  } },
@@ -1970,6 +2443,24 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
         if (!isDesktopLayout) setMobileShowOutput(true);
       },
     })),
+    {
+      id: "sample-table",
+      label: "Load Table sample (array of objects)",
+      category: "Samples",
+      keywords: ["table", "array", "rows", "sample", "grid"],
+      disabled: false,
+      action: () => {
+        setInput(SAMPLE_JSON_TABLE);
+        pushHistory(SAMPLE_JSON_TABLE);
+        setInputFormatOverride(null);
+        setError(null);
+        setValidationError(null);
+        parseOnly(SAMPLE_JSON_TABLE, "json");
+        setRightView("table");
+        setFocusedPane("output");
+        if (!isDesktopLayout) setMobileShowOutput(true);
+      },
+    },
     ...EXAMPLES.map((ex) => ({
       id: `example-${ex.id}`,
       label: `Load example: ${ex.label}`,
@@ -1998,7 +2489,8 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     { id: "ws-copy-uri", label: "Copy as URL-encoded",   category: "Workspace", keywords: ["url", "encoded", "percent", "uri"], disabled: !output.trim(), action: () => copyOutputAs("uri") },
     { id: "ws-copy-dat", label: "Copy as Data URI",      category: "Workspace", keywords: ["data", "uri", "base64"], disabled: !output.trim(), action: () => copyOutputAs("datauri") },
     { id: "ws-download", label: "Download output",       category: "Workspace", keywords: ["save", "export"], disabled: !output.trim(), action: () => downloadOutput() },
-    { id: "ws-share",    label: "Share workspace link",  category: "Workspace", keywords: ["link", "url"], disabled: !output.trim(), action: shareWorkspace },
+    { id: "ws-share",    label: "Share workspace link",  category: "Workspace", keywords: ["link", "url"], disabled: !output.trim(), action: requestShare },
+    { id: "ws-use-output", label: "Use output as input", category: "Workspace", keywords: ["chain", "promote", "swap"], disabled: !output.trim(), action: useOutputAsInput },
     ...(sharedLinkUrl ? [{ id: "ws-embed", label: "Copy embed / iframe URL", category: "Workspace" as const, keywords: ["embed", "iframe", "share"], disabled: false, action: async () => { await navigator.clipboard.writeText(`${sharedLinkUrl}&embed=1`); setShareNotification("Embed URL copied"); window.setTimeout(() => setShareNotification(null), 3000); } }] : []),
     { id: "ws-clear",    label: "Clear workspace",       category: "Workspace", keywords: ["reset", "new", "empty"], disabled: inputEmpty && !output.trim(), action: () => {
       setInput(""); setOutput(""); setParsedOutput(null); setError(null);
@@ -2019,7 +2511,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     // Zoom / font size
     { id: "zoom-in",    label: `Zoom in (font ${Math.min(24, editorFontSize + 1)}px)`,  category: "Workspace", keywords: ["zoom", "font", "size", "bigger", "larger"],  disabled: editorFontSize >= 24, action: () => setEditorFontSize((s) => Math.min(24, s + 1)) },
     { id: "zoom-out",   label: `Zoom out (font ${Math.max(10, editorFontSize - 1)}px)`, category: "Workspace", keywords: ["zoom", "font", "size", "smaller"],              disabled: editorFontSize <= 10, action: () => setEditorFontSize((s) => Math.max(10, s - 1)) },
-    { id: "zoom-reset", label: "Reset zoom (13px)",                                     category: "Workspace", keywords: ["zoom", "font", "size", "reset"],              disabled: editorFontSize === 13, action: () => setEditorFontSize(13) },
+    { id: "zoom-reset", label: "Reset zoom (14px)",                                     category: "Workspace", keywords: ["zoom", "font", "size", "reset"],              disabled: editorFontSize === 14, action: () => setEditorFontSize(14) },
     { id: "line-wrap",  label: lineWrap ? "Line wrap: On (turn off)" : "Line wrap: Off (turn on)", category: "Workspace", keywords: ["wrap", "line", "long", "scroll"], badge: lineWrap ? "on" : undefined, action: () => setLineWrap((v) => !v) },
     { id: "fullscreen",        label: isOutputMaximized ? "Restore output pane" : "Maximize output pane",    category: "Workspace", keywords: ["maximize", "expand", "output", "pane"],                          action: () => setIsOutputMaximized((v) => !v) },
     { id: "window-fullscreen", label: isWindowFullscreen ? "Exit fullscreen" : "Enter fullscreen",          category: "Workspace", keywords: ["fullscreen", "full screen", "window", "expand", "maximize"], action: toggleWindowFullscreen },
@@ -2057,7 +2549,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     { id: "set-indent-dec",   label: `Indent: decrease (${Math.max(0,  formatOptions.indentation - 1)})`, category: "Settings", keywords: ["indent", "spaces"], disabled: inputEmpty || formatOptions.indentation <= 0,  action: () => applyFormatWithOptions({ ...formatOptions, indentation: Math.max(0,  formatOptions.indentation - 1) }) },
     { id: "set-indent-reset", label: "Indent: reset to 2",     category: "Settings", keywords: ["indent", "spaces", "reset"], disabled: inputEmpty || formatOptions.indentation === 2, action: () => applyFormatWithOptions({ ...formatOptions, indentation: 2 }) },
     { id: "set-live",         label: liveTransform ? "Live transform: On (turn off)" : "Live transform: Off (turn on)", category: "Settings", keywords: ["live", "auto", "realtime", "transform"], badge: liveTransform ? "on" : undefined, action: () => setLiveTransform((v) => !v) },
-    { id: "set-viewasmenu",   label: viewAsMenu ? "View-as menu: On (use panel)" : "View-as menu: Off (use sidebar)", category: "Settings", keywords: ["menu", "view", "panel", "sidebar"], badge: viewAsMenu ? "on" : undefined, action: () => setViewAsMenu((v) => !v) },
+    { id: "set-viewasmenu",   label: viewAsMenu ? "Compact menus: On" : "Compact menus: Off (pinned toolbar)", category: "Settings", keywords: ["menu", "view", "panel", "sidebar"], badge: viewAsMenu ? "on" : undefined, action: () => setViewAsMenu((v) => !v) },
     { id: "set-reset",        label: "Reset all settings to default", category: "Settings", keywords: ["reset", "default", "restore"], action: () => { setFormatOptions(DEFAULT_FORMAT_OPTIONS); setConvertToFormat("json"); setRightView("raw"); setEditorFontSize(13); setPinnedItems(new Set(["fmt:json", "fmt:xml", "view:raw", "view:graph", "view:query", "action:beautify", "action:minify", "action:schema", "action:diff", "type:typescript", "type:java", "type:go", "type:python", "type:sql"])); } },
     // Theme
     { id: "theme-light",  label: "Theme: Light",  category: "Theme", badge: themeMode === "light"  ? "active" : undefined, action: () => setThemeMode("light")  },
@@ -2075,7 +2567,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     // Auto-format on paste
     { id: "auto-fmt-paste", label: autoFormatOnPaste ? "Auto-format on paste: On (turn off)" : "Auto-format on paste: Off (turn on)", category: "Settings", keywords: ["auto", "format", "paste", "beautify", "pretty"], badge: autoFormatOnPaste ? "on" : undefined, action: () => setAutoFormatOnPaste((v) => !v) },
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  ], [inputEmpty, showBusy, convertToFormat, rightView, parsedOutput, typeLanguage, activeOperation, output, themeMode, editorFontSize, isOutputMaximized, isWindowFullscreen, toggleWindowFullscreen, formatOptions, liveTransform, viewAsMenu, canUndo, canRedo, lineWrap, diffSideBySide, diffIgnoreWhitespace, diffShowPaths, diffKind, csvDelimiter, sharedLinkUrl, pinnedItems, undoStack.length, tabs.length, activeTabId, splitInputOpen, autoFormatOnPaste, showTabs, swapDiffSides, beautifyDiffSides, copyDiffText, downloadDiffReport]);
+  ], [inputEmpty, showBusy, convertToFormat, rightView, parsedOutput, typeLanguage, activeOperation, output, themeMode, editorFontSize, isOutputMaximized, isWindowFullscreen, toggleWindowFullscreen, formatOptions, liveTransform, viewAsMenu, canUndo, canRedo, lineWrap, diffSideBySide, diffIgnoreWhitespace, diffShowPaths, diffKind, csvDelimiter, sharedLinkUrl, pinnedItems, undoStack.length, tabs.length, activeTabId, splitInputOpen, autoFormatOnPaste, showTabs, swapDiffSides, beautifyDiffSides, copyDiffText, downloadDiffReport, isUtilsMode, utilTab, isDiffMode]);
 
   return (
     <main
@@ -2162,6 +2654,552 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
             </button>
           </div>
         )}
+      {/* Column: stable full-width tool row + split (icons never jump when left panel hides) */}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        {/* ── Full-width secondary toolbar (Transform | Compare | Utils + output actions) ── */}
+        <div
+          className={`flex h-10 shrink-0 flex-nowrap items-center gap-0.5 border-b px-1.5 text-xs ${inputEditorBgClass} text-[var(--workspace-text-muted)]`}
+        >
+          <div
+            className="relative flex h-7 shrink-0 overflow-hidden rounded-lg border border-[var(--workspace-border)]"
+            role="group"
+            aria-label="Workspace tool"
+          >
+            {(
+              [
+                {
+                  id: "transform",
+                  label: "Transform",
+                  active: !isDiffMode && !isUtilsMode,
+                  title: "Format, convert, views, types",
+                  onClick: () => {
+                    if (isDiffMode) runOperation("diff");
+                    else if (isUtilsMode) runOperation("utils");
+                  },
+                },
+                {
+                  id: "compare",
+                  label: "Compare",
+                  active: isDiffMode,
+                  title: "Document or list compare",
+                  onClick: () => {
+                    if (!isDiffMode) runOperation("diff");
+                  },
+                },
+                {
+                  id: "utils",
+                  label: "Utils",
+                  active: isUtilsMode,
+                  title: "UUID, Base64, JWT, hash, time…",
+                  onClick: () => {
+                    if (!isUtilsMode) runOperation("utils");
+                  },
+                },
+              ] as const
+            ).map((tab, i) => (
+              <button
+                key={tab.id}
+                type="button"
+                className={`relative h-7 cursor-pointer px-2.5 text-[11px] font-semibold transition-colors duration-150 ${
+                  i > 0 ? "border-l border-[var(--workspace-border)]" : ""
+                } ${
+                  tab.active
+                    ? "text-primary"
+                    : "text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)] hover:text-[var(--workspace-text)]"
+                }`}
+                onClick={tab.onClick}
+                title={tab.title}
+              >
+                {tab.active && (
+                  <motion.span
+                    layoutId="tool-mode-pill"
+                    className="absolute inset-0 bg-primary/15"
+                    transition={{ type: "spring", stiffness: 420, damping: 34 }}
+                  />
+                )}
+                <span className="relative z-[1]">{tab.label}</span>
+              </button>
+            ))}
+          </div>
+
+          {isDiffMode && (
+            <>
+              <div className="flex h-7 shrink-0 overflow-hidden rounded-lg border border-[var(--workspace-border)]">
+                <button
+                  type="button"
+                  className={`h-7 cursor-pointer px-2.5 text-[11px] font-semibold ${
+                    diffKind === "document"
+                      ? "bg-primary/15 text-primary"
+                      : "text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)]"
+                  }`}
+                  onClick={() => setDiffKind("document")}
+                  title="Document text/JSON diff"
+                >
+                  Document
+                </button>
+                <button
+                  type="button"
+                  className={`h-7 cursor-pointer border-l border-[var(--workspace-border)] px-2.5 text-[11px] font-semibold ${
+                    diffKind === "list"
+                      ? "bg-primary/15 text-primary"
+                      : "text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)]"
+                  }`}
+                  onClick={() => setDiffKind("list")}
+                  title="List / set compare"
+                >
+                  Lists
+                </button>
+              </div>
+              {diffKind === "list" && (
+                <div
+                  ref={setListToolbarHost}
+                  className="flex min-h-7 min-w-0 flex-1 flex-nowrap items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                />
+              )}
+              {diffKind === "document" && (
+                <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-0.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  <div className="flex shrink-0 items-center gap-0.5 rounded-lg border border-[var(--workspace-border)]/60 px-0.5">
+                    <button type="button" title="Previous difference" className={`${linkBtnClass} btn-square h-7 min-h-7 w-7`} disabled={!diffNav.total} onClick={() => diffEditorRef.current?.prevChange()}>
+                      <ChevronUpIcon className="h-3.5 w-3.5" />
+                    </button>
+                    <span className="min-w-[2.75rem] px-0.5 text-center text-[11px] font-medium tabular-nums text-[var(--workspace-text)]" title="Current / total hunks">
+                      {diffNav.total ? `${diffNav.current}/${diffNav.total}` : "0"}
+                    </span>
+                    <button type="button" title="Next difference" className={`${linkBtnClass} btn-square h-7 min-h-7 w-7`} disabled={!diffNav.total} onClick={() => diffEditorRef.current?.nextChange()}>
+                      <ChevronDownIcon className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  {diffLineStats && diffLineStats.hunks > 0 ? (
+                    <div className="flex shrink-0 items-center gap-1 text-[10px] font-medium tabular-nums">
+                      <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-emerald-600 dark:text-emerald-400">+{diffLineStats.linesAdded}</span>
+                      <span className="rounded bg-red-500/15 px-1.5 py-0.5 text-red-600 dark:text-red-400">−{diffLineStats.linesRemoved}</span>
+                      <span className="hidden sm:inline rounded bg-[var(--workspace-background)] px-1.5 py-0.5 text-[var(--workspace-text-muted)]">{diffLineStats.hunks} hunk{diffLineStats.hunks === 1 ? "" : "s"}</span>
+                    </div>
+                  ) : (diffLeftInput.trim() || diffRightInput.trim()) ? (
+                    <span className="shrink-0 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">Identical</span>
+                  ) : null}
+                  <button type="button" title="Undo" className={`${linkBtnClass} btn-square h-7 min-h-7 w-7`} onClick={() => diffEditorRef.current?.undo()}>
+                    <ArrowUturnLeftIcon className="h-3.5 w-3.5" />
+                  </button>
+                  <button type="button" title="Redo" className={`${linkBtnClass} btn-square h-7 min-h-7 w-7`} onClick={() => diffEditorRef.current?.redo()}>
+                    <ArrowUturnRightIcon className="h-3.5 w-3.5" />
+                  </button>
+                  <button type="button" title={diffSideBySide ? "Inline view" : "Side-by-side"} className={`${linkBtnClass} h-7 min-h-7 px-1.5 text-[11px]`} onClick={() => setDiffSideBySide((v) => !v)}>
+                    {diffSideBySide ? "Inline" : "Side-by-side"}
+                  </button>
+                  <button type="button" title="Ignore trim whitespace" className={`${linkBtnClass} h-7 min-h-7 px-1.5 text-[11px] ${diffIgnoreWhitespace ? "text-primary !bg-primary/10" : ""}`} onClick={() => setDiffIgnoreWhitespace((v) => !v)}>
+                    {diffIgnoreWhitespace ? "Ignore WS ✓" : "Ignore WS"}
+                  </button>
+                  <button type="button" title="Swap sides" className={`${linkBtnClass} btn-square h-7 min-h-7 w-7`} onClick={swapDiffSides}>
+                    <ArrowsRightLeftIcon className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    title={canShowPathDiff ? "JSON path-level changes" : "Path diff needs valid JSON on both sides"}
+                    disabled={!canShowPathDiff}
+                    className={`${linkBtnClass} h-7 min-h-7 gap-1 px-1.5 text-[11px] disabled:opacity-40 ${diffShowPaths ? "text-primary !bg-primary/10" : ""}`}
+                    onClick={() => setDiffShowPaths((v) => !v)}
+                  >
+                    <ListBulletIcon className="h-3.5 w-3.5 shrink-0" />
+                    <span className="hidden sm:inline">Paths</span>
+                    {canShowPathDiff && structuralDiff && structuralDiff.total > 0 && (
+                      <span className="tabular-nums opacity-80">{structuralDiff.total}</span>
+                    )}
+                  </button>
+                  <button type="button" title="Paste into focused pane" className={`${linkBtnClass} h-7 min-h-7 px-1.5 text-[11px]`} onClick={pasteFromClipboard}>
+                    <ClipboardDocumentIcon className="h-3.5 w-3.5 shrink-0" />
+                    <span className="hidden sm:inline">Paste</span>
+                  </button>
+                  <button type="button" title="Beautify both sides" className={`${linkBtnClass} h-7 min-h-7 px-1.5 text-[11px]`} onClick={() => beautifyDiffSides("both")}>
+                    Beautify
+                  </button>
+                  <Dropdown
+                    open={downloadMenuOpen && isDiffMode}
+                    onOpenChange={setDownloadMenuOpen}
+                    side="bottom"
+                    align="end"
+                    rootClassName="shrink-0"
+                    contentClassName={`dropdown-content z-[100] min-w-[11rem] p-1.5 shadow-2xl rounded-xl border border-[var(--workspace-border)]/50 ${dropdownPanelClass}`}
+                    trigger={
+                      <div className={`${linkBtnClass} flex h-7 min-h-7 items-center gap-1 px-1.5 text-[11px]`} title="Copy / export">
+                        <ArrowDownTrayIcon className="h-3.5 w-3.5" />
+                        <span className="hidden sm:inline">Export</span>
+                        <ChevronDownIcon className="h-3 w-3 shrink-0" />
+                      </div>
+                    }
+                  >
+                    <div className="flex flex-col gap-0.5" onClick={(e) => e.stopPropagation()}>
+                      <button type="button" className={`${linkBtnClass} h-7 min-h-7 w-full justify-start px-2.5 text-[11px] font-medium`} onClick={() => { void copyDiffText("left"); setDownloadMenuOpen(false); }}>Copy left</button>
+                      <button type="button" className={`${linkBtnClass} h-7 min-h-7 w-full justify-start px-2.5 text-[11px] font-medium`} onClick={() => { void copyDiffText("right"); setDownloadMenuOpen(false); }}>Copy right</button>
+                      <button type="button" className={`${linkBtnClass} h-7 min-h-7 w-full justify-start px-2.5 text-[11px] font-medium`} onClick={() => { void copyDiffText("paths"); setDownloadMenuOpen(false); }}>Copy path changes</button>
+                      <button type="button" className={`${linkBtnClass} h-7 min-h-7 w-full justify-start px-2.5 text-[11px] font-medium`} onClick={() => { void copyDiffText("report"); setDownloadMenuOpen(false); }}>Copy full report</button>
+                      <button type="button" className={`${linkBtnClass} h-7 min-h-7 w-full justify-start px-2.5 text-[11px] font-medium`} onClick={() => { downloadDiffReport(); setDownloadMenuOpen(false); }}>Download report JSON</button>
+                    </div>
+                  </Dropdown>
+                  {diffActionFlash && <span className="shrink-0 text-[10px] font-medium text-primary animate-pulse">{diffActionFlash}</span>}
+                </div>
+              )}
+            </>
+          )}
+
+          {isUtilsMode && (
+            <button
+              type="button"
+              className={`${linkBtnClass} h-7 min-h-7 shrink-0 px-2 text-[11px] font-medium`}
+              title="Load sample for current util"
+              onClick={loadUtilSampleFromToolbar}
+            >
+              Sample
+            </button>
+          )}
+
+          <span className="min-w-2 flex-1" />
+
+          <OutputActionBar
+              canCopy={Boolean(getActiveOutputText().trim()) || (!isDiffMode && !isUtilsMode && canDownload)}
+              canShare
+              canShareAll={showTabs && tabs.length > 1}
+              isGraphView={!isDiffMode && !isUtilsMode && isGraphView}
+              isMaximized={isOutputMaximized}
+              copyLabel={copyLabel}
+              shareLabel={shareLabel}
+              actionBounce={actionBounce}
+              linkBtnClass={linkBtnClass}
+              dropdownPanelClass={dropdownPanelClass}
+              downloadMenuOpen={downloadMenuOpen && !isDiffMode}
+              onDownloadMenuOpenChange={setDownloadMenuOpen}
+              settingsOpen={transformConfigOpen}
+              onSettingsOpenChange={setTransformConfigOpen}
+              settingsContent={
+                <div className="space-y-2.5">
+                  <div className="flex flex-wrap gap-1.5">
+                    {(
+                      [
+                        ["Compact menus", viewAsMenu, () => setViewAsMenu((v) => !v)],
+                        ["Live transform", liveTransform, () => setLiveTransform((v) => !v)],
+                        ["Line wrap", lineWrap, () => setLineWrap((v) => !v)],
+                        ["Format on paste", autoFormatOnPaste, () => setAutoFormatOnPaste((v) => !v)],
+                      ] as const
+                    ).map(([label, on, toggle]) => (
+                      <button
+                        key={label}
+                        type="button"
+                        onClick={toggle}
+                        className={`inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-medium transition-colors ${
+                          on
+                            ? "border-primary/30 bg-primary/12 text-primary"
+                            : "border-[var(--workspace-border)] text-[var(--workspace-text-muted)] hover:border-primary/20 hover:text-[var(--workspace-text)]"
+                        }`}
+                      >
+                        <span className={`h-1.5 w-1.5 rounded-full ${on ? "bg-primary" : "bg-[var(--workspace-border)]"}`} />
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  {isDiffMode && (
+                    <p className="rounded-md bg-primary/5 px-2 py-1.5 text-[10px] leading-snug text-[var(--workspace-text-muted)]">
+                      <strong className="text-primary">Compare</strong> — options below save preferences only.
+                    </p>
+                  )}
+                  {/* Steppers — content-width only */}
+                  <div className="flex flex-wrap items-end gap-3">
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-1">
+                        <p className={settingsLabelClass}>Font</p>
+                        <button
+                          type="button"
+                          className={pinStarClass(pinnedItems.has("fontSize"))}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPinnedItems((s) => {
+                              const n = new Set(s);
+                              n.has("fontSize") ? n.delete("fontSize") : n.add("fontSize");
+                              return n;
+                            });
+                          }}
+                          title={pinnedItems.has("fontSize") ? "Unpin from toolbar" : "Pin to toolbar"}
+                          aria-label={pinnedItems.has("fontSize") ? "Unpin font size" : "Pin font size"}
+                        >
+                          {pinnedItems.has("fontSize") ? (
+                            <StarSolidIcon className="h-3.5 w-3.5" />
+                          ) : (
+                            <StarIcon className="h-3.5 w-3.5" />
+                          )}
+                        </button>
+                      </div>
+                      <div className={settingsBtnGroupClass}>
+                        <button type="button" aria-label="Decrease font size" className={settingsStepBtnClass} onClick={() => setEditorFontSize((s) => Math.max(10, s - 1))}><MinusIcon className="h-3.5 w-3.5" aria-hidden /></button>
+                        <span className="flex h-7 min-w-[1.75rem] items-center justify-center px-1.5 text-xs font-medium tabular-nums text-[var(--workspace-text)]">{editorFontSize}</span>
+                        <button type="button" aria-label="Increase font size" className={settingsStepBtnClass} onClick={() => setEditorFontSize((s) => Math.min(24, s + 1))}><PlusIcon className="h-3.5 w-3.5" aria-hidden /></button>
+                        <button type="button" aria-label="Reset font size" className={settingsStepBtnClass} onClick={() => setEditorFontSize(14)}><ArrowPathIcon className="h-3 w-3" aria-hidden /></button>
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-1">
+                        <p className={settingsLabelClass}>Indent</p>
+                        <button
+                          type="button"
+                          className={pinStarClass(pinnedItems.has("indent"))}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPinnedItems((s) => {
+                              const n = new Set(s);
+                              n.has("indent") ? n.delete("indent") : n.add("indent");
+                              return n;
+                            });
+                          }}
+                          title={pinnedItems.has("indent") ? "Unpin from toolbar" : "Pin to toolbar"}
+                          aria-label={pinnedItems.has("indent") ? "Unpin indent" : "Pin indent"}
+                        >
+                          {pinnedItems.has("indent") ? (
+                            <StarSolidIcon className="h-3.5 w-3.5" />
+                          ) : (
+                            <StarIcon className="h-3.5 w-3.5" />
+                          )}
+                        </button>
+                      </div>
+                      <div className={settingsBtnGroupClass}>
+                        <button type="button" aria-label="Decrease indent" className={settingsStepBtnClass} onClick={() => { const v = Math.max(0, formatOptions.indentation - 1); applyFormatWithOptions({ ...formatOptions, indentation: v }); }}><MinusIcon className="h-3.5 w-3.5" aria-hidden /></button>
+                        <span className="flex h-7 min-w-[1.5rem] items-center justify-center px-1.5 text-xs font-medium tabular-nums text-[var(--workspace-text)]">{formatOptions.indentation}</span>
+                        <button type="button" aria-label="Increase indent" className={settingsStepBtnClass} onClick={() => { const v = Math.min(10, formatOptions.indentation + 1); applyFormatWithOptions({ ...formatOptions, indentation: v }); }}><PlusIcon className="h-3.5 w-3.5" aria-hidden /></button>
+                        <button type="button" aria-label="Reset indent" className={settingsStepBtnClass} onClick={() => applyFormatWithOptions({ ...formatOptions, indentation: 2 })}><ArrowPathIcon className="h-3 w-3" aria-hidden /></button>
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <p className={settingsLabelClass}>Quotes</p>
+                      <div className="inline-flex w-fit overflow-hidden rounded-lg border border-[var(--workspace-border)]/60">
+                        {(["double", "single"] as const).map((q) => (
+                          <button key={q} type="button" className={`h-7 px-2 text-[11px] font-medium ${formatOptions.quoteStyle === q ? "bg-primary/12 text-primary" : "text-[var(--workspace-text-muted)] hover:bg-primary/5"}`} onClick={() => applyFormatWithOptions({ ...formatOptions, quoteStyle: q })}>{q === "double" ? '" "' : "' '"}</button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <p className={settingsLabelClass}>JSON</p>
+                      <div className="flex flex-wrap gap-1">
+                        <label className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-md border border-[var(--workspace-border)]/60 px-2 text-[11px] hover:bg-primary/5">
+                          <input type="checkbox" className="checkbox checkbox-xs checkbox-primary" checked={formatOptions.sortKeys} onChange={(e) => applyFormatWithOptions({ ...formatOptions, sortKeys: e.target.checked })} />
+                          Sort keys
+                        </label>
+                        <label className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-md border border-[var(--workspace-border)]/60 px-2 text-[11px] hover:bg-primary/5">
+                          <input type="checkbox" className="checkbox checkbox-xs checkbox-primary" checked={formatOptions.removeEmpty} onChange={(e) => applyFormatWithOptions({ ...formatOptions, removeEmpty: e.target.checked })} />
+                          Drop empty
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                  {/* Pin favorites — only used when compact menus is off */}
+                  {!isDiffMode && !isUtilsMode && !viewAsMenu && (
+                    <>
+                      <div className="h-px bg-[var(--workspace-border)]/50" />
+                      <p className={settingsLabelClass}>Pin to toolbar · star to show</p>
+                      <div className="space-y-1.5">
+                        <div className="flex flex-wrap items-center gap-0.5">
+                          <span className="mr-1 w-12 shrink-0 text-[9px] font-semibold uppercase tracking-wide text-[var(--workspace-text-muted)]">Format</span>
+                          {FORMAT_KINDS.map((fmt) => {
+                            const on = pinnedItems.has(`fmt:${fmt}`);
+                            return (
+                              <button
+                                key={fmt}
+                                type="button"
+                                className={`inline-flex h-7 items-center gap-0.5 rounded-md border px-1.5 text-[11px] font-medium transition-colors ${on ? "border-primary/30 bg-primary/10 text-primary" : "border-[var(--workspace-border)]/70 text-[var(--workspace-text-muted)] hover:border-primary/20"}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPinnedItems((s) => {
+                                    const n = new Set(s);
+                                    n.has(`fmt:${fmt}`) ? n.delete(`fmt:${fmt}`) : n.add(`fmt:${fmt}`);
+                                    return n;
+                                  });
+                                }}
+                                title={on ? `Unpin ${FORMAT_LABELS[fmt]}` : `Pin ${FORMAT_LABELS[fmt]}`}
+                              >
+                                {on ? <StarSolidIcon className="h-3 w-3 text-amber-500" /> : <StarIcon className="h-3 w-3 opacity-50" />}
+                                {FORMAT_LABELS[fmt]}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-0.5">
+                          <span className="mr-1 w-12 shrink-0 text-[9px] font-semibold uppercase tracking-wide text-[var(--workspace-text-muted)]">View</span>
+                          {(["raw", "tree", "graph", "query", "table"] as const).map((view) => {
+                            const on = pinnedItems.has(`view:${view}`);
+                            const label = view[0].toUpperCase() + view.slice(1);
+                            return (
+                              <button
+                                key={view}
+                                type="button"
+                                className={`inline-flex h-7 items-center gap-0.5 rounded-md border px-1.5 text-[11px] font-medium transition-colors ${on ? "border-primary/30 bg-primary/10 text-primary" : "border-[var(--workspace-border)]/70 text-[var(--workspace-text-muted)] hover:border-primary/20"}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPinnedItems((s) => {
+                                    const n = new Set(s);
+                                    n.has(`view:${view}`) ? n.delete(`view:${view}`) : n.add(`view:${view}`);
+                                    return n;
+                                  });
+                                }}
+                                title={on ? `Unpin ${label}` : `Pin ${label}`}
+                              >
+                                {on ? <StarSolidIcon className="h-3 w-3 text-amber-500" /> : <StarIcon className="h-3 w-3 opacity-50" />}
+                                {label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-0.5">
+                          <span className="mr-1 w-12 shrink-0 text-[9px] font-semibold uppercase tracking-wide text-[var(--workspace-text-muted)]">Action</span>
+                          {OPERATION_ACTIONS.map(([label, action]) => {
+                            const on = pinnedItems.has(`action:${action}`);
+                            return (
+                              <button
+                                key={action}
+                                type="button"
+                                className={`inline-flex h-7 items-center gap-0.5 rounded-md border px-1.5 text-[11px] font-medium transition-colors ${on ? "border-primary/30 bg-primary/10 text-primary" : "border-[var(--workspace-border)]/70 text-[var(--workspace-text-muted)] hover:border-primary/20"}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPinnedItems((s) => {
+                                    const n = new Set(s);
+                                    n.has(`action:${action}`) ? n.delete(`action:${action}`) : n.add(`action:${action}`);
+                                    return n;
+                                  });
+                                }}
+                                title={on ? `Unpin ${label}` : `Pin ${label}`}
+                              >
+                                {on ? <StarSolidIcon className="h-3 w-3 text-amber-500" /> : <StarIcon className="h-3 w-3 opacity-50" />}
+                                {label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-0.5">
+                          <span className="mr-1 w-12 shrink-0 text-[9px] font-semibold uppercase tracking-wide text-[var(--workspace-text-muted)]">Types</span>
+                          {TYPE_LANGUAGES.slice(0, 8).map((item) => {
+                            const on = pinnedItems.has(`type:${item.id}`);
+                            return (
+                              <button
+                                key={item.id}
+                                type="button"
+                                className={`inline-flex h-7 items-center gap-0.5 rounded-md border px-1.5 text-[11px] font-medium transition-colors ${on ? "border-primary/30 bg-primary/10 text-primary" : "border-[var(--workspace-border)]/70 text-[var(--workspace-text-muted)] hover:border-primary/20"}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPinnedItems((s) => {
+                                    const n = new Set(s);
+                                    n.has(`type:${item.id}`) ? n.delete(`type:${item.id}`) : n.add(`type:${item.id}`);
+                                    return n;
+                                  });
+                                }}
+                                title={on ? `Unpin ${item.label}` : `Pin ${item.label}`}
+                              >
+                                {on ? <StarSolidIcon className="h-3 w-3 text-amber-500" /> : <StarIcon className="h-3 w-3 opacity-50" />}
+                                {item.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                  {!isDiffMode && !isUtilsMode && viewAsMenu && (
+                    <p className="text-[10px] leading-snug text-[var(--workspace-text-muted)]">
+                      Compact menus on — toolbar uses Format / View / Actions / Types. Turn off compact to pin shortcuts.
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-[var(--workspace-border)]/50 py-1.5 text-[11px] font-medium text-[var(--workspace-text-muted)] transition-all hover:bg-primary/8 hover:text-primary"
+                    onClick={() => {
+                      setFormatOptions(DEFAULT_FORMAT_OPTIONS);
+                      setConvertToFormat("json");
+                      setRightView("raw");
+                      setEditorFontSize(14);
+                      setViewAsMenu(true);
+                      setPinnedItems(new Set(["fmt:json", "view:raw", "view:query", "action:beautify", "action:minify", "type:typescript", "type:zod"]));
+                    }}
+                  >
+                    <ArrowPathIcon className="h-3.5 w-3.5" />
+                    Reset to default
+                  </button>
+                </div>
+              }
+              onShare={() => {
+                setShareAllTabs(false);
+                requestShare();
+              }}
+              onShareAll={() => {
+                setShareAllTabs(true);
+                requestShare();
+              }}
+              onCopy={() => {
+                const text = getActiveOutputText();
+                if (!text.trim() && !isDiffMode) {
+                  if (!isUtilsMode) void copyOutput();
+                  return;
+                }
+                if (!text.trim()) return;
+                void navigator.clipboard.writeText(text).then(
+                  () => {
+                    setCopyState("done");
+                    setShareNotification("Copied");
+                    window.setTimeout(() => setShareNotification(null), 2000);
+                    window.setTimeout(() => setCopyState("idle"), 1400);
+                  },
+                  () => setCopyState("error"),
+                );
+              }}
+              onDownload={() => {
+                if (isUtilsMode) {
+                  const text = getActiveOutputText();
+                  if (!text) return;
+                  const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = `formaty-${utilTab}.txt`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                  setShareNotification("Downloaded");
+                  window.setTimeout(() => setShareNotification(null), 2000);
+                  return;
+                }
+                if (isDiffMode) {
+                  if (diffKind === "list" && listCompareExport?.text) {
+                    const blob = new Blob([listCompareExport.text], { type: "text/plain;charset=utf-8" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = listCompareExport.filename;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    setShareNotification("Downloaded");
+                    window.setTimeout(() => setShareNotification(null), 2000);
+                    return;
+                  }
+                  downloadDiffReport();
+                  return;
+                }
+                downloadOutput();
+              }}
+              onToggleMaximize={
+                isDiffMode || isUtilsMode
+                  ? undefined
+                  : () => setIsOutputMaximized((v) => !v)
+              }
+              onUseAsInput={isDiffMode || isUtilsMode ? undefined : useOutputAsInput}
+              onCopyAs={copyOutputAs}
+              copyAsOptions={activeCopyAsOptions}
+              onReset={handleWorkspaceReset}
+              resetLabel={
+                isUtilsMode
+                  ? "Reset util"
+                  : isDiffMode
+                    ? "Reset both sides"
+                    : "Reset input & output"
+              }
+              forceHide={{
+                useAsInput: isDiffMode || isUtilsMode,
+                maximize: isDiffMode || isUtilsMode,
+              }}
+            />
+        </div>
+
       <div
         ref={splitContainerRef}
         className={`flex min-h-0 min-w-0 flex-1 overflow-hidden ${isDesktopLayout && !hideInputPanel ? "flex-row" : "flex-col"}`}
@@ -2185,7 +3223,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
           )}
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <div
-            className={`flex shrink-0 flex-wrap items-center gap-0.5 border-b px-1.5 py-1 text-xs sm:flex-nowrap sm:overflow-x-auto ${inputEditorBgClass} text-[var(--workspace-text-muted)]`}
+            className={`flex h-10 shrink-0 flex-nowrap items-center gap-0.5 border-b px-1.5 text-xs ${inputEditorBgClass} text-[var(--workspace-text-muted)]`}
           >
             <div className="flex shrink-0 items-center gap-1">
               <button
@@ -2205,27 +3243,6 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                 onClick={() => moveHistory(1)}
               >
                 <ArrowUturnRightIcon className="h-3.5 w-3.5" />
-              </button>
-              <button
-                type="button"
-                title="Clear"
-                className={`${linkBtnClass} btn-square h-7 min-h-7 w-7 shrink-0`}
-                onClick={() => {
-                  setInput("");
-                  setOutput("");
-                  setParsedOutput(null);
-                  setError(null);
-        setValidationError(null);
-                  setActiveOperation(null);
-                  setCopyState("idle");
-                  setSharedLinkId(null);
-                  setSharedLinkUrl(null);
-                  isViewingSharedRef.current = false;
-                  if (pathname === "/playground" && searchParams?.get("id")) router.replace("/playground");
-                  if (!isDesktopLayout) setMobileShowOutput(true);
-                }}
-              >
-                <ArrowPathIcon className="h-3.5 w-3.5" />
               </button>
             </div>
             <div className="flex shrink-0 items-center gap-1">
@@ -2428,141 +3445,11 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
               Back to input
             </button>
           )}
+          {/* Transform-only secondary row — mode switcher lives on full-width bar above */}
+          {!isDiffMode && !isUtilsMode && (
           <div
-            className={`flex shrink-0 flex-nowrap items-center gap-0.5 overflow-x-auto border-b px-1.5 py-1 text-xs ${inputEditorBgClass} text-[var(--workspace-text-muted)]`}
+            className={`flex h-10 shrink-0 flex-nowrap items-center gap-0.5 border-b px-1.5 text-xs ${inputEditorBgClass} text-[var(--workspace-text-muted)]`}
           >
-            <Dropdown
-              open={transformConfigOpen}
-              onOpenChange={setTransformConfigOpen}
-              side="bottom"
-              align="start"
-              rootClassName="shrink-0"
-              contentClassName={`dropdown-content z-[100] w-72 sm:w-[22rem] max-w-[90vw] shadow-2xl rounded-xl border border-[var(--workspace-border)]/50 ${dropdownPanelClass}`}
-              trigger={
-                <div className={`${linkBtnClass} flex h-7 min-h-7 shrink-0 items-center justify-center ${transformConfigOpen ? "text-primary" : ""}`} title="Settings">
-                  <Cog6ToothIcon className="h-3.5 w-3.5" />
-                </div>
-              }
-            >
-              <div className="p-3 text-xs max-h-[85vh] overflow-y-auto space-y-3" onClick={(e) => e.stopPropagation()}>
-                <label className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-2 transition-colors hover:bg-primary/5">
-                  <input type="checkbox" className="toggle toggle-sm toggle-primary" checked={viewAsMenu} onChange={(e) => setViewAsMenu(e.target.checked)} />
-                  <span className="text-xs font-medium text-[var(--workspace-text)]">View as Menu items</span>
-                </label>
-                {viewAsMenu ? (
-                  <p className="text-xs opacity-70 py-2 px-2 text-[var(--workspace-text-muted)]">Options are now in the menu bar above. Uncheck to use the settings panel.</p>
-                ) : (
-                  <>
-                <div className={settingsSectionClass}>
-                  <p className={settingsLabelClass}>Output format</p>
-                <div className="flex flex-wrap gap-0.5">
-                  {FORMAT_KINDS.map((fmt) => (
-                    <div key={fmt} className="flex items-center">
-                      <button type="button" disabled={inputEmpty} className={`${linkBtnClass} h-7 min-h-7 px-2 text-[11px] font-medium disabled:opacity-40 ${convertToFormat === fmt ? "!text-primary !bg-primary/10" : ""}`} onClick={() => { setFocusedPane("output"); runConvert(fmt); }}>
-                        {FORMAT_LABELS[fmt]}
-                      </button>
-                      <button type="button" className={`btn btn-ghost btn-xs btn-square h-5 w-5 p-0 rounded-full transition-all ${pinnedItems.has(`fmt:${fmt}`) ? "text-primary scale-110" : "opacity-40 hover:opacity-70"}`} onClick={(e) => { e.stopPropagation(); setPinnedItems((s) => { const n = new Set(s); n.has(`fmt:${fmt}`) ? n.delete(`fmt:${fmt}`) : n.add(`fmt:${fmt}`); return n; }); }} title={pinnedItems.has(`fmt:${fmt}`) ? "Unpin" : "Pin to toolbar"}>
-                        <StarIcon className="h-3 w-3" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                </div>
-                <div className="h-px bg-gradient-to-r from-transparent via-[var(--workspace-border)] to-transparent" />
-                <div className={settingsSectionClass}>
-                  <p className={settingsLabelClass}>View</p>
-                  <div className="flex flex-wrap gap-0.5">
-                    {(["raw", "tree", "graph", "query", "table"] as const).map((view) => (
-                      <div key={view} className="flex items-center">
-                        <button type="button" disabled={inputEmpty || ((view === "tree" || view === "graph" || view === "query" || view === "table") && !parsedOutput)} className={`${linkBtnClass} h-7 min-h-7 px-2 text-[11px] font-medium disabled:opacity-40 ${rightView === view ? "!text-primary !bg-primary/10" : ""}`} onClick={() => { setRightView(view); setFocusedPane("output"); }}>
-                          {view[0].toUpperCase() + view.slice(1)}
-                        </button>
-                        <button type="button" className={`btn btn-ghost btn-xs btn-square h-5 w-5 p-0 rounded-full transition-all ${pinnedItems.has(`view:${view}`) ? "text-primary scale-110" : "opacity-40 hover:opacity-70"}`} onClick={(e) => { e.stopPropagation(); setPinnedItems((s) => { const n = new Set(s); n.has(`view:${view}`) ? n.delete(`view:${view}`) : n.add(`view:${view}`); return n; }); }} title={pinnedItems.has(`view:${view}`) ? "Unpin" : "Pin to toolbar"}>
-                          <StarIcon className="h-3 w-3" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div className="h-px bg-gradient-to-r from-transparent via-[var(--workspace-border)] to-transparent" />
-                <div className={settingsSectionClass}>
-                  <p className={settingsLabelClass}>Actions</p>
-                  <div className="flex flex-wrap gap-0.5">
-                    {OPERATION_ACTIONS.map(([label, action]) => (
-                      <div key={action} className="flex items-center">
-                        <button type="button" disabled={showBusy || (action !== "diff" && inputEmpty)} className={`${linkBtnClass} h-7 min-h-7 px-2 text-[11px] font-medium disabled:opacity-40 ${activeOperation === action ? "!text-primary !bg-primary/10" : ""}`} onClick={() => runOperation(action)}>{label}</button>
-                        <button type="button" className={`btn btn-ghost btn-xs btn-square h-5 w-5 p-0 rounded-full transition-all ${pinnedItems.has(`action:${action}`) ? "text-primary scale-110" : "opacity-40 hover:opacity-70"}`} onClick={(e) => { e.stopPropagation(); setPinnedItems((s) => { const n = new Set(s); n.has(`action:${action}`) ? n.delete(`action:${action}`) : n.add(`action:${action}`); return n; }); }} title={pinnedItems.has(`action:${action}`) ? "Unpin" : "Pin to toolbar"}>
-                          <StarIcon className="h-3 w-3" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div className="h-px bg-gradient-to-r from-transparent via-[var(--workspace-border)] to-transparent" />
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="flex flex-col gap-1.5">
-                    <div className="flex items-center justify-between gap-1">
-                      <p className={settingsLabelClass}>Font size</p>
-                      <button type="button" className={`btn btn-ghost btn-xs btn-square h-5 w-5 p-0 rounded-full transition-all ${pinnedItems.has("fontSize") ? "text-primary scale-110" : "opacity-40 hover:opacity-70"}`} onClick={(e) => { e.stopPropagation(); setPinnedItems((s) => { const n = new Set(s); n.has("fontSize") ? n.delete("fontSize") : n.add("fontSize"); return n; }); }} title={pinnedItems.has("fontSize") ? "Unpin" : "Pin to toolbar"}><StarIcon className="h-3 w-3" /></button>
-                    </div>
-                    <div className={settingsBtnGroupClass}>
-                      <button type="button" aria-label="Decrease font size" className={settingsStepBtnClass} onClick={() => setEditorFontSize((s) => Math.max(10, s - 1))}><MinusIcon className="h-3.5 w-3.5" aria-hidden /></button>
-                      <span className={`flex shrink-0 items-center justify-center px-2 py-0.5 text-xs tabular-nums min-w-[2.25rem] text-center font-medium ${isDark ? "text-white/90" : "text-[var(--workspace-text)]"}`}>{editorFontSize}</span>
-                      <button type="button" aria-label="Increase font size" className={settingsStepBtnClass} onClick={() => setEditorFontSize((s) => Math.min(24, s + 1))}><PlusIcon className="h-3.5 w-3.5" aria-hidden /></button>
-                      <button type="button" aria-label="Reset font size" className={settingsStepBtnClass} onClick={() => setEditorFontSize(13)}><ArrowPathIcon className="h-3 w-3" aria-hidden /></button>
-                    </div>
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <div className="flex items-center justify-between gap-1">
-                      <p className={settingsLabelClass}>Indent</p>
-                      <button type="button" className={`btn btn-ghost btn-xs btn-square h-5 w-5 p-0 rounded-full transition-all ${pinnedItems.has("indent") ? "text-primary scale-110" : "opacity-40 hover:opacity-70"}`} onClick={(e) => { e.stopPropagation(); setPinnedItems((s) => { const n = new Set(s); n.has("indent") ? n.delete("indent") : n.add("indent"); return n; }); }} title={pinnedItems.has("indent") ? "Unpin" : "Pin to toolbar"}><StarIcon className="h-3 w-3" /></button>
-                    </div>
-                    <div className={settingsBtnGroupClass}>
-                      <button type="button" aria-label="Decrease indent" className={settingsStepBtnClass} onClick={() => { const v = Math.max(0, formatOptions.indentation - 1); applyFormatWithOptions({ ...formatOptions, indentation: v }); }}><MinusIcon className="h-3.5 w-3.5" aria-hidden /></button>
-                      <span className={`flex shrink-0 items-center justify-center px-2 py-0.5 text-xs tabular-nums min-w-[2.25rem] text-center font-medium ${isDark ? "text-white/90" : "text-[var(--workspace-text)]"}`}>{formatOptions.indentation}</span>
-                      <button type="button" aria-label="Increase indent" className={settingsStepBtnClass} onClick={() => { const v = Math.min(10, formatOptions.indentation + 1); applyFormatWithOptions({ ...formatOptions, indentation: v }); }}><PlusIcon className="h-3.5 w-3.5" aria-hidden /></button>
-                      <button type="button" aria-label="Reset indent" className={settingsStepBtnClass} onClick={() => applyFormatWithOptions({ ...formatOptions, indentation: 2 })}><ArrowPathIcon className="h-3 w-3" aria-hidden /></button>
-                    </div>
-                  </div>
-                </div>
-                <div className="h-px bg-gradient-to-r from-transparent via-[var(--workspace-border)] to-transparent" />
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="flex flex-col gap-1.5">
-                    <p className={settingsLabelClass}>Quote style</p>
-                    <div className="flex gap-0.5">
-                      {(["double", "single"] as const).map((q) => (
-                        <button key={q} type="button" className={`${linkBtnClass} h-7 min-h-7 px-2.5 text-[11px] font-medium ${formatOptions.quoteStyle === q ? "!text-primary !bg-primary/10" : ""}`} onClick={() => applyFormatWithOptions({ ...formatOptions, quoteStyle: q })}>{q === "double" ? '"Double"' : "'Single'"}</button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <p className={settingsLabelClass}>Format options</p>
-                    <div className="flex flex-col gap-1">
-                      <label className="flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 transition-colors hover:bg-primary/5"><input type="checkbox" className="checkbox checkbox-xs checkbox-primary" checked={formatOptions.sortKeys} onChange={(e) => applyFormatWithOptions({ ...formatOptions, sortKeys: e.target.checked })} /><span className="text-[11px]">Sort keys</span></label>
-                      <label className="flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 transition-colors hover:bg-primary/5"><input type="checkbox" className="checkbox checkbox-xs checkbox-primary" checked={formatOptions.removeEmpty} onChange={(e) => applyFormatWithOptions({ ...formatOptions, removeEmpty: e.target.checked })} /><span className="text-[11px]">Remove empty</span></label>
-                    </div>
-                  </div>
-                </div>
-                <div className="h-px bg-gradient-to-r from-transparent via-[var(--workspace-border)] to-transparent" />
-                <div className={settingsSectionClass}>
-                  <p className={settingsLabelClass}>Generate Types</p>
-                  <div className="flex flex-wrap gap-0.5">
-                    {TYPE_LANGUAGES.map((item) => (
-                      <div key={item.id} className="flex items-center">
-                        <button type="button" disabled={inputEmpty} className={`${linkBtnClass} h-7 min-h-7 px-2 text-[11px] font-medium disabled:opacity-40 ${typeLanguage === item.id ? "!text-primary !bg-primary/10" : ""}`} onClick={() => { setFocusedPane("output"); setActiveOperation("generateTypes"); executeOperation("generateTypes", { typeLanguage: item.id }); }}>{item.label}</button>
-                        <button type="button" className={`btn btn-ghost btn-xs btn-square h-5 w-5 p-0 rounded-full transition-all ${pinnedItems.has(`type:${item.id}`) ? "text-primary scale-110" : "opacity-40 hover:opacity-70"}`} onClick={(e) => { e.stopPropagation(); setPinnedItems((s) => { const n = new Set(s); n.has(`type:${item.id}`) ? n.delete(`type:${item.id}`) : n.add(`type:${item.id}`); return n; }); }} title={pinnedItems.has(`type:${item.id}`) ? "Unpin" : "Pin to toolbar"}><StarIcon className="h-3 w-3" /></button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div className="h-px bg-gradient-to-r from-transparent via-[var(--workspace-border)] to-transparent" />
-                <button type="button" className="flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-[11px] font-medium text-[var(--workspace-text-muted)] transition-all hover:bg-primary/8 hover:text-primary" onClick={() => { setFormatOptions(DEFAULT_FORMAT_OPTIONS); setConvertToFormat("json"); setRightView("raw"); setEditorFontSize(13); setPinnedItems(new Set(["fmt:json", "fmt:xml", "view:raw", "view:graph", "view:query", "action:beautify", "action:minify", "action:schema", "action:diff", "type:typescript", "type:java", "type:go", "type:python", "type:sql"])); }}>
-                  <ArrowPathIcon className="h-3.5 w-3.5" />Reset to default
-                </button>
-                  </>
-                )}
-              </div>
-            </Dropdown>
             {viewAsMenu && (
               <>
             <Dropdown open={formatMenuOpen} onOpenChange={setFormatMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`dropdown-content z-[100] min-w-[7rem] p-1.5 shadow-2xl rounded-xl border border-[var(--workspace-border)]/50 ${dropdownPanelClass}`} trigger={<div className={`${linkBtnClass} flex h-7 min-h-7 shrink-0 items-center gap-1 ${formatMenuOpen ? "text-primary" : ""}`} title="Format"><span className="font-medium">Format</span><ChevronDownIcon className="h-3 w-3" /></div>}>
@@ -2582,51 +3469,12 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                     ))}
                   </div>
                 </div>
-                <div className="h-px bg-gradient-to-r from-transparent via-[var(--workspace-border)] to-transparent" />
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <p className={`${settingsLabelClass} mb-1`}>Font size</p>
-                    <div className={settingsBtnGroupClass}>
-                      <button type="button" className={settingsStepBtnClass} onClick={() => setEditorFontSize((s) => Math.max(10, s - 1))}><MinusIcon className="h-3 w-3" /></button>
-                      <span className={`flex shrink-0 items-center justify-center px-1.5 text-xs tabular-nums font-medium min-w-[2rem] text-center ${isDark ? "text-white/90" : "text-[var(--workspace-text)]"}`}>{editorFontSize}</span>
-                      <button type="button" className={settingsStepBtnClass} onClick={() => setEditorFontSize((s) => Math.min(24, s + 1))}><PlusIcon className="h-3 w-3" /></button>
-                      <button type="button" className={`${settingsStepBtnClass} text-[9px] font-medium`} onClick={() => setEditorFontSize(13)}><ArrowPathIcon className="h-3 w-3" /></button>
-                    </div>
-                  </div>
-                  <div>
-                    <p className={`${settingsLabelClass} mb-1`}>Indent</p>
-                    <div className={settingsBtnGroupClass}>
-                      <button type="button" className={settingsStepBtnClass} onClick={() => { const v = Math.max(0, formatOptions.indentation - 1); applyFormatWithOptions({ ...formatOptions, indentation: v }); }}><MinusIcon className="h-3 w-3" /></button>
-                      <span className={`flex shrink-0 items-center justify-center px-1.5 text-xs tabular-nums font-medium min-w-[2rem] text-center ${isDark ? "text-white/90" : "text-[var(--workspace-text)]"}`}>{formatOptions.indentation}</span>
-                      <button type="button" className={settingsStepBtnClass} onClick={() => { const v = Math.min(10, formatOptions.indentation + 1); applyFormatWithOptions({ ...formatOptions, indentation: v }); }}><PlusIcon className="h-3 w-3" /></button>
-                      <button type="button" className={`${settingsStepBtnClass} text-[9px] font-medium`} onClick={() => applyFormatWithOptions({ ...formatOptions, indentation: 2 })}><ArrowPathIcon className="h-3 w-3" /></button>
-                    </div>
-                  </div>
-                </div>
-                <div className="h-px bg-gradient-to-r from-transparent via-[var(--workspace-border)] to-transparent" />
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <p className={`${settingsLabelClass} mb-1`}>Quote style</p>
-                    <div className="flex gap-0.5">
-                      {(["double", "single"] as const).map((q) => (
-                        <button key={q} type="button" className={`${linkBtnClass} h-7 min-h-7 px-2 text-[11px] font-medium ${formatOptions.quoteStyle === q ? "!text-primary !bg-primary/10" : ""}`} onClick={() => applyFormatWithOptions({ ...formatOptions, quoteStyle: q })}>{q === "double" ? '"Double"' : "'Single'"}</button>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <p className={`${settingsLabelClass} mb-1`}>Format options</p>
-                    <div className="flex flex-col gap-0.5">
-                      <button type="button" className={`${linkBtnClass} h-7 min-h-7 px-2 text-[11px] font-medium text-left ${formatOptions.sortKeys ? "!text-primary !bg-primary/10" : ""}`} onClick={() => applyFormatWithOptions({ ...formatOptions, sortKeys: !formatOptions.sortKeys })}>Sort keys</button>
-                      <button type="button" className={`${linkBtnClass} h-7 min-h-7 px-2 text-[11px] font-medium text-left ${formatOptions.removeEmpty ? "!text-primary !bg-primary/10" : ""}`} onClick={() => applyFormatWithOptions({ ...formatOptions, removeEmpty: !formatOptions.removeEmpty })}>Remove empty</button>
-                    </div>
-                  </div>
-                </div>
               </div>
             </Dropdown>
             <Dropdown open={actionsMenuOpen} onOpenChange={setActionsMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`dropdown-content z-[100] min-w-[7rem] p-1.5 shadow-2xl rounded-xl border border-[var(--workspace-border)]/50 ${dropdownPanelClass}`} trigger={<div className={`${linkBtnClass} flex h-7 min-h-7 shrink-0 items-center gap-1 ${actionsMenuOpen ? "text-primary" : ""}`} title="Actions"><span className="font-medium">Actions</span><ChevronDownIcon className="h-3 w-3" /></div>}>
               <div className="flex flex-col gap-0.5 p-0.5" onClick={(e) => e.stopPropagation()}>
                 {OPERATION_ACTIONS.map(([label, action]) => (
-                  <button key={action} type="button" disabled={showBusy || (action !== "diff" && inputEmpty)} className={`${linkBtnClass} h-7 min-h-7 px-2.5 text-[11px] font-medium w-full text-left disabled:opacity-40 ${activeOperation === action ? "!text-primary !bg-primary/10" : ""}`} onClick={() => { runOperation(action); setActionsMenuOpen(false); }}>{label}</button>
+                  <button key={action} type="button" disabled={showBusy || inputEmpty} className={`${linkBtnClass} h-7 min-h-7 px-2.5 text-[11px] font-medium w-full text-left disabled:opacity-40 ${activeOperation === action ? "!text-primary !bg-primary/10" : ""}`} onClick={() => { runOperation(action); setActionsMenuOpen(false); }}>{label}</button>
                 ))}
               </div>
             </Dropdown>
@@ -2639,486 +3487,141 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
             </Dropdown>
               </>
             )}
-            {!viewAsMenu && (
-            <button type="button" disabled={showBusy || inputEmpty} className={`${linkBtnClass} h-7 min-h-7 shrink-0 font-medium ${activeOperation === "format" ? tbActiveClass : "hover:text-primary"}`} onClick={() => runOperation("format")}>Transform</button>
-            )}
-            {!viewAsMenu && FORMAT_KINDS.some((f) => pinnedItems.has(`fmt:${f}`)) && (
-              <span className="mx-1.5 h-3 w-px shrink-0 self-center bg-[var(--workspace-border)]" role="separator" aria-hidden />
-            )}
-            {!viewAsMenu && FORMAT_KINDS.filter((f) => pinnedItems.has(`fmt:${f}`)).map((fmt) => (
-              <button
-                key={fmt}
-                type="button"
-                disabled={inputEmpty}
-                className={`${linkBtnClass} h-7 min-h-7 shrink-0 disabled:opacity-40 ${
-                  convertToFormat === fmt ? tbActiveClass : ""
-                }`}
-                onClick={() => { setFocusedPane("output"); runConvert(fmt); }}
-              >
-                {FORMAT_LABELS[fmt]}
-              </button>
-            ))}
-            {!viewAsMenu && (["raw", "tree", "graph", "query", "table"] as const).some((v) => pinnedItems.has(`view:${v}`)) && (
-              <span className="mx-1.5 h-3 w-px shrink-0 self-center bg-[var(--workspace-border)]" role="separator" aria-hidden />
-            )}
-            {!viewAsMenu && (["raw", "tree", "graph", "query", "table"] as const)
-              .filter((v) => pinnedItems.has(`view:${v}`))
-              .map((view) => (
-                <button
-                  key={view}
-                  type="button"
-                  disabled={inputEmpty || ((view === "tree" || view === "graph" || view === "query" || view === "table") && !parsedOutput)}
-                  className={`${linkBtnClass} h-7 min-h-7 shrink-0 disabled:opacity-40 ${
-                    rightView === view ? tbActiveClass : ""
-                  }`}
-                  onClick={() => { setRightView(view); setFocusedPane("output"); }}
-                >
-                  {view[0].toUpperCase() + view.slice(1)}
-                </button>
-              ))}
-            {!viewAsMenu && OPERATION_ACTIONS.some(([, a]) => pinnedItems.has(`action:${a}`)) && (
-              <span className="mx-1.5 h-3 w-px shrink-0 self-center bg-[var(--workspace-border)]" role="separator" aria-hidden />
-            )}
-            {!viewAsMenu && OPERATION_ACTIONS.filter(([, a]) => pinnedItems.has(`action:${a}`)).map(([label, action]) => (
-              <button
-                key={action}
-                type="button"
-                disabled={showBusy || (action !== "diff" && inputEmpty)}
-                className={`${linkBtnClass} h-7 min-h-7 shrink-0 disabled:opacity-40 ${
-                  activeOperation === action ? tbActiveClass : ""
-                }`}
-                onClick={() => runOperation(action)}
-              >
-                {label}
-              </button>
-            )            )}
-            {!viewAsMenu && pinnedItems.has("fontSize") && (
-              <>
-              <span className="mx-1.5 h-3 w-px shrink-0 self-center bg-[var(--workspace-border)]" role="separator" aria-hidden />
-              <div className="flex w-fit shrink-0 items-center rounded-lg border border-[var(--workspace-border)] overflow-hidden [&>*:not(:last-child)]:border-r [&>*:not(:last-child)]:border-[var(--workspace-border)]">
-                <span className="px-1.5 py-0.5 text-xs opacity-70 border-r border-[var(--workspace-border)]">Font</span>
-                <button type="button" aria-label="Decrease font size" className="flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors" onClick={() => setEditorFontSize((s) => Math.max(10, s - 1))}>
-                  <MinusIcon className="h-3 w-3" aria-hidden />
-                </button>
-                <span className="flex shrink-0 items-center justify-center px-1 py-0.5 text-xs tabular-nums border-r border-[var(--workspace-border)]">{editorFontSize}</span>
-                <button type="button" aria-label="Increase font size" className="flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors" onClick={() => setEditorFontSize((s) => Math.min(24, s + 1))}>
-                  <PlusIcon className="h-3 w-3" aria-hidden />
-                </button>
-                <button type="button" aria-label="Reset font size" className="flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors" onClick={() => setEditorFontSize(13)}>
-                  <ArrowPathIcon className="h-3 w-3" aria-hidden />
-                </button>
-              </div>
-              </>
-            )}
-            {!viewAsMenu && pinnedItems.has("indent") && (
-              <>
-              <span className="mx-1.5 h-3 w-px shrink-0 self-center bg-[var(--workspace-border)]" role="separator" aria-hidden />
-              <div className="flex w-fit shrink-0 items-center rounded-lg border border-[var(--workspace-border)] overflow-hidden [&>*:not(:last-child)]:border-r [&>*:not(:last-child)]:border-[var(--workspace-border)]">
-                <span className="px-1.5 py-0.5 text-xs opacity-70 border-r border-[var(--workspace-border)]">Indent</span>
-                <button
-                  type="button"
-                  aria-label="Decrease indent"
-                  className="flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors"
-                  onClick={() => {
-                    const v = Math.max(0, formatOptions.indentation - 1);
-                    applyFormatWithOptions({ ...formatOptions, indentation: v });
-                  }}
-                >
-                  <MinusIcon className="h-3 w-3" aria-hidden />
-                </button>
-                <span className="flex shrink-0 items-center justify-center px-1 py-0.5 text-xs tabular-nums border-r border-[var(--workspace-border)]">{formatOptions.indentation}</span>
-                <button
-                  type="button"
-                  aria-label="Increase indent"
-                  className="flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors"
-                  onClick={() => {
-                    const v = Math.min(10, formatOptions.indentation + 1);
-                    applyFormatWithOptions({ ...formatOptions, indentation: v });
-                  }}
-                >
-                  <PlusIcon className="h-3 w-3" aria-hidden />
-                </button>
-                <button
-                  type="button"
-                  aria-label="Reset indent"
-                  className="flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors"
-                  onClick={() => applyFormatWithOptions({ ...formatOptions, indentation: 2 })}
-                >
-                  <ArrowPathIcon className="h-3 w-3" aria-hidden />
-                </button>
-              </div>
-              </>
-            )}
-            {!viewAsMenu && TYPE_LANGUAGES.some((t) => pinnedItems.has(`type:${t.id}`)) && (
-              <span className="mx-1.5 h-3 w-px shrink-0 self-center bg-[var(--workspace-border)]" role="separator" aria-hidden />
-            )}
-            {!viewAsMenu && TYPE_LANGUAGES.filter((t) => pinnedItems.has(`type:${t.id}`)).map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                disabled={inputEmpty}
-                className={`${linkBtnClass} flex h-7 min-h-7 shrink-0 items-center gap-1 disabled:opacity-40 ${
-                  activeOperation === "generateTypes" && typeLanguage === item.id ? tbActiveClass : ""
-                }`}
-                onClick={() => {
-                  setFocusedPane("output");
-                  setActiveOperation("generateTypes");
-                  executeOperation("generateTypes", { typeLanguage: item.id });
-                }}
-              >
-                {item.label}
-              </button>
-            ))}
+            {/* Pinned shortcuts only when compact menus is OFF */}
+            {!viewAsMenu && (() => {
+              const fmtPins = FORMAT_KINDS.filter((f) => pinnedItems.has(`fmt:${f}`));
+              const viewPins = (["raw", "tree", "graph", "query", "table"] as const).filter((v) => pinnedItems.has(`view:${v}`));
+              const actionPins = OPERATION_ACTIONS.filter(([, a]) => pinnedItems.has(`action:${a}`));
+              const typePins = TYPE_LANGUAGES.filter((t) => pinnedItems.has(`type:${t.id}`));
+              const hasPins = fmtPins.length + viewPins.length + actionPins.length + typePins.length > 0
+                || pinnedItems.has("fontSize") || pinnedItems.has("indent");
+              if (!hasPins) return null;
+              const groups: React.ReactNode[] = [];
+              if (fmtPins.length > 0) {
+                groups.push(
+                  <span key="fmt" className="flex shrink-0 items-center gap-0.5">
+                    {fmtPins.map((fmt) => (
+                      <button key={fmt} type="button" disabled={inputEmpty} className={`${linkBtnClass} h-7 min-h-7 shrink-0 disabled:opacity-40 ${convertToFormat === fmt ? tbActiveClass : ""}`} onClick={() => { setFocusedPane("output"); runConvert(fmt); }}>{FORMAT_LABELS[fmt]}</button>
+                    ))}
+                  </span>,
+                );
+              }
+              if (viewPins.length > 0) {
+                groups.push(
+                  <span key="view" className="flex shrink-0 items-center gap-0.5">
+                    {viewPins.map((view) => (
+                      <button key={view} type="button" disabled={inputEmpty || ((view === "tree" || view === "graph" || view === "query" || view === "table") && !parsedOutput)} className={`${linkBtnClass} h-7 min-h-7 shrink-0 disabled:opacity-40 ${rightView === view ? tbActiveClass : ""}`} onClick={() => { setRightView(view); setFocusedPane("output"); }}>{view[0].toUpperCase() + view.slice(1)}</button>
+                    ))}
+                  </span>,
+                );
+              }
+              if (actionPins.length > 0) {
+                groups.push(
+                  <span key="act" className="flex shrink-0 items-center gap-0.5">
+                    {actionPins.map(([label, action]) => (
+                      <button key={action} type="button" disabled={showBusy || inputEmpty} className={`${linkBtnClass} h-7 min-h-7 shrink-0 disabled:opacity-40 ${activeOperation === action ? tbActiveClass : ""}`} onClick={() => runOperation(action)}>{label}</button>
+                    ))}
+                  </span>,
+                );
+              }
+              if (typePins.length > 0) {
+                groups.push(
+                  <span key="type" className="flex shrink-0 items-center gap-0.5">
+                    {typePins.map((item) => (
+                      <button key={item.id} type="button" disabled={inputEmpty} className={`${linkBtnClass} h-7 min-h-7 shrink-0 disabled:opacity-40 ${activeOperation === "generateTypes" && typeLanguage === item.id ? tbActiveClass : ""}`} onClick={() => { setFocusedPane("output"); setActiveOperation("generateTypes"); executeOperation("generateTypes", { typeLanguage: item.id }); }}>{item.label}</button>
+                    ))}
+                  </span>,
+                );
+              }
+              if (pinnedItems.has("fontSize") || pinnedItems.has("indent")) {
+                groups.push(
+                  <span key="steps" className="flex shrink-0 items-center gap-1">
+                    {pinnedItems.has("fontSize") && (
+                      <div className={settingsBtnGroupClass} title="Font size">
+                        <button type="button" aria-label="Decrease font size" className={settingsStepBtnClass} onClick={() => setEditorFontSize((s) => Math.max(10, s - 1))}><MinusIcon className="h-3 w-3" /></button>
+                        <span className="flex h-7 min-w-[1.5rem] items-center justify-center px-1 text-[11px] font-medium tabular-nums text-[var(--workspace-text)]">{editorFontSize}</span>
+                        <button type="button" aria-label="Increase font size" className={settingsStepBtnClass} onClick={() => setEditorFontSize((s) => Math.min(24, s + 1))}><PlusIcon className="h-3 w-3" /></button>
+                      </div>
+                    )}
+                    {pinnedItems.has("indent") && (
+                      <div className={settingsBtnGroupClass} title="Indent">
+                        <button type="button" aria-label="Decrease indent" className={settingsStepBtnClass} onClick={() => { const v = Math.max(0, formatOptions.indentation - 1); applyFormatWithOptions({ ...formatOptions, indentation: v }); }}><MinusIcon className="h-3 w-3" /></button>
+                        <span className="flex h-7 min-w-[1.25rem] items-center justify-center px-1 text-[11px] font-medium tabular-nums text-[var(--workspace-text)]">{formatOptions.indentation}</span>
+                        <button type="button" aria-label="Increase indent" className={settingsStepBtnClass} onClick={() => { const v = Math.min(10, formatOptions.indentation + 1); applyFormatWithOptions({ ...formatOptions, indentation: v }); }}><PlusIcon className="h-3 w-3" /></button>
+                      </div>
+                    )}
+                  </span>,
+                );
+              }
+              return (
+                <>
+                  {groups.map((g, i) => (
+                    <React.Fragment key={i}>
+                      {i > 0 ? toolbarSep : null}
+                      {g}
+                    </React.Fragment>
+                  ))}
+                </>
+              );
+            })()}
             <span className="flex-1" />
           </div>
+          )}
           <div className="relative flex min-h-[200px] min-h-0 flex-1 flex-col overflow-hidden">
-            {output.trim() && !isDiffMode && (
-            <div className="absolute right-3 top-1/2 z-20 flex -translate-y-1/2 flex-col gap-0.5 rounded-xl border border-[var(--workspace-border)]/50 bg-[var(--workspace-panel)]/90 p-1 shadow-xl backdrop-blur-md">
-              <button
-                type="button"
-                className={`group relative flex items-center justify-center rounded-lg p-1.5 shrink-0 transition-all duration-150 text-[var(--workspace-text-muted)] hover:bg-primary/10 hover:text-primary ${actionBounce === "share" ? "scale-90" : ""}`}
-                onClick={shareWorkspace}
-                title={shareLabel}
-              >
-                <ShareIcon className="h-3.5 w-3.5" />
-              </button>
-              <button
-                type="button"
-                className={`group relative flex items-center justify-center rounded-lg p-1.5 shrink-0 transition-all duration-150 text-[var(--workspace-text-muted)] hover:bg-primary/10 hover:text-primary disabled:opacity-40 ${actionBounce === "copy" ? "scale-90" : ""}`}
-                disabled={!canDownload}
-                onClick={copyOutput}
-                title={copyLabel}
-              >
-                <ClipboardDocumentIcon className="h-3.5 w-3.5" />
-              </button>
-              {isGraphView ? (
-                <Dropdown
-                  open={downloadMenuOpen}
-                  onOpenChange={setDownloadMenuOpen}
-                  side="bottom"
-                  align="end"
-                  contentClassName={`rounded-xl border border-[var(--workspace-border)]/50 p-1.5 shadow-2xl ${dropdownPanelClass}`}
-                  trigger={
-                    <button
-                      type="button"
-                      className={`flex items-center justify-center rounded-lg p-1.5 shrink-0 transition-all duration-150 text-[var(--workspace-text-muted)] hover:bg-primary/10 hover:text-primary disabled:opacity-40`}
-                      disabled={!canDownload}
-                      title="Download"
-                    >
-                      <ArrowDownTrayIcon className="h-3.5 w-3.5" />
-                    </button>
-                  }
-                >
-                  <div className="flex flex-col gap-0.5">
-                    <button type="button" className={`${linkBtnClass} h-7 min-h-7 w-full justify-start px-2.5 text-[11px] font-medium`} onClick={() => downloadOutput("png")}>PNG</button>
-                    <button type="button" className={`${linkBtnClass} h-7 min-h-7 w-full justify-start px-2.5 text-[11px] font-medium`} onClick={() => downloadOutput("jpg")}>JPG</button>
-                  </div>
-                </Dropdown>
-              ) : (
-                <button
-                  type="button"
-                  className={`flex items-center justify-center rounded-lg p-1.5 shrink-0 transition-all duration-150 text-[var(--workspace-text-muted)] hover:bg-primary/10 hover:text-primary disabled:opacity-40`}
-                  disabled={!canDownload}
-                  onClick={() => downloadOutput()}
-                  title="Download"
-                >
-                  <ArrowDownTrayIcon className="h-3.5 w-3.5" />
-                </button>
-              )}
-              <button
-                type="button"
-                className="flex items-center justify-center rounded-lg p-1.5 shrink-0 transition-all duration-150 text-[var(--workspace-text-muted)] hover:bg-primary/10 hover:text-primary"
-                onClick={() => setIsOutputMaximized((v) => !v)}
-                title={isOutputMaximized ? "Restore layout" : "Maximize output"}
-              >
-                {isOutputMaximized ? (
-                  <ArrowsPointingInIcon className="h-4 w-4" />
+            <motion.div
+              key={
+                isUtilsMode
+                  ? `utils-${utilTab}`
+                  : isDiffMode
+                    ? `diff-${diffKind}`
+                    : `transform-${rightView}`
+              }
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
+              className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+            >
+            {isUtilsMode ? (
+              <UtilsPanel
+                linkBtnClass={linkBtnClass}
+                panelClass={outputPanelClass}
+                isDark={isDark}
+                activeTab={utilTab}
+                onActiveTabChange={setUtilTab}
+                stateByTool={utilsByTool}
+                onStateByToolChange={setUtilsByTool}
+                fontSize={editorFontSize}
+                onNotify={(msg) => {
+                  setShareNotification(msg);
+                  window.setTimeout(() => setShareNotification(null), 2500);
+                }}
+              />
+            ) : isDiffMode ? (
+              <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+                {diffKind === "list" ? (
+                  <ListComparePanel
+                    left={diffLeftInput}
+                    right={diffRightInput}
+                    onLeftChange={setDiffLeftInput}
+                    onRightChange={setDiffRightInput}
+                    linkBtnClass={linkBtnClass}
+                    panelClass={outputPanelClass}
+                    dropdownPanelClass={dropdownPanelClass}
+                    isDark={isDark}
+                    toolbarHost={listToolbarHost}
+                    onExportChange={setListCompareExport}
+                    fontSize={editorFontSize}
+                  />
                 ) : (
-                  <ArrowsPointingOutIcon className="h-3.5 w-3.5" />
-                )}
-              </button>
-            </div>
-            )}
-            {(error || validationError) ? (
-              <div className={`flex h-full min-h-[200px] flex-col items-start justify-start gap-2 p-4 overflow-y-auto ${outputPanelClass}`}>
-                <div className="flex items-center gap-2 text-error font-medium">
-                  <XCircleIcon className="h-5 w-5 shrink-0" />
-                  Error
-                </div>
-                <pre className="w-full text-left text-sm text-[var(--workspace-text-muted)] whitespace-pre-wrap break-words font-mono">
-                  {error ?? validationError}
-                </pre>
-              </div>
-            ) : rightView === "raw" ? (
-              isDiffMode ? (
-                <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
-                  {diffKind === "list" ? (
-                    <ListComparePanel
-                      left={diffLeftInput}
-                      right={diffRightInput}
-                      onLeftChange={setDiffLeftInput}
-                      onRightChange={setDiffRightInput}
-                      linkBtnClass={linkBtnClass}
-                      panelClass={outputPanelClass}
-                      isDark={isDark}
-                      leadingControls={
-                        <>
-                          <span className="shrink-0 rounded bg-primary/10 px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
-                            Diff
-                          </span>
-                          <div className="flex shrink-0 overflow-hidden rounded-md border border-[var(--workspace-border)]">
-                            <button
-                              type="button"
-                              className="h-6 min-h-6 px-1.5 text-[10px] font-medium text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)]"
-                              onClick={() => setDiffKind("document")}
-                              title="Document text/JSON diff"
-                            >
-                              Doc
-                            </button>
-                            <button
-                              type="button"
-                              className="h-6 min-h-6 border-l border-[var(--workspace-border)] bg-primary/15 px-1.5 text-[10px] font-medium text-primary"
-                              title="List / set compare"
-                            >
-                              List
-                            </button>
-                          </div>
-                          <div className="mx-0.5 h-3.5 w-px shrink-0 bg-[var(--workspace-border)]" />
-                        </>
-                      }
-                      trailingControls={
-                        <button
-                          type="button"
-                          title="Exit diff mode"
-                          className={`${linkBtnClass} h-6 min-h-6 shrink-0 px-1.5 text-[10px] text-primary`}
-                          onClick={() => runOperation("diff")}
-                        >
-                          Exit
-                        </button>
-                      }
-                    />
-                  ) : (
-                  <>
-                  {/* Document diff toolbar (includes mode switch — one bar only) */}
-                  <div className={`flex shrink-0 flex-wrap items-center gap-1 border-b px-1.5 py-0.5 ${outputPanelClass}`}>
-                    <span className="shrink-0 rounded bg-primary/10 px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
-                      Diff
-                    </span>
-                    <div className="flex shrink-0 overflow-hidden rounded-md border border-[var(--workspace-border)]">
-                      <button
-                        type="button"
-                        className="h-6 min-h-6 bg-primary/15 px-1.5 text-[10px] font-medium text-primary"
-                        title="Document text/JSON diff"
-                      >
-                        Doc
-                      </button>
-                      <button
-                        type="button"
-                        className="h-6 min-h-6 border-l border-[var(--workspace-border)] px-1.5 text-[10px] font-medium text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)]"
-                        onClick={() => setDiffKind("list")}
-                        title="List / set compare"
-                      >
-                        List
-                      </button>
-                    </div>
-                    <div className="mx-0.5 h-3.5 w-px shrink-0 bg-[var(--workspace-border)]" />
-                    {/* Change navigation + counts */}
-                    <div className="flex shrink-0 items-center gap-0.5 rounded-lg border border-[var(--workspace-border)]/60 px-0.5">
-                      <button
-                        type="button"
-                        title="Previous difference"
-                        className={`${linkBtnClass} btn-square h-7 min-h-7 w-7 shrink-0`}
-                        disabled={!diffNav.total}
-                        onClick={() => diffEditorRef.current?.prevChange()}
-                      >
-                        <ChevronUpIcon className="h-3.5 w-3.5" />
-                      </button>
-                      <span
-                        className="min-w-[3.25rem] px-0.5 text-center text-[11px] font-medium tabular-nums text-[var(--workspace-text)]"
-                        title="Current change / total line hunks"
-                      >
-                        {diffNav.total ? `${diffNav.current}/${diffNav.total}` : "0"}
-                      </span>
-                      <button
-                        type="button"
-                        title="Next difference"
-                        className={`${linkBtnClass} btn-square h-7 min-h-7 w-7 shrink-0`}
-                        disabled={!diffNav.total}
-                        onClick={() => diffEditorRef.current?.nextChange()}
-                      >
-                        <ChevronDownIcon className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-
-                    {/* Line-level stats */}
-                    {diffLineStats && diffLineStats.hunks > 0 ? (
-                      <div className="flex shrink-0 items-center gap-1 text-[10px] font-medium tabular-nums">
-                        <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-emerald-600 dark:text-emerald-400" title="Lines added">
-                          +{diffLineStats.linesAdded}
-                        </span>
-                        <span className="rounded bg-red-500/15 px-1.5 py-0.5 text-red-600 dark:text-red-400" title="Lines removed">
-                          −{diffLineStats.linesRemoved}
-                        </span>
-                        <span className="hidden sm:inline rounded bg-[var(--workspace-background)] px-1.5 py-0.5 text-[var(--workspace-text-muted)]" title="Line hunks">
-                          {diffLineStats.hunks} hunk{diffLineStats.hunks === 1 ? "" : "s"}
-                        </span>
-                      </div>
-                    ) : (diffLeftInput.trim() || diffRightInput.trim()) ? (
-                      <span className="shrink-0 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
-                        Identical
-                      </span>
-                    ) : null}
-
-                    {/* Structural JSON path stats — only when both sides are valid JSON (optional extra) */}
-                    {structuralDiff && structuralDiff.total > 0 && (
-                      <div className="hidden md:flex shrink-0 items-center gap-1 text-[10px] font-medium tabular-nums" title="JSON path-level changes (optional when both sides are JSON)">
-                        <span className="text-[var(--workspace-text-muted)]">paths:</span>
-                        {structuralDiff.added > 0 && (
-                          <span className="rounded bg-emerald-500/15 px-1 py-0.5 text-emerald-600 dark:text-emerald-400">+{structuralDiff.added}</span>
-                        )}
-                        {structuralDiff.removed > 0 && (
-                          <span className="rounded bg-red-500/15 px-1 py-0.5 text-red-600 dark:text-red-400">−{structuralDiff.removed}</span>
-                        )}
-                        {structuralDiff.changed > 0 && (
-                          <span className="rounded bg-amber-500/15 px-1 py-0.5 text-amber-700 dark:text-amber-400">~{structuralDiff.changed}</span>
-                        )}
-                        {structuralDiff.truncated && (
-                          <span className="text-[var(--workspace-text-muted)]" title="Path list capped at 2000">…</span>
-                        )}
-                      </div>
-                    )}
-
-                    <div className="mx-0.5 h-4 w-px shrink-0 bg-[var(--workspace-border)]" />
-
-                    <button
-                      type="button"
-                      title="Undo (Ctrl+Z)"
-                      className={`${linkBtnClass} btn-square h-7 min-h-7 w-7 shrink-0`}
-                      onClick={() => diffEditorRef.current?.undo()}
-                    >
-                      <ArrowUturnLeftIcon className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      title="Redo (Ctrl+Y / Ctrl+Shift+Z)"
-                      className={`${linkBtnClass} btn-square h-7 min-h-7 w-7 shrink-0`}
-                      onClick={() => diffEditorRef.current?.redo()}
-                    >
-                      <ArrowUturnRightIcon className="h-3.5 w-3.5" />
-                    </button>
-
-                    <div className="mx-0.5 h-4 w-px shrink-0 bg-[var(--workspace-border)]" />
-
-                    <button
-                      type="button"
-                      title={diffSideBySide ? "Switch to inline view" : "Switch to side-by-side view"}
-                      className={`${linkBtnClass} h-7 min-h-7 shrink-0 px-1.5`}
-                      onClick={() => setDiffSideBySide((v) => !v)}
-                    >
-                      {diffSideBySide ? "Inline" : "Side-by-side"}
-                    </button>
-                    <button
-                      type="button"
-                      title={diffIgnoreWhitespace ? "Respect whitespace differences" : "Ignore leading/trailing whitespace in lines"}
-                      className={`${linkBtnClass} h-7 min-h-7 shrink-0 px-1.5 ${diffIgnoreWhitespace ? "text-primary !bg-primary/10" : ""}`}
-                      onClick={() => setDiffIgnoreWhitespace((v) => !v)}
-                    >
-                      Trim WS
-                    </button>
-                    <button
-                      type="button"
-                      title="Swap left and right"
-                      className={`${linkBtnClass} btn-square h-7 min-h-7 w-7 shrink-0`}
-                      onClick={swapDiffSides}
-                    >
-                      <ArrowsRightLeftIcon className="h-3.5 w-3.5" />
-                    </button>
-                    {structuralDiff !== null && (
-                      <button
-                        type="button"
-                        title="JSON path change list (when both sides are valid JSON)"
-                        className={`${linkBtnClass} h-7 min-h-7 shrink-0 gap-1 px-1.5 ${diffShowPaths ? "text-primary !bg-primary/10" : ""}`}
-                        onClick={() => setDiffShowPaths((v) => !v)}
-                      >
-                        <ListBulletIcon className="h-3.5 w-3.5 shrink-0" />
-                        <span className="hidden sm:inline">Paths</span>
-                        {structuralDiff.total > 0 && (
-                          <span className="tabular-nums opacity-80">{structuralDiff.total}</span>
-                        )}
-                      </button>
-                    )}
-
-                    <div className="mx-0.5 h-4 w-px shrink-0 bg-[var(--workspace-border)]" />
-
-                    <button
-                      type="button"
-                      title="Paste into focused pane"
-                      className={`${linkBtnClass} h-7 min-h-7 shrink-0`}
-                      onClick={pasteFromClipboard}
-                    >
-                      <ClipboardDocumentIcon className="h-3.5 w-3.5 shrink-0" />
-                      <span className="hidden sm:inline">Paste</span>
-                    </button>
-                    <button
-                      type="button"
-                      title="Beautify both sides (valid JSON)"
-                      className={`${linkBtnClass} h-7 min-h-7 shrink-0 px-1.5`}
-                      onClick={() => beautifyDiffSides("both")}
-                    >
-                      Beautify
-                    </button>
-
-                    <Dropdown
-                      open={downloadMenuOpen && isDiffMode}
-                      onOpenChange={(open) => setDownloadMenuOpen(open)}
-                      side="bottom"
-                      align="end"
-                      rootClassName="shrink-0"
-                      contentClassName={`dropdown-content z-[100] min-w-[11rem] p-1.5 shadow-2xl rounded-xl border border-[var(--workspace-border)]/50 ${dropdownPanelClass}`}
-                      trigger={
-                        <div className={`${linkBtnClass} flex h-7 min-h-7 shrink-0 items-center gap-1 px-1.5`} title="Copy / export">
-                          <ArrowDownTrayIcon className="h-3.5 w-3.5" />
-                          <span className="hidden sm:inline">Export</span>
-                          <ChevronDownIcon className="h-3 w-3 shrink-0" />
-                        </div>
-                      }
-                    >
-                      <div className="flex flex-col gap-0.5" onClick={(e) => e.stopPropagation()}>
-                        <button type="button" className={`${linkBtnClass} h-7 min-h-7 w-full justify-start px-2.5 text-[11px] font-medium`} onClick={() => { void copyDiffText("left"); setDownloadMenuOpen(false); }}>Copy left</button>
-                        <button type="button" className={`${linkBtnClass} h-7 min-h-7 w-full justify-start px-2.5 text-[11px] font-medium`} onClick={() => { void copyDiffText("right"); setDownloadMenuOpen(false); }}>Copy right</button>
-                        <button type="button" className={`${linkBtnClass} h-7 min-h-7 w-full justify-start px-2.5 text-[11px] font-medium`} onClick={() => { void copyDiffText("paths"); setDownloadMenuOpen(false); }}>Copy path changes</button>
-                        <button type="button" className={`${linkBtnClass} h-7 min-h-7 w-full justify-start px-2.5 text-[11px] font-medium`} onClick={() => { void copyDiffText("report"); setDownloadMenuOpen(false); }}>Copy full report</button>
-                        <button type="button" className={`${linkBtnClass} h-7 min-h-7 w-full justify-start px-2.5 text-[11px] font-medium`} onClick={() => { downloadDiffReport(); setDownloadMenuOpen(false); }}>Download report JSON</button>
-                        <div className="my-0.5 h-px bg-[var(--workspace-border)]/60" />
-                        <button type="button" className={`${linkBtnClass} h-7 min-h-7 w-full justify-start px-2.5 text-[11px] font-medium`} onClick={() => { clearDiffSide("left"); setDownloadMenuOpen(false); }}>Clear left</button>
-                        <button type="button" className={`${linkBtnClass} h-7 min-h-7 w-full justify-start px-2.5 text-[11px] font-medium`} onClick={() => { clearDiffSide("right"); setDownloadMenuOpen(false); }}>Clear right</button>
-                        <button type="button" className={`${linkBtnClass} h-7 min-h-7 w-full justify-start px-2.5 text-[11px] font-medium text-red-500`} onClick={() => { clearDiffSide("both"); setDownloadMenuOpen(false); }}>Clear both</button>
-                      </div>
-                    </Dropdown>
-
-                    {diffActionFlash && (
-                      <span className="shrink-0 text-[10px] font-medium text-primary animate-pulse">{diffActionFlash}</span>
-                    )}
-                    <span className="flex-1" />
-                    <button
-                      type="button"
-                      title="Exit diff mode"
-                      className={`${linkBtnClass} h-6 min-h-6 shrink-0 px-1.5 text-[10px] text-primary`}
-                      onClick={() => runOperation("diff")}
-                    >
-                      Exit
-                    </button>
-                  </div>
-
                   <div className="flex min-h-0 flex-1 overflow-hidden">
                     <div className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden ${diffShowPaths ? "" : "w-full"}`}>
                       {diffSideBySide && (
-                        <div className={`flex h-5 shrink-0 border-b text-[10px] font-medium ${outputPanelClass}`}>
-                          <div className="flex flex-1 items-center gap-1 border-r border-[var(--workspace-border)] px-2 text-[var(--workspace-text-muted)]">
+                        <div className={`flex h-6 shrink-0 border-b text-[11px] font-medium ${outputPanelClass}`}>
+                          <div className="flex flex-1 items-center gap-1.5 border-r border-[var(--workspace-border)] px-2 text-[var(--workspace-text-muted)]">
                             <span className="h-1.5 w-1.5 rounded-full bg-red-400/80" />
                             Left
                           </div>
-                          <div className="flex flex-1 items-center gap-1 px-2 text-[var(--workspace-text-muted)]">
+                          <div className="flex flex-1 items-center gap-1.5 px-2 text-[var(--workspace-text-muted)]">
                             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400/80" />
                             Right
                           </div>
@@ -3144,7 +3647,6 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                         outputPanelClass={outputPanelClass}
                       />
                     </div>
-
                     {diffShowPaths && (
                       <div className={`flex w-full max-w-[min(100%,20rem)] shrink-0 flex-col border-l sm:w-80 ${outputPanelClass}`}>
                         <div className="flex shrink-0 items-center gap-1 border-b border-[var(--workspace-border)] px-2 py-1.5">
@@ -3176,18 +3678,13 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                               onClick={() => setDiffPathFilter(id)}
                             >
                               {label}
-                              {structuralDiff && id !== "all" && (
-                                <span className="ml-0.5 opacity-70 tabular-nums">
-                                  {id === "added" ? structuralDiff.added : id === "removed" ? structuralDiff.removed : structuralDiff.changed}
-                                </span>
-                              )}
                             </button>
                           ))}
                         </div>
                         <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
                           {structuralDiff === null ? (
                             <p className="px-2 py-3 text-[11px] leading-relaxed text-[var(--workspace-text-muted)]">
-                              Path list is available when both sides are valid JSON. Text/line diff works for any content.
+                              Path list is available when both sides are valid JSON.
                             </p>
                           ) : filteredDiffRows.length === 0 ? (
                             <p className="px-2 py-3 text-[11px] text-[var(--workspace-text-muted)]">
@@ -3216,20 +3713,6 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                                       <p className="truncate font-mono text-[10px] font-semibold text-[var(--workspace-text)]" title={row.path}>
                                         {row.path}
                                       </p>
-                                      {row.change === "changed" ? (
-                                        <div className="mt-0.5 space-y-0.5 font-mono text-[9px] leading-snug">
-                                          <p className="truncate text-red-600/90 dark:text-red-400/90" title={row.left}>− {row.left}</p>
-                                          <p className="truncate text-emerald-600/90 dark:text-emerald-400/90" title={row.right}>+ {row.right}</p>
-                                        </div>
-                                      ) : row.change === "added" ? (
-                                        <p className="mt-0.5 truncate font-mono text-[9px] text-emerald-600/90 dark:text-emerald-400/90" title={row.right}>
-                                          {row.right}
-                                        </p>
-                                      ) : (
-                                        <p className="mt-0.5 truncate font-mono text-[9px] text-red-600/90 dark:text-red-400/90" title={row.left}>
-                                          {row.left}
-                                        </p>
-                                      )}
                                     </div>
                                   </div>
                                 </li>
@@ -3237,31 +3720,89 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                             </ul>
                           )}
                         </div>
-                        {structuralDiff && structuralDiff.total > 0 && (
-                          <div className="flex shrink-0 gap-1 border-t border-[var(--workspace-border)] p-1.5">
-                            <button
-                              type="button"
-                              className={`${linkBtnClass} h-7 min-h-7 flex-1 text-[10px] font-medium`}
-                              onClick={() => void copyDiffText("paths")}
-                            >
-                              Copy list
-                            </button>
-                            <button
-                              type="button"
-                              className={`${linkBtnClass} h-7 min-h-7 flex-1 text-[10px] font-medium`}
-                              onClick={downloadDiffReport}
-                            >
-                              Export
-                            </button>
-                          </div>
-                        )}
                       </div>
                     )}
                   </div>
-                  </>
-                  )}
+                )}
+              </div>
+            ) : (error || validationError) ? (
+              <div className={`flex h-full min-h-[200px] flex-col items-start justify-start gap-2 p-4 overflow-y-auto ${outputPanelClass}`}>
+                <div className="flex w-full items-center gap-2 text-error font-medium">
+                  <XCircleIcon className="h-5 w-5 shrink-0" />
+                  Error
+                  <span className="flex-1" />
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--workspace-border)] px-3 py-1.5 text-xs font-medium text-[var(--workspace-text)] hover:bg-primary/10 hover:text-primary"
+                    title="Clear input and error"
+                    onClick={() => {
+                      setInput("");
+                      setOutput("");
+                      setParsedOutput(null);
+                      setError(null);
+                      setValidationError(null);
+                      setActiveOperation(null);
+                      setCopyState("idle");
+                      setFocusedPane("input");
+                      if (!isDesktopLayout) setMobileShowOutput(false);
+                    }}
+                  >
+                    <XMarkIcon className="h-3.5 w-3.5" />
+                    Clear
+                  </button>
                 </div>
-              ) : output.trim() ? (
+                <pre className="w-full text-left text-sm text-[var(--workspace-text-muted)] whitespace-pre-wrap break-words font-mono">
+                  {error ?? validationError}
+                </pre>
+                <div className="flex flex-wrap items-center gap-2">
+                {(() => {
+                  const msg = error ?? validationError ?? "";
+                  const m = msg.match(/position\s+(\d+)/i) || msg.match(/line\s+(\d+)/i) || msg.match(/at position\s+(\d+)/i);
+                  if (!m) return null;
+                  const n = Number(m[1]);
+                  if (!Number.isFinite(n) || n < 1) return null;
+                  // Prefer line number if "line N", else approximate line from char position
+                  const isLine = /line\s+\d+/i.test(msg);
+                  let line = n;
+                  if (!isLine) {
+                    const slice = input.slice(0, n);
+                    line = slice.split("\n").length;
+                  }
+                  return (
+                    <button
+                      type="button"
+                      className="rounded-lg border border-[var(--workspace-border)] px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10"
+                      onClick={() => {
+                        setFocusedPane("input");
+                        if (!isDesktopLayout) setMobileShowOutput(false);
+                        inputEditorApiRef.current?.goToLine(line, 1);
+                      }}
+                    >
+                      Jump to line {line} in input
+                    </button>
+                  );
+                })()}
+                  <button
+                    type="button"
+                    className="rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/15"
+                    onClick={() => {
+                      setInput(SAMPLE_JSON_TABLE);
+                      pushHistory(SAMPLE_JSON_TABLE);
+                      setInputFormatOverride(null);
+                      setError(null);
+                      setValidationError(null);
+                      parseOnly(SAMPLE_JSON_TABLE, "json");
+                      setRightView("table");
+                      setFocusedPane("output");
+                      if (!isDesktopLayout) setMobileShowOutput(true);
+                    }}
+                  >
+                    Load table sample
+                  </button>
+                </div>
+              </div>
+            ) : rightView === "raw" ? (
+              output.trim() ? (
                 <JsonEditor
                   value={output}
                   onChange={setOutput}
@@ -3289,7 +3830,10 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                       <span className="text-xl font-extrabold tracking-tight text-primary">ormaty</span>
                     </div>
                     <p className="max-w-md text-sm text-[var(--workspace-text-muted)] leading-relaxed">
-                      Format, convert, validate, and query structured data - everything runs locally in your browser.
+                      Format, convert, compare, and developer utils — JSON, XML, YAML, and more. Everything runs locally in your browser.
+                    </p>
+                    <p className="text-[11px] text-[var(--workspace-text-muted)]">
+                      Tip: <kbd className="rounded border border-[var(--workspace-border)] px-1 font-mono text-[10px]">Ctrl+K</kbd> opens commands · Share is the only action that can leave your device
                     </p>
                   </motion.div>
 
@@ -3300,13 +3844,17 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                     transition={{ duration: 0.3, delay: 0.07 }}
                     className="flex flex-wrap items-center justify-center gap-2"
                   >
-                    <button type="button" className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-3 py-1.5 text-xs font-medium text-[var(--workspace-text-muted)] transition-all hover:border-primary/30 hover:text-primary hover:shadow-sm" onClick={pasteFromClipboard}>
+                    <button type="button" className="inline-flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary transition-all hover:bg-primary/15 hover:shadow-sm" onClick={pasteFromClipboard}>
                       <ClipboardDocumentIcon className="h-3.5 w-3.5" />
                       Paste
                     </button>
                     <button type="button" className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-3 py-1.5 text-xs font-medium text-[var(--workspace-text-muted)] transition-all hover:border-primary/30 hover:text-primary hover:shadow-sm" onClick={() => document.getElementById("import-json-file")?.click()}>
                       <DocumentArrowDownIcon className="h-3.5 w-3.5" />
                       Import file
+                    </button>
+                    <button type="button" className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-3 py-1.5 text-xs font-medium text-[var(--workspace-text-muted)] transition-all hover:border-primary/30 hover:text-primary hover:shadow-sm" onClick={() => runOperation("diff")}>
+                      <ArrowsRightLeftIcon className="h-3.5 w-3.5" />
+                      Compare
                     </button>
                   </motion.div>
 
@@ -3339,6 +3887,23 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                           {FORMAT_LABELS[fmt]}
                         </button>
                       ))}
+                      <button
+                        type="button"
+                        className="rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-2.5 py-1 font-mono text-[11px] font-medium text-[var(--workspace-text-muted)] transition-all hover:border-primary/40 hover:text-primary hover:shadow-sm"
+                        onClick={() => {
+                          setInput(SAMPLE_JSON_TABLE);
+                          pushHistory(SAMPLE_JSON_TABLE);
+                          setInputFormatOverride(null);
+                          setError(null);
+                          setValidationError(null);
+                          parseOnly(SAMPLE_JSON_TABLE, "json");
+                          setRightView("table");
+                          setFocusedPane("output");
+                          if (!isDesktopLayout) setMobileShowOutput(true);
+                        }}
+                      >
+                        Table
+                      </button>
                       <button
                         type="button"
                         className="rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-2.5 py-1 font-mono text-[11px] font-medium text-[var(--workspace-text-muted)] transition-all hover:border-primary/40 hover:text-primary hover:shadow-sm"
@@ -3411,34 +3976,65 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                 </div>
               )
             ) : null}
-            {rightView === "tree" ? (
+            {!isUtilsMode && !isDiffMode && rightView === "tree" ? (
               parsedOutput ? (
-                <TreeView
-                  data={parsedOutput}
-                  isDark={isDark}
-                  className={`${outputPanelClass} min-h-0 flex-1 overflow-auto`}
-                />
+                isHugeInput ? (
+                  <div className={`flex h-full min-h-[200px] flex-col items-center justify-center gap-3 border p-6 text-center text-sm text-[var(--workspace-text-muted)] ${outputPanelClass}`}>
+                    <p>Tree view is disabled for inputs over ~2MB to keep the UI responsive.</p>
+                    <button type="button" className={`${linkBtnClass} h-8 px-3 font-medium text-primary`} onClick={() => setRightView("raw")}>Switch to Raw</button>
+                  </div>
+                ) : (
+                  <TreeView
+                    data={parsedOutput}
+                    isDark={isDark}
+                    largeFile={isLargeInput}
+                    onNotify={(msg) => {
+                      setShareNotification(msg);
+                      window.setTimeout(() => setShareNotification(null), 2500);
+                    }}
+                    className={`${outputPanelClass} min-h-0 flex-1 overflow-auto`}
+                  />
+                )
               ) : (
                 <div className={`flex h-full min-h-[200px] items-center justify-center border text-sm text-[var(--workspace-text-muted)] ${outputPanelClass}`}>
                   Current output is not valid JSON.
                 </div>
               )
             ) : null}
-            {rightView === "graph" ? (
+            {!isUtilsMode && !isDiffMode && rightView === "graph" ? (
               parsedOutput ? (
-                <GraphView
-                  ref={graphViewRef}
-                  data={parsedOutput}
-                  isDark={isDark}
-                  className={`${outputPanelClass} min-h-0 flex-1`}
-                />
+                isHugeInput ? (
+                  <div className={`flex h-full min-h-[200px] flex-col items-center justify-center gap-3 border p-6 text-center text-sm text-[var(--workspace-text-muted)] ${outputPanelClass}`}>
+                    <p>Graph view is disabled for inputs over ~2MB. Use Raw, Query, or download instead.</p>
+                    <button type="button" className={`${linkBtnClass} h-8 px-3 font-medium text-primary`} onClick={() => setRightView("raw")}>Switch to Raw</button>
+                  </div>
+                ) : isLargeInput ? (
+                  <div className={`flex h-full min-h-0 flex-1 flex-col overflow-hidden ${outputPanelClass}`}>
+                    <div className="shrink-0 border-b border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-[11px] text-amber-700 dark:text-amber-300">
+                      Large file — graph may be slow. Prefer Query or Tree for exploration.
+                    </div>
+                    <GraphView
+                      ref={graphViewRef}
+                      data={parsedOutput}
+                      isDark={isDark}
+                      className="min-h-0 flex-1"
+                    />
+                  </div>
+                ) : (
+                  <GraphView
+                    ref={graphViewRef}
+                    data={parsedOutput}
+                    isDark={isDark}
+                    className={`${outputPanelClass} min-h-0 flex-1`}
+                  />
+                )
               ) : (
                 <div className={`flex h-full min-h-[200px] items-center justify-center border text-sm text-[var(--workspace-text-muted)] ${outputPanelClass}`}>
                   Current output is not valid JSON.
                 </div>
               )
             ) : null}
-            {rightView === "query" ? (
+            {!isUtilsMode && !isDiffMode && rightView === "query" ? (
               parsedOutput ? (
                 <QueryView
                   data={parsedOutput}
@@ -3446,6 +4042,21 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                   isDark={isDark}
                   fontSize={editorFontSize}
                   monacoTheme={monacoTheme}
+                  onPromoteResult={(text) => {
+                    setInput(text);
+                    pushHistory(text);
+                    setInputFormatOverride(null);
+                    setError(null);
+                    setValidationError(null);
+                    setRightView("raw");
+                    setFocusedPane("input");
+                    setShareNotification("Query result moved to input");
+                    window.setTimeout(() => setShareNotification(null), 2500);
+                  }}
+                  onNotify={(msg) => {
+                    setShareNotification(msg);
+                    window.setTimeout(() => setShareNotification(null), 2500);
+                  }}
                 />
               ) : (
                 <div className={`flex h-full min-h-[200px] items-center justify-center border text-sm text-[var(--workspace-text-muted)] ${outputPanelClass}`}>
@@ -3453,21 +4064,65 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                 </div>
               )
             ) : null}
-            {rightView === "table" ? (
-              parsedOutput ? (
-                <TableView
-                  data={parsedOutput}
-                  className={`${outputPanelClass} min-h-0 flex-1 overflow-auto`}
-                  isDark={isDark}
-                />
-              ) : (
-                <div className={`flex h-full min-h-[200px] items-center justify-center border text-sm text-[var(--workspace-text-muted)] ${outputPanelClass}`}>
-                  Current output is not valid JSON.
-                </div>
-              )
+            {!isUtilsMode && !isDiffMode && rightView === "table" ? (
+              (() => {
+                let data = parsedOutput;
+                const tryParse = (text: string) => {
+                  try {
+                    return parseJsonInput(text);
+                  } catch {
+                    try {
+                      const fmt = detectFormat(text);
+                      if (fmt !== "curl") return parseInput(text, fmt) as JsonValue;
+                    } catch {
+                      /* ignore */
+                    }
+                    return null;
+                  }
+                };
+                if (data == null && output.trim()) data = tryParse(output);
+                if (data == null && input.trim()) data = tryParse(input);
+                return data != null ? (
+                  <TableView
+                    data={data}
+                    className={`${outputPanelClass} min-h-0 flex-1 overflow-auto`}
+                    isDark={isDark}
+                  />
+                ) : (
+                  <div className={`flex h-full min-h-[200px] flex-col items-center justify-center gap-2 border p-6 text-center text-sm text-[var(--workspace-text-muted)] ${outputPanelClass}`}>
+                    <p>No tabular data yet. Paste a JSON <strong className="text-[var(--workspace-text)]">array of objects</strong>.</p>
+                    <div className="flex flex-wrap justify-center gap-2">
+                      <button
+                        type="button"
+                        className={`${linkBtnClass} h-8 px-3 font-medium text-primary`}
+                        onClick={() => {
+                          setInput(SAMPLE_JSON_TABLE);
+                          pushHistory(SAMPLE_JSON_TABLE);
+                          setInputFormatOverride(null);
+                          setError(null);
+                          setValidationError(null);
+                          parseOnly(SAMPLE_JSON_TABLE, "json");
+                          setRightView("table");
+                        }}
+                      >
+                        Load table sample
+                      </button>
+                      <button
+                        type="button"
+                        className={`${linkBtnClass} h-8 px-3 font-medium`}
+                        onClick={() => setRightView("raw")}
+                      >
+                        Switch to Raw
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()
             ) : null}
+            </motion.div>
           </div>
         </div>
+      </div>
       </div>
       </div>
 
@@ -3664,6 +4319,85 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
             </form>
           </div>
         ) : null}
+
+        {shareConfirmOpen ? (
+          <div className="modal modal-open">
+            <div className="modal-box max-w-md border border-[var(--workspace-border)] bg-[var(--workspace-panel)]">
+              <h3 className="text-sm font-semibold text-[var(--workspace-text)]">Share this workspace?</h3>
+              <p className="mt-2 text-xs leading-relaxed text-[var(--workspace-text-muted)]">
+                Everything else in Formaty runs <strong className="text-[var(--workspace-text)]">locally in your browser</strong>.
+                Sharing uploads your current input (and related settings) so others can open a link.
+                Do not share secrets, tokens, or personal data.
+              </p>
+              {showTabs && tabs.length > 1 && (
+                <label className="mt-3 flex cursor-pointer items-start gap-2.5 rounded-lg border border-[var(--workspace-border)] bg-[var(--workspace-background)]/60 px-3 py-2.5">
+                  <input
+                    type="checkbox"
+                    className="checkbox checkbox-sm checkbox-primary mt-0.5"
+                    checked={shareAllTabs}
+                    onChange={(e) => setShareAllTabs(e.target.checked)}
+                  />
+                  <span className="text-xs leading-relaxed text-[var(--workspace-text)]">
+                    <strong className="font-semibold">Share all {tabs.length} tabs</strong>
+                    <span className="mt-0.5 block text-[var(--workspace-text-muted)]">
+                      Include every tab’s input, output, Compare sides, and Utils state. Unchecked shares only the active tab.
+                    </span>
+                  </span>
+                </label>
+              )}
+              <ul className="mt-3 list-inside list-disc text-[11px] text-[var(--workspace-text-muted)]">
+                <li>Link can be disabled later from the status bar</li>
+                <li>If cloud share is unavailable, a URL hash fallback is used in the browser</li>
+              </ul>
+              <div className="mt-4 flex justify-end gap-2">
+                <button
+                  type="button"
+                  className="rounded-lg border border-[var(--workspace-border)] px-3 py-1.5 text-xs font-medium text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)]"
+                  onClick={() => setShareConfirmOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-content hover:opacity-90"
+                  onClick={() => void shareWorkspace()}
+                >
+                  Create link &amp; copy
+                </button>
+              </div>
+            </div>
+            <form method="dialog" className="modal-backdrop">
+              <button type="button" onClick={() => setShareConfirmOpen(false)}>close</button>
+            </form>
+          </div>
+        ) : null}
+
+        {showFirstRunHint && (
+          <div className="fixed bottom-20 left-1/2 z-50 flex max-w-[min(92vw,28rem)] -translate-x-1/2 items-start gap-3 rounded-xl border border-[var(--workspace-border)] bg-[var(--workspace-panel)]/95 px-4 py-3 text-xs shadow-xl backdrop-blur-md">
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold text-[var(--workspace-text)]">Quick tip</p>
+              <p className="mt-0.5 text-[var(--workspace-text-muted)]">
+                Press <kbd className="rounded border border-[var(--workspace-border)] px-1 font-mono text-[10px]">Ctrl+K</kbd> for any action.
+                Output Share / Copy / Download live in the <strong>toolbar</strong> (never over your text).
+              </p>
+            </div>
+            <button
+              type="button"
+              className="shrink-0 text-[var(--workspace-text-muted)] hover:text-[var(--workspace-text)]"
+              aria-label="Dismiss"
+              onClick={() => {
+                setShowFirstRunHint(false);
+                try {
+                  localStorage.setItem("formaty-onboarded", "1");
+                } catch {
+                  /* ignore */
+                }
+              }}
+            >
+              <XMarkIcon className="h-4 w-4" />
+            </button>
+          </div>
+        )}
 
     </main>
   );

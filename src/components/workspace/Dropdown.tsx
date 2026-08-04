@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { AnimatePresence, motion } from "framer-motion";
 
 interface DropdownProps {
   trigger: React.ReactNode | ((open: boolean) => React.ReactNode);
@@ -12,6 +13,13 @@ interface DropdownProps {
   rootClassName?: string;
   align?: "start" | "end";
   side?: "top" | "bottom";
+  /**
+   * Prefer anchoring to the right edge of the viewport (settings panels).
+   * Still tracks the trigger vertically.
+   */
+  preferScreenRight?: boolean;
+  /** Gap from viewport edges when clamping (px). */
+  edgePadding?: number;
 }
 
 export function Dropdown({
@@ -23,6 +31,8 @@ export function Dropdown({
   rootClassName = "",
   align = "start",
   side = "top",
+  preferScreenRight = false,
+  edgePadding = 8,
 }: DropdownProps) {
   const triggerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -53,24 +63,78 @@ export function Dropdown({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [open, close]);
 
-  const [position, setPosition] = useState<{ top: number; left?: number; right?: number } | null>(null);
-  useLayoutEffect(() => {
+  const [style, setStyle] = useState<React.CSSProperties | null>(null);
+
+  const updatePosition = useCallback(() => {
     if (!open || typeof document === "undefined") return;
-    const rect = triggerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const gap = 4;
-    if (side === "top") {
-      setPosition({
-        top: rect.top - gap,
-        ...(align === "start" ? { left: rect.left } : { right: window.innerWidth - rect.right }),
-      });
+    const triggerEl = triggerRef.current;
+    const content = contentRef.current;
+    if (!triggerEl) return;
+
+    const rect = triggerEl.getBoundingClientRect();
+    const gap = 6;
+    const pad = edgePadding;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const cw = content?.offsetWidth ?? 320;
+    const ch = content?.offsetHeight ?? 240;
+
+    let top: number;
+    if (side === "bottom") {
+      top = rect.bottom + gap;
+      if (top + ch > vh - pad && rect.top - gap - ch > pad) {
+        top = Math.max(pad, rect.top - gap - ch);
+      } else {
+        top = Math.min(top, Math.max(pad, vh - pad - ch));
+      }
     } else {
-      setPosition({
-        top: rect.bottom + gap,
-        ...(align === "start" ? { left: rect.left } : { right: window.innerWidth - rect.right }),
-      });
+      top = Math.max(pad, rect.top - gap - ch);
     }
-  }, [open, align, side]);
+
+    let left: number | undefined;
+    let right: number | undefined;
+
+    if (preferScreenRight) {
+      right = pad;
+      left = undefined;
+      if (cw > vw - pad * 2) {
+        left = pad;
+        right = pad;
+      }
+    } else if (align === "end") {
+      right = Math.max(pad, vw - rect.right);
+      const panelLeft = vw - right - cw;
+      if (panelLeft < pad) {
+        right = Math.max(pad, vw - pad - cw);
+      }
+    } else {
+      left = Math.min(Math.max(pad, rect.left), Math.max(pad, vw - pad - cw));
+    }
+
+    setStyle({
+      position: "fixed",
+      top,
+      left,
+      right,
+      zIndex: 200,
+    });
+  }, [open, align, side, preferScreenRight, edgePadding]);
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setStyle(null);
+      return;
+    }
+    updatePosition();
+    const id = requestAnimationFrame(() => updatePosition());
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      cancelAnimationFrame(id);
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [open, updatePosition, children]);
 
   return (
     <div className={`relative inline-block ${rootClassName}`} ref={triggerRef}>
@@ -85,23 +149,25 @@ export function Dropdown({
       >
         {typeof trigger === "function" ? trigger(open) : trigger}
       </div>
-      {open &&
-        typeof document !== "undefined" &&
-        position &&
+      {typeof document !== "undefined" &&
         createPortal(
-          <div
-            ref={contentRef}
-            className={`fixed z-[100] ${contentClassName}`}
-            onPointerDown={(e) => e.stopPropagation()}
-            style={{
-              [side === "top" ? "bottom" : "top"]: side === "top" ? `calc(100vh - ${position.top}px)` : position.top,
-              left: position.left,
-              right: position.right,
-            }}
-          >
-            {children}
-          </div>,
-          document.body
+          <AnimatePresence>
+            {open && style && (
+              <motion.div
+                ref={contentRef}
+                className={contentClassName}
+                onPointerDown={(e) => e.stopPropagation()}
+                style={style}
+                initial={{ opacity: 0, y: side === "bottom" ? -4 : 4, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: side === "bottom" ? -3 : 3, scale: 0.98 }}
+                transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
+              >
+                {children}
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body,
         )}
     </div>
   );

@@ -38,7 +38,7 @@ export function Header({ themeMode, onThemeChange, onOpenCommandPalette }: Heade
         </Link>
         <span className="hidden h-3.5 w-px bg-[var(--workspace-border)] sm:block" aria-hidden />
         <span className="hidden select-none truncate font-mono text-[10px] tracking-wide text-[var(--workspace-text-muted)] sm:inline">
-          Format · Convert · Query · Visualize
+          Format · Convert · Compare · Utils
         </span>
       </div>
 

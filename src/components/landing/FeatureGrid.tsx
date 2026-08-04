@@ -45,11 +45,21 @@ const FEATURES: {
   },
   {
     route: "/json-diff",
-    title: "JSON Diff",
-    desc: "Side-by-side diff with precise change highlighting",
+    title: "Compare",
+    desc: "Document diff + list/set compare with SQL IN export",
     icon: ArrowsRightLeftIcon,
     color: "text-rose-500 bg-rose-500/10 border-rose-500/20",
     glow: "hover:shadow-rose-500/10 hover:border-rose-500/30",
+    badge: "New",
+  },
+  {
+    route: "/playground",
+    title: "Developer Utils",
+    desc: "UUID, Base64, JWT decode, hash, time, URL, password…",
+    icon: BoltIcon,
+    color: "text-violet-500 bg-violet-500/10 border-violet-500/20",
+    glow: "hover:shadow-violet-500/10 hover:border-violet-500/30",
+    badge: "New",
   },
   {
     route: "/json-to-typescript",
