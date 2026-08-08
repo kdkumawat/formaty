@@ -7,7 +7,6 @@ import {
   BarsArrowDownIcon,
   BarsArrowUpIcon,
   ChevronDownIcon,
-  Cog6ToothIcon,
 } from "@heroicons/react/24/outline";
 import { Dropdown } from "@/components/workspace/Dropdown";
 import {
@@ -47,13 +46,14 @@ interface ListComparePanelProps {
   toolbarHost?: HTMLElement | null;
   onExportChange?: (exportInfo: ListCompareExport | null) => void;
   fontSize?: number;
+  options?: ListParseOptions;
+  onOptionsChange?: (options: ListParseOptions) => void;
 }
 
 const PRIMARY_BUCKETS: ListBucket[] = ["common", "leftOnly", "rightOnly", "union", "symmetric"];
 const DUPE_BUCKETS: ListBucket[] = ["leftDupes", "rightDupes"];
 
 const DELIMITERS: { id: ListDelimiter; label: string }[] = [
-  { id: "auto", label: "Auto detect" },
   { id: "newline", label: "Newline" },
   { id: "comma", label: "Comma" },
   { id: "semicolon", label: "Semicolon" },
@@ -135,8 +135,10 @@ export function ListComparePanel({
   toolbarHost = null,
   onExportChange,
   fontSize = 14,
+  options,
+  onOptionsChange,
 }: ListComparePanelProps) {
-  const [options, setOptions] = useState<ListParseOptions>(DEFAULT_LIST_PARSE_OPTIONS);
+  const effectiveOptions = options ?? DEFAULT_LIST_PARSE_OPTIONS;
   const [resultSort, setResultSort] = useState<ListSortMode>("asc");
   const [leftSort, setLeftSort] = useState<ListSortMode>("none");
   const [rightSort, setRightSort] = useState<ListSortMode>("none");
@@ -145,13 +147,13 @@ export function ListComparePanel({
   const [sqlColumn, setSqlColumn] = useState("id");
   const [sqlNotIn, setSqlNotIn] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
-  const [optsOpen, setOptsOpen] = useState(false);
   const [delimOpen, setDelimOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [bucketOpen, setBucketOpen] = useState(false);
   const [leftSnapshot, setLeftSnapshot] = useState<string | null>(null);
   const [rightSnapshot, setRightSnapshot] = useState<string | null>(null);
 
-  const result = useMemo(() => compareLists(left, right, options), [left, right, options]);
+  const result = useMemo(() => compareLists(left, right, effectiveOptions), [left, right, effectiveOptions]);
   const bucketItems = useMemo(
     () => getBucketItems(result, activeBucket),
     [result, activeBucket],
@@ -243,7 +245,7 @@ export function ListComparePanel({
       }
       if (leftSnapshot === null) setLeftSnapshot(left);
       const base = leftSnapshot ?? left;
-      onLeftChange(sortListText(base, options, next));
+      onLeftChange(sortListText(base, effectiveOptions, next));
       setLeftSort(next);
       flashMsg(next === "asc" ? "Left A → Z" : "Left Z → A");
     } else {
@@ -259,7 +261,7 @@ export function ListComparePanel({
       }
       if (rightSnapshot === null) setRightSnapshot(right);
       const base = rightSnapshot ?? right;
-      onRightChange(sortListText(base, options, next));
+      onRightChange(sortListText(base, effectiveOptions, next));
       setRightSort(next);
       flashMsg(next === "asc" ? "Right A → Z" : "Right Z → A");
     }
@@ -284,7 +286,8 @@ export function ListComparePanel({
   };
 
   const setOpt = <K extends keyof ListParseOptions>(key: K, value: ListParseOptions[K]) => {
-    setOptions((prev) => ({ ...prev, [key]: value }));
+    const next = { ...effectiveOptions, [key]: value };
+    onOptionsChange?.(next);
   };
 
   const bucketCount = (b: ListBucket) => {
@@ -315,14 +318,6 @@ export function ListComparePanel({
     if (b === "symmetric") return "text-rose-600 dark:text-rose-400 bg-rose-500/10";
     return "text-[var(--workspace-text-muted)] bg-[var(--workspace-background)]";
   };
-
-  const activeOptCount = [
-    options.trim,
-    options.ignoreEmpty,
-    options.caseInsensitive,
-    options.stripQuotes,
-    options.numericNormalize,
-  ].filter(Boolean).length;
 
   const shortBucket = (b: ListBucket) => {
     if (b === "leftOnly") return "Only L";
@@ -357,7 +352,7 @@ export function ListComparePanel({
             className={`${linkBtnClass} h-7 min-h-7 gap-0.5 px-2 text-[11px] font-medium ${delimOpen ? "text-primary" : ""}`}
             title="Split delimiter"
           >
-            {DELIMITERS.find((d) => d.id === options.delimiter)?.label ?? "Auto"}
+            {DELIMITERS.find((d) => d.id === effectiveOptions.delimiter)?.label ?? DELIMITERS[0]?.label}
             <ChevronDownIcon className="h-3 w-3 opacity-60" />
           </button>
         }
@@ -367,7 +362,7 @@ export function ListComparePanel({
             <button
               key={d.id}
               type="button"
-              className={menuItem(options.delimiter === d.id)}
+              className={menuItem(effectiveOptions.delimiter === d.id)}
               onClick={() => {
                 setOpt("delimiter", d.id);
                 setDelimOpen(false);
@@ -379,84 +374,7 @@ export function ListComparePanel({
         </div>
       </Dropdown>
 
-      <Dropdown
-        open={optsOpen}
-        onOpenChange={setOptsOpen}
-        side="bottom"
-        align="start"
-        contentClassName={`w-52 rounded-xl border border-[var(--workspace-border)]/50 p-1.5 shadow-2xl ${dropdownPanelClass}`}
-        trigger={
-          <button
-            type="button"
-            title="Parse options"
-            className={`${linkBtnClass} h-7 min-h-7 gap-1 px-2 text-[11px] ${
-              optsOpen || activeOptCount > 0 ? "text-primary !bg-primary/10" : ""
-            }`}
-          >
-            <Cog6ToothIcon className="h-3.5 w-3.5" />
-            Options
-            {activeOptCount > 0 && (
-              <span className="rounded bg-primary/15 px-1 text-[10px] tabular-nums text-primary">
-                {activeOptCount}
-              </span>
-            )}
-          </button>
-        }
-      >
-        <div className="flex flex-col gap-0.5">
-          {(
-            [
-              ["trim", "Trim whitespace"],
-              ["ignoreEmpty", "Skip empty"],
-              ["caseInsensitive", "Ignore case"],
-              ["stripQuotes", "Strip quotes"],
-              ["numericNormalize", "Normalize numbers"],
-            ] as const
-          ).map(([key, label]) => (
-            <label
-              key={key}
-              className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-[11px] text-[var(--workspace-text)] hover:bg-primary/5"
-            >
-              <input
-                type="checkbox"
-                className="checkbox checkbox-xs checkbox-primary"
-                checked={options[key]}
-                onChange={(e) => setOpt(key, e.target.checked)}
-              />
-              {label}
-            </label>
-          ))}
-        </div>
-      </Dropdown>
-
-      <button
-        type="button"
-        title="Swap sides"
-        className={`${linkBtnClass} btn-square h-7 min-h-7 w-7`}
-        onClick={swap}
-      >
-        <ArrowsRightLeftIcon className="h-3.5 w-3.5" />
-      </button>
-
       <div className="mx-0.5 h-4 w-px shrink-0 bg-[var(--workspace-border)]" />
-
-      {PRIMARY_BUCKETS.map((b) => {
-        const n = bucketCount(b);
-        if (n === 0 && b === "symmetric") return null;
-        return (
-          <button
-            key={b}
-            type="button"
-            onClick={() => setActiveBucket(b)}
-            title={BUCKET_LABELS[b]}
-            className={`${linkBtnClass} h-7 min-h-7 shrink-0 px-2 text-[11px] font-semibold tabular-nums ${
-              activeBucket === b ? `!ring-1 !ring-primary/40 ${bucketColor(b)}` : ""
-            }`}
-          >
-            {shortBucket(b)} <span className="opacity-70">{n}</span>
-          </button>
-        );
-      })}
 
       {visibleDupes.map((b) => {
         const n = bucketCount(b);
@@ -505,7 +423,7 @@ export function ListComparePanel({
       {toolbarNode}
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col border-b border-[var(--workspace-border)] sm:flex-row lg:border-b-0 lg:border-r">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col border-b border-[var(--workspace-border)] sm:flex-row lg:border-b-0">
           {/* Left */}
           <div className="flex min-h-0 min-w-0 flex-1 flex-col border-b border-[var(--workspace-border)] sm:border-b-0 sm:border-r">
             <div className={paneHeader}>
@@ -543,6 +461,18 @@ export function ListComparePanel({
               className={editorClass}
               style={{ fontSize }}
             />
+          </div>
+
+          {/* Middle divider — swap appears on hover */}
+          <div className="hidden lg:flex h-10 w-4 shrink-0 flex-col items-center justify-center border-x border-[var(--workspace-border)] bg-[var(--workspace-panel)] group/swap">
+            <button
+              type="button"
+              title="Swap sides"
+              onClick={swap}
+              className={`${linkBtnClass} btn-square h-7 min-h-7 w-7 opacity-0 transition-opacity duration-150 group-hover/swap:opacity-100`}
+            >
+              <ArrowsRightLeftIcon className="h-3.5 w-3.5" />
+            </button>
           </div>
 
           {/* Right */}
@@ -586,13 +516,61 @@ export function ListComparePanel({
         </div>
 
         {/* Result */}
-        <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col lg:max-w-[42%]">
+        <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col border-l border-[var(--workspace-border)] lg:max-w-[42%]">
           <div className={`${paneHeader} gap-1`}>
-            <span
-              className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-bold ${bucketColor(activeBucket)}`}
+            <Dropdown
+              open={bucketOpen}
+              onOpenChange={setBucketOpen}
+              side="bottom"
+              align="start"
+              contentClassName={`min-w-[10rem] rounded-xl border border-[var(--workspace-border)]/50 p-1 shadow-2xl ${dropdownPanelClass}`}
+              trigger={
+                <button
+                  type="button"
+                  className={`${linkBtnClass} h-7 min-h-7 gap-0.5 px-2 text-[11px] font-semibold ${bucketColor(activeBucket)}`}
+                  title="Select bucket"
+                >
+                  {BUCKET_LABELS[activeBucket]} · {bucketItems.length}
+                  <ChevronDownIcon className="h-3 w-3 opacity-60" />
+                </button>
+              }
             >
-              {BUCKET_LABELS[activeBucket]} · {bucketItems.length}
-            </span>
+              <div className="flex flex-col gap-0.5 p-0.5">
+                {PRIMARY_BUCKETS.map((b) => {
+                  const n = bucketCount(b);
+                  if (n === 0 && b === "symmetric") return null;
+                  return (
+                    <button
+                      key={b}
+                      type="button"
+                      className={menuItem(activeBucket === b)}
+                      onClick={() => {
+                        setActiveBucket(b);
+                        setBucketOpen(false);
+                      }}
+                    >
+                      {BUCKET_LABELS[b]} <span className="opacity-70">{n}</span>
+                    </button>
+                  );
+                })}
+                {visibleDupes.map((b) => {
+                  const n = bucketCount(b);
+                  return (
+                    <button
+                      key={b}
+                      type="button"
+                      className={menuItem(activeBucket === b)}
+                      onClick={() => {
+                        setActiveBucket(b);
+                        setBucketOpen(false);
+                      }}
+                    >
+                      {BUCKET_LABELS[b]} {n}
+                    </button>
+                  );
+                })}
+              </div>
+            </Dropdown>
 
             <CycleSortButton
               linkBtnClass={linkBtnClass}
@@ -676,8 +654,19 @@ export function ListComparePanel({
           </div>
 
           <pre
-            className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-all bg-[var(--workspace-panel)] px-2.5 py-2 font-mono leading-relaxed text-[var(--workspace-text)]"
+            tabIndex={0}
+            className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-all bg-[var(--workspace-panel)] px-2.5 py-2 font-mono leading-relaxed text-[var(--workspace-text)] outline-none"
             style={{ fontSize }}
+            onKeyDown={(e) => {
+              if ((e.ctrlKey || e.metaKey) && e.key === "a") {
+                e.preventDefault();
+                const range = document.createRange();
+                range.selectNodeContents(e.currentTarget);
+                const selection = window.getSelection();
+                selection?.removeAllRanges();
+                selection?.addRange(range);
+              }
+            }}
           >
             {formatted || (
               <span className="text-[var(--workspace-text-muted)]">

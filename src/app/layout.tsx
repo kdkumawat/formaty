@@ -1,18 +1,18 @@
 import type { Metadata, Viewport } from "next";
-import { DM_Sans, DM_Mono } from "next/font/google";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
-const dmSans = DM_Sans({
+const inter = Inter({
   subsets: ["latin"],
-  variable: "--font-dm-sans",
+  variable: "--font-inter",
   display: "swap",
   axes: ["opsz"],
 });
 
-const dmMono = DM_Mono({
+const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
-  weight: ["400", "500"],
-  variable: "--font-dm-mono",
+  weight: ["400", "500", "600"],
+  variable: "--font-jetbrains-mono",
   display: "swap",
 });
 
@@ -174,11 +174,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning className={`${dmSans.variable} ${dmMono.variable}`}>
+    <html lang="en" suppressHydrationWarning className={`${inter.variable} ${jetbrainsMono.variable}`}>
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){var t="light";try{var s=localStorage.getItem("formaty-session");if(s){var d=JSON.parse(s);if(d.themeMode==="dark"||d.themeMode==="light")t=d.themeMode;else t=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"}else{t=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"}}catch(e){t=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"}document.documentElement.setAttribute("data-theme",t);var e=document.createElement("style");e.id="formaty-theme-inline";e.textContent=t==="dark"?"html,body{--workspace-background:#0d0d0d;--workspace-panel:#141414;--workspace-border:#252525;--workspace-text:#ececec;--workspace-text-muted:#a3a3a3}":"html,body{--workspace-background:#f8f8f8;--workspace-panel:#ffffff;--workspace-border:#e8e8e8;--workspace-text:#0a0a0a;--workspace-text-muted:#545454}";document.head.appendChild(e)})();`,
+            __html: `(function(){var t="light";try{var s=localStorage.getItem("formaty-session");if(s){var d=JSON.parse(s);if(d.themeMode==="dark"||d.themeMode==="light")t=d.themeMode;else t=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"}else{t=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"}}catch(e){t=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"}document.documentElement.setAttribute("data-theme",t);var e=document.createElement("style");e.id="formaty-theme-inline";e.textContent=t==="dark"?"html,body{--workspace-background:#0e0e10;--workspace-panel:#161618;--workspace-border:#28282c;--workspace-text:#ececee;--workspace-text-muted:#a2a2a9}":"html,body{--workspace-background:#f6f6f7;--workspace-panel:#ffffff;--workspace-border:#e2e2e5;--workspace-text:#17171a;--workspace-text-muted:#55565c}";document.head.appendChild(e)})();`,
           }}
         />
       </head>

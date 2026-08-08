@@ -43,6 +43,45 @@ import {
 
 export type { UtilTab };
 
+/** Codec tools that support bidirectional plain ⇄ encoded editing. */
+const CODEC_TABS: ReadonlySet<UtilTab> = new Set(["base64", "url", "hex", "escape", "html"]);
+/** Generator tools that have options instead of a text input (options + output only). */
+const GENERATOR_TABS: ReadonlySet<UtilTab> = new Set(["uuid", "password"]);
+
+function encodeText(tab: UtilTab, text: string): string {
+  switch (tab) {
+    case "base64":
+      return toBase64(text);
+    case "url":
+      return urlEncode(text);
+    case "hex":
+      return toHex(text);
+    case "escape":
+      return jsonEscape(text);
+    case "html":
+      return htmlEncode(text);
+    default:
+      return text;
+  }
+}
+
+function decodeText(tab: UtilTab, text: string): string {
+  switch (tab) {
+    case "base64":
+      return fromBase64(text);
+    case "url":
+      return urlDecode(text);
+    case "hex":
+      return fromHex(text);
+    case "escape":
+      return jsonUnescape(text);
+    case "html":
+      return htmlDecode(text);
+    default:
+      return text;
+  }
+}
+
 export interface UtilToolState {
   input: string;
   output: string;
@@ -57,6 +96,8 @@ export interface UtilToolState {
   hexMode: "auto" | "encode" | "decode";
   escapeMode: "escape" | "unescape";
   htmlMode: "encode" | "decode";
+  /** Which side is being edited for codec tools (left = plain, right = encoded). */
+  editSide: "left" | "right";
   touched: boolean;
 }
 
@@ -77,6 +118,7 @@ export function defaultUtilToolState(tab: UtilTab): UtilToolState {
     hexMode: "auto",
     escapeMode: "escape",
     htmlMode: "encode",
+    editSide: "left",
     touched: false,
   };
 }
@@ -102,30 +144,22 @@ export function applyUtilSample(tab: UtilTab, cur?: UtilToolState): UtilToolStat
   };
 }
 
-function looksLikeBase64(t: string): boolean {
-  const s = t.trim();
-  if (s.length < 4) return false;
-  if (!/^[A-Za-z0-9+/=\s]+$/.test(s)) return false;
-  return s.includes("=") || s.replace(/\s/g, "").length % 4 === 0;
-}
-
 async function computeUtil(tab: UtilTab, s: UtilToolState): Promise<Partial<UtilToolState>> {
   if (tab === "uuid") {
     const n = Math.max(1, Math.min(50, s.uuidCount));
     const list = Array.from({ length: n }, () => generateUuidV4());
     return { uuidList: list, output: list.join("\n"), error: null };
   }
-  if (tab === "base64") {
-    const t = s.input;
-    const mode = s.base64Mode;
-    if (mode === "decode" || (mode === "auto" && looksLikeBase64(t))) {
+  // Bidirectional codec: editing the right (encoded) side decodes back to the left.
+  if (CODEC_TABS.has(tab)) {
+    if (s.editSide === "right") {
       try {
-        return { output: fromBase64(t), error: null };
+        return { input: decodeText(tab, s.output), error: null };
       } catch (e) {
-        if (mode === "decode") throw e;
+        throw e;
       }
     }
-    return { output: toBase64(t), error: null };
+    return { output: encodeText(tab, s.input), error: null };
   }
   if (tab === "jwt") {
     if (!s.input.trim()) return { output: "", error: null };
@@ -159,55 +193,13 @@ async function computeUtil(tab: UtilTab, s: UtilToolState): Promise<Partial<Util
     if (/^\d+(\.\d+)?$/.test(t)) return { output: unixToIso(t), error: null };
     return { output: prettyJson(isoToUnix(t)), error: null };
   }
-  if (tab === "url") {
-    if (!s.input) return { output: "", error: null };
-    const t = s.input;
-    const mode = s.urlMode;
-    if (mode === "decode" || (mode === "auto" && /%[0-9A-Fa-f]{2}/.test(t))) {
-      try {
-        return { output: urlDecode(t), error: null };
-      } catch (e) {
-        if (mode === "decode") throw e;
-      }
-    }
-    return { output: urlEncode(t), error: null };
-  }
   if (tab === "case") {
     if (!s.input) return { output: "", error: null };
     return { output: transformCase(s.input, s.caseMode), error: null };
   }
-  if (tab === "hex") {
-    if (!s.input) return { output: "", error: null };
-    const t = s.input;
-    const mode = s.hexMode;
-    if (
-      mode === "decode" ||
-      (mode === "auto" &&
-        /^[0-9a-fA-F\s]+$/.test(t.trim()) &&
-        t.replace(/\s/g, "").length % 2 === 0 &&
-        t.trim().length > 2)
-    ) {
-      try {
-        return { output: fromHex(t), error: null };
-      } catch (e) {
-        if (mode === "decode") throw e;
-      }
-    }
-    return { output: toHex(t), error: null };
-  }
   if (tab === "number") {
     if (!s.input.trim()) return { output: "", error: null };
     return { output: convertNumberBase(s.input), error: null };
-  }
-  if (tab === "escape") {
-    if (!s.input) return { output: "", error: null };
-    if (s.escapeMode === "unescape") return { output: jsonUnescape(s.input), error: null };
-    return { output: jsonEscape(s.input), error: null };
-  }
-  if (tab === "html") {
-    if (!s.input) return { output: "", error: null };
-    if (s.htmlMode === "decode") return { output: htmlDecode(s.input), error: null };
-    return { output: htmlEncode(s.input), error: null };
   }
   if (tab === "password") {
     return { output: generatePassword(s.passwordLen), error: null };
@@ -413,6 +405,8 @@ export function UtilsPanel({
   const runGen = useRef(0);
   useEffect(() => {
     const s = mapRef.current[activeTab] ?? defaultUtilToolState(activeTab);
+    // Codec right-side (encoded) editing is handled by a dedicated effect below.
+    if (CODEC_TABS.has(activeTab) && s.editSide === "right") return;
     const gen = ++runGen.current;
     const delay =
       activeTab === "uuid" || activeTab === "password" || activeTab === "time" ? 0 : 160;
@@ -463,6 +457,26 @@ export function UtilsPanel({
     state.htmlMode,
     onStateByToolChange,
   ]);
+
+  // Bidirectional codec: editing the encoded (right) side auto-decodes back to the left.
+  const codecRun = useRef(0);
+  useEffect(() => {
+    if (!CODEC_TABS.has(activeTab) || state.editSide !== "right") return;
+    const gen = ++codecRun.current;
+    const id = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const dec = decodeText(activeTab, state.output);
+          if (codecRun.current !== gen) return;
+          patch({ input: dec, error: null });
+        } catch (e) {
+          if (codecRun.current !== gen) return;
+          patch({ error: e instanceof Error ? e.message : "Failed" });
+        }
+      })();
+    }, 160);
+    return () => window.clearTimeout(id);
+  }, [activeTab, state.output, state.editSide, patch]);
 
   const regeneratePassword = () => {
     try {
@@ -557,12 +571,123 @@ export function UtilsPanel({
         </div>
       </nav>
 
-      <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 md:grid-cols-2">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      {GENERATOR_TABS.has(activeTab) ? (
+        <div className="flex h-full min-h-0 flex-col">
+          <div className={`${paneHeader} flex-wrap`}>
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--workspace-text-muted)]">
+              {activeLabel}
+            </span>
+            <span className="flex-1" />
+            {activeTab === "uuid" && (
+              <>
+                <NumberStepper label="Count" value={state.uuidCount} min={1} max={50} onChange={(n) => patch({ uuidCount: n })} aria-label="UUID count" />
+                <button type="button" className={toolBtn(false)} onClick={regenerateUuids} title="Regenerate">New</button>
+                <button type="button" className={toolBtn(false)} onClick={() => { const id = generateUuidV4(); patch({ uuidList: [id], output: id, error: null }); }}>One</button>
+                <button type="button" className={toolBtn(false)} onClick={() => { const id = uuidNil(); patch({ uuidList: [id], output: id, error: null }); }}>NIL</button>
+              </>
+            )}
+            {activeTab === "password" && (
+              <>
+                <NumberStepper label="Len" value={state.passwordLen} min={4} max={128} onChange={(n) => patch({ passwordLen: n })} aria-label="Password length" />
+                <button type="button" className={toolBtn(false)} onClick={regeneratePassword}>New</button>
+              </>
+            )}
+          </div>
+          <div className="flex min-h-0 flex-1 flex-col bg-[var(--workspace-panel)]">
+            {activeTab === "uuid" && state.uuidList.length > 0 ? (
+              <ul className="min-h-0 flex-1 space-y-1 overflow-auto p-2">
+                {state.uuidList.map((id, i) => (
+                  <li
+                    key={`${id}-${i}`}
+                    className="flex items-center gap-1.5 rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-2 py-1.5 font-mono text-[12px] text-[var(--workspace-text)]"
+                    style={{ fontSize }}
+                  >
+                    <span className="min-w-0 flex-1 break-all select-all">{id}</span>
+                    <button type="button" className={`${linkBtnClass} btn-square h-7 min-h-7 w-7 shrink-0`} title="Copy UUID" onClick={() => void copy(id, "UUID copied")}>
+                      <DocumentDuplicateIcon className="h-3.5 w-3.5" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : state.output ? (
+              <pre
+                className={`${fieldClass} overflow-auto whitespace-pre-wrap break-all`}
+                style={{ fontSize }}
+                tabIndex={0}
+                onKeyDown={selectFieldAll}
+              >
+                {state.output}
+              </pre>
+            ) : (
+              <div className="flex flex-1 items-center justify-center px-4 text-center text-[13px] text-[var(--workspace-text-muted)]">
+                {activeTab === "uuid"
+                  ? "Set a count, then press New / One / NIL to generate UUIDs."
+                  : "Set a length, then press New to generate a password."}
+              </div>
+            )}
+          </div>
+        </div>
+      ) : CODEC_TABS.has(activeTab) ? (
+        <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 md:grid-cols-2">
+          <div className="flex min-h-0 flex-col border-b border-[var(--workspace-border)] md:border-b-0 md:border-r">
+            <div className={paneHeader}>
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--workspace-text-muted)]">Plain text</span>
+            </div>
+            <div className="flex min-h-0 flex-1 flex-col bg-[var(--workspace-panel)]">
+              <textarea
+                className={fieldClass}
+                style={{ fontSize }}
+                value={state.input}
+                onChange={(e) => patch({ input: e.target.value, editSide: "left" })}
+                onKeyDown={(e) => utilInputKeyDown(e, utilUndo, utilRedo)}
+                placeholder={utilPlaceholder(activeTab)}
+                spellCheck={false}
+              />
+            </div>
+          </div>
+          <div className="flex min-h-0 flex-col">
+            <div className={paneHeader}>
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--workspace-text-muted)]">Encoded</span>
+              <span className="flex-1" />
+              {state.error && <span className="text-[10px] text-red-500">{state.error}</span>}
+              <button
+                type="button"
+                className={toolBtn(false)}
+                title="Decode the encoded side back to plain text"
+                onClick={() => {
+                  const s = mapRef.current[activeTab] ?? state;
+                  void (async () => {
+                    try {
+                      patch({ input: decodeText(activeTab, s.output), error: null });
+                    } catch (e) {
+                      patch({ error: e instanceof Error ? e.message : "Failed" });
+                    }
+                  })();
+                }}
+              >
+                Decode
+              </button>
+            </div>
+            <div className="flex min-h-0 flex-1 flex-col bg-[var(--workspace-panel)]">
+              <textarea
+                className={fieldClass}
+                style={{ fontSize }}
+                value={state.output}
+                onChange={(e) => patch({ output: e.target.value, editSide: "right" })}
+                placeholder="Encoded result — edit here to decode back to plain text"
+                spellCheck={false}
+              />
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 md:grid-cols-2">
         {/* Input */}
         <div className="flex min-h-0 flex-col border-b border-[var(--workspace-border)] md:border-b-0 md:border-r">
           <div className={paneHeader}>
             <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--workspace-text-muted)]">
-              {showOptionsOnly ? "Options" : "Input"}
+              Input
             </span>
             <span className="hidden text-[10px] text-[var(--workspace-text-muted)] sm:inline">
               · {activeLabel}
@@ -836,6 +961,8 @@ export function UtilsPanel({
             )}
           </div>
         </div>
+        </div>
+        )}
       </div>
     </div>
   );

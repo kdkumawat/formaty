@@ -4,47 +4,47 @@
 }
 
 @theme inline {
-  --font-sans: var(--font-dm-sans), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-mono: var(--font-dm-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;
 }
 
 /* Workspace design tokens */
 :root {
-  --workspace-background: #f5f5f5;
+  --workspace-background: #f6f6f7;
   --workspace-panel: #ffffff;
-  --workspace-border: #dedede;
-  --workspace-text: #0a0a0a;
-  --workspace-text-muted: #4a4a4a;
+  --workspace-border: #e2e2e5;
+  --workspace-text: #17171a;
+  --workspace-text-muted: #55565c;
   --workspace-primary: oklch(var(--p));
   --glow-color: rgba(124, 58, 237, 0.35);
 }
 
 [data-theme="dark"] {
-  --workspace-background: #0d0d0d;
-  --workspace-panel: #141414;
-  --workspace-border: #282828;
-  --workspace-text: #f0f0f0;
-  --workspace-text-muted: #9a9a9a;
+  --workspace-background: #0e0e10;
+  --workspace-panel: #161618;
+  --workspace-border: #2a2a2e;
+  --workspace-text: #ececee;
+  --workspace-text-muted: #a2a2a9;
   --glow-color: rgba(124, 58, 237, 0.25);
 }
 
 [data-theme="light"] {
-  --workspace-background: #f5f5f5;
+  --workspace-background: #f6f6f7;
   --workspace-panel: #ffffff;
-  --workspace-border: #dedede;
-  --workspace-text: #0a0a0a;
-  --workspace-text-muted: #4a4a4a;
+  --workspace-border: #e2e2e5;
+  --workspace-text: #17171a;
+  --workspace-text-muted: #55565c;
   --glow-color: rgba(124, 58, 237, 0.35);
 }
 
 /* First paint: use system preference when no data-theme set yet */
 @media (prefers-color-scheme: dark) {
   html:not([data-theme]) {
-    --workspace-background: #0d0d0d;
-    --workspace-panel: #141414;
-    --workspace-border: #252525;
-    --workspace-text: #ececec;
-    --workspace-text-muted: #858585;
+    --workspace-background: #0e0e10;
+    --workspace-panel: #161618;
+    --workspace-border: #28282c;
+    --workspace-text: #ececee;
+    --workspace-text-muted: #9a9aa1;
     --glow-color: rgba(124, 58, 237, 0.25);
   }
 }
@@ -52,6 +52,8 @@
 html {
   /* Slightly larger base for readability in dense tool UIs */
   font-size: 106%;
+  /* Consistent, readable letter spacing across the app */
+  letter-spacing: -0.003em;
 }
 
 html,
@@ -61,11 +63,69 @@ body {
 
 body {
   font-size: 1rem;
-  line-height: 1.5;
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  font-feature-settings: "cv01", "cv03", "cv04";
+  /* Inter: disambiguated glyphs, tabular-friendly alternates */
+  font-feature-settings: "cv05", "cv08", "cv11", "ss01";
   text-rendering: optimizeLegibility;
+}
+
+/* ── Global typography ─────────────────────────────────── */
+
+/* Headings: tighter tracking + slightly taller line-height for clarity */
+h1, h2, h3, h4, h5, h6 {
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  text-wrap: balance;
+}
+
+/* Long-form paragraphs read better with a touch more leading */
+p {
+  line-height: 1.65;
+  text-wrap: pretty;
+}
+
+/* Code & mono: JetBrains Mono ligatures + comfortable sizing */
+code,
+kbd,
+pre,
+samp,
+.font-mono {
+  font-feature-settings: "liga", "calt", "zero";
+}
+
+code,
+pre {
+  font-size: 0.9375em;
+  line-height: 1.6;
+}
+
+kbd {
+  font-size: 0.8125em;
+  letter-spacing: 0.01em;
+}
+
+/* Numeric data aligns cleanly everywhere */
+.tabular-nums,
+input[type="number"] {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Muted text: keep contrast accessible in both themes */
+[data-theme="dark"] {
+  /* Slightly brighter muted text on dark for WCAG AA on panels */
+  color-scheme: dark;
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+}
+
+/* Selection: readable in both themes */
+::selection {
+  background: rgba(124, 58, 237, 0.28);
+  color: inherit;
 }
 
 /* ── Animations ─────────────────────────────────────────── */

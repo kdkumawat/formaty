@@ -35,9 +35,9 @@ import {
 import { StarIcon as StarSolidIcon } from "@heroicons/react/24/solid";
 import { JsonDiffEditor, type DiffNavState, type JsonDiffEditorRef } from "@/components/JsonDiffEditor";
 import { ListComparePanel, type ListCompareExport } from "@/components/ListComparePanel";
+import { DEFAULT_LIST_PARSE_OPTIONS, type ListParseOptions } from "@/lib/json/listCompare";
 import {
   UtilsPanel,
-  applyUtilSample,
   defaultUtilToolState,
   type UtilTab,
   type UtilsStateMap,
@@ -436,6 +436,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   const [listToolbarHost, setListToolbarHost] = useState<HTMLElement | null>(null);
   /** Active list-compare result for shared OutputActionBar copy/download */
   const [listCompareExport, setListCompareExport] = useState<ListCompareExport | null>(null);
+  const [listCompareOptions, setListCompareOptions] = useState<ListParseOptions>(DEFAULT_LIST_PARSE_OPTIONS);
   const [themeMode, setThemeMode] = useState<ThemeMode>("system");
   const [systemDark, setSystemDark] = useState(false);
   const [themeSynced, setThemeSynced] = useState(false);
@@ -2265,15 +2266,6 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     router,
   ]);
 
-  const loadUtilSampleFromToolbar = useCallback(() => {
-    setUtilsByTool((prev) => ({
-      ...prev,
-      [utilTab]: applyUtilSample(utilTab, prev[utilTab]),
-    }));
-    setShareNotification("Sample loaded");
-    window.setTimeout(() => setShareNotification(null), 1500);
-  }, [utilTab]);
-
   const activeCopyAsOptions = useMemo(() => {
     if (isUtilsMode && utilTab === "uuid") return UUID_COPY_AS_OPTIONS;
     if (isUtilsMode) return [...DEFAULT_COPY_AS_OPTIONS, ...UUID_COPY_AS_OPTIONS.filter((o) => o.id === "newline" || o.id === "comma")];
@@ -2842,17 +2834,6 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
             </>
           )}
 
-          {isUtilsMode && (
-            <button
-              type="button"
-              className={`${linkBtnClass} h-7 min-h-7 shrink-0 px-2 text-[11px] font-medium`}
-              title="Load sample for current util"
-              onClick={loadUtilSampleFromToolbar}
-            >
-              Sample
-            </button>
-          )}
-
           <span className="min-w-2 flex-1" />
 
           <OutputActionBar
@@ -2871,7 +2852,29 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
               settingsOpen={transformConfigOpen}
               onSettingsOpenChange={setTransformConfigOpen}
               settingsContent={
-                <div className="space-y-2.5">
+                <div className="space-y-3">
+                  {/* Active tab */}
+                  <div className="flex items-center gap-1 rounded-lg border border-[var(--workspace-border)] bg-[var(--workspace-background)] p-1">
+                    {(
+                      [
+                        ["transform", !isDiffMode && !isUtilsMode],
+                        ["compare", isDiffMode],
+                        ["utils", isUtilsMode],
+                      ] as const
+                    ).map(([m, active]) => (
+                      <span
+                        key={m}
+                        className={`flex-1 rounded-md px-2 py-1 text-center text-[10px] font-semibold uppercase tracking-wide transition-colors ${
+                          active ? "bg-primary/12 text-primary" : "text-[var(--workspace-text-muted)]"
+                        }`}
+                      >
+                        {m}
+                      </span>
+                    ))}
+                  </div>
+
+                  {!isDiffMode && !isUtilsMode && (
+                  <>
                   <div className="flex flex-wrap gap-1.5">
                     {(
                       [
@@ -2896,11 +2899,76 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                       </button>
                     ))}
                   </div>
+                  </>
+                  )}
                   {isDiffMode && (
+                  <>
                     <p className="rounded-md bg-primary/5 px-2 py-1.5 text-[10px] leading-snug text-[var(--workspace-text-muted)]">
                       <strong className="text-primary">Compare</strong> — options below save preferences only.
                     </p>
+                    <div className="flex flex-col gap-1">
+                      <p className={settingsLabelClass}>Font</p>
+                      <div className={settingsBtnGroupClass}>
+                        <button type="button" aria-label="Decrease font size" className={settingsStepBtnClass} onClick={() => setEditorFontSize((s) => Math.max(10, s - 1))}><MinusIcon className="h-3.5 w-3.5" aria-hidden /></button>
+                        <span className="flex h-7 min-w-[1.75rem] items-center justify-center px-1.5 text-xs font-medium tabular-nums text-[var(--workspace-text)]">{editorFontSize}</span>
+                        <button type="button" aria-label="Increase font size" className={settingsStepBtnClass} onClick={() => setEditorFontSize((s) => Math.min(24, s + 1))}><PlusIcon className="h-3.5 w-3.5" aria-hidden /></button>
+                        <button type="button" aria-label="Reset font size" className={settingsStepBtnClass} onClick={() => setEditorFontSize(14)}><ArrowPathIcon className="h-3 w-3" aria-hidden /></button>
+                      </div>
+                    </div>
+                    {diffKind === "list" && (
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]">List parse options</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(
+                          [
+                            ["trim", "Trim whitespace"],
+                            ["ignoreEmpty", "Skip empty"],
+                            ["caseInsensitive", "Ignore case"],
+                            ["stripQuotes", "Strip quotes"],
+                            ["numericNormalize", "Normalize numbers"],
+                          ] as const
+                        ).map(([key, label]) => (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() =>
+                              setListCompareOptions((prev) => ({ ...prev, [key]: !prev[key as keyof ListParseOptions] }))
+                            }
+                            className={`inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-medium transition-colors ${
+                              listCompareOptions[key as keyof ListParseOptions]
+                                ? "border-primary/30 bg-primary/12 text-primary"
+                                : "border-[var(--workspace-border)] text-[var(--workspace-text-muted)] hover:border-primary/20 hover:text-[var(--workspace-text)]"
+                            }`}
+                          >
+                            <span
+                              className={`h-1.5 w-1.5 rounded-full ${listCompareOptions[key as keyof ListParseOptions] ? "bg-primary" : "bg-[var(--workspace-border)]"}`}
+                            />
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    )}
+                  </>
                   )}
+                  {isUtilsMode && (
+                  <>
+                    <p className="rounded-md bg-primary/5 px-2 py-1.5 text-[10px] leading-snug text-[var(--workspace-text-muted)]">
+                      <strong className="text-primary">Utils</strong> — tools update live as you type.
+                    </p>
+                    <div className="flex flex-col gap-1">
+                      <p className={settingsLabelClass}>Font</p>
+                      <div className={settingsBtnGroupClass}>
+                        <button type="button" aria-label="Decrease font size" className={settingsStepBtnClass} onClick={() => setEditorFontSize((s) => Math.max(10, s - 1))}><MinusIcon className="h-3.5 w-3.5" aria-hidden /></button>
+                        <span className="flex h-7 min-w-[1.75rem] items-center justify-center px-1.5 text-xs font-medium tabular-nums text-[var(--workspace-text)]">{editorFontSize}</span>
+                        <button type="button" aria-label="Increase font size" className={settingsStepBtnClass} onClick={() => setEditorFontSize((s) => Math.min(24, s + 1))}><PlusIcon className="h-3.5 w-3.5" aria-hidden /></button>
+                        <button type="button" aria-label="Reset font size" className={settingsStepBtnClass} onClick={() => setEditorFontSize(14)}><ArrowPathIcon className="h-3 w-3" aria-hidden /></button>
+                      </div>
+                    </div>
+                  </>
+                  )}
+                  {!isDiffMode && !isUtilsMode && (
+                  <>
                   {/* Steppers — content-width only */}
                   <div className="flex flex-wrap items-end gap-3">
                     <div className="flex flex-col gap-1">
@@ -3117,6 +3185,8 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                     <ArrowPathIcon className="h-3.5 w-3.5" />
                     Reset to default
                   </button>
+                  </>
+                  )}
                 </div>
               }
               onShare={() => {
@@ -3568,7 +3638,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
           </div>
           )}
           <div className="relative flex min-h-[200px] min-h-0 flex-1 flex-col overflow-hidden">
-            <motion.div
+            <div
               key={
                 isUtilsMode
                   ? `utils-${utilTab}`
@@ -3576,9 +3646,6 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                     ? `diff-${diffKind}`
                     : `transform-${rightView}`
               }
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
               className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
             >
             {isUtilsMode ? (
@@ -3611,6 +3678,8 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                     toolbarHost={listToolbarHost}
                     onExportChange={setListCompareExport}
                     fontSize={editorFontSize}
+                    options={listCompareOptions}
+                    onOptionsChange={setListCompareOptions}
                   />
                 ) : (
                   <div className="flex min-h-0 flex-1 overflow-hidden">
@@ -4119,7 +4188,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                 );
               })()
             ) : null}
-            </motion.div>
+            </div>
           </div>
         </div>
       </div>
