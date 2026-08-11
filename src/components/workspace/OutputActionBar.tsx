@@ -4,17 +4,17 @@ import { useEffect, useState, type ReactNode } from "react";
 import {
   ArrowDownTrayIcon,
   ArrowPathIcon,
+  ArrowUturnLeftIcon,
+  ArrowUturnRightIcon,
   ArrowsPointingInIcon,
   ArrowsPointingOutIcon,
   ChevronDownIcon,
   ClipboardDocumentIcon,
-  Cog6ToothIcon,
   ShareIcon,
 } from "@heroicons/react/24/outline";
 import { Dropdown } from "./Dropdown";
 import { Tooltip } from "./Tooltip";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   menuItemClass as sharedMenuItemClass,
   menuSectionLabel as sharedMenuSectionLabel,
@@ -23,6 +23,8 @@ import {
 
 export type OutputActionId =
   | "reset"
+  | "undo"
+  | "redo"
   | "share"
   | "copy"
   | "copyAs"
@@ -51,6 +53,8 @@ export type OutputActionVisibility = Record<OutputActionId, boolean>;
 
 const DEFAULT_VISIBILITY: OutputActionVisibility = {
   reset: true,
+  undo: false,
+  redo: false,
   share: true,
   copy: true,
   copyAs: true,
@@ -61,7 +65,7 @@ const DEFAULT_VISIBILITY: OutputActionVisibility = {
 
 const VIS_STORAGE_KEY = "formaty-output-action-visibility";
 
-function loadVisibility(): OutputActionVisibility {
+export function loadVisibility(): OutputActionVisibility {
   try {
     const raw = localStorage.getItem(VIS_STORAGE_KEY);
     if (!raw) return { ...DEFAULT_VISIBILITY };
@@ -72,7 +76,7 @@ function loadVisibility(): OutputActionVisibility {
   }
 }
 
-function saveVisibility(v: OutputActionVisibility) {
+export function saveVisibility(v: OutputActionVisibility) {
   try {
     localStorage.setItem(VIS_STORAGE_KEY, JSON.stringify(v));
   } catch {
@@ -100,14 +104,15 @@ export type OutputActionBarProps = {
   copyAsOptions?: CopyAsOption[];
   onReset?: () => void;
   resetLabel?: string;
+  onUndo?: () => void;
+  onRedo?: () => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
   className?: string;
   extra?: ReactNode;
   forceHide?: Partial<Record<OutputActionId, boolean>>;
-  showVisibilityToggle?: boolean;
-  /** Full workspace settings panel (opens from gear) */
-  settingsContent?: ReactNode;
-  settingsOpen?: boolean;
-  onSettingsOpenChange?: (open: boolean) => void;
+  /** Visibility is fully controlled by the parent (settings panel lives in the header gear). */
+  visibility: OutputActionVisibility;
 };
 
 const iconBtn =
@@ -129,8 +134,10 @@ function IconButton({
   );
 }
 
-const ACTION_LABELS: Record<OutputActionId, string> = {
+export const ACTION_LABELS: Record<OutputActionId, string> = {
   reset: "Reset",
+  undo: "Undo",
+  redo: "Redo",
   share: "Share",
   copy: "Copy",
   copyAs: "Copy as…",
@@ -228,26 +235,19 @@ export function OutputActionBar({
   copyAsOptions = DEFAULT_COPY_AS_OPTIONS,
   onReset,
   resetLabel = "Reset",
+  onUndo,
+  onRedo,
+  canUndo,
+  canRedo,
   className = "",
   extra,
   forceHide,
-  showVisibilityToggle = true,
-  settingsContent,
-  settingsOpen,
-  onSettingsOpenChange,
+  visibility,
 }: OutputActionBarProps) {
   const [copyAsOpen, setCopyAsOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
-  const [localSettingsOpen, setLocalSettingsOpen] = useState(false);
-  const [visibility, setVisibility] = useState<OutputActionVisibility>(DEFAULT_VISIBILITY);
   const [lastCopyAsId, setLastCopyAsId] = useState<CopyAsFormat>(copyAsOptions[0]?.id ?? "base64");
 
-  const settingsIsOpen = settingsOpen ?? localSettingsOpen;
-  const setSettingsOpen = onSettingsOpenChange ?? setLocalSettingsOpen;
-
-  useEffect(() => {
-    setVisibility(loadVisibility());
-  }, []);
 
   // Keep the remembered copy format valid when options change (tool/mode switch).
   useEffect(() => {
@@ -267,18 +267,6 @@ export function OutputActionBar({
 
   const show = (id: OutputActionId) =>
     visibility[id] !== false && forceHide?.[id] !== true;
-
-  const toggleVis = (id: OutputActionId) => {
-    setVisibility((prev) => {
-      const next = { ...prev, [id]: !prev[id] };
-      const anyOn = (Object.keys(next) as OutputActionId[]).some(
-        (k) => next[k] && forceHide?.[k] !== true,
-      );
-      if (!anyOn) return prev;
-      saveVisibility(next);
-      return next;
-    });
-  };
 
   const downloadControl = isGraphView ? (
     <Dropdown
@@ -413,37 +401,59 @@ export function OutputActionBar({
 
   const shareControl =
     show("share") && canShare ? (
-      canShareAll && onShareAll ? (
-        <Dropdown
-          open={shareOpen}
-          onOpenChange={setShareOpen}
-          side="bottom"
-          align="end"
-          contentClassName={`w-max min-w-[8rem]`}
-          trigger={
-            <Tooltip content="Share link">
+      <Dropdown
+        open={shareOpen}
+        onOpenChange={setShareOpen}
+        side="bottom"
+        align="end"
+        contentClassName={`w-max min-w-[8rem]`}
+        trigger={
+          <Tooltip content={`${shareLabel} - creates a link`}>
+            <div className="flex items-center">
               <button
                 type="button"
-                className={`${iconBtn} gap-0.5 !w-auto px-1.5 ${actionBounce === "share" ? "scale-90" : ""}`}
+                className={`${iconBtn} !w-6 ${actionBounce === "share" ? "scale-90" : ""}`}
                 aria-label="Share"
+                // Radix opens the trigger on pointerdown - stop it so a plain
+                // share click never pops the menu open.
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  onShare();
+                }}
               >
                 <ShareIcon className="h-3.5 w-3.5" />
-                <ChevronDownIcon className="h-2.5 w-2.5 opacity-60" />
               </button>
-            </Tooltip>
-          }
-        >
-          <div className="flex flex-col" onClick={(e) => e.stopPropagation()}>
-            <button
-              type="button"
-              className={sharedMenuItemClass}
-              onClick={() => {
-                onShare();
-                setShareOpen(false);
-              }}
-            >
-              Share this tab
-            </button>
+              <button
+                type="button"
+                className={`${iconBtn} !w-4 rounded-l-none`}
+                aria-label="Share options"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  setShareOpen((v) => !v);
+                }}
+              >
+                <ChevronDownIcon className="h-2 w-2 opacity-70" />
+              </button>
+            </div>
+          </Tooltip>
+        }
+      >
+        <div className="flex flex-col" onClick={(e) => e.stopPropagation()}>
+          <button
+            type="button"
+            className={sharedMenuItemClass}
+            onClick={() => {
+              onShare();
+              setShareOpen(false);
+            }}
+          >
+            {canShareAll ? "Share this tab" : "Share link"}
+          </button>
+          {canShareAll && onShareAll && (
             <button
               type="button"
               className={sharedMenuItemClass}
@@ -454,83 +464,10 @@ export function OutputActionBar({
             >
               Share all tabs
             </button>
-          </div>
-        </Dropdown>
-      ) : (
-        <Tooltip content={`${shareLabel} - creates a link`}>
-          <button
-            type="button"
-            className={`${iconBtn} ${actionBounce === "share" ? "scale-90" : ""}`}
-            onClick={onShare}
-            aria-label="Share"
-          >
-            <ShareIcon className="h-3.5 w-3.5" />
-          </button>
-        </Tooltip>
-      )
+          )}
+        </div>
+      </Dropdown>
     ) : null;
-
-  /** Toolbar-button visibility toggles, shown inside the Settings popup (inline). */
-  const visibilitySection = showVisibilityToggle ? (
-    <div className="mt-2.5 border-t border-[var(--workspace-border)]/60 pt-2">
-      <div className="flex items-center gap-2.5 pb-1">
-        <p className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--workspace-text-muted)]">
-          Toolbar buttons
-        </p>
-        <span className="h-px flex-1 bg-[var(--workspace-border)]/60" aria-hidden />
-      </div>
-      <div className="grid grid-cols-2 gap-x-2">
-        {(Object.keys(ACTION_LABELS) as OutputActionId[]).map((id) => {
-          if (id === "copyAs") return null; // merged into Copy
-          if (id === "useAsInput") return null; // removed
-          if (forceHide?.[id]) return null;
-          if (id === "share" && !canShare) return null;
-          if (id === "reset" && !onReset) return null;
-          if (id === "maximize" && !onToggleMaximize) return null;
-          return (
-            <label
-              key={id}
-              className="flex min-h-7 cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 text-xs text-[var(--workspace-text)] transition-colors hover:bg-primary/5"
-            >
-              <Checkbox
-                checked={visibility[id] !== false}
-                onCheckedChange={() => toggleVis(id)}
-              />
-              {ACTION_LABELS[id]}
-            </label>
-          );
-        })}
-      </div>
-    </div>
-  ) : null;
-
-  const settingsControl = settingsContent ? (
-    <Dropdown
-      open={settingsIsOpen}
-      onOpenChange={setSettingsOpen}
-      side="bottom"
-      align="end"
-      preferScreenRight
-      edgePadding={10}
-      contentClassName={`w-[min(21.5rem,calc(100vw-1.25rem))] max-h-[min(78vh,42rem)] overflow-y-auto`}
-      trigger={
-        <Tooltip content="Settings">
-          <button
-            type="button"
-            className={`${iconBtn} ${settingsIsOpen ? "text-primary bg-primary/10" : ""}`}
-            aria-label="Settings"
-          >
-            <Cog6ToothIcon className="h-3.5 w-3.5" />
-          </button>
-        </Tooltip>
-      }
-    >
-      <div className="p-2.5 text-xs" onClick={(e) => e.stopPropagation()}>
-        {settingsContent}
-        {visibilitySection}
-      </div>
-    </Dropdown>
-  ) : null;
 
   return (
     <div
@@ -538,11 +475,32 @@ export function OutputActionBar({
       role="toolbar"
       aria-label="Output actions"
     >
-      {settingsControl}
       {show("reset") && onReset && (
         <Tooltip content={resetLabel}>
           <IconButton onClick={onReset} aria-label={resetLabel}>
             <ArrowPathIcon className="h-3.5 w-3.5" />
+          </IconButton>
+        </Tooltip>
+      )}
+      {show("undo") && onUndo && (
+        <Tooltip content="Undo (Ctrl+Z)">
+          <IconButton
+            onClick={onUndo}
+            aria-label="Undo"
+            disabled={typeof canUndo === "boolean" ? !canUndo : false}
+          >
+            <ArrowUturnLeftIcon className="h-3.5 w-3.5" />
+          </IconButton>
+        </Tooltip>
+      )}
+      {show("redo") && onRedo && (
+        <Tooltip content="Redo (Ctrl+⇧Z)">
+          <IconButton
+            onClick={onRedo}
+            aria-label="Redo"
+            disabled={typeof canRedo === "boolean" ? !canRedo : false}
+          >
+            <ArrowUturnRightIcon className="h-3.5 w-3.5" />
           </IconButton>
         </Tooltip>
       )}

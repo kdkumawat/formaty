@@ -1,9 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { MagnifyingGlassIcon, SunIcon, MoonIcon, ComputerDesktopIcon } from "@heroicons/react/24/outline";
+import {
+  Cog6ToothIcon,
+  MagnifyingGlassIcon,
+  SunIcon,
+  MoonIcon,
+  ComputerDesktopIcon,
+} from "@heroicons/react/24/outline";
+import type { ReactNode } from "react";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
+import { Dropdown } from "./Dropdown";
+import { Tooltip } from "./Tooltip";
 
 type ThemeMode = "system" | "dark" | "light";
 
@@ -11,6 +20,10 @@ interface HeaderProps {
   themeMode: ThemeMode;
   onThemeChange: (mode: ThemeMode) => void;
   onOpenCommandPalette?: () => void;
+  /** Full workspace settings panel (opens from gear in the top-right). */
+  settingsContent?: ReactNode;
+  settingsOpen?: boolean;
+  onSettingsOpenChange?: (open: boolean) => void;
 }
 
 const themeOptions: { mode: ThemeMode; label: string; Icon: typeof SunIcon }[] = [
@@ -25,7 +38,14 @@ const GitHubIcon = () => (
   </svg>
 );
 
-export function Header({ themeMode, onThemeChange, onOpenCommandPalette }: HeaderProps) {
+export function Header({
+  themeMode,
+  onThemeChange,
+  onOpenCommandPalette,
+  settingsContent,
+  settingsOpen = false,
+  onSettingsOpenChange,
+}: HeaderProps) {
   return (
     <header
       className="relative flex shrink-0 flex-nowrap items-center justify-between gap-3 border-b border-[var(--workspace-border)] bg-[var(--workspace-background)] px-3"
@@ -98,6 +118,39 @@ export function Header({ themeMode, onThemeChange, onOpenCommandPalette }: Heade
             </Button>
           ))}
         </div>
+
+        {/* Settings gear - opens the full workspace settings panel */}
+        {settingsContent && (
+          <Dropdown
+            open={settingsOpen}
+            onOpenChange={(open) => onSettingsOpenChange?.(open)}
+            side="bottom"
+            align="end"
+            preferScreenRight
+            edgePadding={10}
+            contentClassName="w-[min(21.5rem,calc(100vw-1.25rem))] max-h-[min(78vh,42rem)] overflow-y-auto"
+            trigger={
+              <Tooltip content="Settings">
+                <button
+                  type="button"
+                  aria-label="Settings"
+                  title="Settings"
+                  className={`inline-flex h-auto min-h-0 items-center justify-center rounded-lg border border-[var(--workspace-border)] bg-[var(--workspace-panel)] p-1.5 transition-all duration-150 [&_svg]:!size-3.5 ${
+                    settingsOpen
+                      ? "border-primary/40 bg-primary/10 text-primary"
+                      : "text-[var(--workspace-text-muted)] hover:border-primary/30 hover:text-[var(--workspace-text)]"
+                  }`}
+                >
+                  <Cog6ToothIcon className="h-3.5 w-3.5" aria-hidden />
+                </button>
+              </Tooltip>
+            }
+          >
+            <div className="p-2.5 text-xs" onClick={(e) => e.stopPropagation()}>
+              {settingsContent}
+            </div>
+          </Dropdown>
+        )}
       </div>
     </header>
   );

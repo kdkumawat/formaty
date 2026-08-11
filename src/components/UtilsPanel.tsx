@@ -1,14 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { motion } from "framer-motion";
 import {
   ArrowLongRightIcon,
   ArrowUturnLeftIcon,
   ArrowUturnRightIcon,
+  CheckIcon,
   DocumentDuplicateIcon,
 } from "@heroicons/react/24/outline";
 import { NumberStepper } from "@/components/workspace/NumberStepper";
 import { Tooltip } from "@/components/workspace/Tooltip";
+import { toast } from "@/components/Toast";
+import { Switch } from "@/components/ui/switch";
 import {
   convertNumberBase,
   decodeJwt,
@@ -260,7 +264,6 @@ interface UtilsPanelProps {
   linkBtnClass: string;
   panelClass: string;
   isDark?: boolean;
-  onNotify?: (msg: string) => void;
   activeTab: UtilTab;
   onActiveTabChange: (tab: UtilTab) => void;
   stateByTool: UtilsStateMap;
@@ -272,7 +275,6 @@ interface UtilsPanelProps {
 export function UtilsPanel({
   linkBtnClass,
   panelClass,
-  onNotify,
   activeTab,
   onActiveTabChange,
   stateByTool,
@@ -398,7 +400,10 @@ export function UtilsPanel({
     [activeTab, onStateByToolChange, pushInputHistory],
   );
 
-  const flash = useCallback((msg: string) => onNotify?.(msg), [onNotify]);
+  const flash = useCallback(
+    (msg: string) => toast({ message: msg, type: /failed/i.test(msg) ? "error" : "success" }),
+    [],
+  );
 
   const copy = async (text: string, label = "Copied") => {
     try {
@@ -406,6 +411,71 @@ export function UtilsPanel({
       flash(label);
     } catch {
       flash("Copy failed");
+    }
+  };
+
+  /** Auto-copy the generated batch to the clipboard (persisted, default off). */
+  const [copyOnGenerate, setCopyOnGenerate] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("formaty-util-copy-on-generate") === "1";
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem("formaty-util-copy-on-generate", copyOnGenerate ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }, [copyOnGenerate]);
+
+  /** UUID card that was just copied — shows a checkmark flash. */
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const copiedTimerRef = useRef<number | null>(null);
+  const gridRef = useRef<HTMLUListElement | null>(null);
+  const [focusIndex, setFocusIndex] = useState<number | null>(null);
+
+  const copyUuid = (i: number, id: string) => {
+    setCopiedIndex(i);
+    if (copiedTimerRef.current) window.clearTimeout(copiedTimerRef.current);
+    copiedTimerRef.current = window.setTimeout(() => setCopiedIndex(null), 900);
+    void copy(id, "UUID copied");
+  };
+
+  /** Keyboard grid navigation: arrows move focus, Enter copies the focused card. */
+  const handleUuidGridKeyDown = (e: React.KeyboardEvent<HTMLUListElement>) => {
+    const n = state.uuidList.length;
+    if (n === 0) return;
+    const target = e.target as HTMLElement;
+    const current = Math.min(
+      n - 1,
+      Math.max(0, Number(target.closest("li")?.getAttribute("data-index") ?? focusIndex ?? 0)),
+    );
+    const move = (idx: number) => {
+      const els = gridRef.current?.querySelectorAll<HTMLElement>("li[data-index]");
+      const next = Math.min(n - 1, Math.max(0, idx));
+      els?.[next]?.focus();
+    };
+    if (e.key === "Enter") {
+      const id = state.uuidList[current];
+      if (id) {
+        e.preventDefault();
+        copyUuid(current, id);
+      }
+      return;
+    }
+    if (e.key === "ArrowRight") {
+      e.preventDefault();
+      move(current + 1);
+    } else if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      move(current - 1);
+    } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const grid = gridRef.current;
+      const cols = grid ? Math.max(1, getComputedStyle(grid).gridTemplateColumns.split(" ").length) : 1;
+      move(e.key === "ArrowDown" ? current + cols : current - cols);
     }
   };
 
@@ -493,6 +563,7 @@ export function UtilsPanel({
         symbols: state.pwSymbols,
       });
       patch({ output: pw, error: null });
+      if (copyOnGenerate) void copy(pw, "Password copied");
     } catch (e) {
       patch({ error: e instanceof Error ? e.message : "Failed" });
     }
@@ -502,6 +573,7 @@ export function UtilsPanel({
     const n = Math.max(1, Math.min(50, state.uuidCount));
     const list = Array.from({ length: n }, () => generateUuidV4());
     patch({ uuidList: list, output: list.join("\n"), error: null });
+    if (copyOnGenerate) void copy(list.join("\n"), n === 1 ? "UUID copied" : `${n} UUIDs copied`);
   };
 
   const insertNow = () => {
@@ -596,8 +668,8 @@ export function UtilsPanel({
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       {GENERATOR_TABS.has(activeTab) ? (
         <div className="flex h-full min-h-0 flex-col">
-          <div className={`${paneHeader} flex-wrap gap-1.5`}>
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--workspace-text-muted)]">
+          <div className="flex h-9 shrink-0 items-center gap-1.5 border-b border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-2">
+            <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-[var(--workspace-text-muted)]">
               {activeLabel}
             </span>
             <span className="flex-1" />
@@ -605,8 +677,8 @@ export function UtilsPanel({
               <>
                 <NumberStepper label="Count" value={state.uuidCount} min={1} max={50} onChange={(n) => patch({ uuidCount: n })} aria-label="UUID count" />
                 <button type="button" className={toolBtn(false)} onClick={regenerateUuids} title="Generate a new batch">New</button>
-                <button type="button" className={toolBtn(false)} onClick={() => { const id = generateUuidV4(); patch({ uuidList: [id], output: id, error: null }); }}>One</button>
-                <button type="button" className={toolBtn(false)} onClick={() => { const id = uuidNil(); patch({ uuidList: [id], output: id, error: null }); }}>NIL</button>
+                <button type="button" className={toolBtn(false)} onClick={() => { const id = generateUuidV4(); patch({ uuidList: [id], output: id, error: null }); if (copyOnGenerate) void copy(id, "UUID copied"); }}>One</button>
+                <button type="button" className={toolBtn(false)} onClick={() => { const id = uuidNil(); patch({ uuidList: [id], output: id, error: null }); if (copyOnGenerate) void copy(id, "UUID copied"); }}>NIL</button>
                 <button type="button" className={toolBtn(false)} disabled={!state.output} onClick={() => void copy(state.output, "UUIDs copied")} title="Copy all">Copy all</button>
               </>
             ) : (
@@ -616,6 +688,13 @@ export function UtilsPanel({
                 <button type="button" className={toolBtn(false)} disabled={!state.output} onClick={() => void copy(state.output, "Password copied")} title="Copy password">Copy</button>
               </>
             )}
+            <label
+              className="flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-md border border-[var(--workspace-border)]/60 bg-muted/30 px-2 text-[10px] font-medium text-[var(--workspace-text-muted)] transition-colors hover:border-primary/30 hover:text-[var(--workspace-text)]"
+              title="Auto-copy the generated result to the clipboard"
+            >
+              <Switch checked={copyOnGenerate} onCheckedChange={setCopyOnGenerate} className="scale-75" />
+              <span>Auto-copy</span>
+            </label>
           </div>
           {activeTab === "password" && (
             <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-[var(--workspace-border)] bg-[var(--workspace-background)]/50 px-2 py-1.5">
@@ -650,32 +729,71 @@ export function UtilsPanel({
           )}
           <div className="flex min-h-0 flex-1 flex-col bg-[var(--workspace-panel)]">
             {activeTab === "uuid" && state.uuidList.length > 0 ? (
-              <ul className="grid min-h-0 flex-1 auto-rows-min grid-cols-1 gap-0.5 overflow-auto p-1.5 lg:grid-cols-2 lg:gap-x-3">
-                {state.uuidList.map((id, i) => (
-                  <li
+              <ul
+                ref={gridRef}
+                className="grid min-h-0 flex-1 auto-rows-min grid-cols-[repeat(auto-fill,minmax(min(19rem,100%),1fr))] content-start gap-1.5 overflow-auto p-2"
+                role="grid"
+                aria-label="Generated UUIDs — click a card or press Enter to copy"
+                onKeyDown={handleUuidGridKeyDown}
+              >
+                {state.uuidList.map((id, i) => {
+                  const isCopied = copiedIndex === i;
+                  return (
+                  <motion.li
                     key={`${id}-${i}`}
-                    className="group flex min-w-0 items-center gap-2 rounded-md px-2 py-1 font-mono text-[12px] text-[var(--workspace-text)] transition-colors hover:bg-[var(--workspace-background)]"
+                    initial={{ opacity: 0, y: 6, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    transition={{ duration: 0.18, delay: Math.min(i * 0.035, 0.35), ease: "easeOut" }}
+                    data-index={i}
+                    role="gridcell"
+                    tabIndex={0}
+                    aria-label={`Copy UUID ${i + 1}: ${id}`}
+                    onClick={() => copyUuid(i, id)}
+                    onFocus={() => setFocusIndex(i)}
+                    className={`group flex min-w-0 cursor-pointer items-center gap-2.5 rounded-lg border px-2.5 py-1.5 font-mono text-[12px] text-[var(--workspace-text)] transition-all duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary/60 ${
+                      isCopied
+                        ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-500"
+                        : "border-[var(--workspace-border)]/70 bg-[var(--workspace-background)]/50 hover:-translate-y-px hover:border-primary/40 hover:bg-[var(--workspace-background)] hover:shadow-[0_2px_8px_-2px_rgba(0,0,0,0.35)]"
+                    }`}
                     style={{ fontSize }}
                   >
-                    <span className="w-6 shrink-0 select-none text-right text-[10px] tabular-nums text-[var(--workspace-text-muted)]/70">{i + 1}</span>
-                    <span className="min-w-0 flex-1 break-all select-all">{id}</span>
-                    <button
-                      type="button"
-                      className={`${linkBtnClass} h-6 w-6 shrink-0 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100`}
-                      title="Copy UUID"
-                      onClick={() => void copy(id, "UUID copied")}
+                    <span
+                      className={`w-5 shrink-0 select-none text-center text-[10px] tabular-nums ${
+                        isCopied ? "text-emerald-500/80" : "rounded bg-[var(--workspace-border)]/40 py-0.5 text-[var(--workspace-text-muted)]"
+                      }`}
                     >
-                      <DocumentDuplicateIcon className="h-3.5 w-3.5" />
-                    </button>
-                  </li>
-                ))}
+                      {i + 1}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate select-all" title={id}>
+                      {id}
+                    </span>
+                    {isCopied ? (
+                      <motion.span
+                        key="check"
+                        initial={{ scale: 0.5 }}
+                        animate={{ scale: 1 }}
+                        transition={{ type: "spring", stiffness: 420, damping: 18 }}
+                      >
+                        <CheckIcon className="h-4 w-4 shrink-0 text-emerald-500" />
+                      </motion.span>
+                    ) : (
+                      <DocumentDuplicateIcon className="h-3.5 w-3.5 shrink-0 text-[var(--workspace-text-muted)]/50 transition-colors duration-150 group-hover:text-[var(--workspace-text)]" />
+                    )}
+                  </motion.li>
+                  );
+                })}
               </ul>
-            ) : state.output ? (
+            ) : activeTab === "password" && state.output ? (
               <pre
-                className={`${fieldClass} overflow-auto whitespace-pre-wrap break-all`}
+                className={`${fieldClass} cursor-pointer overflow-auto whitespace-pre-wrap break-all`}
                 style={{ fontSize }}
                 tabIndex={0}
-                onKeyDown={selectFieldAll}
+                title="Click to copy"
+                onClick={() => void copy(state.output, "Password copied")}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void copy(state.output, "Password copied");
+                  else selectFieldAll(e);
+                }}
               >
                 {state.output}
               </pre>
