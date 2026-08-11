@@ -10,6 +10,12 @@ import {
 } from "@heroicons/react/24/outline";
 import { Dropdown } from "@/components/workspace/Dropdown";
 import {
+  menuItemClass as sharedMenuItemClass,
+  menuItemActiveClass as sharedMenuItemActiveClass,
+  menuSectionLabel as sharedMenuSectionLabel,
+} from "@/components/workspace/menuStyles";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
   BUCKET_LABELS,
   DEFAULT_LIST_PARSE_OPTIONS,
   compareLists,
@@ -19,7 +25,6 @@ import {
   listExportFormatLabel,
   sortListText,
   type ListBucket,
-  type ListDelimiter,
   type ListExportFormat,
   type ListParseOptions,
   type ListSortMode,
@@ -39,7 +44,6 @@ interface ListComparePanelProps {
   onRightChange: (value: string) => void;
   linkBtnClass: string;
   panelClass: string;
-  dropdownPanelClass: string;
   isDark?: boolean;
   leadingControls?: ReactNode;
   trailingControls?: ReactNode;
@@ -47,20 +51,10 @@ interface ListComparePanelProps {
   onExportChange?: (exportInfo: ListCompareExport | null) => void;
   fontSize?: number;
   options?: ListParseOptions;
-  onOptionsChange?: (options: ListParseOptions) => void;
 }
 
 const PRIMARY_BUCKETS: ListBucket[] = ["common", "leftOnly", "rightOnly", "union", "symmetric"];
 const DUPE_BUCKETS: ListBucket[] = ["leftDupes", "rightDupes"];
-
-const DELIMITERS: { id: ListDelimiter; label: string }[] = [
-  { id: "newline", label: "Newline" },
-  { id: "comma", label: "Comma" },
-  { id: "semicolon", label: "Semicolon" },
-  { id: "pipe", label: "Pipe" },
-  { id: "whitespace", label: "Whitespace" },
-  { id: "json", label: "JSON array" },
-];
 
 const EXPORT_GROUPS: { label: string; items: ListExportFormat[] }[] = [
   {
@@ -95,12 +89,12 @@ function CycleSortButton({
     mode === "none"
       ? `${titlePrefix}: click for A → Z`
       : mode === "asc"
-        ? `${titlePrefix}: A → Z — click for Z → A`
-        : `${titlePrefix}: Z → A — click to reset`;
+        ? `${titlePrefix}: A → Z - click for Z → A`
+        : `${titlePrefix}: Z → A - click to reset`;
   return (
     <button
       type="button"
-      className={`${linkBtnClass} btn-square h-7 min-h-7 w-7 disabled:opacity-40 ${
+      className={`${linkBtnClass} h-7 min-h-7 w-7 disabled:opacity-40 ${
         mode !== "none" ? "!bg-primary/12 !text-primary" : ""
       }`}
       disabled={disabled}
@@ -129,14 +123,12 @@ export function ListComparePanel({
   onRightChange,
   linkBtnClass,
   panelClass,
-  dropdownPanelClass,
   leadingControls,
   trailingControls,
   toolbarHost = null,
   onExportChange,
   fontSize = 14,
   options,
-  onOptionsChange,
 }: ListComparePanelProps) {
   const effectiveOptions = options ?? DEFAULT_LIST_PARSE_OPTIONS;
   const [resultSort, setResultSort] = useState<ListSortMode>("asc");
@@ -147,7 +139,6 @@ export function ListComparePanel({
   const [sqlColumn, setSqlColumn] = useState("id");
   const [sqlNotIn, setSqlNotIn] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
-  const [delimOpen, setDelimOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [bucketOpen, setBucketOpen] = useState(false);
   const [leftSnapshot, setLeftSnapshot] = useState<string | null>(null);
@@ -285,11 +276,6 @@ export function ListComparePanel({
     }
   };
 
-  const setOpt = <K extends keyof ListParseOptions>(key: K, value: ListParseOptions[K]) => {
-    const next = { ...effectiveOptions, [key]: value };
-    onOptionsChange?.(next);
-  };
-
   const bucketCount = (b: ListBucket) => {
     switch (b) {
       case "common":
@@ -329,50 +315,14 @@ export function ListComparePanel({
   };
 
   const menuItem = (active: boolean) =>
-    `${linkBtnClass} h-7 min-h-7 w-full justify-start px-2.5 text-[11px] font-medium ${
-      active ? "!bg-primary/12 !text-primary" : ""
-    }`;
+    `${sharedMenuItemClass} ${active ? sharedMenuItemActiveClass : ""}`;
 
   const visibleDupes = DUPE_BUCKETS.filter((b) => bucketCount(b) > 0);
 
-  // Single row — parent host owns overflow; no wrap so toolbar stays one line
+  // Single row - parent host owns overflow; no wrap so toolbar stays one line
   const toolbarBody = (
     <>
       {leadingControls}
-
-      <Dropdown
-        open={delimOpen}
-        onOpenChange={setDelimOpen}
-        side="bottom"
-        align="start"
-        contentClassName={`min-w-[9rem] rounded-xl border border-[var(--workspace-border)]/50 p-1 shadow-2xl ${dropdownPanelClass}`}
-        trigger={
-          <button
-            type="button"
-            className={`${linkBtnClass} h-7 min-h-7 gap-0.5 px-2 text-[11px] font-medium ${delimOpen ? "text-primary" : ""}`}
-            title="Split delimiter"
-          >
-            {DELIMITERS.find((d) => d.id === effectiveOptions.delimiter)?.label ?? DELIMITERS[0]?.label}
-            <ChevronDownIcon className="h-3 w-3 opacity-60" />
-          </button>
-        }
-      >
-        <div className="flex flex-col gap-0.5 p-0.5">
-          {DELIMITERS.map((d) => (
-            <button
-              key={d.id}
-              type="button"
-              className={menuItem(effectiveOptions.delimiter === d.id)}
-              onClick={() => {
-                setOpt("delimiter", d.id);
-                setDelimOpen(false);
-              }}
-            >
-              {d.label}
-            </button>
-          ))}
-        </div>
-      </Dropdown>
 
       <div className="mx-0.5 h-4 w-px shrink-0 bg-[var(--workspace-border)]" />
 
@@ -463,13 +413,13 @@ export function ListComparePanel({
             />
           </div>
 
-          {/* Middle divider — swap appears on hover */}
+          {/* Middle divider - swap appears on hover */}
           <div className="hidden lg:flex h-10 w-4 shrink-0 flex-col items-center justify-center border-x border-[var(--workspace-border)] bg-[var(--workspace-panel)] group/swap">
             <button
               type="button"
               title="Swap sides"
               onClick={swap}
-              className={`${linkBtnClass} btn-square h-7 min-h-7 w-7 opacity-0 transition-opacity duration-150 group-hover/swap:opacity-100`}
+              className={`${linkBtnClass} h-7 min-h-7 w-7 opacity-0 transition-opacity duration-150 group-hover/swap:opacity-100`}
             >
               <ArrowsRightLeftIcon className="h-3.5 w-3.5" />
             </button>
@@ -523,7 +473,7 @@ export function ListComparePanel({
               onOpenChange={setBucketOpen}
               side="bottom"
               align="start"
-              contentClassName={`min-w-[10rem] rounded-xl border border-[var(--workspace-border)]/50 p-1 shadow-2xl ${dropdownPanelClass}`}
+              contentClassName={`w-max min-w-[8rem]`}
               trigger={
                 <button
                   type="button"
@@ -535,7 +485,7 @@ export function ListComparePanel({
                 </button>
               }
             >
-              <div className="flex flex-col gap-0.5 p-0.5">
+              <div className="flex flex-col">
                 {PRIMARY_BUCKETS.map((b) => {
                   const n = bucketCount(b);
                   if (n === 0 && b === "symmetric") return null;
@@ -584,7 +534,7 @@ export function ListComparePanel({
               onOpenChange={setExportOpen}
               side="bottom"
               align="end"
-              contentClassName={`max-h-[50vh] w-52 overflow-y-auto rounded-xl border border-[var(--workspace-border)]/50 p-1.5 shadow-2xl ${dropdownPanelClass}`}
+              contentClassName={`max-h-[50vh] w-52 overflow-y-auto`}
               trigger={
                 <button
                   type="button"
@@ -596,12 +546,10 @@ export function ListComparePanel({
                 </button>
               }
             >
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col">
                 {EXPORT_GROUPS.map((group) => (
                   <div key={group.label}>
-                    <p className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[var(--workspace-text-muted)]">
-                      {group.label}
-                    </p>
+                    {sharedMenuSectionLabel(group.label)}
                     {group.items.map((f) => (
                       <button
                         key={f}
@@ -634,11 +582,9 @@ export function ListComparePanel({
               className="flex shrink-0 cursor-pointer items-center gap-0.5 text-[11px] text-[var(--workspace-text-muted)]"
               title="NOT IN"
             >
-              <input
-                type="checkbox"
-                className="checkbox checkbox-xs checkbox-primary"
+              <Checkbox
                 checked={sqlNotIn}
-                onChange={(e) => setSqlNotIn(e.target.checked)}
+                onCheckedChange={(c) => setSqlNotIn(c === true)}
               />
               NOT
             </label>

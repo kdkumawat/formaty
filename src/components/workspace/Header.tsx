@@ -35,7 +35,7 @@ export function Header({ themeMode, onThemeChange, onOpenCommandPalette }: Heade
       <div className="flex min-w-0 shrink-0 items-center gap-2.5">
         <Link href="/" className="flex shrink-0 items-center gap-0.5 transition-opacity hover:opacity-80">
           <Logo size={18} />
-          <span className="shrink-0 text-sm font-bold tracking-tight text-primary">ormaty</span>
+          <span className="truncate text-sm font-bold tracking-tight text-primary">ormaty</span>
         </Link>
         <span className="hidden h-3.5 w-px bg-[var(--workspace-border)] sm:block" aria-hidden />
         <span className="hidden select-none truncate font-mono text-[10px] tracking-wide text-[var(--workspace-text-muted)] sm:inline">
@@ -43,9 +43,9 @@ export function Header({ themeMode, onThemeChange, onOpenCommandPalette }: Heade
         </span>
       </div>
 
-      {/* Command palette trigger - centered absolutely */}
+      {/* Command palette trigger - centered absolutely (hidden on narrow screens so it never overlaps the brand/actions) */}
       {onOpenCommandPalette && (
-        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+        <div className="absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 md:block">
           <Button
             variant="ghost"
             onClick={onOpenCommandPalette}
@@ -63,7 +63,7 @@ export function Header({ themeMode, onThemeChange, onOpenCommandPalette }: Heade
       <div className="flex shrink-0 items-center gap-1">
         <Link
           href="/docs"
-          className="hidden rounded-md px-2 py-1 text-[11px] font-medium text-[var(--workspace-text-muted)] transition-colors hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] sm:inline-flex"
+          className="hidden rounded-md px-2 py-1 text-xs font-medium text-[var(--workspace-text-muted)] transition-colors hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] sm:inline-flex"
           aria-label="Documentation"
         >
           Docs
@@ -72,7 +72,7 @@ export function Header({ themeMode, onThemeChange, onOpenCommandPalette }: Heade
           href="https://github.com/kdkumawat/formaty"
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 rounded-md border border-[var(--workspace-border)] px-2 py-1 text-[11px] font-medium text-[var(--workspace-text-muted)] transition-all hover:border-primary/30 hover:text-[var(--workspace-text)]"
+          className="inline-flex items-center gap-1.5 rounded-md border border-[var(--workspace-border)] px-2 py-1 text-xs font-medium text-[var(--workspace-text-muted)] transition-all hover:border-primary/30 hover:text-[var(--workspace-text)]"
           aria-label="GitHub repository"
         >
           <GitHubIcon />

@@ -55,8 +55,9 @@ export function Dropdown({
           collisionPadding={edgePadding}
           alignOffset={preferScreenRight ? -6 : 0}
           className={cn(
-            "z-[200] min-w-[8rem] rounded-lg border border-[var(--workspace-border)]/50 bg-[var(--workspace-panel)] p-1.5 shadow-2xl",
-            "data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
+            // Borderless by design - a soft shadow + hairline ring (Linear/Vercel-style).
+            "z-[200] min-w-[9rem] rounded-lg bg-popover p-1.5 text-popover-foreground shadow-xl shadow-black/15 dark:shadow-black/50 ring-1 ring-black/5 dark:ring-white/10",
+            "data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=open]:slide-in-from-top-1.5",
             contentClassName,
           )}
         >

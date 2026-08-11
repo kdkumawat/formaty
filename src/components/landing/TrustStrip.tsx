@@ -20,7 +20,7 @@ const ITEMS = [
 
 export function TrustStrip() {
   return (
-    <section className="relative overflow-hidden border-y border-[var(--workspace-border)] bg-[var(--workspace-panel)] py-3.5">
+    <section className="fixed inset-x-0 bottom-0 z-40 overflow-hidden border-t border-[var(--workspace-border)] bg-[var(--workspace-panel)] py-2.5 backdrop-blur-sm">
       {/* Fade edges */}
       <div
         className="pointer-events-none absolute bottom-0 left-0 top-0 z-10 w-24"
@@ -32,10 +32,11 @@ export function TrustStrip() {
         style={{ background: "linear-gradient(to left, var(--workspace-panel), transparent)" }}
         aria-hidden
       />
-      {/* Marquee - single track, content doubled, -50% = exactly one set → seamless loop */}
+
+      {/* Marquee - two copies; gap-12 + pr-12 make the -50% translate seamless */}
       <div className="flex w-full overflow-hidden" aria-hidden>
         <div className="marquee-track flex shrink-0 items-center gap-12 pr-12">
-          {[...ITEMS, ...ITEMS, ...ITEMS, ...ITEMS].map(({ icon: Icon, text }, i) => (
+          {[...ITEMS, ...ITEMS].map(({ icon: Icon, text }, i) => (
             <div
               key={i}
               className="flex shrink-0 items-center gap-2 whitespace-nowrap text-[var(--workspace-text-muted)]"

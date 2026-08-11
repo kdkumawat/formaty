@@ -140,7 +140,7 @@ export const GraphView = forwardRef<GraphViewRef, GraphViewProps>(function Graph
     }
 
     ctx.scale(scale, scale);
-    ctx.fillStyle = isDark ? "#1e1e1e" : "#ffffff";
+    ctx.fillStyle = isDark ? "#12121a" : "#ffffff";
     ctx.fillRect(0, 0, width, height);
 
     try {
@@ -187,7 +187,7 @@ export const GraphView = forwardRef<GraphViewRef, GraphViewProps>(function Graph
     } catch {
       // Final fallback: html2canvas with onclone to replace lab/oklch colors
       try {
-        const fallbackColor = isDark ? "#111111" : "#ffffff";
+        const fallbackColor = isDark ? "#12121a" : "#ffffff";
         const canvas = await html2canvas(source, {
           backgroundColor: fallbackColor,
           scale: window.devicePixelRatio || 1,

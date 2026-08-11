@@ -269,7 +269,7 @@ export function TreeView({
         </button>
         {largeFile && (
           <span className="ml-auto text-[10px] text-amber-600 dark:text-amber-400">
-            Large file — expand carefully
+            Large file - expand carefully
           </span>
         )}
       </div>

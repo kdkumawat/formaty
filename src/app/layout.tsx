@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { Inter, JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 
 const inter = Inter({
@@ -13,6 +13,12 @@ const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
   weight: ["400", "500", "600"],
   variable: "--font-jetbrains-mono",
+  display: "swap",
+});
+
+const spaceGrotesk = Space_Grotesk({
+  subsets: ["latin"],
+  variable: "--font-space-grotesk",
   display: "swap",
 });
 
@@ -30,7 +36,7 @@ const CREATOR_NAME = "Kuldeep Kumawat";
 const CREATOR_X = "https://x.com/kuldeep_kumawat";
 const CREATOR_LINKEDIN = "https://www.linkedin.com/in/kdkumawat";
 const SITE_DESCRIPTION =
-  "Format, convert, compare, and developer utils for JSON, XML, YAML, TOML, CSV. UUID, Base64, JWT, hash, URL encode, and more. Import cURL, query with JSONPath, generate types. Runs in your browser — no data leaves your device.";
+  "Format, convert, compare, and developer utils for JSON, XML, YAML, TOML, CSV. UUID, Base64, JWT, hash, URL encode, and more. Import cURL, query with JSONPath, generate types. Runs in your browser - no data leaves your device.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -174,11 +180,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning className={`${inter.variable} ${jetbrainsMono.variable}`}>
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${inter.variable} ${jetbrainsMono.variable} ${spaceGrotesk.variable}`}
+    >
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){var t="light";try{var s=localStorage.getItem("formaty-session");if(s){var d=JSON.parse(s);if(d.themeMode==="dark"||d.themeMode==="light")t=d.themeMode;else t=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"}else{t=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"}}catch(e){t=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"}document.documentElement.setAttribute("data-theme",t);var e=document.createElement("style");e.id="formaty-theme-inline";e.textContent=t==="dark"?"html,body{--workspace-background:#0e0e10;--workspace-panel:#161618;--workspace-border:#28282c;--workspace-text:#ececee;--workspace-text-muted:#a2a2a9}":"html,body{--workspace-background:#f6f6f7;--workspace-panel:#ffffff;--workspace-border:#e2e2e5;--workspace-text:#17171a;--workspace-text-muted:#55565c}";document.head.appendChild(e)})();`,
+            __html: `(function(){var t="dark";try{var s=localStorage.getItem("formaty-session");if(s){var d=JSON.parse(s);if(d.themeMode==="dark"||d.themeMode==="light")t=d.themeMode;else if(d.themeMode==="system")t=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"}}catch(e){}document.documentElement.setAttribute("data-theme",t);var e=document.createElement("style");e.id="formaty-theme-inline";e.textContent=t==="dark"?"html,body{--background:#0a0a10;--foreground:#ececf1;--card:#12121a;--card-foreground:#ececf1;--popover:#171721;--popover-foreground:#ececf1;--border:#23232e;--input:#2f2f3c;--muted:#191924;--muted-foreground:#9a9aa5;--accent:#1e1e2b;--accent-foreground:#ececf1;--secondary:#1c1c27;--secondary-foreground:#ececf1;--primary:oklch(0.72 0.19 280);--ring:oklch(0.72 0.19 280);--destructive:oklch(0.64 0.2 25);--workspace-background:#0a0a10;--workspace-panel:#12121a;--workspace-border:#23232e;--workspace-text:#ececf1;--workspace-text-muted:#9a9aa5}":"html,body{--background:#f7f7fa;--foreground:#181820;--card:#ffffff;--card-foreground:#181820;--popover:#ffffff;--popover-foreground:#181820;--border:#e7e7ef;--input:#d8d8e2;--muted:#eceef3;--muted-foreground:#5f5f6b;--accent:#eef0f5;--accent-foreground:#181820;--secondary:#eef0f5;--secondary-foreground:#181820;--primary:oklch(0.56 0.22 278);--ring:oklch(0.56 0.22 278);--destructive:oklch(0.58 0.23 25);--workspace-background:#f7f7fa;--workspace-panel:#ffffff;--workspace-border:#e7e7ef;--workspace-text:#181820;--workspace-text-muted:#5f5f6b}";document.head.appendChild(e)})();`,
           }}
         />
       </head>

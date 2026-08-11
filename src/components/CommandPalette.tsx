@@ -171,7 +171,7 @@ export function CommandPalette({
   }, [query]);
 
   const borderColor = isDark ? "border-white/[0.08]" : "border-black/[0.06]";
-  const bg = isDark ? "bg-[#141414]/95 backdrop-blur-xl" : "bg-white/95 backdrop-blur-xl";
+  const bg = "bg-[var(--workspace-panel)]/95 backdrop-blur-xl";
   const inputBg = isDark ? "bg-white/[0.05]" : "bg-black/[0.02]";
   const textMuted = isDark ? "text-white/50" : "text-black/35";
   const categoryColor = isDark ? "text-primary/60" : "text-primary/40";
@@ -310,15 +310,15 @@ export function CommandPalette({
             {/* Footer hint */}
             <div className={`flex items-center gap-4 border-t px-4 py-2 text-[10px] tracking-wide ${borderColor} ${textMuted}`}>
               <span className="flex items-center gap-1">
-                <kbd className={`rounded-md border px-1.5 py-0.5 font-mono text-[9px] ${badgeBg}`}>↑↓</kbd>
+                <kbd className={`rounded-md border px-1.5 py-0.5 font-mono text-[10px] ${badgeBg}`}>↑↓</kbd>
                 navigate
               </span>
               <span className="flex items-center gap-1">
-                <kbd className={`rounded-md border px-1.5 py-0.5 font-mono text-[9px] ${badgeBg}`}>↵</kbd>
+                <kbd className={`rounded-md border px-1.5 py-0.5 font-mono text-[10px] ${badgeBg}`}>↵</kbd>
                 run
               </span>
               <span className="flex items-center gap-1">
-                <kbd className={`rounded-md border px-1.5 py-0.5 font-mono text-[9px] ${badgeBg}`}>ESC</kbd>
+                <kbd className={`rounded-md border px-1.5 py-0.5 font-mono text-[10px] ${badgeBg}`}>ESC</kbd>
                 close
               </span>
               <span className="ml-auto flex items-center gap-1">

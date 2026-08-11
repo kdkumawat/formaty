@@ -15,7 +15,7 @@ export function LandingHeader() {
   const { themeMode, setThemeMode } = useTheme();
 
   return (
-    <header className="sticky top-0 z-50 border-b border-[var(--workspace-border)] bg-[var(--workspace-background)]/90 backdrop-blur-xl">
+    <header className="sticky top-0 z-50 border-b border-[var(--workspace-border)]/70 bg-[var(--workspace-background)]/70 backdrop-blur-xl">
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
         <Link
           href="/"
@@ -56,7 +56,7 @@ export function LandingHeader() {
           </a>
 
           {/* Theme switcher */}
-          <div className="flex rounded-lg border border-[var(--workspace-border)] p-0.5">
+          <div className="flex rounded-lg border border-[var(--workspace-border)] bg-[var(--workspace-panel)]/60 p-0.5">
             {themeOptions.map(({ mode, label, Icon }) => (
               <button
                 key={mode}

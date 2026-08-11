@@ -20,13 +20,14 @@ function applyTheme(mode: ThemeMode) {
   if (style) {
     style.textContent =
       resolved === "dark"
-        ? "html,body{--workspace-background:#0b0b0b;--workspace-panel:#111111;--workspace-border:#1f1f1f;--workspace-text:#e5e5e5;--workspace-text-muted:#9ca3af}"
-        : "html,body{--workspace-background:#f5f5f5;--workspace-panel:#ffffff;--workspace-border:#e5e5e5;--workspace-text:#171717;--workspace-text-muted:#737373}";
+        ? "html,body{--workspace-background:#0a0a10;--workspace-panel:#12121a;--workspace-border:#23232e;--workspace-text:#ececf1;--workspace-text-muted:#9a9aa5}"
+        : "html,body{--workspace-background:#f7f7fa;--workspace-panel:#ffffff;--workspace-border:#e7e7ef;--workspace-text:#181820;--workspace-text-muted:#5f5f6b}";
   }
 }
 
 export function useTheme() {
-  const [themeMode, setThemeModeState] = useState<ThemeMode>("system");
+  // Dark-first default: match the layout script so a fresh visitor stays dark.
+  const [themeMode, setThemeModeState] = useState<ThemeMode>("dark");
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {

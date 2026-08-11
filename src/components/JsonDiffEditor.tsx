@@ -3,6 +3,7 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef } from "react";
 import { DiffEditor, type DiffOnMount } from "@monaco-editor/react";
 import type { editor } from "monaco-editor";
+import { defineFormatyThemes, resolveFormatyTheme } from "@/lib/utils/monacoThemes";
 import type { LineDiffStats } from "@/lib/json/diff";
 
 export interface DiffNavState {
@@ -134,7 +135,7 @@ export const JsonDiffEditor = forwardRef<JsonDiffEditorRef, JsonDiffEditorProps>
   const lastOriginalRef = useRef(original);
   const lastModifiedRef = useRef(modified);
   // Seed values frozen for the DiffEditor React props (never updated after first paint
-  // of this instance — remount via parent key if a full reset is required)
+  // of this instance - remount via parent key if a full reset is required)
   const seedOriginalRef = useRef(original);
   const seedModifiedRef = useRef(modified);
   const mountedRef = useRef(false);
@@ -169,7 +170,7 @@ export const JsonDiffEditor = forwardRef<JsonDiffEditorRef, JsonDiffEditorProps>
     const model = side === "original" ? ed.getModel()?.original : ed.getModel()?.modified;
     if (!model) return;
     if (model.getValue() === value) return;
-    // setValue resets that side's undo stack — only used for external sync (swap, paste from parent, enter-diff)
+    // setValue resets that side's undo stack - only used for external sync (swap, paste from parent, enter-diff)
     model.setValue(value);
   }, []);
 
@@ -207,7 +208,7 @@ export const JsonDiffEditor = forwardRef<JsonDiffEditorRef, JsonDiffEditorProps>
 
   useEffect(() => {
     const monaco = monacoRef.current;
-    if (monaco) monaco.editor.setTheme(monacoTheme);
+    if (monaco) monaco.editor.setTheme(resolveFormatyTheme(monacoTheme));
   }, [monacoTheme]);
 
   const editorOptions = useMemo(
@@ -444,7 +445,7 @@ export const JsonDiffEditor = forwardRef<JsonDiffEditorRef, JsonDiffEditorProps>
           monaco.editor.setModelLanguage(model.original, language);
           monaco.editor.setModelLanguage(model.modified, language);
         }
-        monaco.editor.setTheme(monacoTheme);
+        monaco.editor.setTheme(resolveFormatyTheme(monacoTheme));
       } catch {
         /* ignore */
       }
@@ -470,11 +471,12 @@ export const JsonDiffEditor = forwardRef<JsonDiffEditorRef, JsonDiffEditorProps>
     >
       <DiffEditor
         height="100%"
-        // Stable seeds — never feed live React state back into these props
+        // Stable seeds - never feed live React state back into these props
         original={seedOriginalRef.current}
         modified={seedModifiedRef.current}
         language={language}
-        theme={monacoTheme}
+        theme={resolveFormatyTheme(monacoTheme)}
+        beforeMount={(monaco) => defineFormatyThemes(monaco)}
         onMount={handleMount}
         options={editorOptions}
       />

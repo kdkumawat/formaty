@@ -3,6 +3,7 @@
 import React from "react";
 import type { editor } from "monaco-editor";
 import Editor from "@monaco-editor/react";
+import { defineFormatyThemes, resolveFormatyTheme } from "@/lib/utils/monacoThemes";
 
 interface JsonEditorProps {
   value: string;
@@ -42,7 +43,7 @@ export function JsonEditor({
   onEditorMount,
 }: JsonEditorProps) {
   const editorRef = React.useRef<editor.IStandaloneCodeEditor | null>(null);
-  const resolvedTheme = monacoTheme === "vs-dark" ? "formaty-dark" : "formaty-light";
+  const resolvedTheme = resolveFormatyTheme(monacoTheme);
 
   return (
     <div
@@ -58,26 +59,7 @@ export function JsonEditor({
         value={value}
         language={language}
         beforeMount={(monaco) => {
-          monaco.editor.defineTheme("formaty-dark", {
-            base: "vs-dark",
-            inherit: true,
-            rules: [],
-            colors: {
-              "editor.background": "#00000000",
-              "editorGutter.background": "#00000000",
-              "editor.lineHighlightBackground": "#ffffff10",
-            },
-          });
-          monaco.editor.defineTheme("formaty-light", {
-            base: "vs",
-            inherit: true,
-            rules: [],
-            colors: {
-              "editor.background": "#00000000",
-              "editorGutter.background": "#00000000",
-              "editor.lineHighlightBackground": "#00000010",
-            },
-          });
+          defineFormatyThemes(monaco);
         }}
         options={{
           minimap: { enabled: false },
@@ -99,7 +81,7 @@ export function JsonEditor({
           lineDecorationsWidth: hideLineNumbers ? 0 : 10,
           lineNumbersMinChars: hideLineNumbers ? 0 : 3,
           renderLineHighlight: readOnly ? "none" : "line",
-          hover: { enabled: !passiveReadOnly },
+          hover: { enabled: passiveReadOnly ? "off" : "on" },
           links: !passiveReadOnly,
           contextmenu: !passiveReadOnly,
           occurrencesHighlight: passiveReadOnly ? "off" : "singleFile",

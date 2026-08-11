@@ -373,7 +373,7 @@ export function utilPlaceholder(tab: UtilTab): string {
     case "jwt":
       return "Paste JWT (header.payload.signature)…";
     case "time":
-      return "Unix seconds/ms or ISO date — empty for now";
+      return "Unix seconds/ms or ISO date - empty for now";
     case "hash":
       return "Text to hash (SHA-256 / SHA-1)…";
     case "url":
@@ -391,7 +391,7 @@ export function utilPlaceholder(tab: UtilTab): string {
     case "html":
       return "HTML or entity-encoded text…";
     case "password":
-      return "Options only — use Run to generate";
+      return "Options only - use Run to generate";
     case "stats":
       return "Paste text for line / word / character counts…";
     default:

@@ -22,7 +22,7 @@ export function ConversionGrid() {
             initial={{ opacity: 0, y: 12 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="text-xl font-bold tracking-tight text-[var(--workspace-text)] md:text-3xl"
+            className="text-2xl font-semibold tracking-tight text-[var(--workspace-text)] md:text-3xl"
           >
             Format Conversions
           </motion.h2>

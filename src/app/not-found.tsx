@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useEffect } from "react";
 import { Logo } from "@/components/Logo";
 
-const linkBtnClass = "btn btn-m btn-ghost rounded p-1 border-0 hover:bg-[var(--workspace-panel)] hover:underline";
+const linkBtnClass =
+  "inline-flex items-center justify-center gap-2 h-8 min-h-8 px-2 rounded border-0 bg-transparent text-sm font-medium whitespace-nowrap text-[var(--workspace-text)] hover:bg-[var(--workspace-panel)] hover:underline";
 
 function getInitialTheme(): "light" | "dark" {
   if (typeof window === "undefined") return "light";

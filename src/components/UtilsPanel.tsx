@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ArrowLongRightIcon,
   ArrowUturnLeftIcon,
   ArrowUturnRightIcon,
   DocumentDuplicateIcon,
@@ -91,11 +92,10 @@ export interface UtilToolState {
   caseMode: TextCaseMode;
   hashAlgo: "sha256" | "sha1";
   passwordLen: number;
-  base64Mode: "auto" | "encode" | "decode";
-  urlMode: "auto" | "encode" | "decode";
-  hexMode: "auto" | "encode" | "decode";
-  escapeMode: "escape" | "unescape";
-  htmlMode: "encode" | "decode";
+  pwLower: boolean;
+  pwUpper: boolean;
+  pwDigits: boolean;
+  pwSymbols: boolean;
   /** Which side is being edited for codec tools (left = plain, right = encoded). */
   editSide: "left" | "right";
   touched: boolean;
@@ -113,11 +113,10 @@ export function defaultUtilToolState(tab: UtilTab): UtilToolState {
     caseMode: "snake",
     hashAlgo: "sha256",
     passwordLen: 16,
-    base64Mode: "auto",
-    urlMode: "auto",
-    hexMode: "auto",
-    escapeMode: "escape",
-    htmlMode: "encode",
+    pwLower: true,
+    pwUpper: true,
+    pwDigits: true,
+    pwSymbols: true,
     editSide: "left",
     touched: false,
   };
@@ -202,7 +201,15 @@ async function computeUtil(tab: UtilTab, s: UtilToolState): Promise<Partial<Util
     return { output: convertNumberBase(s.input), error: null };
   }
   if (tab === "password") {
-    return { output: generatePassword(s.passwordLen), error: null };
+    return {
+      output: generatePassword(s.passwordLen, {
+        lower: s.pwLower,
+        upper: s.pwUpper,
+        digits: s.pwDigits,
+        symbols: s.pwSymbols,
+      }),
+      error: null,
+    };
   }
   if (tab === "stats") {
     return { output: textStats(s.input), error: null };
@@ -280,7 +287,7 @@ export function UtilsPanel({
   const mapRef = useRef(stateByTool);
   mapRef.current = stateByTool;
 
-  /** Per-tool input undo stacks (textarea history — independent of transform undo) */
+  /** Per-tool input undo stacks (textarea history - independent of transform undo) */
   const inputHistory = useRef<Partial<Record<UtilTab, { stack: string[]; idx: number }>>>({});
   const [, bumpHist] = useState(0);
   const histBusy = useRef(false);
@@ -450,11 +457,10 @@ export function UtilsPanel({
     state.caseMode,
     state.hashAlgo,
     state.passwordLen,
-    state.base64Mode,
-    state.urlMode,
-    state.hexMode,
-    state.escapeMode,
-    state.htmlMode,
+    state.pwLower,
+    state.pwUpper,
+    state.pwDigits,
+    state.pwSymbols,
     onStateByToolChange,
   ]);
 
@@ -480,7 +486,12 @@ export function UtilsPanel({
 
   const regeneratePassword = () => {
     try {
-      const pw = generatePassword(state.passwordLen);
+      const pw = generatePassword(state.passwordLen, {
+        lower: state.pwLower,
+        upper: state.pwUpper,
+        digits: state.pwDigits,
+        symbols: state.pwSymbols,
+      });
       patch({ output: pw, error: null });
     } catch (e) {
       patch({ error: e instanceof Error ? e.message : "Failed" });
@@ -497,7 +508,18 @@ export function UtilsPanel({
     patch({ input: nowIso(), error: null });
   };
 
-  const showOptionsOnly = activeTab === "uuid" || activeTab === "password";
+  const charSetChip = (active: boolean) =>
+    `h-6 shrink-0 cursor-pointer rounded-md border px-2 text-[11px] font-medium transition-colors ${active
+      ? "border-primary/40 bg-primary/10 text-primary"
+      : "border-[var(--workspace-border)] text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)] hover:text-[var(--workspace-text)]"}`;
+  const pwStrength = useMemo(() => {
+    const sets = [state.pwLower, state.pwUpper, state.pwDigits, state.pwSymbols].filter(Boolean).length;
+    const entropy = state.passwordLen * Math.log2(Math.max(2, sets * 8));
+    if (entropy >= 90) return { score: 4, label: "Strong", color: "bg-emerald-500" };
+    if (entropy >= 60) return { score: 3, label: "Good", color: "bg-lime-500" };
+    if (entropy >= 35) return { score: 2, label: "Fair", color: "bg-amber-500" };
+    return { score: 1, label: "Weak", color: "bg-red-500" };
+  }, [state.passwordLen, state.pwLower, state.pwUpper, state.pwDigits, state.pwSymbols]);
 
   // Same visual language as Monaco panes: panel surface, not muted “disabled” gray
   const fieldClass =
@@ -574,37 +596,75 @@ export function UtilsPanel({
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       {GENERATOR_TABS.has(activeTab) ? (
         <div className="flex h-full min-h-0 flex-col">
-          <div className={`${paneHeader} flex-wrap`}>
+          <div className={`${paneHeader} flex-wrap gap-1.5`}>
             <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--workspace-text-muted)]">
               {activeLabel}
             </span>
             <span className="flex-1" />
-            {activeTab === "uuid" && (
+            {activeTab === "uuid" ? (
               <>
                 <NumberStepper label="Count" value={state.uuidCount} min={1} max={50} onChange={(n) => patch({ uuidCount: n })} aria-label="UUID count" />
-                <button type="button" className={toolBtn(false)} onClick={regenerateUuids} title="Regenerate">New</button>
+                <button type="button" className={toolBtn(false)} onClick={regenerateUuids} title="Generate a new batch">New</button>
                 <button type="button" className={toolBtn(false)} onClick={() => { const id = generateUuidV4(); patch({ uuidList: [id], output: id, error: null }); }}>One</button>
                 <button type="button" className={toolBtn(false)} onClick={() => { const id = uuidNil(); patch({ uuidList: [id], output: id, error: null }); }}>NIL</button>
+                <button type="button" className={toolBtn(false)} disabled={!state.output} onClick={() => void copy(state.output, "UUIDs copied")} title="Copy all">Copy all</button>
               </>
-            )}
-            {activeTab === "password" && (
+            ) : (
               <>
                 <NumberStepper label="Len" value={state.passwordLen} min={4} max={128} onChange={(n) => patch({ passwordLen: n })} aria-label="Password length" />
                 <button type="button" className={toolBtn(false)} onClick={regeneratePassword}>New</button>
+                <button type="button" className={toolBtn(false)} disabled={!state.output} onClick={() => void copy(state.output, "Password copied")} title="Copy password">Copy</button>
               </>
             )}
           </div>
+          {activeTab === "password" && (
+            <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-[var(--workspace-border)] bg-[var(--workspace-background)]/50 px-2 py-1.5">
+              {(
+                [
+                  ["a-z", "pwLower", "Lowercase letters"],
+                  ["A-Z", "pwUpper", "Uppercase letters"],
+                  ["0-9", "pwDigits", "Digits"],
+                  ["!@#", "pwSymbols", "Symbols"],
+                ] as const
+              ).map(([label, key, title]) => (
+                <button
+                  key={key}
+                  type="button"
+                  title={title}
+                  aria-pressed={state[key]}
+                  className={charSetChip(state[key])}
+                  onClick={() => patch({ [key]: !state[key] })}
+                >
+                  {label}
+                </button>
+              ))}
+              <span className="ml-auto flex items-center gap-1.5" title={`Estimated strength: ${pwStrength.label}`}>
+                <span className="flex items-end gap-0.5" aria-hidden>
+                  {[0, 1, 2, 3].map((i) => (
+                    <span key={i} className={`h-1.5 w-3 rounded-sm ${i < pwStrength.score ? pwStrength.color : "bg-[var(--workspace-border)]/60"}`} />
+                  ))}
+                </span>
+                <span className="text-[10px] font-semibold text-[var(--workspace-text-muted)]">{pwStrength.label}</span>
+              </span>
+            </div>
+          )}
           <div className="flex min-h-0 flex-1 flex-col bg-[var(--workspace-panel)]">
             {activeTab === "uuid" && state.uuidList.length > 0 ? (
-              <ul className="min-h-0 flex-1 space-y-1 overflow-auto p-2">
+              <ul className="grid min-h-0 flex-1 auto-rows-min grid-cols-1 gap-0.5 overflow-auto p-1.5 lg:grid-cols-2 lg:gap-x-3">
                 {state.uuidList.map((id, i) => (
                   <li
                     key={`${id}-${i}`}
-                    className="flex items-center gap-1.5 rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-2 py-1.5 font-mono text-[12px] text-[var(--workspace-text)]"
+                    className="group flex min-w-0 items-center gap-2 rounded-md px-2 py-1 font-mono text-[12px] text-[var(--workspace-text)] transition-colors hover:bg-[var(--workspace-background)]"
                     style={{ fontSize }}
                   >
+                    <span className="w-6 shrink-0 select-none text-right text-[10px] tabular-nums text-[var(--workspace-text-muted)]/70">{i + 1}</span>
                     <span className="min-w-0 flex-1 break-all select-all">{id}</span>
-                    <button type="button" className={`${linkBtnClass} btn-square h-7 min-h-7 w-7 shrink-0`} title="Copy UUID" onClick={() => void copy(id, "UUID copied")}>
+                    <button
+                      type="button"
+                      className={`${linkBtnClass} h-6 w-6 shrink-0 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100`}
+                      title="Copy UUID"
+                      onClick={() => void copy(id, "UUID copied")}
+                    >
                       <DocumentDuplicateIcon className="h-3.5 w-3.5" />
                     </button>
                   </li>
@@ -622,7 +682,7 @@ export function UtilsPanel({
             ) : (
               <div className="flex flex-1 items-center justify-center px-4 text-center text-[13px] text-[var(--workspace-text-muted)]">
                 {activeTab === "uuid"
-                  ? "Set a count, then press New / One / NIL to generate UUIDs."
+                  ? "Set a count, then press New to generate UUIDs."
                   : "Set a length, then press New to generate a password."}
               </div>
             )}
@@ -633,6 +693,11 @@ export function UtilsPanel({
           <div className="flex min-h-0 flex-col border-b border-[var(--workspace-border)] md:border-b-0 md:border-r">
             <div className={paneHeader}>
               <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--workspace-text-muted)]">Plain text</span>
+              {state.editSide === "left" && (
+                <span className="ml-1.5 inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-primary">
+                  <ArrowLongRightIcon className="h-2.5 w-2.5" aria-hidden /> encodes
+                </span>
+              )}
             </div>
             <div className="flex min-h-0 flex-1 flex-col bg-[var(--workspace-panel)]">
               <textarea
@@ -649,24 +714,21 @@ export function UtilsPanel({
           <div className="flex min-h-0 flex-col">
             <div className={paneHeader}>
               <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--workspace-text-muted)]">Encoded</span>
+              {state.editSide === "right" && (
+                <span className="ml-1.5 inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-primary">
+                  <ArrowLongRightIcon className="h-2.5 w-2.5 rotate-180" aria-hidden /> decodes
+                </span>
+              )}
               <span className="flex-1" />
               {state.error && <span className="text-[10px] text-red-500">{state.error}</span>}
               <button
                 type="button"
                 className={toolBtn(false)}
-                title="Decode the encoded side back to plain text"
-                onClick={() => {
-                  const s = mapRef.current[activeTab] ?? state;
-                  void (async () => {
-                    try {
-                      patch({ input: decodeText(activeTab, s.output), error: null });
-                    } catch (e) {
-                      patch({ error: e instanceof Error ? e.message : "Failed" });
-                    }
-                  })();
-                }}
+                disabled={!state.output}
+                title="Copy encoded result"
+                onClick={() => void copy(state.output, "Copied")}
               >
-                Decode
+                Copy
               </button>
             </div>
             <div className="flex min-h-0 flex-1 flex-col bg-[var(--workspace-panel)]">
@@ -675,7 +737,7 @@ export function UtilsPanel({
                 style={{ fontSize }}
                 value={state.output}
                 onChange={(e) => patch({ output: e.target.value, editSide: "right" })}
-                placeholder="Encoded result — edit here to decode back to plain text"
+                placeholder="Encoded result - edit here to decode back to plain text"
                 spellCheck={false}
               />
             </div>
@@ -692,12 +754,11 @@ export function UtilsPanel({
             <span className="hidden text-[10px] text-[var(--workspace-text-muted)] sm:inline">
               · {activeLabel}
             </span>
-            {!showOptionsOnly && (
-              <span className="ml-1 flex items-center gap-0.5">
+            <span className="ml-1 flex items-center gap-0.5">
                 <Tooltip content="Undo (Ctrl+Z)">
                   <button
                     type="button"
-                    className={`${linkBtnClass} btn-square h-7 min-h-7 w-7`}
+                    className={`${linkBtnClass} h-7 min-h-7 w-7`}
                     disabled={!utilCanUndo}
                     onClick={utilUndo}
                     aria-label="Undo"
@@ -708,7 +769,7 @@ export function UtilsPanel({
                 <Tooltip content="Redo (Ctrl+Y)">
                   <button
                     type="button"
-                    className={`${linkBtnClass} btn-square h-7 min-h-7 w-7`}
+                    className={`${linkBtnClass} h-7 min-h-7 w-7`}
                     disabled={!utilCanRedo}
                     onClick={utilRedo}
                     aria-label="Redo"
@@ -717,58 +778,7 @@ export function UtilsPanel({
                   </button>
                 </Tooltip>
               </span>
-            )}
             <span className="flex-1" />
-            {activeTab === "uuid" && (
-              <>
-                <NumberStepper
-                  label="Count"
-                  value={state.uuidCount}
-                  min={1}
-                  max={50}
-                  onChange={(n) => patch({ uuidCount: n })}
-                  aria-label="UUID count"
-                />
-                <button type="button" className={toolBtn(false)} onClick={regenerateUuids} title="Regenerate">
-                  New
-                </button>
-                <button
-                  type="button"
-                  className={toolBtn(false)}
-                  onClick={() => {
-                    const id = generateUuidV4();
-                    patch({ uuidList: [id], output: id, error: null });
-                  }}
-                >
-                  One
-                </button>
-                <button
-                  type="button"
-                  className={toolBtn(false)}
-                  onClick={() => {
-                    const id = uuidNil();
-                    patch({ uuidList: [id], output: id, error: null });
-                  }}
-                >
-                  NIL
-                </button>
-              </>
-            )}
-            {activeTab === "password" && (
-              <>
-                <NumberStepper
-                  label="Len"
-                  value={state.passwordLen}
-                  min={4}
-                  max={128}
-                  onChange={(n) => patch({ passwordLen: n })}
-                  aria-label="Password length"
-                />
-                <button type="button" className={toolBtn(false)} onClick={regeneratePassword}>
-                  New
-                </button>
-              </>
-            )}
             {activeTab === "hash" && (
               <div className={modeGroup} role="group" aria-label="Hash algorithm">
                 {(["sha256", "sha1"] as const).map((a, i) => (
@@ -779,76 +789,6 @@ export function UtilsPanel({
                     onClick={() => patch({ hashAlgo: a })}
                   >
                     {a.toUpperCase()}
-                  </button>
-                ))}
-              </div>
-            )}
-            {activeTab === "base64" && (
-              <div className={modeGroup} role="group" aria-label="Base64 mode">
-                {(["auto", "encode", "decode"] as const).map((m, i) => (
-                  <button
-                    key={m}
-                    type="button"
-                    className={`${modeChip(state.base64Mode === m)}${i > 0 ? " border-l border-[var(--workspace-border)]" : ""}`}
-                    onClick={() => patch({ base64Mode: m })}
-                  >
-                    {m}
-                  </button>
-                ))}
-              </div>
-            )}
-            {activeTab === "url" && (
-              <div className={modeGroup} role="group" aria-label="URL mode">
-                {(["auto", "encode", "decode"] as const).map((m, i) => (
-                  <button
-                    key={m}
-                    type="button"
-                    className={`${modeChip(state.urlMode === m)}${i > 0 ? " border-l border-[var(--workspace-border)]" : ""}`}
-                    onClick={() => patch({ urlMode: m })}
-                  >
-                    {m}
-                  </button>
-                ))}
-              </div>
-            )}
-            {activeTab === "hex" && (
-              <div className={modeGroup} role="group" aria-label="Hex mode">
-                {(["auto", "encode", "decode"] as const).map((m, i) => (
-                  <button
-                    key={m}
-                    type="button"
-                    className={`${modeChip(state.hexMode === m)}${i > 0 ? " border-l border-[var(--workspace-border)]" : ""}`}
-                    onClick={() => patch({ hexMode: m })}
-                  >
-                    {m}
-                  </button>
-                ))}
-              </div>
-            )}
-            {activeTab === "escape" && (
-              <div className={modeGroup} role="group" aria-label="Escape mode">
-                {(["escape", "unescape"] as const).map((m, i) => (
-                  <button
-                    key={m}
-                    type="button"
-                    className={`${modeChip(state.escapeMode === m)}${i > 0 ? " border-l border-[var(--workspace-border)]" : ""}`}
-                    onClick={() => patch({ escapeMode: m })}
-                  >
-                    {m}
-                  </button>
-                ))}
-              </div>
-            )}
-            {activeTab === "html" && (
-              <div className={modeGroup} role="group" aria-label="HTML mode">
-                {(["encode", "decode"] as const).map((m, i) => (
-                  <button
-                    key={m}
-                    type="button"
-                    className={`${modeChip(state.htmlMode === m)}${i > 0 ? " border-l border-[var(--workspace-border)]" : ""}`}
-                    onClick={() => patch({ htmlMode: m })}
-                  >
-                    {m}
                   </button>
                 ))}
               </div>
@@ -892,26 +832,15 @@ export function UtilsPanel({
             )}
           </div>
           <div className="flex min-h-0 flex-1 flex-col bg-[var(--workspace-panel)]">
-            {activeTab === "uuid" ? (
-              <div className="flex flex-1 flex-col items-center justify-center gap-1 px-4 text-center text-[13px] text-[var(--workspace-text-muted)]">
-                <p>UUIDs update live when you change count or press New.</p>
-                <p className="text-[11px]">Copy / copy-as from the output actions bar.</p>
-              </div>
-            ) : activeTab === "password" ? (
-              <div className="flex flex-1 flex-col items-center justify-center gap-1 px-4 text-center text-[13px] text-[var(--workspace-text-muted)]">
-                <p>Cryptographically random password — changes with length or New.</p>
-              </div>
-            ) : (
-              <textarea
-                className={fieldClass}
-                style={{ fontSize }}
-                value={state.input}
-                onChange={(e) => patch({ input: e.target.value })}
-                onKeyDown={(e) => utilInputKeyDown(e, utilUndo, utilRedo)}
-                placeholder={utilPlaceholder(activeTab)}
-                spellCheck={false}
-              />
-            )}
+            <textarea
+              className={fieldClass}
+              style={{ fontSize }}
+              value={state.input}
+              onChange={(e) => patch({ input: e.target.value })}
+              onKeyDown={(e) => utilInputKeyDown(e, utilUndo, utilRedo)}
+              placeholder={utilPlaceholder(activeTab)}
+              spellCheck={false}
+            />
           </div>
         </div>
 
@@ -927,26 +856,6 @@ export function UtilsPanel({
               <div className="m-2 flex flex-col gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-600 dark:text-red-400">
                 <span>{state.error}</span>
               </div>
-            ) : activeTab === "uuid" && state.uuidList.length > 0 ? (
-              <ul className="min-h-0 flex-1 space-y-1 overflow-auto p-2">
-                {state.uuidList.map((id, i) => (
-                  <li
-                    key={`${id}-${i}`}
-                    className="flex items-center gap-1.5 rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-2 py-1.5 font-mono text-[12px] text-[var(--workspace-text)]"
-                    style={{ fontSize }}
-                  >
-                    <span className="min-w-0 flex-1 break-all select-all">{id}</span>
-                    <button
-                      type="button"
-                      className={`${linkBtnClass} btn-square h-7 min-h-7 w-7 shrink-0`}
-                      title="Copy UUID"
-                      onClick={() => void copy(id, "UUID copied")}
-                    >
-                      <DocumentDuplicateIcon className="h-3.5 w-3.5" />
-                    </button>
-                  </li>
-                ))}
-              </ul>
             ) : (
               <pre
                 className={`${fieldClass} overflow-auto whitespace-pre-wrap break-all`}

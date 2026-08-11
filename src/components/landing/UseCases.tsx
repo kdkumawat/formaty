@@ -52,7 +52,7 @@ export function UseCases() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ delay: 0.06 }}
-            className="text-2xl font-bold tracking-tight text-[var(--workspace-text)] md:text-4xl"
+            className="text-3xl font-semibold tracking-tight text-[var(--workspace-text)] md:text-[2.6rem] md:leading-[1.1]"
           >
             Use cases
           </motion.h2>

@@ -46,7 +46,7 @@ export function Capabilities() {
   return (
     <section className="border-t border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-4 py-16">
       <div className="mx-auto max-w-5xl">
-        <h2 className="mb-10 text-center text-2xl font-bold text-[var(--workspace-text)]">
+        <h2 className="mb-10 text-center text-3xl font-semibold tracking-tight text-[var(--workspace-text)] md:text-[2.6rem]">
           Everything you need
         </h2>
 

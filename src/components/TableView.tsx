@@ -10,6 +10,16 @@ import {
   ViewColumnsIcon,
 } from "@heroicons/react/24/outline";
 import type { JsonValue } from "@/lib/json/core";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 
 interface TableViewProps {
   data: JsonValue;
@@ -255,7 +265,7 @@ export function TableView({ data, className = "" }: TableViewProps) {
                 aria-label="Close"
                 onClick={() => setColsOpen(false)}
               />
-              <div className="absolute right-0 top-full z-50 mt-1 max-h-56 w-48 overflow-y-auto rounded-xl border border-[var(--workspace-border)] bg-[var(--workspace-panel)] p-1.5 shadow-xl">
+              <div className="absolute right-0 top-full z-50 mt-1 max-h-56 w-48 overflow-y-auto rounded-xl border border-[var(--workspace-border)] bg-[var(--workspace-panel)] p-1.5 shadow-2xl shadow-black/30 ring-1 ring-black/5 dark:ring-white/10">
                 <button
                   type="button"
                   className="mb-1 w-full rounded-md px-2 py-1 text-left text-[10px] font-medium text-primary hover:bg-primary/10"
@@ -268,11 +278,9 @@ export function TableView({ data, className = "" }: TableViewProps) {
                     key={h}
                     className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-[11px] text-[var(--workspace-text)] hover:bg-primary/5"
                   >
-                    <input
-                      type="checkbox"
-                      className="checkbox checkbox-xs checkbox-primary"
+                    <Checkbox
                       checked={!hidden.has(h)}
-                      onChange={() => toggleCol(h)}
+                      onCheckedChange={() => toggleCol(h)}
                     />
                     <span className="truncate font-mono">{h}</span>
                   </label>
@@ -287,11 +295,11 @@ export function TableView({ data, className = "" }: TableViewProps) {
         {visibleHeaders.length === 0 ? (
           <div className="p-6 text-center text-sm text-[var(--workspace-text-muted)]">No columns visible</div>
         ) : (
-          <table className="table table-xs table-pin-rows w-full">
-            <thead>
-              <tr className={headerClass}>
+          <Table className="w-full border-collapse">
+            <TableHeader>
+              <TableRow className={cn(headerClass, "sticky top-0 z-10 hover:bg-[var(--workspace-background)]")}>
                 {visibleHeaders.map((h) => (
-                  <th key={h} className={`${cellClass} whitespace-nowrap p-0`}>
+                  <TableHead key={h} className={`${cellClass} whitespace-nowrap p-0`}>
                     <button
                       type="button"
                       className="inline-flex h-8 w-full cursor-pointer items-center gap-1 px-2 text-left font-medium hover:bg-primary/5"
@@ -313,23 +321,23 @@ export function TableView({ data, className = "" }: TableViewProps) {
                         )}
                       </span>
                     </button>
-                  </th>
+                  </TableHead>
                 ))}
-              </tr>
-            </thead>
-            <tbody>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {processed.length === 0 ? (
-                <tr>
-                  <td
+                <TableRow>
+                  <TableCell
                     colSpan={visibleHeaders.length}
                     className={`${cellClass} px-3 py-6 text-center text-[var(--workspace-text-muted)]`}
                   >
                     No rows match search
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ) : (
                 processed.map((row, i) => (
-                  <tr key={i} className={cellClass}>
+                  <TableRow key={i} className={cellClass}>
                     {visibleHeaders.map((h) => {
                       const val = row[h];
                       const display = cellDisplay(val);
@@ -343,7 +351,7 @@ export function TableView({ data, className = "" }: TableViewProps) {
                               ? String(row.index)
                               : h;
                         return (
-                          <td key={h} className={`${cellClass} max-w-[280px] px-1.5 py-0.5`}>
+                          <TableCell key={h} className={`${cellClass} max-w-[280px] px-1.5 py-0.5`}>
                             <button
                               type="button"
                               onClick={() => drillInto(label, val)}
@@ -359,25 +367,25 @@ export function TableView({ data, className = "" }: TableViewProps) {
                               </span>
                               <ChevronRightIcon className="h-3 w-3 shrink-0 text-primary opacity-60 group-hover:opacity-100" />
                             </button>
-                          </td>
+                          </TableCell>
                         );
                       }
 
                       return (
-                        <td
+                        <TableCell
                           key={h}
                           className={`${cellClass} max-w-[240px] truncate px-2 py-1 font-mono text-[11px]`}
                           title={display}
                         >
                           {display}
-                        </td>
+                        </TableCell>
                       );
                     })}
-                  </tr>
+                  </TableRow>
                 ))
               )}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         )}
       </div>
     </div>

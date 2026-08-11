@@ -1,8 +1,14 @@
 @import "tailwindcss";
 
+/* Theme-aware `dark:` variant — keyed to the app's `data-theme` attribute
+   (default dark), not the OS media query Tailwind ships with. Fixes status
+   colors / ring / shadow tints appearing wrong when app theme ≠ OS theme. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *, :root:not([data-theme]) *));
+
 @theme inline {
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;
+  --font-display: var(--font-space-grotesk), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 
   /* shadcn/ui color utilities */
   --color-background: var(--background);
@@ -29,162 +35,71 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
-/* shadcn/ui semantic tokens (light) */
-:root {
-  --background: #f6f6f7;
-  --foreground: #17171a;
-  --card: #ffffff;
-  --card-foreground: #17171a;
-  --popover: #ffffff;
-  --popover-foreground: #17171a;
-  --primary: oklch(0.51 0.24 287);
-  --primary-foreground: #ffffff;
-  --secondary: #ececef;
-  --secondary-foreground: #17171a;
-  --muted: #e9e9ec;
-  --muted-foreground: #55565c;
-  --accent: #ececef;
-  --accent-foreground: #17171a;
-  --destructive: oklch(0.58 0.23 25);
-  --border: #e2e2e5;
-  --input: #d1d1d6;
-  --ring: oklch(0.51 0.24 287);
+/* ── Dark (default, hero look) ─────────────────────────── */
+[data-theme="dark"],
+html:not([data-theme]) {
+  color-scheme: dark;
+  /* Layered surfaces: canvas → panel → popover */
+  --background: #0a0a10;
+  --foreground: #ececf1;
+  --card: #12121a;
+  --card-foreground: #ececf1;
+  --popover: #171721;
+  --popover-foreground: #ececf1;
+  --primary: oklch(0.72 0.19 280);
+  --primary-foreground: #0b0b12;
+  --secondary: #1c1c27;
+  --secondary-foreground: #ececf1;
+  --muted: #191924;
+  --muted-foreground: #9a9aa5;
+  --accent: #1e1e2b;
+  --accent-foreground: #ececf1;
+  --destructive: oklch(0.64 0.2 25);
+  --border: #23232e;
+  --input: #2f2f3c;
+  --ring: oklch(0.72 0.19 280);
   --radius: 0.6rem;
+
+  --workspace-background: #0a0a10;
+  --workspace-panel: #12121a;
+  --workspace-border: #23232e;
+  --workspace-text: #ececf1;
+  --workspace-text-muted: #9a9aa5;
+  --glow-color: rgba(109, 109, 244, 0.28);
 }
 
-/* Workspace design tokens */
-:root {
-  --workspace-background: #f6f6f7;
-  --workspace-panel: #ffffff;
-  --workspace-border: #e2e2e5;
-  --workspace-text: #17171a;
-  --workspace-text-muted: #55565c;
-  --workspace-primary: var(--primary);
-  --glow-color: rgba(124, 58, 237, 0.35);
-}
-
-[data-theme="dark"] {
-  --background: #0e0e10;
-  --foreground: #ececee;
-  --card: #161618;
-  --card-foreground: #ececee;
-  --popover: #161618;
-  --popover-foreground: #ececee;
-  --primary: oklch(0.66 0.2 287);
-  --primary-foreground: #0e0e10;
-  --secondary: #28282c;
-  --secondary-foreground: #ececee;
-  --muted: #202023;
-  --muted-foreground: #a2a2a9;
-  --accent: #28282c;
-  --accent-foreground: #ececee;
-  --destructive: oklch(0.62 0.2 25);
-  --border: #2a2a2e;
-  --input: #3a3a40;
-  --ring: oklch(0.66 0.2 287);
-
-  --workspace-background: #0e0e10;
-  --workspace-panel: #161618;
-  --workspace-border: #2a2a2e;
-  --workspace-text: #ececee;
-  --workspace-text-muted: #a2a2a9;
-  --glow-color: rgba(124, 58, 237, 0.25);
-}
-
+/* ── Light ─────────────────────────────────────────────── */
 [data-theme="light"] {
-  --workspace-background: #f6f6f7;
+  color-scheme: light;
+  --background: #f7f7fa;
+  --foreground: #181820;
+  --card: #ffffff;
+  --card-foreground: #181820;
+  --popover: #ffffff;
+  --popover-foreground: #181820;
+  --primary: oklch(0.56 0.22 278);
+  --primary-foreground: #ffffff;
+  --secondary: #eef0f5;
+  --secondary-foreground: #181820;
+  --muted: #eceef3;
+  --muted-foreground: #5f5f6b;
+  --accent: #eef0f5;
+  --accent-foreground: #181820;
+  --destructive: oklch(0.58 0.23 25);
+  --border: #e7e7ef;
+  --input: #d8d8e2;
+  --ring: oklch(0.56 0.22 278);
+  --radius: 0.6rem;
+
+  --workspace-background: #f7f7fa;
   --workspace-panel: #ffffff;
-  --workspace-border: #e2e2e5;
-  --workspace-text: #17171a;
-  --workspace-text-muted: #55565c;
-  --glow-color: rgba(124, 58, 237, 0.35);
-}
-
-/* ── Minimal component utilities (replaces daisyUI) ───────── */
-@layer components {
-  .btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    height: 2.5rem;
-    min-height: 2.5rem;
-    padding-inline: 1rem;
-    border: 1px solid transparent;
-    border-radius: 0.5rem;
-    background-color: var(--card);
-    color: var(--foreground);
-    font-size: 0.875rem;
-    font-weight: 500;
-    white-space: nowrap;
-    transition: background-color 0.15s ease, opacity 0.15s ease;
-  }
-  .btn:hover { background-color: var(--muted); }
-  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-
-  .btn-ghost { background-color: transparent; }
-  .btn-ghost:hover { background-color: var(--muted); }
-  .btn-primary {
-    background-color: var(--primary);
-    border-color: var(--primary);
-    color: var(--primary-foreground);
-  }
-  .btn-primary:hover { background-color: color-mix(in oklab, var(--primary) 88%, black); }
-  .btn-soft {
-    background-color: color-mix(in oklab, var(--primary) 12%, transparent);
-    color: var(--primary);
-  }
-  .btn-soft:hover { background-color: color-mix(in oklab, var(--primary) 20%, transparent); }
-
-  .btn-xs { height: 1.5rem; min-height: 1.5rem; padding-inline: 0.5rem; font-size: 0.75rem; border-radius: 0.375rem; }
-  .btn-sm { height: 2rem; min-height: 2rem; padding-inline: 0.75rem; font-size: 0.8125rem; }
-  .btn-m { height: 2rem; min-height: 2rem; padding-inline: 0.75rem; }
-
-  .btn-square { width: 2.5rem; height: 2.5rem; min-height: 2.5rem; padding: 0; }
-
-  .checkbox {
-    appearance: none;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 1.25rem;
-    height: 1.25rem;
-    flex-shrink: 0;
-    border: 1px solid var(--border);
-    border-radius: 0.25rem;
-    background-color: var(--card);
-    cursor: pointer;
-    vertical-align: middle;
-    transition: background-color 0.15s ease, border-color 0.15s ease;
-  }
-  .checkbox:hover { border-color: var(--primary); }
-  .checkbox:checked {
-    background-color: var(--primary);
-    border-color: var(--primary);
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23fff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 8l4 4L13 4'/%3E%3C/svg%3E");
-    background-size: 0.9em;
-    background-position: center;
-    background-repeat: no-repeat;
-  }
-  .checkbox-xs { width: 1rem; height: 1rem; border-radius: 0.1875rem; }
-  .checkbox-sm { width: 1.125rem; height: 1.125rem; }
-}
-
-/* First paint: use system preference when no data-theme set yet */
-@media (prefers-color-scheme: dark) {
-  html:not([data-theme]) {
-    --workspace-background: #0e0e10;
-    --workspace-panel: #161618;
-    --workspace-border: #28282c;
-    --workspace-text: #ececee;
-    --workspace-text-muted: #9a9aa1;
-    --glow-color: rgba(124, 58, 237, 0.25);
-  }
+  --workspace-border: #e7e7ef;
+  --workspace-text: #181820;
+  --workspace-text-muted: #5f5f6b;
+  --glow-color: rgba(91, 91, 214, 0.22);
 }
 
 html {
-  /* Slightly larger base for readability in dense tool UIs */
-  font-size: 106%;
   /* Consistent, readable letter spacing across the app */
   letter-spacing: -0.003em;
 }
@@ -202,14 +117,16 @@ body {
   /* Inter: disambiguated glyphs, tabular-friendly alternates */
   font-feature-settings: "cv05", "cv08", "cv11", "ss01";
   text-rendering: optimizeLegibility;
+  background-color: var(--background);
 }
 
 /* ── Global typography ─────────────────────────────────── */
 
-/* Headings: tighter tracking + slightly taller line-height for clarity */
+/* Headings: display font, tighter tracking, balanced lines */
 h1, h2, h3, h4, h5, h6 {
-  letter-spacing: -0.02em;
-  line-height: 1.25;
+  font-family: var(--font-display);
+  letter-spacing: -0.025em;
+  line-height: 1.22;
   text-wrap: balance;
 }
 
@@ -245,19 +162,9 @@ input[type="number"] {
   font-variant-numeric: tabular-nums;
 }
 
-/* Muted text: keep contrast accessible in both themes */
-[data-theme="dark"] {
-  /* Slightly brighter muted text on dark for WCAG AA on panels */
-  color-scheme: dark;
-}
-
-[data-theme="light"] {
-  color-scheme: light;
-}
-
-/* Selection: readable in both themes */
+/* Selection: indigo-violet in both themes */
 ::selection {
-  background: rgba(124, 58, 237, 0.28);
+  background: rgba(109, 109, 244, 0.3);
   color: inherit;
 }
 
@@ -301,12 +208,12 @@ input[type="number"] {
 /* ── Utility classes ─────────────────────────────────────── */
 
 .gradient-text {
-  background: linear-gradient(135deg, #7c3aed 0%, #2563eb 50%, #7c3aed 100%);
+  background: linear-gradient(135deg, #6d6df4 0%, #8b5cf6 45%, #4f8ff7 100%);
   background-size: 200% auto;
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
-  animation: shimmer 5s linear infinite;
+  animation: shimmer 6s linear infinite;
 }
 
 .dot-grid {
@@ -317,8 +224,8 @@ input[type="number"] {
 /* Fine line grid for hero sections */
 .hero-grid {
   background-image:
-    linear-gradient(rgba(128,128,128,0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(128,128,128,0.05) 1px, transparent 1px);
+    linear-gradient(rgba(128,128,128,0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(128,128,128,0.055) 1px, transparent 1px);
   background-size: 40px 40px;
 }
 
@@ -333,6 +240,32 @@ input[type="number"] {
   animation-play-state: paused;
 }
 
+/* ── Hover-glow tracking card (Linear-style) ───────────── */
+.glow-card {
+  position: relative;
+}
+.glow-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: radial-gradient(
+    320px circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
+    rgba(109, 109, 244, 0.55),
+    transparent 45%
+  );
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+.glow-card:hover::before {
+  opacity: 1;
+}
+
 /* ── Monaco editor ───────────────────────────────────────── */
 .monaco-editor .monaco-scrollable-element > .scrollbar.vertical  { width: 10px; }
 .monaco-editor .monaco-scrollable-element > .scrollbar.horizontal { height: 10px; }
@@ -342,8 +275,8 @@ input[type="number"] {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #c8c8c8; border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
-[data-theme="dark"] ::-webkit-scrollbar-thumb { background: #383838; }
-[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: #505050; }
+[data-theme="dark"] ::-webkit-scrollbar-thumb { background: #35353f; }
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: #4a4a58; }
 
 /* Clickable controls always show pointer */
 button:not(:disabled),
@@ -363,7 +296,7 @@ button:disabled,
 
 /* ── Focus ring ──────────────────────────────────────────── */
 :focus-visible {
-  outline: 2px solid rgba(124, 58, 237, 0.6);
+  outline: 2px solid rgba(109, 109, 244, 0.6);
   outline-offset: 2px;
 }
 input:focus-visible,

@@ -282,7 +282,7 @@ export function Hero() {
       <div
         className="blob-drift-a pointer-events-none absolute -right-24 -top-36 h-[700px] w-[700px]"
         style={{
-          background: "radial-gradient(circle, rgba(124,58,237,0.13) 0%, rgba(124,58,237,0.04) 45%, transparent 65%)",
+          background: "radial-gradient(circle, rgba(109,109,244,0.14) 0%, rgba(109,109,244,0.05) 45%, transparent 65%)",
           filter: "blur(64px)",
         }}
         aria-hidden
@@ -291,7 +291,7 @@ export function Hero() {
       <div
         className="blob-drift-b pointer-events-none absolute -bottom-36 -left-24 h-[600px] w-[600px]"
         style={{
-          background: "radial-gradient(circle, rgba(37,99,235,0.11) 0%, rgba(37,99,235,0.04) 45%, transparent 65%)",
+          background: "radial-gradient(circle, rgba(79,143,247,0.12) 0%, rgba(79,143,247,0.04) 45%, transparent 65%)",
           filter: "blur(64px)",
         }}
         aria-hidden
@@ -316,7 +316,7 @@ export function Hero() {
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.06 }}
-            className="text-[2.8rem] font-bold leading-[1.04] tracking-[-0.03em] text-[var(--workspace-text)] sm:text-5xl md:text-6xl lg:text-[4.5rem]"
+            className="text-[2.9rem] font-semibold leading-[1.02] tracking-[-0.035em] text-[var(--workspace-text)] sm:text-5xl md:text-6xl lg:text-[4.6rem]"
           >
             Work with data.
             <br />
@@ -334,7 +334,7 @@ export function Hero() {
             <span className="font-semibold text-[var(--workspace-text)]">
               JSON · XML · YAML · TOML · CSV · cURL
             </span>
-            {" "}— UUID, Base64, JWT, hash, and more. One workspace, zero installs.
+            {" "}- UUID, Base64, JWT, hash, and more. One workspace, zero installs.
           </motion.p>
 
           {/* CTA row */}
@@ -401,7 +401,7 @@ export function Hero() {
             <div
               className="pointer-events-none absolute -inset-px rounded-[1.15rem]"
               style={{
-                background: "linear-gradient(135deg, rgba(124,58,237,0.35) 0%, rgba(37,99,235,0.2) 60%, transparent 100%)",
+                background: "linear-gradient(135deg, rgba(109,109,244,0.4) 0%, rgba(139,92,246,0.25) 45%, rgba(79,143,247,0.18) 100%)",
                 filter: "blur(1px)",
               }}
               aria-hidden
@@ -410,7 +410,7 @@ export function Hero() {
             <div
               className="pointer-events-none absolute -inset-10 rounded-3xl"
               style={{
-                background: "radial-gradient(ellipse, rgba(124,58,237,0.12) 0%, transparent 65%)",
+                background: "radial-gradient(ellipse, rgba(109,109,244,0.14) 0%, transparent 65%)",
                 filter: "blur(30px)",
               }}
               aria-hidden
@@ -475,6 +475,8 @@ export function Hero() {
                 <span className="font-mono text-[10px] text-[var(--workspace-text-muted)]">auto-detect</span>
                 <span className="select-none text-[var(--workspace-border)]">·</span>
                 <span className="font-mono text-[10px] text-[var(--workspace-text-muted)]">UTF-8</span>
+                <span className="select-none text-[var(--workspace-border)]">·</span>
+                <span className="font-mono text-[10px] text-[var(--workspace-text-muted)]">local-first</span>
                 <AnimatePresence mode="wait">
                   <motion.span
                     key={slide.id}

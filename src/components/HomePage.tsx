@@ -16,11 +16,10 @@ import { LandingHeader } from "@/components/landing";
 
 export function HomePage() {
   return (
-    <div className="min-h-screen bg-[var(--workspace-background)]">
+    <div className="min-h-screen bg-[var(--workspace-background)] pb-12">
       <LandingHeader />
       <main className="flex-1">
         <Hero />
-        <TrustStrip />
         <ProblemSolution />
         <FeatureGrid />
         <PowerFeatures />
@@ -30,6 +29,7 @@ export function HomePage() {
         <FinalCTA />
         <Footer />
       </main>
+      <TrustStrip />
     </div>
   );
 }

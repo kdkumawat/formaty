@@ -73,7 +73,7 @@ export function ToolPage({ config }: ToolPageProps) {
           className="pointer-events-none absolute inset-0"
           style={{
             background:
-              "radial-gradient(ellipse 80% 60% at 50% -10%, rgba(124,58,237,0.08) 0%, transparent 70%)",
+              "radial-gradient(ellipse 80% 60% at 50% -10%, rgba(109,109,244,0.1) 0%, transparent 70%)",
           }}
           aria-hidden
         />
