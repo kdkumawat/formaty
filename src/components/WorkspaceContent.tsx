@@ -4,10 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { motion } from "framer-motion";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import {
-  ArrowDownTrayIcon,
   ArrowPathIcon,
-  ArrowUturnLeftIcon,
-  ArrowUturnRightIcon,
   ArrowsRightLeftIcon,
   ChevronDownIcon,
   ChevronUpIcon,
@@ -54,11 +51,17 @@ import {
   Header as WorkspaceHeader,
   OutputActionBar,
   StatusBar,
+  Tooltip,
+  ACTION_LABELS,
+  loadVisibility,
+  saveVisibility,
   formatCopyAsText,
   DEFAULT_COPY_AS_OPTIONS,
   LIST_COPY_AS_OPTIONS,
   UUID_COPY_AS_OPTIONS,
   type CopyAsFormat,
+  type OutputActionId,
+  type OutputActionVisibility,
 } from "@/components/workspace";
 import { Logo } from "@/components/Logo";
 import {
@@ -77,6 +80,7 @@ import { decodeState, encodeState } from "@/lib/shareState";
 import { savePlayground, updatePlayground, deletePlayground } from "@/lib/playgroundApi";
 import { themeInlineCss } from "@/lib/utils/themeTokens";
 import { CommandPalette, type Command } from "@/components/CommandPalette";
+import { Toaster, toast } from "@/components/Toast";
 import type { JsonValue, TypeTargetLanguage } from "@/lib/json/core";
 
 const SAMPLE_JSON = `{
@@ -319,7 +323,7 @@ type ThemeMode = "system" | "dark" | "light";
 type ModalKind = "validate" | "diff" | null;
 type RightView = "raw" | "tree" | "graph" | "query" | "table";
 type QuoteStyle = "double" | "single";
-type Tab = { id: string; label: string };
+type Tab = { id: string; label: string; num: number; renamed?: boolean };
 type FormatOptions = {
   indentation: number;
   quoteStyle: QuoteStyle;
@@ -430,7 +434,7 @@ function SquareBtn({ className = "", ...props }: ButtonHTMLAttributes<HTMLButton
 /** Section rule header: uppercase label + hairline rule. */
 function SettingsRule({ title }: { title: string }) {
   return (
-    <div className="flex items-center gap-2.5">
+    <div className="mt-3 flex items-center gap-2.5">
       <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--workspace-text-muted)]">
         {title}
       </span>
@@ -604,7 +608,6 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   const [shareState, setShareState] = useState<"idle" | "done" | "error">("idle");
   const [sharedLinkId, setSharedLinkId] = useState<string | null>(initialSharedLinkId ?? null);
   const [sharedLinkUrl, setSharedLinkUrl] = useState<string | null>(initialSharedLinkUrl ?? null);
-  const [shareNotification, setShareNotification] = useState<string | null>(null);
   const [isOutputMaximized, setIsOutputMaximized] = useState(false);
   const [isDesktopLayout, setIsDesktopLayout] = useState(true);
   const [focusedPane, setFocusedPane] = useState<"input" | "output">("input");
@@ -612,6 +615,8 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   const [convertToFormat, setConvertToFormat] = useState<FormatKind>("json");
   const [inputFormatOverride, setInputFormatOverride] = useState<InputFormatKind | null>(null);
   const [transformConfigOpen, setTransformConfigOpen] = useState(false);
+  /** Which settings-panel tab is open (General / Compare / Utils). */
+  const [settingsTab, setSettingsTab] = useState<"general" | "compare" | "utils">("general");
   /** Menu-first chrome by default - cleaner for new users; uncheck in settings for pinned toolbar. */
   const [viewAsMenu, setViewAsMenu] = useState(true);
   const [formatMenuOpen, setFormatMenuOpen] = useState(false);
@@ -622,6 +627,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   const [pinnedItems, setPinnedItems] = useState<Set<string>>(
     () => new Set(["fmt:json", "view:raw", "view:query", "action:beautify", "action:minify", "type:typescript", "type:zod"])
   );
+  const [outputActionVisibility, setOutputActionVisibility] = useState<OutputActionVisibility>(() => loadVisibility());
   const [shareConfirmOpen, setShareConfirmOpen] = useState(false);
   const [showFirstRunHint, setShowFirstRunHint] = useState(false);
 
@@ -634,7 +640,6 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   const [diffPathFilter, setDiffPathFilter] = useState<"all" | "added" | "removed" | "changed">("all");
   const [diffLineStats, setDiffLineStats] = useState<LineDiffStats | null>(null);
   const [diffNav, setDiffNav] = useState<DiffNavState>({ current: 0, total: 0 });
-  const [diffActionFlash, setDiffActionFlash] = useState<string | null>(null);
   /** Document = Monaco text/JSON diff; List = set/list compare for SQL IN etc. */
   const [diffKind, setDiffKind] = useState<"document" | "list">("document");
   const [showHistoryPanel, setShowHistoryPanel] = useState(false);
@@ -642,10 +647,14 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   const [isWindowFullscreen, setIsWindowFullscreen] = useState(false);
 
   // Multiple tabs
-  const [tabs, setTabs] = useState<Tab[]>([{ id: "t1", label: "Tab 1" }]);
+  const [tabs, setTabs] = useState<Tab[]>([{ id: "t1", label: "T1", num: 1 }]);
   const [activeTabId, setActiveTabId] = useState("t1");
   const [showTabs, setShowTabs] = useState(false);
   const tabCounterRef = useRef(1);
+  /** Inline tab-rename editor state (floating input next to the rail). */
+  const [renamingTabId, setRenamingTabId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [renameRect, setRenameRect] = useState<{ top: number; left: number } | null>(null);
   // Recent command palette actions
   const [recentActions, setRecentActions] = useState<string[]>([]);
   // Split input
@@ -858,6 +867,13 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   const isUtilsMode = activeOperation === "utils";
   const hideInputPanel = isOutputMaximized || isDiffMode || isUtilsMode;
 
+  // Opening settings auto-selects the tab matching the current workspace tool.
+  useEffect(() => {
+    if (transformConfigOpen) {
+      setSettingsTab(isDiffMode ? "compare" : isUtilsMode ? "utils" : "general");
+    }
+  }, [transformConfigOpen, isDiffMode, isUtilsMode]);
+
   const structuralDiff = useMemo((): DiffSummary | null => {
     if (!isDiffMode) return null;
     if (!diffLeftInput.trim() && !diffRightInput.trim()) return emptyDiffSummary();
@@ -894,8 +910,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   }, [structuralDiff, diffPathFilter]);
 
   const flashDiffAction = useCallback((msg: string) => {
-    setDiffActionFlash(msg);
-    window.setTimeout(() => setDiffActionFlash(null), 1400);
+    toast({ message: msg, type: /failed|needs valid JSON/i.test(msg) ? "error" : "success" });
   }, []);
   const copyLabel = copyState === "done" ? "Copied" : copyState === "error" ? "Failed" : "Copy";
   const shareLabel = shareState === "done" ? "Copied" : shareState === "error" ? "Failed" : "Share";
@@ -924,6 +939,9 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   /* Pinned toolbar shortcut (non-compact mode) - same greyed squarish language as select triggers */
   const pinnedBtnClass =
     "inline-flex h-7 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-md bg-muted px-2 text-xs font-medium text-[var(--workspace-text)] transition-colors hover:bg-primary/10 hover:text-primary disabled:opacity-40";
+  /* Compare-document toolbar buttons - match the standard toolbar button design */
+  const diffToolBtn =
+    "inline-flex h-7 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-md bg-muted px-2 text-xs font-medium text-[var(--workspace-text)] transition-colors hover:bg-primary/10 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40";
   /* Dropdown menu row - shared design (see menuStyles) */
   const menuItemClass = sharedMenuItemClass;
   const menuItemActiveClass = sharedMenuItemActiveClass;
@@ -938,8 +956,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   useEffect(() => {
     if (isHugeInput && liveTransform) {
       setLiveTransform(false);
-      setShareNotification("Live transform off for large files");
-      window.setTimeout(() => setShareNotification(null), 3000);
+      toast({ message: "Live transform off for large files", type: "info" });
     }
     // Only react to size crossing the threshold, not liveTransform toggles
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1004,7 +1021,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     tabSnapshotsRef.current.set(activeTabId, captureTabSnapshot());
     tabCounterRef.current += 1;
     const newId = `t${tabCounterRef.current}`;
-    setTabs((prev) => [...prev, { id: newId, label: `Tab ${tabCounterRef.current}` }]);
+    setTabs((prev) => [...prev, { id: newId, label: `T${tabCounterRef.current}`, num: tabCounterRef.current }]);
     setActiveTabId(newId);
     historyLock.current = true;
     applyTabSnapshot(emptyTabSnapshot());
@@ -1030,6 +1047,49 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
       setTabs(newTabs);
     }
   };
+
+  /** Short context label letter: T (Transform), C (Compare), U (Utils). */
+  const letterForTab = useCallback(
+    (tabId: string): string => {
+      const op =
+        tabId === activeTabId
+          ? activeOperation
+          : (tabSnapshotsRef.current.get(tabId)?.activeOperation ?? null);
+      return op === "diff" ? "C" : op === "utils" ? "U" : "T";
+    },
+    [activeTabId, activeOperation],
+  );
+
+  /** Keep the live rename target in a ref so blur-after-Escape never commits. */
+  const renamingTabIdRef = useRef<string | null>(null);
+
+  const startRename = useCallback(
+    (tab: Tab, el: HTMLElement | null) => {
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      renamingTabIdRef.current = tab.id;
+      setRenameRect({ top: r.top, left: r.right + 6 });
+      setRenamingTabId(tab.id);
+      setRenameValue(tab.renamed ? tab.label : `${letterForTab(tab.id)}${tab.num}`);
+    },
+    [letterForTab],
+  );
+
+  const commitRename = useCallback(() => {
+    const id = renamingTabIdRef.current;
+    const v = renameValue.trim();
+    renamingTabIdRef.current = null;
+    setRenamingTabId(null);
+    setRenameRect(null);
+    if (!id || !v) return;
+    setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, label: v, renamed: true } : t)));
+  }, [renameValue]);
+
+  const cancelRename = useCallback(() => {
+    renamingTabIdRef.current = null;
+    setRenamingTabId(null);
+    setRenameRect(null);
+  }, []);
 
   useEffect(() => {
     try {
@@ -1253,9 +1313,16 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
       if (Array.isArray(data.pinnedItems)) setPinnedItems(new Set(data.pinnedItems));
       // Restore tabs
       if (Array.isArray(data.tabs) && data.tabs.length > 0) {
-        setTabs(data.tabs);
-        if (typeof data.tabCounter === "number") tabCounterRef.current = data.tabCounter;
-        if (data.activeTabId && data.tabs.some((t: Tab) => t.id === data.activeTabId)) {
+        // Migrate tabs saved by older sessions (no num/renamed) and reset the
+        // counter per session: new tabs continue from the highest existing number.
+        const migrated: Tab[] = data.tabs.map((t, i) => ({
+          ...t,
+          num: (t as Partial<Tab>).num ?? (Number(String((t as Partial<Tab>).label ?? "").replace(/\D/g, "")) || i + 1),
+          renamed: Boolean((t as Partial<Tab>).renamed),
+        }));
+        setTabs(migrated);
+        tabCounterRef.current = Math.max(0, ...migrated.map((t) => t.num));
+        if (data.activeTabId && migrated.some((t: Tab) => t.id === data.activeTabId)) {
           setActiveTabId(data.activeTabId);
         } else {
           setActiveTabId(data.tabs[0].id);
@@ -2101,12 +2168,10 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
             throw new Error("Graph export is not ready yet.");
           }
           await graphViewRef.current.downloadImage(format ?? "png");
-          setShareNotification("Downloaded");
-          window.setTimeout(() => setShareNotification(null), 3000);
+          toast({ message: "Downloaded" });
         } catch (e) {
           console.warn("Graph download failed:", e);
-          setShareNotification("Download failed");
-          window.setTimeout(() => setShareNotification(null), 3000);
+          toast({ message: "Download failed", type: "error" });
         }
       })();
       setDownloadMenuOpen(false);
@@ -2120,8 +2185,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     a.download = `formaty-output.${outputExt}`;
     a.click();
     URL.revokeObjectURL(url);
-    setShareNotification("Downloaded");
-    window.setTimeout(() => setShareNotification(null), 3000);
+    toast({ message: "Downloaded" });
     setDownloadMenuOpen(false);
   };
 
@@ -2199,12 +2263,11 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     try {
       await navigator.clipboard.writeText(url);
       setShareState("done");
-      setShareNotification(
-        includeAllTabs
-          ? `Link copied (${tabs.length} tabs)`
-          : url,
-      );
-      window.setTimeout(() => setShareNotification(null), 4000);
+      toast({
+        message: includeAllTabs ? `Link copied (${tabs.length} tabs)` : "Link copied",
+        url,
+        duration: 4000,
+      });
     } catch {
       setShareState("error");
     }
@@ -2221,12 +2284,10 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
         }
         await graphViewRef.current.copyPngToClipboard();
         setCopyState("done");
-        setShareNotification("Copied");
-        window.setTimeout(() => setShareNotification(null), 3000);
+        toast({ message: "Copied" });
       } catch {
         setCopyState("error");
-        setShareNotification("Copy failed");
-        window.setTimeout(() => setShareNotification(null), 3000);
+        toast({ message: "Copy failed", type: "error" });
       }
       window.setTimeout(() => setCopyState("idle"), 1400);
       return;
@@ -2235,12 +2296,10 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     try {
       await navigator.clipboard.writeText(output);
       setCopyState("done");
-      setShareNotification("Copied");
-      window.setTimeout(() => setShareNotification(null), 3000);
+      toast({ message: "Copied" });
     } catch {
       setCopyState("error");
-      setShareNotification("Copy failed");
-      window.setTimeout(() => setShareNotification(null), 3000);
+      toast({ message: "Copy failed", type: "error" });
     }
     window.setTimeout(() => setCopyState("idle"), 1400);
   };
@@ -2287,11 +2346,10 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     try {
       const text = formatCopyAsText(raw, format);
       await navigator.clipboard.writeText(text);
-      setShareNotification("Copied");
+      toast({ message: "Copied" });
     } catch {
-      setShareNotification("Copy failed");
+      toast({ message: "Copy failed", type: "error" });
     }
-    window.setTimeout(() => setShareNotification(null), 3000);
   };
 
   const handleWorkspaceReset = useCallback(() => {
@@ -2306,8 +2364,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
           touched: true,
         },
       }));
-      setShareNotification("Reset");
-      window.setTimeout(() => setShareNotification(null), 1500);
+      toast({ message: "Reset" });
       return;
     }
     if (isDiffMode) {
@@ -2318,8 +2375,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
       } else {
         clearDiffSide("both");
       }
-      setShareNotification("Reset");
-      window.setTimeout(() => setShareNotification(null), 1500);
+      toast({ message: "Reset" });
       return;
     }
     setInput("");
@@ -2333,8 +2389,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     setSharedLinkUrl(null);
     isViewingSharedRef.current = false;
     if (pathname === "/playground" && searchParams?.get("id")) router.replace("/playground");
-    setShareNotification("Reset");
-    window.setTimeout(() => setShareNotification(null), 1500);
+    toast({ message: "Reset" });
   }, [
     isUtilsMode,
     isDiffMode,
@@ -2363,8 +2418,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     a.download = "formaty-history.json";
     a.click();
     URL.revokeObjectURL(url);
-    setShareNotification("History exported");
-    window.setTimeout(() => setShareNotification(null), 3000);
+    toast({ message: "History exported" });
   };
 
 
@@ -2593,7 +2647,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     { id: "ws-download", label: "Download output",       category: "Workspace", keywords: ["save", "export"], disabled: !output.trim(), action: () => downloadOutput() },
     { id: "ws-share",    label: "Share workspace link",  category: "Workspace", keywords: ["link", "url"], disabled: !output.trim(), action: requestShare },
 
-    ...(sharedLinkUrl ? [{ id: "ws-embed", label: "Copy embed / iframe URL", category: "Workspace" as const, keywords: ["embed", "iframe", "share"], disabled: false, action: async () => { await navigator.clipboard.writeText(`${sharedLinkUrl}&embed=1`); setShareNotification("Embed URL copied"); window.setTimeout(() => setShareNotification(null), 3000); } }] : []),
+    ...(sharedLinkUrl ? [{ id: "ws-embed", label: "Copy embed / iframe URL", category: "Workspace" as const, keywords: ["embed", "iframe", "share"], disabled: false, action: async () => { await navigator.clipboard.writeText(`${sharedLinkUrl}&embed=1`); toast({ message: "Embed URL copied" }); } }] : []),
     { id: "ws-clear",    label: "Clear workspace",       category: "Workspace", keywords: ["reset", "new", "empty"], disabled: inputEmpty && !output.trim(), action: () => {
       setInput(""); setOutput(""); setParsedOutput(null); setError(null);
       setValidationError(null); setActiveOperation(null); setCopyState("idle");
@@ -2671,6 +2725,409 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   // eslint-disable-next-line react-hooks/exhaustive-deps
   ], [inputEmpty, showBusy, convertToFormat, rightView, parsedOutput, typeLanguage, activeOperation, output, themeMode, editorFontSize, isOutputMaximized, isWindowFullscreen, toggleWindowFullscreen, formatOptions, liveTransform, viewAsMenu, canUndo, canRedo, lineWrap, diffSideBySide, diffIgnoreWhitespace, diffShowPaths, diffKind, csvDelimiter, sharedLinkUrl, pinnedItems, undoStack.length, tabs.length, activeTabId, splitInputOpen, autoFormatOnPaste, showTabs, swapDiffSides, beautifyDiffSides, copyDiffText, downloadDiffReport, isUtilsMode, utilTab, isDiffMode]);
 
+  const settingsPanelContent = (
+                <div className="w-[20rem] max-w-[85vw]">
+  {/* Header */}
+  <div className="flex items-center gap-2">
+    <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/12 text-primary">
+      <Cog6ToothIcon className="h-3.5 w-3.5" aria-hidden />
+    </span>
+    <div className="min-w-0 flex-1">
+      <p className="text-xs font-semibold leading-tight tracking-tight text-[var(--workspace-text)]">Settings</p>
+      <p className="truncate text-[10px] leading-snug text-[var(--workspace-text-muted)]">
+        Saved automatically · applies to this tab
+      </p>
+    </div>
+    <span className="inline-flex h-4 shrink-0 items-center rounded-full bg-emerald-500/10 px-1.5 text-[9px] font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+      Local
+    </span>
+  </div>
+
+  {/* Settings tabs - General / Compare / Utils */}
+  <div
+    className="mb-2 mt-2 flex items-center gap-px rounded-lg border border-[var(--workspace-border)] bg-muted/50 p-0.5"
+    role="tablist"
+    aria-label="Settings sections"
+  >
+    {(
+      [
+        ["general", "General"],
+        ["compare", "Compare"],
+        ["utils", "Utils"],
+      ] as const
+    ).map(([tab, label]) => (
+      <button
+        key={tab}
+        type="button"
+        role="tab"
+        aria-selected={settingsTab === tab}
+        className={`h-6 flex-1 rounded-md text-[11px] font-semibold transition-colors ${
+          settingsTab === tab
+            ? "bg-primary text-primary-foreground shadow-sm"
+            : "text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)] hover:text-[var(--workspace-text)]"
+        }`}
+        onClick={() => setSettingsTab(tab)}
+      >
+        {label}
+      </button>
+    ))}
+  </div>
+
+  {settingsTab === "general" && (
+  <>
+  {/* Behavior */}
+  <SettingsRule title="Behavior" />
+  <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-px">
+    {(
+      [
+        ["Compact menus", viewAsMenu, (v: boolean) => setViewAsMenu(v)],
+        ["Multi-tab mode", showTabs, (v: boolean) => setShowTabs(v)],
+        ["Live transform", liveTransform, (v: boolean) => setLiveTransform(v)],
+        ["Line wrap", lineWrap, (v: boolean) => setLineWrap(v)],
+        ["Format on paste", autoFormatOnPaste, (v: boolean) => setAutoFormatOnPaste(v)],
+      ] as const
+    ).map(([label, on, setOn]) => (
+      <label
+        key={label}
+        className="flex min-h-7 cursor-pointer items-center justify-between gap-2 rounded-md px-1.5 py-1 text-xs text-[var(--workspace-text)] transition-colors hover:bg-primary/5"
+      >
+        <span className="min-w-0">{label}</span>
+        <Switch checked={on} onCheckedChange={setOn} />
+      </label>
+    ))}
+  </div>
+  </>)}
+
+  {/* Toolbar pins - kept next to the Compact menus toggle */}
+  {settingsTab === "general" && (
+    <>
+      <SettingsRule title="Toolbar" />
+      <div className="mt-1 space-y-2">
+        {!viewAsMenu ? (
+          <div className="space-y-1.5">
+            <PinChipRow
+              label="Format"
+              items={FORMAT_KINDS.map((fmt) => ({ id: `fmt:${fmt}`, label: FORMAT_LABELS[fmt] }))}
+              pinned={(id) => pinnedItems.has(id)}
+              onToggle={(id) =>
+                setPinnedItems((s) => {
+                  const n = new Set(s);
+                  if (n.has(id)) n.delete(id);
+                  else n.add(id);
+                  return n;
+                })
+              }
+            />
+            <PinChipRow
+              label="View"
+              items={(["raw", "tree", "graph", "query", "table"] as const).map((view) => ({
+                id: `view:${view}`,
+                label: view[0].toUpperCase() + view.slice(1),
+              }))}
+              pinned={(id) => pinnedItems.has(id)}
+              onToggle={(id) =>
+                setPinnedItems((s) => {
+                  const n = new Set(s);
+                  if (n.has(id)) n.delete(id);
+                  else n.add(id);
+                  return n;
+                })
+              }
+            />
+            <PinChipRow
+              label="Action"
+              items={OPERATION_ACTIONS.map(([label, action]) => ({ id: `action:${action}`, label }))}
+              pinned={(id) => pinnedItems.has(id)}
+              onToggle={(id) =>
+                setPinnedItems((s) => {
+                  const n = new Set(s);
+                  if (n.has(id)) n.delete(id);
+                  else n.add(id);
+                  return n;
+                })
+              }
+            />
+            <PinChipRow
+              label="Types"
+              items={TYPE_LANGUAGES.slice(0, 8).map((item) => ({ id: `type:${item.id}`, label: item.label }))}
+              pinned={(id) => pinnedItems.has(id)}
+              onToggle={(id) =>
+                setPinnedItems((s) => {
+                  const n = new Set(s);
+                  if (n.has(id)) n.delete(id);
+                  else n.add(id);
+                  return n;
+                })
+              }
+            />
+          </div>
+        ) : (
+          <p className="rounded-md bg-primary/5 px-2 py-1.5 text-[10px] leading-snug text-[var(--workspace-text-muted)]">
+            Compact menus is on - the toolbar uses{" "}
+            <strong className="text-primary">Format · View · Actions · Types</strong> dropdowns. Turn off{" "}
+            <strong className="text-primary">Compact menus</strong> in Behavior to show pinned shortcuts instead.
+          </p>
+        )}
+      </div>
+    </>
+  )}
+
+  {settingsTab === "general" && (
+  <>
+  {/* Editor */}
+  <SettingsRule title="Editor" />
+  <div className="mt-1">
+    <SettingsRow
+      label={
+        <>
+          Font size
+          <PinButton
+            pinned={pinnedItems.has("fontSize")}
+            label="font size"
+            onClick={() =>
+              setPinnedItems((s) => {
+                const n = new Set(s);
+                if (n.has("fontSize")) n.delete("fontSize");
+                else n.add("fontSize");
+                return n;
+              })
+            }
+          />
+        </>
+      }
+    >
+      <SettingsStepper
+        value={editorFontSize}
+        decLabel="Decrease font size"
+        incLabel="Increase font size"
+        resetLabel="Reset font size"
+        onDec={() => setEditorFontSize((s) => Math.max(10, s - 1))}
+        onInc={() => setEditorFontSize((s) => Math.min(24, s + 1))}
+        onReset={() => setEditorFontSize(14)}
+      />
+    </SettingsRow>
+  </div>
+  </>)}
+
+  {settingsTab === "compare" && (
+    <>
+      <SettingsRule title="List parsing" />
+      <div className="mt-1 space-y-2">
+        <div>
+          <p className="pb-1 text-[10px] font-medium text-[var(--workspace-text-muted)]">Split by</p>
+          <div className="flex flex-wrap gap-1">
+            {(
+              [
+                ["auto", "Auto"],
+                ["comma", "Comma"],
+                ["semicolon", "Semicolon"],
+                ["pipe", "Pipe"],
+                ["whitespace", "Whitespace"],
+                ["json", "JSON array"],
+              ] as const
+            ).map(([delim, label]) => (
+              <button
+                key={delim}
+                type="button"
+                onClick={() => setListCompareOptions((prev) => ({ ...prev, delimiter: delim }))}
+                className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors ${
+                  listCompareOptions.delimiter === delim
+                    ? "bg-primary/15 text-primary"
+                    : "bg-muted text-[var(--workspace-text-muted)] hover:bg-primary/10 hover:text-[var(--workspace-text)]"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <p className="pb-1 text-[10px] font-medium text-[var(--workspace-text-muted)]">Parsing</p>
+          <div className="flex flex-wrap gap-1">
+            {(
+              [
+                ["trim", "Trim whitespace"],
+                ["ignoreEmpty", "Skip empty"],
+                ["caseInsensitive", "Ignore case"],
+                ["stripQuotes", "Strip quotes"],
+                ["numericNormalize", "Normalize numbers"],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() =>
+                  setListCompareOptions((prev) => ({ ...prev, [key]: !prev[key as keyof ListParseOptions] }))
+                }
+                className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors ${
+                  listCompareOptions[key as keyof ListParseOptions]
+                    ? "bg-primary/15 text-primary"
+                    : "bg-muted text-[var(--workspace-text-muted)] hover:bg-primary/10 hover:text-[var(--workspace-text)]"
+                }`}
+              >
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${listCompareOptions[key as keyof ListParseOptions] ? "bg-primary" : "bg-[var(--workspace-border)]"}`}
+                />
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+      <p className="mt-3 rounded-md bg-primary/5 px-2 py-1.5 text-[10px] leading-snug text-[var(--workspace-text-muted)]">
+        Document diff options (hunks, inline vs side-by-side, whitespace, paths) live in the Compare toolbar.
+      </p>
+    </>
+  )}
+  {settingsTab === "utils" && (
+    <>
+      <p className="mt-3 rounded-md bg-primary/5 px-2 py-1.5 text-[10px] leading-snug text-[var(--workspace-text-muted)]">
+        Each utility keeps its own options (count, length, character sets) right in the tool pane.
+      </p>
+    </>
+  )}
+
+  {settingsTab === "general" && (
+    <>
+      {/* Formatting */}
+      <SettingsRule title="Formatting" />
+      <div className="mt-1 space-y-px">
+        <SettingsRow
+          label={
+            <>
+              Indent
+              <PinButton
+                pinned={pinnedItems.has("indent")}
+                label="indent"
+                onClick={() =>
+                  setPinnedItems((s) => {
+                    const n = new Set(s);
+                    if (n.has("indent")) n.delete("indent");
+                    else n.add("indent");
+                    return n;
+                  })
+                }
+              />
+            </>
+          }
+        >
+          <SettingsStepper
+            value={formatOptions.indentation}
+            decLabel="Decrease indent"
+            incLabel="Increase indent"
+            resetLabel="Reset indent"
+            minWidth="min-w-[1.5rem]"
+            onDec={() => {
+              const v = Math.max(0, formatOptions.indentation - 1);
+              applyFormatWithOptions({ ...formatOptions, indentation: v });
+            }}
+            onInc={() => {
+              const v = Math.min(10, formatOptions.indentation + 1);
+              applyFormatWithOptions({ ...formatOptions, indentation: v });
+            }}
+            onReset={() => applyFormatWithOptions({ ...formatOptions, indentation: 2 })}
+          />
+        </SettingsRow>
+        <SettingsRow label="Quotes">
+          <div className="inline-flex overflow-hidden rounded-md border border-[var(--workspace-border)]/60 bg-muted/50">
+            {(["double", "single"] as const).map((q) => (
+              <button
+                key={q}
+                type="button"
+                className={`flex h-7 min-w-[2.25rem] items-center justify-center px-2 text-xs font-medium transition-colors ${
+                  formatOptions.quoteStyle === q
+                    ? "bg-primary/15 text-primary"
+                    : "text-[var(--workspace-text-muted)] hover:bg-primary/5 hover:text-[var(--workspace-text)]"
+                }`}
+                onClick={() => applyFormatWithOptions({ ...formatOptions, quoteStyle: q })}
+              >
+                {q === "double" ? "\u201C \u201D" : "' '"}
+              </button>
+            ))}
+          </div>
+        </SettingsRow>
+        <SettingsRow label="JSON">
+          <div className="flex items-center gap-1">
+            <label className="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-md border border-[var(--workspace-border)]/60 bg-muted/30 px-2 text-xs font-medium text-[var(--workspace-text)] transition-colors hover:border-primary/30 hover:bg-primary/5 has-[[data-state=checked]]:border-primary/40 has-[[data-state=checked]]:bg-primary/10">
+              <Checkbox checked={formatOptions.sortKeys} onCheckedChange={(c) => applyFormatWithOptions({ ...formatOptions, sortKeys: c === true })} />
+              Sort keys
+            </label>
+            <label className="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-md border border-[var(--workspace-border)]/60 bg-muted/30 px-2 text-xs font-medium text-[var(--workspace-text)] transition-colors hover:border-primary/30 hover:bg-primary/5 has-[[data-state=checked]]:border-primary/40 has-[[data-state=checked]]:bg-primary/10">
+              <Checkbox checked={formatOptions.removeEmpty} onCheckedChange={(c) => applyFormatWithOptions({ ...formatOptions, removeEmpty: c === true })} />
+              Drop empty
+            </label>
+          </div>
+        </SettingsRow>
+      </div>
+    </>
+  )}
+
+  {settingsTab === "general" && (
+  <>
+  {/* Toolbar buttons visibility - moved up from output action bar */}
+  <div className="mt-2.5 border-t border-[var(--workspace-border)]/60 pt-2">
+    <div className="flex items-center gap-2.5 pb-1">
+      <p className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--workspace-text-muted)]">
+        Toolbar buttons
+      </p>
+      <span className="h-px flex-1 bg-[var(--workspace-border)]/60" aria-hidden />
+    </div>
+    <div className="grid grid-cols-2 gap-x-2">
+      {(Object.keys(ACTION_LABELS) as OutputActionId[]).map((id) => {
+        if (id === "copyAs") return null; // merged into Copy
+        if (id === "useAsInput") return null; // removed
+        if (id === "share") return null; // always on
+        if (id === "reset") return null; // always on
+        if (id === "maximize" && (isDiffMode || isUtilsMode)) return null;
+        return (
+          <label
+            key={id}
+            className="flex min-h-7 cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 text-xs text-[var(--workspace-text)] transition-colors hover:bg-primary/5"
+          >
+            <Checkbox
+              checked={outputActionVisibility[id] !== false}
+              onCheckedChange={() => {
+                setOutputActionVisibility((prev) => {
+                  const next = { ...prev, [id]: !prev[id] };
+                  const anyOn = (Object.keys(next) as OutputActionId[]).some(
+                    (k) => next[k] && k !== "share" && k !== "reset" && !(k === "maximize" && (isDiffMode || isUtilsMode)),
+                  );
+                  if (!anyOn) return prev;
+                  saveVisibility(next);
+                  return next;
+                });
+              }}
+            />
+            {ACTION_LABELS[id]}
+          </label>
+        );
+      })}
+    </div>
+  </div>
+
+  {/* Footer */}
+  <div className="mt-2.5 border-t border-[var(--workspace-border)]/60 pt-2">
+    <button
+      type="button"
+      className="flex h-7 w-full items-center justify-center gap-1.5 rounded-md border border-[var(--workspace-border)]/60 bg-muted/40 text-xs font-medium text-[var(--workspace-text-muted)] transition-all hover:border-primary/25 hover:bg-primary/10 hover:text-primary"
+      onClick={() => {
+        setFormatOptions(DEFAULT_FORMAT_OPTIONS);
+        setConvertToFormat("json");
+        setRightView("raw");
+        setEditorFontSize(14);
+        setViewAsMenu(true);
+        setPinnedItems(new Set(["fmt:json", "view:raw", "view:query", "action:beautify", "action:minify", "type:typescript", "type:zod"]));
+      }}
+    >
+      <ArrowPathIcon className="h-3.5 w-3.5" />
+      Reset to default
+    </button>
+  </div>
+  </>
+  )}
+</div>
+  );
+
   return (
     <main
       className="flex flex-col overflow-hidden bg-[var(--workspace-background)] text-[var(--workspace-text)]"
@@ -2680,6 +3137,9 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
         themeMode={themeMode}
         onThemeChange={setThemeMode}
         onOpenCommandPalette={() => setCommandPaletteOpen(true)}
+        settingsOpen={transformConfigOpen}
+        onSettingsOpenChange={setTransformConfigOpen}
+        settingsContent={settingsPanelContent}
       />
 
       {loadedToolPreset && (
@@ -2718,34 +3178,46 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
       <div className="flex min-h-0 flex-1 flex-row overflow-hidden">
         {isDesktopLayout && showTabs && (
           <div className="flex h-full w-8 shrink-0 flex-col overflow-y-auto border-r border-[var(--workspace-border)] bg-[var(--workspace-panel)] pb-1 pt-1">
-            {tabs.map((tab) => (
+            {tabs.map((tab) => {
+              const isActive = activeTabId === tab.id;
+              const displayName = tab.renamed ? tab.label : `${letterForTab(tab.id)}${tab.num}`;
+              return (
               <div
                 key={tab.id}
                 role="tab"
                 tabIndex={0}
-                title={tab.label}
-                className={`group relative flex cursor-pointer items-center justify-center py-0.5 transition-all duration-150 ${activeTabId === tab.id ? "bg-primary/10 text-primary" : "text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)]/60 hover:text-[var(--workspace-text)]"}`}
+                className={`group relative flex min-h-9 cursor-pointer items-center justify-center overflow-hidden py-0.5 transition-all duration-150 ${isActive ? "bg-primary/10 text-primary" : "text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)]/60 hover:text-[var(--workspace-text)]"}`}
                 onClick={() => switchToTab(tab.id)}
+                onDoubleClick={(e) => { e.stopPropagation(); startRename(tab, e.currentTarget); }}
                 onKeyDown={(e) => e.key === "Enter" && switchToTab(tab.id)}
               >
-                {activeTabId === tab.id && (
+                {isActive && (
                   <span className="absolute inset-y-1 left-0 w-[2px] rounded-full bg-primary" />
                 )}
-                <span className="text-[10px] font-medium leading-none tracking-wide" style={{ writingMode: "vertical-rl", textOrientation: "mixed", maxHeight: 26 }}>
-                  {tab.label}
-                </span>
+                <Tooltip
+                  content={tab.renamed ? `${tab.label} · double-click to rename` : `${displayName} · double-click to rename`}
+                  side="right"
+                >
+                  <span
+                    className="max-h-16 truncate px-px text-[10px] font-medium leading-none tracking-wide"
+                    style={{ writingMode: "vertical-rl", textOrientation: "upright" }}
+                  >
+                    {displayName}
+                  </span>
+                </Tooltip>
                 {tabs.length > 1 && (
                   <button
                     type="button"
                     className="absolute -right-0.5 -top-0.5 hidden h-3.5 w-3.5 items-center justify-center rounded-full bg-[var(--workspace-border)] text-[var(--workspace-text-muted)] group-hover:flex hover:bg-red-500/20 hover:text-red-400"
                     onClick={(e) => { e.stopPropagation(); closeTab(tab.id); }}
-                    aria-label={`Close ${tab.label}`}
+                    aria-label={`Close ${displayName}`}
                   >
                     <XMarkIcon className="h-2 w-2" />
                   </button>
                 )}
               </div>
-            ))}
+              );
+            })}
             <button
               type="button"
               className="mt-0.5 flex h-7 items-center justify-center text-[var(--workspace-text-muted)] transition-all duration-100 hover:bg-primary/5 hover:text-primary"
@@ -2756,14 +3228,29 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
             </button>
           </div>
         )}
+        {renamingTabId && renameRect && (
+          <input
+            autoFocus
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commitRename();
+              else if (e.key === "Escape") cancelRename();
+            }}
+            onBlur={commitRename}
+            aria-label="Rename tab"
+            className="fixed z-[90] h-7 w-36 rounded-md border border-primary/40 bg-[var(--workspace-panel)] px-2 text-xs text-[var(--workspace-text)] shadow-lg outline-none"
+            style={{ top: renameRect.top, left: renameRect.left }}
+          />
+        )}
       {/* Column: stable full-width tool row + split (icons never jump when left panel hides) */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         {/* ── Full-width secondary toolbar (Transform | Compare | Utils + output actions) ── */}
         <div
-          className={`flex h-10 shrink-0 flex-nowrap items-center gap-0.5 overflow-x-auto border-b px-1.5 text-xs [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${inputEditorBgClass} text-[var(--workspace-text-muted)]`}
+          className={`flex h-9 shrink-0 flex-nowrap items-center gap-0.5 overflow-x-auto border-b px-1.5 text-xs [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${inputEditorBgClass} text-[var(--workspace-text-muted)]`}
         >
           <div
-            className="relative flex h-8 shrink-0 overflow-hidden rounded-md bg-muted"
+            className="relative flex h-7 shrink-0 overflow-hidden rounded-md bg-muted"
             role="group"
             aria-label="Workspace tool"
           >
@@ -2802,7 +3289,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
               <button
                 key={tab.id}
                 type="button"
-                className={`relative h-8 cursor-pointer px-3 text-xs font-semibold transition-colors duration-150 ${
+                className={`relative h-7 cursor-pointer px-3 text-xs font-semibold transition-colors duration-150 ${
                   i > 0 ? "border-l border-[var(--workspace-border)]" : ""
                 } ${
                   tab.active
@@ -3049,30 +3536,37 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
 
           {isDiffMode && (
             <>
-              <div className="flex h-8 shrink-0 overflow-hidden rounded-md bg-muted">
+              <div className="mx-1 h-5 w-px shrink-0 bg-[var(--workspace-border)]" aria-hidden />
+              <div className="flex h-7 shrink-0 overflow-hidden rounded-md bg-muted">
                 <button
                   type="button"
-                  className={`h-8 cursor-pointer px-3 text-xs font-semibold ${
-                    diffKind === "document"
-                      ? "bg-primary/15 text-primary"
-                      : "text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)]"
-                  }`}
+                  className={`relative h-7 cursor-pointer px-3 text-xs font-semibold transition-colors duration-150 ${diffKind === "document" ? "text-primary" : "text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)] hover:text-[var(--workspace-text)]"}`}
                   onClick={() => setDiffKind("document")}
                   title="Document text/JSON diff"
                 >
-                  Document
+                  {diffKind === "document" && (
+                    <motion.span
+                      layoutId="diff-kind-pill"
+                      className="absolute inset-0 bg-primary/15"
+                      transition={{ type: "spring", stiffness: 420, damping: 34 }}
+                    />
+                  )}
+                  <span className="relative z-[1]">Document</span>
                 </button>
                 <button
                   type="button"
-                  className={`h-8 cursor-pointer border-l border-[var(--workspace-border)] px-3 text-xs font-semibold ${
-                    diffKind === "list"
-                      ? "bg-primary/15 text-primary"
-                      : "text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)]"
-                  }`}
+                  className={`relative h-7 cursor-pointer border-l border-[var(--workspace-border)] px-3 text-xs font-semibold transition-colors duration-150 ${diffKind === "list" ? "text-primary" : "text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)] hover:text-[var(--workspace-text)]"}`}
                   onClick={() => setDiffKind("list")}
                   title="List / set compare"
                 >
-                  Lists
+                  {diffKind === "list" && (
+                    <motion.span
+                      layoutId="diff-kind-pill"
+                      className="absolute inset-0 bg-primary/15"
+                      transition={{ type: "spring", stiffness: 420, damping: 34 }}
+                    />
+                  )}
+                  <span className="relative z-[1]">Lists</span>
                 </button>
               </div>
               {diffKind === "list" && (
@@ -3103,26 +3597,20 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                   ) : (diffLeftInput.trim() || diffRightInput.trim()) ? (
                     <span className="shrink-0 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">Identical</span>
                   ) : null}
-                  <button type="button" title="Undo" className={`${linkBtnClass} h-7 min-h-7 w-7`} onClick={() => diffEditorRef.current?.undo()}>
-                    <ArrowUturnLeftIcon className="h-3.5 w-3.5" />
-                  </button>
-                  <button type="button" title="Redo" className={`${linkBtnClass} h-7 min-h-7 w-7`} onClick={() => diffEditorRef.current?.redo()}>
-                    <ArrowUturnRightIcon className="h-3.5 w-3.5" />
-                  </button>
-                  <button type="button" title={diffSideBySide ? "Inline view" : "Side-by-side"} className={`${linkBtnClass} h-7 min-h-7 px-1.5 text-[11px]`} onClick={() => setDiffSideBySide((v) => !v)}>
+                  <button type="button" title={diffSideBySide ? "Inline view" : "Side-by-side"} className={diffToolBtn} onClick={() => setDiffSideBySide((v) => !v)}>
                     {diffSideBySide ? "Inline" : "Side-by-side"}
                   </button>
-                  <button type="button" title="Ignore trim whitespace" className={`${linkBtnClass} h-7 min-h-7 px-1.5 text-[11px] ${diffIgnoreWhitespace ? "text-primary !bg-primary/10" : ""}`} onClick={() => setDiffIgnoreWhitespace((v) => !v)}>
+                  <button type="button" title="Ignore trim whitespace" className={`${diffToolBtn} ${diffIgnoreWhitespace ? "!bg-primary/12 !text-primary" : ""}`} onClick={() => setDiffIgnoreWhitespace((v) => !v)}>
                     {diffIgnoreWhitespace ? "Ignore WS ✓" : "Ignore WS"}
                   </button>
-                  <button type="button" title="Swap sides" className={`${linkBtnClass} h-7 min-h-7 w-7`} onClick={swapDiffSides}>
+                  <button type="button" title="Swap sides" className={`${diffToolBtn} w-7 !px-0`} onClick={swapDiffSides}>
                     <ArrowsRightLeftIcon className="h-3.5 w-3.5" />
                   </button>
                   <button
                     type="button"
                     title={canShowPathDiff ? "JSON path-level changes" : "Path diff needs valid JSON on both sides"}
                     disabled={!canShowPathDiff}
-                    className={`${linkBtnClass} h-7 min-h-7 gap-1 px-1.5 text-[11px] disabled:opacity-40 ${diffShowPaths ? "text-primary !bg-primary/10" : ""}`}
+                    className={`${diffToolBtn} ${diffShowPaths ? "!bg-primary/12 !text-primary" : ""}`}
                     onClick={() => setDiffShowPaths((v) => !v)}
                   >
                     <ListBulletIcon className="h-3.5 w-3.5 shrink-0" />
@@ -3131,37 +3619,9 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                       <span className="tabular-nums opacity-80">{structuralDiff.total}</span>
                     )}
                   </button>
-                  <button type="button" title="Paste into focused pane" className={`${linkBtnClass} h-7 min-h-7 px-1.5 text-[11px]`} onClick={pasteFromClipboard}>
-                    <ClipboardDocumentIcon className="h-3.5 w-3.5 shrink-0" />
-                    <span className="hidden sm:inline">Paste</span>
-                  </button>
-                  <button type="button" title="Beautify both sides" className={`${linkBtnClass} h-7 min-h-7 px-1.5 text-[11px]`} onClick={() => beautifyDiffSides("both")}>
+                  <button type="button" title="Beautify both sides" className={diffToolBtn} onClick={() => beautifyDiffSides("both")}>
                     Beautify
                   </button>
-                  <Dropdown
-                    open={downloadMenuOpen && isDiffMode}
-                    onOpenChange={setDownloadMenuOpen}
-                    side="bottom"
-                    align="end"
-                    rootClassName="shrink-0"
-                    contentClassName={`w-max min-w-[8rem]`}
-                    trigger={
-                      <div className={`${selectBtnClass} ${downloadMenuOpen && isDiffMode ? selectBtnOpenClass : ""}`} title="Copy / export">
-                        <ArrowDownTrayIcon className="h-3.5 w-3.5" />
-                        <span className="hidden sm:inline">Export</span>
-                        <ChevronDownIcon className="h-3 w-3 shrink-0" aria-hidden />
-                      </div>
-                    }
-                  >
-                    <div className="flex flex-col gap-0.5" onClick={(e) => e.stopPropagation()}>
-                      <button type="button" className={menuItemClass} onClick={() => { void copyDiffText("left"); setDownloadMenuOpen(false); }}>Copy left</button>
-                      <button type="button" className={menuItemClass} onClick={() => { void copyDiffText("right"); setDownloadMenuOpen(false); }}>Copy right</button>
-                      <button type="button" className={menuItemClass} onClick={() => { void copyDiffText("paths"); setDownloadMenuOpen(false); }}>Copy path changes</button>
-                      <button type="button" className={menuItemClass} onClick={() => { void copyDiffText("report"); setDownloadMenuOpen(false); }}>Copy full report</button>
-                      <button type="button" className={menuItemClass} onClick={() => { downloadDiffReport(); setDownloadMenuOpen(false); }}>Download report JSON</button>
-                    </div>
-                  </Dropdown>
-                  {diffActionFlash && <span className="shrink-0 text-[10px] font-medium text-primary animate-pulse">{diffActionFlash}</span>}
                 </div>
               )}
             </>
@@ -3180,323 +3640,17 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
               actionBounce={actionBounce}
               downloadMenuOpen={downloadMenuOpen && !isDiffMode}
               onDownloadMenuOpenChange={setDownloadMenuOpen}
-              settingsOpen={transformConfigOpen}
-              onSettingsOpenChange={setTransformConfigOpen}
-              settingsContent={
-                <div className="w-[20rem] max-w-[85vw]">
-  {/* Header */}
-  <div className="flex items-center gap-2">
-    <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/12 text-primary">
-      <Cog6ToothIcon className="h-3.5 w-3.5" aria-hidden />
-    </span>
-    <div className="min-w-0 flex-1">
-      <p className="text-xs font-semibold leading-tight tracking-tight text-[var(--workspace-text)]">Settings</p>
-      <p className="truncate text-[10px] leading-snug text-[var(--workspace-text-muted)]">
-        Saved automatically · applies to this tab
-      </p>
-    </div>
-    <span className="inline-flex h-4 shrink-0 items-center rounded-full bg-emerald-500/10 px-1.5 text-[9px] font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-      Local
-    </span>
-  </div>
-
-  {/* Behavior */}
-  <SettingsRule title="Behavior" />
-  <div className="mt-1 space-y-px">
-    {(
-      [
-        ["Compact menus", viewAsMenu, (v: boolean) => setViewAsMenu(v)],
-        ["Live transform", liveTransform, (v: boolean) => setLiveTransform(v)],
-        ["Line wrap", lineWrap, (v: boolean) => setLineWrap(v)],
-        ["Format on paste", autoFormatOnPaste, (v: boolean) => setAutoFormatOnPaste(v)],
-      ] as const
-    ).map(([label, on, setOn]) => (
-      <label
-        key={label}
-        className="flex min-h-7 cursor-pointer items-center justify-between gap-3 rounded-md px-1.5 py-1 text-xs text-[var(--workspace-text)] transition-colors hover:bg-primary/5"
-      >
-        <span className="min-w-0">{label}</span>
-        <Switch checked={on} onCheckedChange={setOn} />
-      </label>
-    ))}
-  </div>
-
-  {/* Editor */}
-  <SettingsRule title="Editor" />
-  <div className="mt-1">
-    <SettingsRow
-      label={
-        <>
-          Font size
-          <PinButton
-            pinned={pinnedItems.has("fontSize")}
-            label="font size"
-            onClick={() =>
-              setPinnedItems((s) => {
-                const n = new Set(s);
-                if (n.has("fontSize")) n.delete("fontSize");
-                else n.add("fontSize");
-                return n;
-              })
-            }
-          />
-        </>
-      }
-    >
-      <SettingsStepper
-        value={editorFontSize}
-        decLabel="Decrease font size"
-        incLabel="Increase font size"
-        resetLabel="Reset font size"
-        onDec={() => setEditorFontSize((s) => Math.max(10, s - 1))}
-        onInc={() => setEditorFontSize((s) => Math.min(24, s + 1))}
-        onReset={() => setEditorFontSize(14)}
-      />
-    </SettingsRow>
-  </div>
-
-  {isDiffMode && diffKind === "list" && (
-    <>
-      <SettingsRule title="List parsing" />
-      <div className="mt-1 space-y-2">
-        <div>
-          <p className="pb-1 text-[10px] font-medium text-[var(--workspace-text-muted)]">Split by</p>
-          <div className="flex flex-wrap gap-1">
-            {(
-              [
-                ["auto", "Auto"],
-                ["comma", "Comma"],
-                ["semicolon", "Semicolon"],
-                ["pipe", "Pipe"],
-                ["whitespace", "Whitespace"],
-                ["json", "JSON array"],
-              ] as const
-            ).map(([delim, label]) => (
-              <button
-                key={delim}
-                type="button"
-                onClick={() => setListCompareOptions((prev) => ({ ...prev, delimiter: delim }))}
-                className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors ${
-                  listCompareOptions.delimiter === delim
-                    ? "bg-primary/15 text-primary"
-                    : "bg-muted text-[var(--workspace-text-muted)] hover:bg-primary/10 hover:text-[var(--workspace-text)]"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div>
-          <p className="pb-1 text-[10px] font-medium text-[var(--workspace-text-muted)]">Parsing</p>
-          <div className="flex flex-wrap gap-1">
-            {(
-              [
-                ["trim", "Trim whitespace"],
-                ["ignoreEmpty", "Skip empty"],
-                ["caseInsensitive", "Ignore case"],
-                ["stripQuotes", "Strip quotes"],
-                ["numericNormalize", "Normalize numbers"],
-              ] as const
-            ).map(([key, label]) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() =>
-                  setListCompareOptions((prev) => ({ ...prev, [key]: !prev[key as keyof ListParseOptions] }))
-                }
-                className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors ${
-                  listCompareOptions[key as keyof ListParseOptions]
-                    ? "bg-primary/15 text-primary"
-                    : "bg-muted text-[var(--workspace-text-muted)] hover:bg-primary/10 hover:text-[var(--workspace-text)]"
-                }`}
-              >
-                <span
-                  className={`h-1.5 w-1.5 rounded-full ${listCompareOptions[key as keyof ListParseOptions] ? "bg-primary" : "bg-[var(--workspace-border)]"}`}
-                />
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-    </>
-  )}
-  {isDiffMode && diffKind !== "list" && (
-    <p className="rounded-md bg-primary/5 px-2 py-1.5 text-[10px] leading-snug text-[var(--workspace-text-muted)]">
-      Open <strong className="text-primary">Compare → List</strong> to tune how lists are split.
-    </p>
-  )}
-  {isUtilsMode && (
-    <p className="rounded-md bg-primary/5 px-2 py-1.5 text-[10px] leading-snug text-[var(--workspace-text-muted)]">
-      Each utility keeps its own options (count, length, character sets) right in the tool pane.
-    </p>
-  )}
-  {!isDiffMode && !isUtilsMode && (
-    <>
-      {/* Formatting */}
-      <SettingsRule title="Formatting" />
-      <div className="mt-1 space-y-px">
-        <SettingsRow
-          label={
-            <>
-              Indent
-              <PinButton
-                pinned={pinnedItems.has("indent")}
-                label="indent"
-                onClick={() =>
-                  setPinnedItems((s) => {
-                    const n = new Set(s);
-                    if (n.has("indent")) n.delete("indent");
-                    else n.add("indent");
-                    return n;
-                  })
-                }
-              />
-            </>
-          }
-        >
-          <SettingsStepper
-            value={formatOptions.indentation}
-            decLabel="Decrease indent"
-            incLabel="Increase indent"
-            resetLabel="Reset indent"
-            minWidth="min-w-[1.5rem]"
-            onDec={() => {
-              const v = Math.max(0, formatOptions.indentation - 1);
-              applyFormatWithOptions({ ...formatOptions, indentation: v });
-            }}
-            onInc={() => {
-              const v = Math.min(10, formatOptions.indentation + 1);
-              applyFormatWithOptions({ ...formatOptions, indentation: v });
-            }}
-            onReset={() => applyFormatWithOptions({ ...formatOptions, indentation: 2 })}
-          />
-        </SettingsRow>
-        <SettingsRow label="Quotes">
-          <div className="inline-flex overflow-hidden rounded-md border border-[var(--workspace-border)]/60 bg-muted/50">
-            {(["double", "single"] as const).map((q) => (
-              <button
-                key={q}
-                type="button"
-                className={`flex h-7 min-w-[2.25rem] items-center justify-center px-2 text-xs font-medium transition-colors ${
-                  formatOptions.quoteStyle === q
-                    ? "bg-primary/15 text-primary"
-                    : "text-[var(--workspace-text-muted)] hover:bg-primary/5 hover:text-[var(--workspace-text)]"
-                }`}
-                onClick={() => applyFormatWithOptions({ ...formatOptions, quoteStyle: q })}
-              >
-                {q === "double" ? "\u201C \u201D" : "' '"}
-              </button>
-            ))}
-          </div>
-        </SettingsRow>
-        <SettingsRow label="JSON">
-          <div className="flex items-center gap-1">
-            <label className="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-md border border-[var(--workspace-border)]/60 bg-muted/30 px-2 text-xs font-medium text-[var(--workspace-text)] transition-colors hover:border-primary/30 hover:bg-primary/5 has-[[data-state=checked]]:border-primary/40 has-[[data-state=checked]]:bg-primary/10">
-              <Checkbox checked={formatOptions.sortKeys} onCheckedChange={(c) => applyFormatWithOptions({ ...formatOptions, sortKeys: c === true })} />
-              Sort keys
-            </label>
-            <label className="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-md border border-[var(--workspace-border)]/60 bg-muted/30 px-2 text-xs font-medium text-[var(--workspace-text)] transition-colors hover:border-primary/30 hover:bg-primary/5 has-[[data-state=checked]]:border-primary/40 has-[[data-state=checked]]:bg-primary/10">
-              <Checkbox checked={formatOptions.removeEmpty} onCheckedChange={(c) => applyFormatWithOptions({ ...formatOptions, removeEmpty: c === true })} />
-              Drop empty
-            </label>
-          </div>
-        </SettingsRow>
-      </div>
-
-      {/* Toolbar - inline pins */}
-      <SettingsRule title="Toolbar" />
-      <div className="mt-1 space-y-2">
-        {!viewAsMenu ? (
-          <div className="space-y-1.5">
-            <PinChipRow
-              label="Format"
-              items={FORMAT_KINDS.map((fmt) => ({ id: `fmt:${fmt}`, label: FORMAT_LABELS[fmt] }))}
-              pinned={(id) => pinnedItems.has(id)}
-              onToggle={(id) =>
-                setPinnedItems((s) => {
-                  const n = new Set(s);
-                  if (n.has(id)) n.delete(id);
-                  else n.add(id);
-                  return n;
-                })
-              }
-            />
-            <PinChipRow
-              label="View"
-              items={(["raw", "tree", "graph", "query", "table"] as const).map((view) => ({
-                id: `view:${view}`,
-                label: view[0].toUpperCase() + view.slice(1),
-              }))}
-              pinned={(id) => pinnedItems.has(id)}
-              onToggle={(id) =>
-                setPinnedItems((s) => {
-                  const n = new Set(s);
-                  if (n.has(id)) n.delete(id);
-                  else n.add(id);
-                  return n;
-                })
-              }
-            />
-            <PinChipRow
-              label="Action"
-              items={OPERATION_ACTIONS.map(([label, action]) => ({ id: `action:${action}`, label }))}
-              pinned={(id) => pinnedItems.has(id)}
-              onToggle={(id) =>
-                setPinnedItems((s) => {
-                  const n = new Set(s);
-                  if (n.has(id)) n.delete(id);
-                  else n.add(id);
-                  return n;
-                })
-              }
-            />
-            <PinChipRow
-              label="Types"
-              items={TYPE_LANGUAGES.slice(0, 8).map((item) => ({ id: `type:${item.id}`, label: item.label }))}
-              pinned={(id) => pinnedItems.has(id)}
-              onToggle={(id) =>
-                setPinnedItems((s) => {
-                  const n = new Set(s);
-                  if (n.has(id)) n.delete(id);
-                  else n.add(id);
-                  return n;
-                })
-              }
-            />
-          </div>
-        ) : (
-          <p className="rounded-md bg-primary/5 px-2 py-1.5 text-[10px] leading-snug text-[var(--workspace-text-muted)]">
-            Compact menus is on - the toolbar uses{" "}
-            <strong className="text-primary">Format · View · Actions · Types</strong> dropdowns. Turn off{" "}
-            <strong className="text-primary">Compact menus</strong> in Behavior to show pinned shortcuts instead.
-          </p>
-        )}
-      </div>
-    </>
-  )}
-
-  {/* Footer */}
-  <div className="mt-2.5 border-t border-[var(--workspace-border)]/60 pt-2">
-    <button
-      type="button"
-      className="flex h-7 w-full items-center justify-center gap-1.5 rounded-md border border-[var(--workspace-border)]/60 bg-muted/40 text-xs font-medium text-[var(--workspace-text-muted)] transition-all hover:border-primary/25 hover:bg-primary/10 hover:text-primary"
-      onClick={() => {
-        setFormatOptions(DEFAULT_FORMAT_OPTIONS);
-        setConvertToFormat("json");
-        setRightView("raw");
-        setEditorFontSize(14);
-        setViewAsMenu(true);
-        setPinnedItems(new Set(["fmt:json", "view:raw", "view:query", "action:beautify", "action:minify", "type:typescript", "type:zod"]));
-      }}
-    >
-      <ArrowPathIcon className="h-3.5 w-3.5" />
-      Reset to default
-    </button>
-  </div>
-</div>
-              }
+              visibility={outputActionVisibility}
+              onUndo={() => {
+                if (isDiffMode) diffEditorRef.current?.undo();
+                else if (!isUtilsMode) moveHistory(-1);
+              }}
+              onRedo={() => {
+                if (isDiffMode) diffEditorRef.current?.redo();
+                else if (!isUtilsMode) moveHistory(1);
+              }}
+              canUndo={!isDiffMode && !isUtilsMode ? canUndo : undefined}
+              canRedo={!isDiffMode && !isUtilsMode ? canRedo : undefined}
               onShare={() => {
                 setShareAllTabs(false);
                 requestShare();
@@ -3515,8 +3669,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                 void navigator.clipboard.writeText(text).then(
                   () => {
                     setCopyState("done");
-                    setShareNotification("Copied");
-                    window.setTimeout(() => setShareNotification(null), 2000);
+                    toast({ message: "Copied" });
                     window.setTimeout(() => setCopyState("idle"), 1400);
                   },
                   () => setCopyState("error"),
@@ -3533,8 +3686,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                   a.download = `formaty-${utilTab}.txt`;
                   a.click();
                   URL.revokeObjectURL(url);
-                  setShareNotification("Downloaded");
-                  window.setTimeout(() => setShareNotification(null), 2000);
+                  toast({ message: "Downloaded" });
                   return;
                 }
                 if (isDiffMode) {
@@ -3546,8 +3698,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                     a.download = listCompareExport.filename;
                     a.click();
                     URL.revokeObjectURL(url);
-                    setShareNotification("Downloaded");
-                    window.setTimeout(() => setShareNotification(null), 2000);
+                    toast({ message: "Downloaded" });
                     return;
                   }
                   downloadDiffReport();
@@ -3573,6 +3724,8 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
               forceHide={{
                 useAsInput: isDiffMode || isUtilsMode,
                 maximize: isDiffMode || isUtilsMode,
+                undo: isUtilsMode,
+                redo: isUtilsMode,
               }}
             />
         </div>
@@ -3759,10 +3912,6 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                 stateByTool={utilsByTool}
                 onStateByToolChange={setUtilsByTool}
                 fontSize={editorFontSize}
-                onNotify={(msg) => {
-                  setShareNotification(msg);
-                  window.setTimeout(() => setShareNotification(null), 2500);
-                }}
               />
             ) : isDiffMode ? (
               <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
@@ -3949,23 +4098,33 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                     </button>
                   );
                 })()}
-                  <button
-                    type="button"
-                    className="rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/15"
-                    onClick={() => {
-                      setInput(SAMPLE_JSON_TABLE);
-                      pushHistory(SAMPLE_JSON_TABLE);
-                      setInputFormatOverride(null);
-                      setError(null);
-                      setValidationError(null);
-                      parseOnly(SAMPLE_JSON_TABLE, "json");
-                      setRightView("table");
-                      setFocusedPane("output");
-                      if (!isDesktopLayout) setMobileShowOutput(true);
-                    }}
-                  >
-                    Load table sample
-                  </button>
+                  {rightView === "table" ? (
+                    <button
+                      type="button"
+                      className="rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/15"
+                      onClick={() => {
+                        setInput(SAMPLE_JSON_TABLE);
+                        pushHistory(SAMPLE_JSON_TABLE);
+                        setInputFormatOverride(null);
+                        setError(null);
+                        setValidationError(null);
+                        parseOnly(SAMPLE_JSON_TABLE, "json");
+                        setRightView("table");
+                        setFocusedPane("output");
+                        if (!isDesktopLayout) setMobileShowOutput(true);
+                      }}
+                    >
+                      Load table sample
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="rounded-lg border border-[var(--workspace-border)] px-3 py-1.5 text-xs font-medium text-[var(--workspace-text-muted)] hover:bg-primary/10 hover:text-primary"
+                      onClick={() => setRightView("raw")}
+                    >
+                      Switch to Raw
+                    </button>
+                  )}
                 </div>
               </div>
             ) : rightView === "raw" ? (
@@ -4152,10 +4311,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                     data={parsedOutput}
                     isDark={isDark}
                     largeFile={isLargeInput}
-                    onNotify={(msg) => {
-                      setShareNotification(msg);
-                      window.setTimeout(() => setShareNotification(null), 2500);
-                    }}
+                    onNotify={(msg) => toast({ message: msg })}
                     className={`${outputPanelClass} min-h-0 flex-1 overflow-auto`}
                   />
                 )
@@ -4214,13 +4370,9 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                     setValidationError(null);
                     setRightView("raw");
                     setFocusedPane("input");
-                    setShareNotification("Query result moved to input");
-                    window.setTimeout(() => setShareNotification(null), 2500);
+                    toast({ message: "Query result moved to input" });
                   }}
-                  onNotify={(msg) => {
-                    setShareNotification(msg);
-                    window.setTimeout(() => setShareNotification(null), 2500);
-                  }}
+                  onNotify={(msg) => toast({ message: msg })}
                 />
               ) : (
                 <div className={`flex h-full min-h-[200px] items-center justify-center border text-sm text-[var(--workspace-text-muted)] ${outputPanelClass}`}>
@@ -4302,9 +4454,25 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
         encoding="UTF-8"
         rightActions={
           <span className="flex shrink-0 items-center gap-1 font-mono text-[11px] tracking-wide text-[var(--workspace-text-muted)]">
-            <span className="font-semibold text-[var(--workspace-text)]">{getInputFormatLabel(resolvedInputFormat)}</span>
-            <span className="text-primary">→</span>
-            <span className="font-semibold text-[var(--workspace-text)]">{activeOperation === "generateTypes" ? selectedTypeLanguageLabel : FORMAT_LABELS[convertToFormat]}</span>
+            {isDiffMode ? (
+              <>
+                <span className="font-semibold text-[var(--workspace-text)]">Compare</span>
+                <span className="text-primary">·</span>
+                <span className="font-semibold text-[var(--workspace-text)]">{diffKind === "document" ? "Document" : "Lists"}</span>
+              </>
+            ) : isUtilsMode ? (
+              <>
+                <span className="font-semibold text-[var(--workspace-text)]">Utils</span>
+                <span className="text-primary">·</span>
+                <span className="font-semibold text-[var(--workspace-text)]">{UTIL_TABS.find((t) => t.id === utilTab)?.label ?? utilTab}</span>
+              </>
+            ) : (
+              <>
+                <span className="font-semibold text-[var(--workspace-text)]">{getInputFormatLabel(resolvedInputFormat)}</span>
+                <span className="text-primary">→</span>
+                <span className="font-semibold text-[var(--workspace-text)]">{activeOperation === "generateTypes" ? selectedTypeLanguageLabel : FORMAT_LABELS[convertToFormat]}</span>
+              </>
+            )}
           </span>
         }
         sharedLink={
@@ -4329,8 +4497,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                 onClick={async () => {
                   try {
                     await navigator.clipboard.writeText(sharedLinkUrl);
-                    setShareNotification(sharedLinkUrl);
-                    window.setTimeout(() => setShareNotification(null), 3000);
+                    toast({ message: "Link copied", url: sharedLinkUrl, duration: 4000 });
                   } catch {
                     /* ignore */
                   }
@@ -4350,8 +4517,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                   setSharedLinkUrl(null);
                   isViewingSharedRef.current = false;
                   if (idToDelete) await deletePlayground(idToDelete);
-                  setShareNotification("Link disabled");
-                  window.setTimeout(() => setShareNotification(null), 3000);
+                  toast({ message: "Link disabled" });
                 }}
               >
                 <LinkSlashIcon className="h-3.5 w-3.5" />
@@ -4360,21 +4526,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
           ) : undefined
         }
       />
-      {shareNotification ? (
-        <div
-          className={`fixed bottom-16 left-1/2 z-50 -translate-x-1/2 rounded-lg border border-[var(--workspace-border)]/50 bg-[var(--workspace-panel)]/95 px-4 py-2 text-xs shadow-xl backdrop-blur-md`}
-          role="status"
-        >
-          <p className={`font-medium ${shareNotification.includes("failed") ? "text-error" : "text-primary"}`}>
-            {shareNotification.startsWith("http") ? "Link copied" : shareNotification}
-          </p>
-          {shareNotification.startsWith("http") && (
-            <p className="mt-0.5 max-w-[min(90vw,400px)] truncate" title={shareNotification}>
-              {shareNotification}
-            </p>
-          )}
-        </div>
-      ) : null}
+      <Toaster />
 
         <CommandPalette
           open={commandPaletteOpen}

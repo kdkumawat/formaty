@@ -4,12 +4,17 @@ export { Header } from "./Header";
 export { NumberStepper } from "./NumberStepper";
 export {
   OutputActionBar,
+  ACTION_LABELS,
+  loadVisibility,
+  saveVisibility,
   formatCopyAsText,
   DEFAULT_COPY_AS_OPTIONS,
   LIST_COPY_AS_OPTIONS,
   UUID_COPY_AS_OPTIONS,
   type CopyAsFormat,
   type CopyAsOption,
+  type OutputActionId,
+  type OutputActionVisibility,
 } from "./OutputActionBar";
 export { Tooltip } from "./Tooltip";
 export { PanelHeader } from "./PanelHeader";
