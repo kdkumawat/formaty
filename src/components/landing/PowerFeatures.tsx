@@ -95,7 +95,7 @@ export function PowerFeatures() {
             Built for your workflow
           </h2>
           <p className="mx-auto max-w-xl text-sm text-[var(--workspace-text-muted)] md:text-base">
-            Formaty isn't just a formatter - it's a full workspace that remembers how you work.
+            Formaty isn&apos;t just a formatter - it&apos;s a full workspace that remembers how you work.
           </p>
         </motion.div>
 

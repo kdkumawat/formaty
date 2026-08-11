@@ -12,7 +12,6 @@ import {
   MagnifyingGlassIcon,
   XMarkIcon,
   CommandLineIcon,
-  ArrowTurnDownLeftIcon,
 } from "@heroicons/react/24/outline";
 
 export interface Command {

@@ -85,7 +85,7 @@ export function TableView({ data, className = "" }: TableViewProps) {
 
   const current = stack[stack.length - 1]!;
   const base = useMemo(() => toTableRows(current.data), [current.data]);
-  const allHeaders = base?.headers ?? [];
+  const allHeaders = useMemo(() => base?.headers ?? [], [base]);
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");

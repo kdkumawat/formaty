@@ -30,5 +30,5 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ## Tech Stack
 
-- Next.js 15, React 19, Tailwind CSS, DaisyUI
+- Next.js 16, React 19, Tailwind CSS v4, shadcn/ui (Radix UI)
 - Monaco Editor, ReactFlow, jsoncrack

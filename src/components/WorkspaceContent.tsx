@@ -5,8 +5,6 @@ import { motion } from "framer-motion";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import {
   ArrowDownTrayIcon,
-  ArrowsPointingInIcon,
-  ArrowsPointingOutIcon,
   ArrowPathIcon,
   ArrowUturnLeftIcon,
   ArrowUturnRightIcon,
@@ -15,16 +13,11 @@ import {
   ChevronUpIcon,
   ClipboardDocumentIcon,
   ClockIcon,
-  Cog6ToothIcon,
-  ComputerDesktopIcon,
   DocumentArrowDownIcon,
   ListBulletIcon,
   MinusIcon,
-  MoonIcon,
   PlusIcon,
-  ShareIcon,
   StarIcon,
-  SunIcon,
   ArrowLeftCircleIcon,
   ArrowRightCircleIcon,
   XMarkIcon,
@@ -355,39 +348,6 @@ const EXT_BY_FORMAT: Record<FormatKind, string> = {
   csv: "csv",
 };
 
-const EXT_BY_ACTION: Record<Exclude<OperationAction, "generateTypes" | "utils"> | "parse", string> = {
-  parse: "json",
-  format: "json",
-  beautify: "json",
-  minify: "json",
-  sort: "json",
-  sortArrays: "json",
-  dedup: "json",
-  removeEmpty: "json",
-  flatten: "json",
-  unflatten: "json",
-  schema: "json",
-  validate: "json",
-  diff: "json",
-};
-
-const LANGUAGE_BY_ACTION: Record<Exclude<OperationAction, "generateTypes" | "utils"> | "parse", OutputLanguage> =
-  {
-    parse: "json",
-    format: "json",
-    beautify: "json",
-    minify: "json",
-    sort: "json",
-    sortArrays: "json",
-    dedup: "json",
-    removeEmpty: "json",
-    flatten: "json",
-    unflatten: "json",
-    schema: "json",
-    validate: "json",
-    diff: "json",
-  };
-
 const LANGUAGE_BY_TYPE_TARGET: Record<TypeTargetLanguage, OutputLanguage> = {
   typescript: "typescript",
   zod: "typescript",
@@ -415,6 +375,21 @@ export interface WorkspaceContentProps {
   initialState?: import("@/lib/shareState").WorkspaceState;
   sharedLinkId?: string;
   sharedLinkUrl?: string;
+}
+
+import type { ButtonHTMLAttributes } from "react";
+import { Button as UiButton } from "@/components/ui/button";
+
+/** shadcn-backed square icon button (preserves current sizing + icon size). */
+function SquareBtn({ className = "", ...props }: ButtonHTMLAttributes<HTMLButtonElement>) {
+  return (
+    <UiButton
+      type="button"
+      variant="ghost"
+      className={`h-auto min-h-0 w-auto min-w-0 !p-0 [&_svg]:!size-3.5 ${className}`}
+      {...props}
+    />
+  );
 }
 
 export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLinkId, sharedLinkUrl: initialSharedLinkUrl }: WorkspaceContentProps = {}) {
@@ -454,7 +429,6 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   const [sharedLinkId, setSharedLinkId] = useState<string | null>(initialSharedLinkId ?? null);
   const [sharedLinkUrl, setSharedLinkUrl] = useState<string | null>(initialSharedLinkUrl ?? null);
   const [shareNotification, setShareNotification] = useState<string | null>(null);
-  const [isInputMinimized, setIsInputMinimized] = useState(false);
   const [isOutputMaximized, setIsOutputMaximized] = useState(false);
   const [isDesktopLayout, setIsDesktopLayout] = useState(true);
   const [focusedPane, setFocusedPane] = useState<"input" | "output">("input");
@@ -590,7 +564,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     utilTab: "uuid",
     utilsByTool: {},
   });
-  const captureTabSnapshot = (): TabSnapshot => ({
+  const captureTabSnapshot = useCallback((): TabSnapshot => ({
     input,
     inputFormatOverride,
     undoStack,
@@ -610,7 +584,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     isOutputMaximized,
     utilTab,
     utilsByTool,
-  });
+  }), [input, inputFormatOverride, undoStack, undoIndex, output, parsedOutput, outputExt, outputLanguage, activeOperation, error, convertToFormat, typeLanguage, rightView, diffLeftInput, diffRightInput, diffKind, isOutputMaximized, utilTab, utilsByTool]);
   const applyTabSnapshot = (snap: TabSnapshot) => {
     setInput(snap.input);
     setInputFormatOverride(snap.inputFormatOverride);
@@ -693,8 +667,6 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   const resolvedTheme: Exclude<ThemeMode, "system"> =
     themeMode === "system" ? (systemDark ? "dark" : "light") : themeMode;
   const isDark = resolvedTheme === "dark";
-  const toolbarBorderClass = isDark ? "border-white/45" : "border-base-300";
-  const toolbarDividerClass = isDark ? "bg-white/45" : "bg-base-300";
   const monacoTheme = isDark ? "vs-dark" : "vs";
   const outputPanelClass = isDark ? "border-[#2d2d30] bg-[#1e1e1e]" : "border-[#e5e5e5] bg-[#ffffff]";
   const inputEditorBgClass = "border border-[var(--workspace-border)] border-t-0 bg-[var(--workspace-panel)]";
@@ -754,11 +726,8 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   const selectedTypeLanguageLabel =
     TYPE_LANGUAGES.find((item) => item.id === typeLanguage)?.label ?? "Language";
 
-  const joinItemBorderClass =
-    "[&>*:not(:last-child)]:border-r [&>*:not(:last-child)]:!border-base-300/50";
   const dropdownPanelClass = isDark ? "bg-[#1a1a1a]/98 backdrop-blur-xl text-[#e8e8e8]" : "bg-white/98 backdrop-blur-xl text-[#1a1a1a]";
   const settingsLabelClass = isDark ? "text-[10px] font-bold uppercase tracking-[0.1em] text-primary/80" : "text-[10px] font-bold uppercase tracking-[0.1em] text-primary/65";
-  const settingsSectionClass = "space-y-2";
   const settingsBtnGroupClass =
     "inline-flex w-fit max-w-full items-center overflow-hidden rounded-lg border border-[var(--workspace-border)]/60 divide-x divide-[var(--workspace-border)]/40 bg-[var(--workspace-background)]/60";
   const settingsStepBtnClass =
@@ -813,13 +782,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     return run<JsonValue>("parseFormat", { input, format: resolvedParseFormat });
   }, [input, resolvedInputFormat, resolvedParseFormat, run]);
 
-  const themeOptions = [
-    { mode: "system" as const, ariaLabel: "Use system theme", title: "System theme", Icon: ComputerDesktopIcon },
-    { mode: "light" as const, ariaLabel: "Use light theme", title: "Light theme", Icon: SunIcon },
-    { mode: "dark" as const, ariaLabel: "Use dark theme", title: "Dark theme", Icon: MoonIcon },
-  ];
-
-  const pushHistory = (next: string) => {
+  const pushHistory = useCallback((next: string) => {
     if (historyLock.current) return;
     setUndoStack((prev) => {
       if (prev[undoIndex] === next) return prev;
@@ -828,9 +791,9 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
       setUndoIndex(result.length - 1);
       return result;
     });
-  };
+  }, [undoIndex]);
 
-  const moveHistory = (delta: number) => {
+  const moveHistory = useCallback((delta: number) => {
     const targetIdx = undoIndex + delta;
     if (targetIdx < 0 || targetIdx >= undoStack.length) return;
     const next = undoStack[targetIdx];
@@ -840,7 +803,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     setTimeout(() => {
       historyLock.current = false;
     }, 0);
-  };
+  }, [undoIndex, undoStack]);
 
   const switchToTab = (tabId: string) => {
     if (tabId === activeTabId) return;
@@ -855,8 +818,8 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
 
   const addTab = () => {
     tabSnapshotsRef.current.set(activeTabId, captureTabSnapshot());
-    const newId = `t${Date.now()}`;
     tabCounterRef.current += 1;
+    const newId = `t${tabCounterRef.current}`;
     setTabs((prev) => [...prev, { id: newId, label: `Tab ${tabCounterRef.current}` }]);
     setActiveTabId(newId);
     historyLock.current = true;
@@ -1151,6 +1114,10 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     } catch {
       // Ignore malformed persisted sessions.
     }
+    // Restore-once effect: `initialState` may be a fresh object reference each render, so
+    // it is intentionally not a dep — re-running would re-apply shared state and clobber
+    // user edits. `executeOperation` is also referenced here (tool-preset restore).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, pathname]);
 
   useEffect(() => {
@@ -1197,7 +1164,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
         tabSnapshots: allSnapshots,
       }),
     );
-  }, [input, output, split, themeMode, typeLanguage, rightView, formatOptions, convertToFormat, liveTransform, editorFontSize, viewAsMenu, mobileShowOutput, activeOperation, pinnedItems, tabs, activeTabId, inputFormatOverride, undoStack, undoIndex, outputExt, outputLanguage, diffLeftInput, diffRightInput, diffKind, isOutputMaximized, utilTab, utilsByTool]);
+  }, [input, output, split, themeMode, typeLanguage, rightView, formatOptions, convertToFormat, liveTransform, editorFontSize, viewAsMenu, mobileShowOutput, activeOperation, pinnedItems, tabs, activeTabId, showTabs, inputFormatOverride, undoStack, undoIndex, outputExt, outputLanguage, diffLeftInput, diffRightInput, diffKind, isOutputMaximized, utilTab, utilsByTool, captureTabSnapshot]);
 
   // Prefer structured parse for views (table/tree/graph/query)
   useEffect(() => {
@@ -1293,6 +1260,9 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
       }
     }, 500);
     return () => clearTimeout(id);
+    // One-shot restore timer guarded by sessionRestoredRef. executeOperation / runConvert
+    // are declared later in the component and intentionally not in deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [input, output, activeOperation, convertToFormat, typeLanguage]);
 
   useEffect(() => {
@@ -1384,64 +1354,12 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     return () => {
       if (liveTransformTimeoutRef.current) clearTimeout(liveTransformTimeoutRef.current);
     };
+    // Debounced live transform reads the latest input via inputRef; convertJsonToOutput is
+    // declared below and intentionally not in deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liveTransform, input, convertToFormat, run]);
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const mod = event.metaKey || event.ctrlKey;
-      if (!mod) return;
-      if (event.key === "k") {
-        event.preventDefault();
-        setCommandPaletteOpen((v) => !v);
-        return;
-      }
-      if (modalKind) return;
-      if (activeOperation === "diff") {
-        // List mode uses plain textareas — let the browser handle undo/paste.
-        if (diffKind === "list") return;
-        // Document mode: route undo/redo to Monaco diff panes.
-        if (event.key.toLowerCase() === "z" && !event.shiftKey) {
-          event.preventDefault();
-          diffEditorRef.current?.undo();
-          return;
-        }
-        if (event.key.toLowerCase() === "z" && event.shiftKey) {
-          event.preventDefault();
-          diffEditorRef.current?.redo();
-          return;
-        }
-        if (event.key.toLowerCase() === "y") {
-          event.preventDefault();
-          diffEditorRef.current?.redo();
-          return;
-        }
-        return;
-      }
-      if (event.key === "Enter") {
-        event.preventDefault();
-        parseOnly();
-      }
-      if (event.key.toLowerCase() === "v") {
-        const target = event.target as HTMLElement;
-        const isEditable = target.isContentEditable || target.tagName === "INPUT" || target.tagName === "TEXTAREA";
-        // Only intercept when input is empty (paste to start) - when input has content, let editor handle paste at cursor
-        if (!isEditable && inputEmpty) {
-          event.preventDefault();
-          pasteFromClipboard();
-        }
-      }
-      if (event.key.toLowerCase() === "z" && !event.shiftKey) {
-        event.preventDefault();
-        moveHistory(-1);
-      }
-      if (event.key.toLowerCase() === "z" && event.shiftKey) {
-        event.preventDefault();
-        moveHistory(1);
-      }
-    };
-    window.addEventListener("keydown", onKeyDown, { capture: true });
-    return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
-  }, [modalKind, inputEmpty, focusedPane, activeOperation, diffKind]);
+
 
   useEffect(() => {
     if (!isResizing) return;
@@ -1500,7 +1418,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [modalKind]);
 
-  const setOutputData = (
+  const setOutputData = useCallback((
     value: string,
     action: OperationAction | "parse",
     lang?: OutputLanguage,
@@ -1516,9 +1434,9 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     }
     setOutputExt(EXT_BY_FORMAT[convertToFormat]);
     setOutputLanguage(convertToFormat);
-  };
+  }, [typeLanguage, convertToFormat]);
 
-  const convertJsonToOutput = async (
+  const convertJsonToOutput = useCallback(async (
     json: JsonValue,
     opts?: {
       toFormat?: FormatKind;
@@ -1543,9 +1461,9 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     }
 
     return run<string>("convert", { json, toFormat, formatOptions: formatOpts, csvDelimiter });
-  };
+  }, [convertToFormat, formatOptions, run, csvDelimiter]);
 
-  const parseOnly = (inputOverride?: string, formatOverride?: InputFormatKind) => {
+  const parseOnly = useCallback((inputOverride?: string, formatOverride?: InputFormatKind) => {
     const text = inputOverride ?? input;
     const fmt = formatOverride ?? resolvedInputFormat;
     if (!text.trim()) return;
@@ -1582,9 +1500,9 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
         setBusy(false);
       }
     })();
-  };
+  }, [input, resolvedInputFormat, run, convertJsonToOutput, setOutputData, isDesktopLayout]);
 
-  const executeOperation = (
+  const executeOperation = useCallback((
     action: OperationAction,
     options?: {
       schemaText?: string;
@@ -1686,9 +1604,9 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
         setBusy(false);
       }
     })();
-  };
+  }, [getParsedInput, parseSchemaToObject, run, convertJsonToOutput, setOutputData, schemaInput, typeLanguage, formatOptions, convertToFormat]);
 
-  const runConvert = (toFormat: FormatKind) => {
+  const runConvert = useCallback((toFormat: FormatKind) => {
     setConvertToFormat(toFormat);
     setFocusedPane("output");
     if (!isDesktopLayout) setMobileShowOutput(true);
@@ -1709,7 +1627,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
         setBusy(false);
       }
     })();
-  };
+  }, [getParsedInput, convertJsonToOutput, isDesktopLayout]);
 
   const handleDiffLeftChange = useCallback(
     (value: string) => {
@@ -2124,7 +2042,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     setShareNotification("Output moved to input");
     window.setTimeout(() => setShareNotification(null), 2500);
     if (!isDesktopLayout) setMobileShowOutput(false);
-  }, [output, isDesktopLayout]);
+  }, [output, isDesktopLayout, pushHistory]);
 
   const copyOutput = async () => {
     setActionBounce("copy");
@@ -2158,11 +2076,6 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
       window.setTimeout(() => setShareNotification(null), 3000);
     }
     window.setTimeout(() => setCopyState("idle"), 1400);
-  };
-
-  const toggleInputMinimized = () => {
-    setIsInputMinimized((prev) => !prev);
-    setFocusedPane((prev) => (prev === "input" ? "output" : prev));
   };
 
   const getActiveOutputText = useCallback((): string => {
@@ -2326,7 +2239,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     [input, resolvedInputFormat, detectedInputFormat, formatOptions, pushHistory],
   );
 
-  const pasteFromClipboard = async () => {
+  const pasteFromClipboard = useCallback(async () => {
     try {
       const text = await navigator.clipboard.readText();
       if (!text) return;
@@ -2355,7 +2268,66 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     } catch {
       setError("Could not read clipboard.");
     }
-  };
+  }, [activeOperation, autoFormatOnPaste, run, convertJsonToOutput, pushHistory, parseOnly, isDesktopLayout]);
+
+  // Global workspace keyboard shortcuts (Cmd/Ctrl + K / Enter / V / Z). Re-registers
+  // whenever the handlers or their state change so the closure is always fresh.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const mod = event.metaKey || event.ctrlKey;
+      if (!mod) return;
+      if (event.key === "k") {
+        event.preventDefault();
+        setCommandPaletteOpen((v) => !v);
+        return;
+      }
+      if (modalKind) return;
+      if (activeOperation === "diff") {
+        // List mode uses plain textareas — let the browser handle undo/paste.
+        if (diffKind === "list") return;
+        // Document mode: route undo/redo to Monaco diff panes.
+        if (event.key.toLowerCase() === "z" && !event.shiftKey) {
+          event.preventDefault();
+          diffEditorRef.current?.undo();
+          return;
+        }
+        if (event.key.toLowerCase() === "z" && event.shiftKey) {
+          event.preventDefault();
+          diffEditorRef.current?.redo();
+          return;
+        }
+        if (event.key.toLowerCase() === "y") {
+          event.preventDefault();
+          diffEditorRef.current?.redo();
+          return;
+        }
+        return;
+      }
+      if (event.key === "Enter") {
+        event.preventDefault();
+        parseOnly();
+      }
+      if (event.key.toLowerCase() === "v") {
+        const target = event.target as HTMLElement;
+        const isEditable = target.isContentEditable || target.tagName === "INPUT" || target.tagName === "TEXTAREA";
+        // Only intercept when input is empty (paste to start) - when input has content, let editor handle paste at cursor
+        if (!isEditable && inputEmpty) {
+          event.preventDefault();
+          pasteFromClipboard();
+        }
+      }
+      if (event.key.toLowerCase() === "z" && !event.shiftKey) {
+        event.preventDefault();
+        moveHistory(-1);
+      }
+      if (event.key.toLowerCase() === "z" && event.shiftKey) {
+        event.preventDefault();
+        moveHistory(1);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown, { capture: true });
+    return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
+  }, [modalKind, inputEmpty, focusedPane, activeOperation, diffKind, moveHistory, parseOnly, pasteFromClipboard]);
 
   const importJsonFile = (file: File) => {
     const reader = new FileReader();
@@ -2530,8 +2502,8 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     { id: "csv-semicolon", label: "CSV delimiter: Semicolon (;)", category: "Settings", keywords: ["csv", "delimiter", "semicolon"], badge: csvDelimiter === ";"  ? "active" : undefined, action: () => setCsvDelimiter(";")  },
     { id: "csv-pipe",      label: "CSV delimiter: Pipe (|)",      category: "Settings", keywords: ["csv", "delimiter", "pipe"], badge: csvDelimiter === "|"  ? "active" : undefined, action: () => setCsvDelimiter("|")  },
     // Pin/Unpin current view
-    { id: "pin-view",   label: pinnedItems.has(`view:${rightView}`) ? `Unpin current view (${rightView})` : `Pin current view (${rightView})`, category: "Settings", keywords: ["pin", "unpin", "toolbar", "view"], action: () => setPinnedItems((s) => { const n = new Set(s); n.has(`view:${rightView}`) ? n.delete(`view:${rightView}`) : n.add(`view:${rightView}`); return n; }) },
-    { id: "pin-format", label: pinnedItems.has(`fmt:${convertToFormat}`) ? `Unpin current format (${convertToFormat})` : `Pin current format (${convertToFormat})`, category: "Settings", keywords: ["pin", "unpin", "toolbar", "format"], action: () => setPinnedItems((s) => { const n = new Set(s); n.has(`fmt:${convertToFormat}`) ? n.delete(`fmt:${convertToFormat}`) : n.add(`fmt:${convertToFormat}`); return n; }) },
+    { id: "pin-view",   label: pinnedItems.has(`view:${rightView}`) ? `Unpin current view (${rightView})` : `Pin current view (${rightView})`, category: "Settings", keywords: ["pin", "unpin", "toolbar", "view"], action: () => setPinnedItems((s) => { const n = new Set(s); if (n.has(`view:${rightView}`)) n.delete(`view:${rightView}`); else n.add(`view:${rightView}`); return n; }) },
+    { id: "pin-format", label: pinnedItems.has(`fmt:${convertToFormat}`) ? `Unpin current format (${convertToFormat})` : `Pin current format (${convertToFormat})`, category: "Settings", keywords: ["pin", "unpin", "toolbar", "format"], action: () => setPinnedItems((s) => { const n = new Set(s); if (n.has(`fmt:${convertToFormat}`)) n.delete(`fmt:${convertToFormat}`); else n.add(`fmt:${convertToFormat}`); return n; }) },
     // Settings
     { id: "set-sort-keys",    label: formatOptions.sortKeys    ? "Sort keys: On (turn off)"    : "Sort keys: Off (turn on)",    category: "Settings", keywords: ["sort", "keys", "alphabetical"],           badge: formatOptions.sortKeys    ? "on" : undefined, disabled: inputEmpty, action: () => applyFormatWithOptions({ ...formatOptions, sortKeys:    !formatOptions.sortKeys    }) },
     { id: "set-rm-empty",     label: formatOptions.removeEmpty ? "Remove empty: On (turn off)" : "Remove empty: Off (turn on)", category: "Settings", keywords: ["remove", "empty", "null", "clean"],          badge: formatOptions.removeEmpty ? "on" : undefined, disabled: inputEmpty, action: () => applyFormatWithOptions({ ...formatOptions, removeEmpty: !formatOptions.removeEmpty }) },
@@ -2981,7 +2953,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                             e.stopPropagation();
                             setPinnedItems((s) => {
                               const n = new Set(s);
-                              n.has("fontSize") ? n.delete("fontSize") : n.add("fontSize");
+                              if (n.has("fontSize")) n.delete("fontSize"); else n.add("fontSize");
                               return n;
                             });
                           }}
@@ -3012,7 +2984,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                             e.stopPropagation();
                             setPinnedItems((s) => {
                               const n = new Set(s);
-                              n.has("indent") ? n.delete("indent") : n.add("indent");
+                              if (n.has("indent")) n.delete("indent"); else n.add("indent");
                               return n;
                             });
                           }}
@@ -3074,7 +3046,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                                   e.stopPropagation();
                                   setPinnedItems((s) => {
                                     const n = new Set(s);
-                                    n.has(`fmt:${fmt}`) ? n.delete(`fmt:${fmt}`) : n.add(`fmt:${fmt}`);
+                                    if (n.has(`fmt:${fmt}`)) n.delete(`fmt:${fmt}`); else n.add(`fmt:${fmt}`);
                                     return n;
                                   });
                                 }}
@@ -3100,7 +3072,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                                   e.stopPropagation();
                                   setPinnedItems((s) => {
                                     const n = new Set(s);
-                                    n.has(`view:${view}`) ? n.delete(`view:${view}`) : n.add(`view:${view}`);
+                                    if (n.has(`view:${view}`)) n.delete(`view:${view}`); else n.add(`view:${view}`);
                                     return n;
                                   });
                                 }}
@@ -3125,7 +3097,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                                   e.stopPropagation();
                                   setPinnedItems((s) => {
                                     const n = new Set(s);
-                                    n.has(`action:${action}`) ? n.delete(`action:${action}`) : n.add(`action:${action}`);
+                                    if (n.has(`action:${action}`)) n.delete(`action:${action}`); else n.add(`action:${action}`);
                                     return n;
                                   });
                                 }}
@@ -3150,7 +3122,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                                   e.stopPropagation();
                                   setPinnedItems((s) => {
                                     const n = new Set(s);
-                                    n.has(`type:${item.id}`) ? n.delete(`type:${item.id}`) : n.add(`type:${item.id}`);
+                                    if (n.has(`type:${item.id}`)) n.delete(`type:${item.id}`); else n.add(`type:${item.id}`);
                                     return n;
                                   });
                                 }}
@@ -3296,24 +3268,22 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
             className={`flex h-10 shrink-0 flex-nowrap items-center gap-0.5 border-b px-1.5 text-xs ${inputEditorBgClass} text-[var(--workspace-text-muted)]`}
           >
             <div className="flex shrink-0 items-center gap-1">
-              <button
-                type="button"
+              <SquareBtn
                 title="Undo (Ctrl+Z)"
                 disabled={!canUndo}
-                className={`${linkBtnClass} btn-square h-7 min-h-7 w-7 shrink-0`}
+                className={`${linkBtnClass} h-7 min-h-7 w-7 shrink-0`}
                 onClick={() => moveHistory(-1)}
               >
                 <ArrowUturnLeftIcon className="h-3.5 w-3.5" />
-              </button>
-              <button
-                type="button"
+              </SquareBtn>
+              <SquareBtn
                 title="Redo (Shift+Ctrl+Z)"
                 disabled={!canRedo}
-                className={`${linkBtnClass} btn-square h-7 min-h-7 w-7 shrink-0`}
+                className={`${linkBtnClass} h-7 min-h-7 w-7 shrink-0`}
                 onClick={() => moveHistory(1)}
               >
                 <ArrowUturnRightIcon className="h-3.5 w-3.5" />
-              </button>
+              </SquareBtn>
             </div>
             <div className="flex shrink-0 items-center gap-1">
               <input
@@ -3377,14 +3347,13 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
             </Dropdown>
             </div>
             <div className="flex shrink-0 items-center gap-1 hidden">
-              <button
-                type="button"
+              <SquareBtn
                 title={splitInputOpen ? "Close split pane" : "Split input pane"}
-                className={`${linkBtnClass} btn-square h-7 min-h-7 w-7 shrink-0 ${splitInputOpen ? "text-primary" : ""}`}
+                className={`${linkBtnClass} h-7 min-h-7 w-7 shrink-0 ${splitInputOpen ? "text-primary" : ""}`}
                 onClick={() => setSplitInputOpen((v) => !v)}
               >
                 <ViewColumnsIcon className="h-3.5 w-3.5" />
-              </button>
+              </SquareBtn>
             </div>
           </div>
           {splitInputOpen && isDesktopLayout ? (
@@ -3404,7 +3373,6 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                   className="h-full"
                   language={resolvedInputFormat === "toml" || resolvedInputFormat === "csv" || resolvedInputFormat === "curl" ? "plaintext" : resolvedInputFormat}
                   monacoTheme={monacoTheme}
-                  panelTone="input"
                   fontSize={editorFontSize}
                   wordWrap={lineWrap ? "on" : "off"}
                   onEditorMount={(api) => { inputEditorApiRef.current = api; }}
@@ -3430,7 +3398,6 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                   className="h-full"
                   language="json"
                   monacoTheme={monacoTheme}
-                  panelTone="input"
                   fontSize={editorFontSize}
                   wordWrap={lineWrap ? "on" : "off"}
                   onEditorMount={(api) => { splitInput2ApiRef.current = api; }}
@@ -3454,7 +3421,6 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                 className="h-full"
                 language={resolvedInputFormat === "toml" || resolvedInputFormat === "csv" || resolvedInputFormat === "curl" ? "plaintext" : resolvedInputFormat}
                 monacoTheme={monacoTheme}
-                panelTone="input"
                 fontSize={editorFontSize}
                 wordWrap={lineWrap ? "on" : "off"}
                 onEditorMount={(api) => { inputEditorApiRef.current = api; }}
@@ -3724,14 +3690,13 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                           <span className="ml-auto text-[10px] tabular-nums text-[var(--workspace-text-muted)]">
                             {structuralDiff ? structuralDiff.total : "—"}
                           </span>
-                          <button
-                            type="button"
-                            className={`${linkBtnClass} btn-square h-6 min-h-6 w-6`}
+                          <SquareBtn
+                            className={`${linkBtnClass} h-6 min-h-6 w-6`}
                             title="Close path list"
                             onClick={() => setDiffShowPaths(false)}
                           >
                             <XMarkIcon className="h-3.5 w-3.5" />
-                          </button>
+                          </SquareBtn>
                         </div>
                         <div className="flex shrink-0 gap-0.5 border-b border-[var(--workspace-border)] px-1.5 py-1">
                           {([
@@ -3880,7 +3845,6 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                   passiveReadOnly
                   language={outputLanguage === "toml" || outputLanguage === "csv" ? "plaintext" : outputLanguage}
                   monacoTheme={monacoTheme}
-                  panelTone="output"
                   fontSize={editorFontSize}
                   wordWrap={lineWrap ? "on" : "off"}
                   onEditorMount={(api) => { outputEditorApiRef.current = api; }}
@@ -4306,7 +4270,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                 </div>
                 <div className="flex items-center gap-1">
                   <button type="button" className={`${linkBtnClass} h-7 min-h-7 text-[11px] font-medium`} onClick={exportHistory}>Export</button>
-                  <button type="button" className={`${linkBtnClass} btn-square h-7 min-h-7 w-7`} onClick={() => setShowHistoryPanel(false)}><XMarkIcon className="h-4 w-4" /></button>
+                  <SquareBtn className={`${linkBtnClass} h-7 min-h-7 w-7 [&_svg]:!size-4`} onClick={() => setShowHistoryPanel(false)}><XMarkIcon className="h-4 w-4" /></SquareBtn>
                 </div>
               </div>
               <div className="flex-1 overflow-y-auto">
@@ -4428,7 +4392,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                 </button>
                 <button
                   type="button"
-                  className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-content hover:opacity-90"
+                  className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90"
                   onClick={() => void shareWorkspace()}
                 >
                   Create link &amp; copy

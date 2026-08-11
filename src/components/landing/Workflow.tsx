@@ -92,7 +92,7 @@ export function Workflow() {
         >
           <Link
             href="/playground"
-            className="group inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-content shadow-lg shadow-primary/20 transition-all hover:scale-[1.03]"
+            className="group inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:scale-[1.03]"
           >
             Start working
             <ArrowRightIcon

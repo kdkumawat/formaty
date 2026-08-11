@@ -5,7 +5,6 @@ import type { editor } from "monaco-editor";
 import Editor from "@monaco-editor/react";
 
 interface JsonEditorProps {
-  panelTone?: "input" | "output";
   value: string;
   onChange: (next: string) => void;
   readOnly?: boolean;
@@ -37,7 +36,6 @@ export function JsonEditor({
   placeholder,
   className,
   hideLineNumbers = false,
-  panelTone = "input",
   fontSize = 13,
   onCursorChange,
   wordWrap = "on",

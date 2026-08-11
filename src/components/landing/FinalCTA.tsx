@@ -45,7 +45,7 @@ export function FinalCTA() {
         <div className="flex flex-wrap items-center justify-center gap-3">
           <Link
             href="/playground"
-            className="group inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3.5 text-base font-semibold text-primary-content shadow-xl shadow-primary/25 transition-all hover:scale-[1.03] hover:shadow-primary/35 hover:shadow-2xl"
+            className="group inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3.5 text-base font-semibold text-primary-foreground shadow-xl shadow-primary/25 transition-all hover:scale-[1.03] hover:shadow-primary/35 hover:shadow-2xl"
           >
             Open Playground
             <ArrowRightIcon

@@ -1,6 +1,8 @@
 "use client";
 
 import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { Button as ShadcnButton } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 type Variant = "primary" | "secondary";
 
@@ -10,14 +12,10 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   icon?: ReactNode;
 }
 
-const base =
-  "inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-[13px] font-medium transition-[background-color] duration-150 ease-out focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[var(--workspace-background)] disabled:opacity-60 disabled:cursor-not-allowed";
-
-const variants: Record<Variant, string> = {
-  primary:
-    "bg-primary text-primary-content hover:opacity-90 focus:ring-primary",
+const variantClass: Record<Variant, string> = {
+  primary: "bg-primary text-primary-foreground hover:opacity-90 border-transparent",
   secondary:
-    "bg-transparent border border-[var(--workspace-border)] text-[var(--workspace-text)] hover:bg-[var(--workspace-panel)] focus:ring-[var(--workspace-border)]",
+    "bg-transparent border border-[var(--workspace-border)] text-[var(--workspace-text)] hover:bg-[var(--workspace-panel)]",
 };
 
 export function Button({
@@ -28,13 +26,19 @@ export function Button({
   ...props
 }: ButtonProps) {
   return (
-    <button
+    <ShadcnButton
       type="button"
-      className={`${base} ${variants[variant]} ${className}`}
+      variant="ghost"
+      size="default"
+      className={cn(
+        "rounded-lg px-3 py-2 text-[13px] font-medium",
+        variantClass[variant],
+        className,
+      )}
       {...props}
     >
       {icon}
       {children}
-    </button>
+    </ShadcnButton>
   );
 }

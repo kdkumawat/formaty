@@ -15,7 +15,6 @@ import html2canvas from "html2canvas";
 import {
   ArrowPathRoundedSquareIcon,
   ArrowsPointingOutIcon,
-  ArrowUturnRightIcon,
   HomeIcon,
   MagnifyingGlassIcon,
   ScaleIcon,
@@ -90,12 +89,6 @@ export const GraphView = forwardRef<GraphViewRef, GraphViewProps>(function Graph
     });
   };
 
-  const toolbarBorderClass = isDark ? "border-white/45" : "border-base-300";
-  const joinItemBorderClass = "[&>*:not(:last-child)]:border-r [&>*:not(:last-child)]:!border-base-300";
-  const toolbarBtnIcon =
-    "btn btn-sm btn-square btn-soft h-9 min-h-9 rounded-md";
-  const toolbarBtnActive =
-    "btn btn-sm btn-square h-9 min-h-9 rounded-md btn-primary";
   const searchInputClass =
     "flex h-8 min-w-[8rem] max-w-48 items-center gap-2 rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-2 text-sm text-[var(--workspace-text)] shadow-none outline-none focus:ring-2 focus:ring-primary/30";
 
@@ -123,7 +116,7 @@ export const GraphView = forwardRef<GraphViewRef, GraphViewProps>(function Graph
             format === "jpg" ? 0.92 : undefined
           );
         });
-      } catch (error) {
+      } catch {
         console.warn("Native canvas export failed, trying fallback...");
       }
     }
@@ -308,7 +301,7 @@ export const GraphView = forwardRef<GraphViewRef, GraphViewProps>(function Graph
           </button>
           <button
             type="button"
-            className={`rounded p-1 transition-colors ${showGrid ? "bg-primary text-primary-content" : "text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)]"}`}
+            className={`rounded p-1 transition-colors ${showGrid ? "bg-primary text-primary-foreground" : "text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)]"}`}
             onClick={() => setShowGrid((prev) => !prev)}
             aria-label={showGrid ? "Hide rulers" : "Show rulers"}
             title={showGrid ? "Hide rulers" : "Show rulers"}

@@ -15,6 +15,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { Dropdown } from "./Dropdown";
 import { Tooltip } from "./Tooltip";
+import { Button } from "@/components/ui/button";
 
 export type OutputActionId =
   | "reset"
@@ -110,6 +111,22 @@ export type OutputActionBarProps = {
 
 const iconBtn =
   "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--workspace-text-muted)] transition-all duration-150 hover:bg-primary/10 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40";
+
+/** shadcn Button wrapper for OutputActionBar icon actions (keeps existing look). */
+function IconButton({
+  className = "",
+  ...props
+}: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon"
+      className={`${iconBtn} [&_svg]:!size-3.5 ${className}`}
+      {...props}
+    />
+  );
+}
 
 const ACTION_LABELS: Record<OutputActionId, string> = {
   reset: "Reset",
@@ -486,45 +503,40 @@ export function OutputActionBar({
       {settingsControl}
       {show("reset") && onReset && (
         <Tooltip content={resetLabel}>
-          <button type="button" className={iconBtn} onClick={onReset} aria-label={resetLabel}>
+          <IconButton onClick={onReset} aria-label={resetLabel}>
             <ArrowPathIcon className="h-3.5 w-3.5" />
-          </button>
+          </IconButton>
         </Tooltip>
       )}
       {show("useAsInput") && onUseAsInput && (
         <Tooltip content="Use output as input">
-          <button
-            type="button"
-            className={iconBtn}
+          <IconButton
             disabled={!canCopy}
             onClick={onUseAsInput}
             aria-label="Use as input"
           >
             <ArrowUturnLeftIcon className="h-3.5 w-3.5" />
-          </button>
+          </IconButton>
         </Tooltip>
       )}
       {shareControl}
       {show("copy") && (
         <Tooltip content={copyLabel}>
-          <button
-            type="button"
-            className={`${iconBtn} ${actionBounce === "copy" ? "scale-90" : ""}`}
+          <IconButton
+            className={actionBounce === "copy" ? "scale-90" : ""}
             disabled={!canCopy}
             onClick={onCopy}
             aria-label={copyLabel}
           >
             <ClipboardDocumentIcon className="h-3.5 w-3.5" />
-          </button>
+          </IconButton>
         </Tooltip>
       )}
       {show("copyAs") && copyAsControl}
       {show("download") && downloadControl}
       {show("maximize") && onToggleMaximize && (
         <Tooltip content={isMaximized ? "Restore layout" : "Maximize output"}>
-          <button
-            type="button"
-            className={iconBtn}
+          <IconButton
             onClick={onToggleMaximize}
             aria-label={isMaximized ? "Restore" : "Maximize"}
           >
@@ -533,7 +545,7 @@ export function OutputActionBar({
             ) : (
               <ArrowsPointingOutIcon className="h-3.5 w-3.5" />
             )}
-          </button>
+          </IconButton>
         </Tooltip>
       )}
       {extra}

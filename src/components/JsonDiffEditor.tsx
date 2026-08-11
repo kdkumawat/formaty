@@ -451,7 +451,7 @@ export const JsonDiffEditor = forwardRef<JsonDiffEditorRef, JsonDiffEditorProps>
 
       window.setTimeout(emitStatsAndNav, 50);
     },
-    [emitStatsAndNav],
+    [emitStatsAndNav, language, monacoTheme],
   );
 
   useEffect(

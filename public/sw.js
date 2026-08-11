@@ -1,7 +1,7 @@
 /* Formaty does not use a service worker.
    Browsers or leftover registrations may still request /sw.js.
    This file is served as a static asset so it is not captured by /[tool]. */
-self.addEventListener("install", (event) => {
+self.addEventListener("install", () => {
   self.skipWaiting();
 });
 

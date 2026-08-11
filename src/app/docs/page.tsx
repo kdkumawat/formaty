@@ -174,7 +174,7 @@ export default function DocsPage() {
           </div>
 
           <div className="flex items-center gap-3">
-            <Link href="/playground" className="hidden rounded-lg bg-primary px-3.5 py-1.5 text-xs font-semibold text-primary-content shadow-sm transition-all hover:scale-[1.02] sm:inline-flex">
+            <Link href="/playground" className="hidden rounded-lg bg-primary px-3.5 py-1.5 text-xs font-semibold text-primary-foreground shadow-sm transition-all hover:scale-[1.02] sm:inline-flex">
               Open Playground
             </Link>
             <a href="https://github.com/kdkumawat/formaty" target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-xs text-[var(--workspace-text-muted)] hover:text-primary transition-colors">
@@ -569,7 +569,7 @@ export default function DocsPage() {
             </p>
             <ul className="space-y-2 text-sm text-[var(--workspace-text-muted)]">
               <li><strong className="text-[var(--workspace-text)]">Undo / Redo</strong> &mdash; <Kbd>Cmd Z</Kbd> / <Kbd>Cmd Shift Z</Kbd>, toolbar arrow buttons, or command palette.</li>
-              <li><strong className="text-[var(--workspace-text)]">Browse history panel</strong> &mdash; Command palette &rarr; "Browse history". Opens a side panel listing all entries. Click any entry to restore.</li>
+              <li><strong className="text-[var(--workspace-text)]">Browse history panel</strong> &mdash; Command palette &rarr; &quot;Browse history&quot;. Opens a side panel listing all entries. Click any entry to restore.</li>
               <li><strong className="text-[var(--workspace-text)]">Export history</strong> &mdash; Downloads all undo entries as a JSON file.</li>
             </ul>
           </Section>
@@ -579,7 +579,7 @@ export default function DocsPage() {
             <SectionTitle id="share">Share &amp; Export</SectionTitle>
             <ul className="space-y-3 text-sm text-[var(--workspace-text-muted)]">
               <li><strong className="text-[var(--workspace-text)]">Share</strong> &mdash; Confirms first (only action that can leave your device), then saves a short link. Recipients see the same input/output/settings. Toolbar or command palette.</li>
-              <li><strong className="text-[var(--workspace-text)]">Embed</strong> &mdash; After sharing, command palette &rarr; "Copy embed / iframe URL" for a read-only embeddable frame.</li>
+              <li><strong className="text-[var(--workspace-text)]">Embed</strong> &mdash; After sharing, command palette &rarr; &quot;Copy embed / iframe URL&quot; for a read-only embeddable frame.</li>
               <li><strong className="text-[var(--workspace-text)]">Disable sharing</strong> &mdash; Click the disable icon next to the shared link in the status bar.</li>
               <li><strong className="text-[var(--workspace-text)]">Download</strong> &mdash; Saves output as a file (or graph as PNG/JPG). Output toolbar or command palette.</li>
               <li><strong className="text-[var(--workspace-text)]">Copy / Copy as</strong> &mdash; Output toolbar (never covers text). Copy as Base64, escaped, URL-encoded, or Data URI. Optional draggable floating bar in Settings.</li>
@@ -635,7 +635,7 @@ export default function DocsPage() {
               <p className="mb-4 text-base font-semibold text-[var(--workspace-text)]">Ready to try it?</p>
               <Link
                 href="/playground"
-                className="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-content shadow-lg shadow-primary/25 transition-all hover:scale-[1.03] hover:shadow-xl hover:shadow-primary/35"
+                className="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/25 transition-all hover:scale-[1.03] hover:shadow-xl hover:shadow-primary/35"
               >
                 Open Playground &rarr;
               </Link>

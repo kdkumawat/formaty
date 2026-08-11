@@ -34,7 +34,7 @@ export function LandingHeader() {
           </Link>
           <Link
             href="/playground"
-            className="hidden items-center gap-2 rounded-xl bg-primary px-3.5 py-1.5 text-sm font-semibold text-primary-content shadow-md shadow-primary/20 transition-all hover:scale-[1.03] hover:shadow-primary/30 sm:inline-flex"
+            className="hidden items-center gap-2 rounded-xl bg-primary px-3.5 py-1.5 text-sm font-semibold text-primary-foreground shadow-md shadow-primary/20 transition-all hover:scale-[1.03] hover:shadow-primary/30 sm:inline-flex"
           >
             Playground
           </Link>
@@ -66,7 +66,7 @@ export function LandingHeader() {
                 onClick={() => setThemeMode(mode)}
                 className={`rounded p-1.5 transition-colors ${
                   themeMode === mode
-                    ? "bg-primary text-primary-content"
+                    ? "bg-primary text-primary-foreground"
                     : "text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)]"
                 }`}
               >

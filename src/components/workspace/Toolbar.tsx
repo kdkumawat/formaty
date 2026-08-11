@@ -1,15 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
-
-const toolbarBtn =
-  "inline-flex items-center justify-center gap-2 rounded-lg border border-transparent px-3.5 py-2 text-[13px] font-medium transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-[var(--workspace-border)] focus:ring-offset-2 focus:ring-offset-[var(--workspace-background)] disabled:opacity-60 disabled:cursor-not-allowed";
-
-const toolbarBtnPrimary =
-  "bg-primary text-primary-content hover:opacity-90 border-transparent";
-
-const toolbarBtnSecondary =
-  "bg-transparent border-[var(--workspace-border)] text-[var(--workspace-text)] hover:bg-[var(--workspace-panel)]";
+import { Button as ShadcnButton } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 interface ToolbarProps {
   children: ReactNode;
@@ -57,17 +50,23 @@ export function ToolbarButton({
   className?: string;
 }) {
   return (
-    <button
+    <ShadcnButton
       type="button"
+      variant="ghost"
+      size="default"
       title={title}
       disabled={disabled}
       onClick={onClick}
-      className={`${toolbarBtn} ${
-        primary ? toolbarBtnPrimary : toolbarBtnSecondary
-      } ${className}`}
+      className={cn(
+        "rounded-lg border px-3.5 py-2 text-[13px] font-medium",
+        primary
+          ? "bg-primary text-primary-foreground hover:opacity-90 border-transparent"
+          : "bg-transparent border-[var(--workspace-border)] text-[var(--workspace-text)] hover:bg-[var(--workspace-panel)]",
+        className,
+      )}
     >
       {icon}
       {children}
-    </button>
+    </ShadcnButton>
   );
 }

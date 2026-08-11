@@ -211,7 +211,6 @@ export function QueryView({
           passiveReadOnly
           language="json"
           monacoTheme={monacoTheme}
-          panelTone="output"
           fontSize={fontSize}
         />
       </div>

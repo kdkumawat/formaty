@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { Logo } from "@/components/Logo";
 
 const TOOL_LINKS = [
   { route: "/json-formatter", label: "JSON Formatter" },

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { MagnifyingGlassIcon, SunIcon, MoonIcon, ComputerDesktopIcon } from "@heroicons/react/24/outline";
 import { Logo } from "@/components/Logo";
+import { Button } from "@/components/ui/button";
 
 type ThemeMode = "system" | "dark" | "light";
 
@@ -45,28 +46,28 @@ export function Header({ themeMode, onThemeChange, onOpenCommandPalette }: Heade
       {/* Command palette trigger - centered absolutely */}
       {onOpenCommandPalette && (
         <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-          <button
-            type="button"
+          <Button
+            variant="ghost"
             onClick={onOpenCommandPalette}
             title="Command palette (⌘K)"
-            className="flex items-center gap-2 rounded-lg border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-3 py-1.5 text-[12px] text-[var(--workspace-text-muted)] transition-all hover:border-primary/30 hover:text-[var(--workspace-text)] hover:shadow-sm w-[220px] sm:w-[280px]"
+            className="h-auto min-h-0 w-[220px] items-center gap-2 rounded-lg border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-3 py-1.5 text-left text-[12px] text-[var(--workspace-text-muted)] transition-all hover:border-primary/30 hover:text-[var(--workspace-text)] hover:shadow-sm sm:w-[280px] [&_svg]:!size-3.5"
           >
             <MagnifyingGlassIcon className="h-3.5 w-3.5 shrink-0" />
             <span className="flex-1 text-left">Search commands…</span>
             <kbd className="hidden rounded border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-1.5 py-0.5 font-mono text-[10px] sm:flex">⌘K</kbd>
-          </button>
+          </Button>
         </div>
       )}
 
       {/* Actions */}
       <div className="flex shrink-0 items-center gap-1">
-        <a
+        <Link
           href="/docs"
           className="hidden rounded-md px-2 py-1 text-[11px] font-medium text-[var(--workspace-text-muted)] transition-colors hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] sm:inline-flex"
           aria-label="Documentation"
         >
           Docs
-        </a>
+        </Link>
         <a
           href="https://github.com/kdkumawat/formaty"
           target="_blank"
@@ -80,20 +81,21 @@ export function Header({ themeMode, onThemeChange, onOpenCommandPalette }: Heade
         {/* Theme segment control */}
         <div className="ml-0.5 flex items-center gap-px rounded-lg border border-[var(--workspace-border)] bg-[var(--workspace-panel)] p-0.5">
           {themeOptions.map(({ mode, label, Icon }) => (
-            <button
+            <Button
               key={mode}
               type="button"
+              variant="ghost"
               aria-label={`${label} theme`}
               title={label}
               onClick={() => onThemeChange(mode)}
-              className={`rounded p-1 transition-all duration-150 ${
+              className={`h-auto min-h-0 !p-1 rounded transition-all duration-150 [&_svg]:!size-3.5 ${
                 themeMode === mode
-                  ? "bg-primary text-primary-content shadow-sm"
+                  ? "bg-primary text-primary-foreground shadow-sm"
                   : "text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)] hover:text-[var(--workspace-text)]"
               }`}
             >
               <Icon className="h-3.5 w-3.5" aria-hidden />
-            </button>
+            </Button>
           ))}
         </div>
       </div>

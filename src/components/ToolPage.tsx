@@ -95,7 +95,7 @@ export function ToolPage({ config }: ToolPageProps) {
           <div className="mt-6 flex flex-wrap gap-3">
             <Link
               href={`/playground?tool=${config.route}`}
-              className="group inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-content shadow-lg shadow-primary/20 transition-all hover:scale-[1.03] hover:shadow-primary/30"
+              className="group inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:scale-[1.03] hover:shadow-primary/30"
             >
               Try {config.h1}
               <ArrowRightIcon
@@ -194,7 +194,7 @@ export function ToolPage({ config }: ToolPageProps) {
               </p>
               <Link
                 href={`/playground?tool=${config.route}`}
-                className="group flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-content shadow-lg shadow-primary/20 transition-all hover:scale-[1.02]"
+                className="group flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:scale-[1.02]"
               >
                 Open Tool
                 <ArrowRightIcon
