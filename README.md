@@ -17,11 +17,14 @@
 ## Getting Started
 
 ```bash
-npm install
-npm run dev
+bun install
+bun run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
+
+> This project uses [Bun](https://bun.sh) as its package manager (`bun install` / `bun run`).
+> Lockfile: `bun.lock`.
 
 ## Documentation
 
