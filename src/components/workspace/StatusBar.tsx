@@ -60,7 +60,7 @@ export function StatusBar({
 
   return (
     <div
-      className="flex flex-shrink-0 items-center justify-between gap-1 overflow-x-auto overflow-y-hidden border-t border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-2 font-mono text-[11px] text-[var(--workspace-text-muted)]"
+      className="flex flex-shrink-0 items-center justify-between gap-1 overflow-x-auto overflow-y-hidden border-t border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-2 text-xs text-[var(--workspace-text-muted)]"
       style={{ minHeight: "24px", height: "24px", paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
     >
       <div className="flex min-w-0 flex-1 items-center gap-0 overflow-x-auto" style={{ height: "24px" }}>

@@ -7,13 +7,7 @@ const nextConfig: NextConfig = {
     FORMATY_API_URL: process.env.FORMATY_API_URL,
     SITE_URL: process.env.SITE_URL,
   },
-  webpack: (config) => {
-    config.resolve.conditionNames = [
-      "import",
-      ...(config.resolve.conditionNames ?? []),
-    ];
-    return config;
-  },
+  turbopack: {},
 };
 
 export default nextConfig;

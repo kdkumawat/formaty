@@ -7,7 +7,8 @@ import { loadPlayground, type LoadPlaygroundResult } from "@/lib/playgroundApi";
 import { WorkspaceContent } from "@/components/WorkspaceContent";
 import { Logo } from "@/components/Logo";
 
-const linkBtnClass = "btn btn-m btn-ghost rounded p-1 border-0 hover:bg-[var(--workspace-panel)] hover:underline text-primary";
+const linkBtnClass =
+  "inline-flex items-center justify-center gap-2 h-8 min-h-8 px-2 rounded border-0 bg-transparent text-sm font-medium whitespace-nowrap text-primary hover:bg-[var(--workspace-panel)] hover:underline";
 
 type LoadStatus = "loading" | LoadPlaygroundResult;
 

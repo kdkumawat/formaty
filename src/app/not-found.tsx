@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { Logo } from "@/components/Logo";
 
-const linkBtnClass = "btn btn-m btn-ghost rounded p-1 border-0 hover:bg-[var(--workspace-panel)] hover:underline";
+const linkBtnClass =
+  "inline-flex items-center justify-center gap-2 h-8 min-h-8 px-2 rounded border-0 bg-transparent text-sm font-medium whitespace-nowrap text-[var(--workspace-text)] hover:bg-[var(--workspace-panel)] hover:underline";
 
 function getInitialTheme(): "light" | "dark" {
   if (typeof window === "undefined") return "light";
@@ -19,12 +20,8 @@ function getInitialTheme(): "light" | "dark" {
 }
 
 export default function NotFound() {
-  const [theme, setTheme] = useState<"light" | "dark">("light");
-
   useEffect(() => {
-    const t = getInitialTheme();
-    setTheme(t);
-    document.documentElement.setAttribute("data-theme", t);
+    document.documentElement.setAttribute("data-theme", getInitialTheme());
   }, []);
 
   return (
@@ -33,7 +30,7 @@ export default function NotFound() {
         <Logo size={48} className="shrink-0 text-primary" />
         <h1 className="text-xl font-bold text-[var(--workspace-text)]">Page not found</h1>
         <p className="max-w-sm text-sm text-[var(--workspace-text-muted)]">
-          The page you're looking for doesn't exist or has been moved.
+          The page you&apos;re looking for doesn&apos;t exist or has been moved.
         </p>
       </div>
       <div className="flex w-full max-w-md flex-col gap-5 rounded-xl border border-[var(--workspace-border)] bg-[var(--workspace-panel)] p-6">

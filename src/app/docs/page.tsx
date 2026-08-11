@@ -51,7 +51,7 @@ function SectionTitle({ id, children }: { id: string; children: React.ReactNode 
   return (
     <h2
       id={id}
-      className="group mb-4 flex scroll-mt-[72px] items-center gap-2 text-xl font-bold text-[var(--workspace-text)]"
+      className="group mb-4 flex scroll-mt-[72px] items-center gap-2 text-xl font-semibold text-[var(--workspace-text)]"
     >
       <a href={`#${id}`} className="opacity-0 transition-opacity group-hover:opacity-40 text-primary text-base">
         #
@@ -174,7 +174,7 @@ export default function DocsPage() {
           </div>
 
           <div className="flex items-center gap-3">
-            <Link href="/playground" className="hidden rounded-lg bg-primary px-3.5 py-1.5 text-xs font-semibold text-primary-content shadow-sm transition-all hover:scale-[1.02] sm:inline-flex">
+            <Link href="/playground" className="hidden rounded-lg bg-primary px-3.5 py-1.5 text-xs font-semibold text-primary-foreground shadow-sm transition-all hover:scale-[1.02] sm:inline-flex">
               Open Playground
             </Link>
             <a href="https://github.com/kdkumawat/formaty" target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-xs text-[var(--workspace-text-muted)] hover:text-primary transition-colors">
@@ -238,8 +238,8 @@ export default function DocsPage() {
           {!query && (
             <div className="mb-10 border-b border-[var(--workspace-border)] pb-8">
               <span className="mb-3 inline-flex rounded-md bg-primary/10 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider text-primary">Docs</span>
-              <h1 className="text-3xl font-bold tracking-tight text-[var(--workspace-text)]">formaty Documentation</h1>
-              <p className="mt-2 text-base text-[var(--workspace-text-muted)]">Local-first data toolkit. Everything runs in your browser &mdash; no servers, no sign-up.</p>
+              <h1 className="text-3xl font-semibold tracking-tight text-[var(--workspace-text)] md:text-4xl">formaty Documentation</h1>
+              <p className="mt-2 text-base text-[var(--workspace-text-muted)]">Local-first data toolkit. Everything runs in your browser - no servers, no sign-up.</p>
               <div className="mt-4 flex flex-wrap gap-1.5">
                 {["JSON", "XML", "YAML", "TOML", "CSV", "cURL"].map((f) => (
                   <Tag key={f}>{f}</Tag>
@@ -287,9 +287,9 @@ export default function DocsPage() {
             <TableWrap>
               <THead cols={["Feature", "Details"]} />
               <tbody className="divide-y divide-[var(--workspace-border)]/50">
-                <Row label="Transform" value="Format, convert, views, types — classic left input / right output." />
+                <Row label="Transform" value="Format, convert, views, types - classic left input / right output." />
                 <Row label="Compare" value="Document text/JSON diff or list/set compare (SQL IN export)." />
-                <Row label="Utils" value="UUID, Base64, JWT, hash, time, URL, case, hex, password, and more — each tool keeps its own state." />
+                <Row label="Utils" value="UUID, Base64, JWT, hash, time, URL, case, hex, password, and more - each tool keeps its own state." />
                 <Row label="Drag splitter" value="Click and drag the center divider to resize input/output panes to any ratio." />
                 <Row label="Live transform" value="When enabled, output updates instantly as you type. Toggle via command palette." />
                 <Row label="Auto-format on paste" value="Automatically beautifies data when you paste into the input editor. Toggle via settings." />
@@ -348,7 +348,7 @@ export default function DocsPage() {
                 <Row label="Sort array items" value="Sort all array contents recursively (alphabetically / numerically)." />
                 <Row label="Remove duplicates" value="Deep-deduplicate array values recursively." />
                 <Row label="Generate JSON Schema" value="Infer a JSON Schema draft from your sample data." />
-                <Row label="Validate against Schema" value="Paste a JSON Schema in the modal — formaty validates input and reports all errors." />
+                <Row label="Validate against Schema" value="Paste a JSON Schema in the modal - formaty validates input and reports all errors." />
               </tbody>
             </TableWrap>
           </Section>
@@ -381,9 +381,9 @@ export default function DocsPage() {
               {[
                 { name: "Raw",   desc: "Monaco editor with syntax highlighting, folding, line numbers, and find/replace." },
                 { name: "Tree",  desc: "Expandable/collapsible explorer of the full data structure." },
-                { name: "Graph", desc: "Interactive node graph — zoom, pan, drag to explore relationships." },
+                { name: "Graph", desc: "Interactive node graph - zoom, pan, drag to explore relationships." },
                 { name: "Query", desc: "JSONPath / JMESPath live filter with highlighted matching nodes." },
-                { name: "Table", desc: "Tabular grid for arrays of objects — load the Table sample, or paste [{\"id\":1},…]. Sort, search, and hide columns." },
+                { name: "Table", desc: "Tabular grid for arrays of objects - load the Table sample, or paste [{\"id\":1},…]. Sort, search, and hide columns." },
               ].map(({ name, desc }) => (
                 <div key={name} className="rounded-xl border border-[var(--workspace-border)] bg-[var(--workspace-panel)] p-4">
                   <p className="mb-1 font-bold text-[var(--workspace-text)]">{name}</p>
@@ -470,18 +470,18 @@ export default function DocsPage() {
             </p>
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--workspace-text-muted)]">Document mode</p>
             <ul className="mb-4 space-y-2 text-sm text-[var(--workspace-text-muted)]">
-              <li><strong className="text-[var(--workspace-text)]">Enter</strong> &mdash; Actions &rarr; Diff, or palette &rarr; Diff. Full-width left/right panes (main input hidden).</li>
-              <li><strong className="text-[var(--workspace-text)]">Counts</strong> &mdash; <em>current/total</em> hunks, +/− lines, JSON path totals. Navigate with arrows or palette.</li>
-              <li><strong className="text-[var(--workspace-text)]">Tools</strong> &mdash; Inline layout, Trim WS, Paths panel, swap, beautify, paste, export report.</li>
+              <li><strong className="text-[var(--workspace-text)]">Enter</strong> - Actions &rarr; Diff, or palette &rarr; Diff. Full-width left/right panes (main input hidden).</li>
+              <li><strong className="text-[var(--workspace-text)]">Counts</strong> - <em>current/total</em> hunks, +/− lines, JSON path totals. Navigate with arrows or palette.</li>
+              <li><strong className="text-[var(--workspace-text)]">Tools</strong> - Inline layout, Trim WS, Paths panel, swap, beautify, paste, export report.</li>
             </ul>
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--workspace-text-muted)]">List / Set mode</p>
             <ul className="space-y-2 text-sm text-[var(--workspace-text-muted)]">
-              <li><strong className="text-[var(--workspace-text)]">Switch</strong> &mdash; Toolbar tab <em>List / Set</em> (or palette &rarr; &quot;Diff: List / set mode&quot;).</li>
-              <li><strong className="text-[var(--workspace-text)]">Buckets</strong> &mdash; Common, Only left, Only right, Union, Symmetric diff, Left/Right duplicates — with live counts.</li>
-              <li><strong className="text-[var(--workspace-text)]">Parse</strong> &mdash; Auto / newline / comma / semicolon / pipe / whitespace / JSON array; toggles for trim, skip empty, ignore case, strip quotes, normalize numbers.</li>
-              <li><strong className="text-[var(--workspace-text)]">Sort</strong> &mdash; Original, A→Z, Z→A, numeric, by frequency.</li>
-              <li><strong className="text-[var(--workspace-text)]">Export</strong> &mdash; SQL <code className="text-[var(--workspace-text)]">IN</code> with single/double/unquoted, full <code className="text-[var(--workspace-text)]">column IN (…)</code> / <code className="text-[var(--workspace-text)]">NOT IN</code>, JSON array, CSV, YAML, JS/Python lists, regex alternation. One-click quick buttons + download.</li>
-              <li><strong className="text-[var(--workspace-text)]">Sample</strong> &mdash; Empty state offers sample fruit lists to try common vs left-only vs right-only.</li>
+              <li><strong className="text-[var(--workspace-text)]">Switch</strong> - Toolbar tab <em>List / Set</em> (or palette &rarr; &quot;Diff: List / set mode&quot;).</li>
+              <li><strong className="text-[var(--workspace-text)]">Buckets</strong> - Common, Only left, Only right, Union, Symmetric diff, Left/Right duplicates - with live counts.</li>
+              <li><strong className="text-[var(--workspace-text)]">Parse</strong> - Auto / newline / comma / semicolon / pipe / whitespace / JSON array; toggles for trim, skip empty, ignore case, strip quotes, normalize numbers.</li>
+              <li><strong className="text-[var(--workspace-text)]">Sort</strong> - Original, A→Z, Z→A, numeric, by frequency.</li>
+              <li><strong className="text-[var(--workspace-text)]">Export</strong> - SQL <code className="text-[var(--workspace-text)]">IN</code> with single/double/unquoted, full <code className="text-[var(--workspace-text)]">column IN (…)</code> / <code className="text-[var(--workspace-text)]">NOT IN</code>, JSON array, CSV, YAML, JS/Python lists, regex alternation. One-click quick buttons + download.</li>
+              <li><strong className="text-[var(--workspace-text)]">Sample</strong> - Empty state offers sample fruit lists to try common vs left-only vs right-only.</li>
             </ul>
           </Section>
 
@@ -495,7 +495,7 @@ export default function DocsPage() {
             <TableWrap>
               <THead cols={["Tool", "What it does"]} />
               <tbody className="divide-y divide-[var(--workspace-border)]/50">
-                <Row label="UUID" value="Generate v4 UUIDs (count 1–50) with copy-per-id, or NIL UUID." />
+                <Row label="UUID" value="Generate v4 UUIDs (count 1-50) with copy-per-id, or NIL UUID." />
                 <Row label="Base64" value="Encode / decode with auto-detect or forced mode." />
                 <Row label="JWT" value="Decode header + payload (no signature verification)." />
                 <Row label="Hash" value="SHA-256 or SHA-1 hex digest of any text." />
@@ -522,7 +522,7 @@ export default function DocsPage() {
           <Section id="palette" query={query} keywords={["command palette","palette","search","cmd k","ctrl k","recent","shortcut","all commands"]}>
             <SectionTitle id="palette">Command Palette</SectionTitle>
             <p className="mb-4 text-sm leading-relaxed text-[var(--workspace-text-muted)]">
-              Press <Kbd>Cmd K</Kbd> (or <Kbd>Ctrl K</Kbd>) anywhere &mdash; even inside the editor &mdash; to open the command palette. The last 3 used commands always appear first.
+              Press <Kbd>Cmd K</Kbd> (or <Kbd>Ctrl K</Kbd>) anywhere - even inside the editor - to open the command palette. The last 3 used commands always appear first.
             </p>
             <TableWrap>
               <THead cols={["Category", "Examples"]} />
@@ -548,7 +548,7 @@ export default function DocsPage() {
             </p>
             <div className="grid gap-3 sm:grid-cols-2">
               {[
-                { name: "Base64",         desc: "btoa(output) — compact binary-safe encoding." },
+                { name: "Base64",         desc: "btoa(output) - compact binary-safe encoding." },
                 { name: "Escaped string", desc: "Output wrapped as a JSON string literal (escaped) for embedding in code." },
                 { name: "URL-encoded",    desc: "Percent-encoded for use in query parameters or form POST bodies." },
                 { name: "Data URI",       desc: "data:application/json;base64,... for inline embedding in HTML / CSS." },
@@ -568,9 +568,9 @@ export default function DocsPage() {
               Every paste, import, or edit batch is saved to an undo stack (up to 100 entries per tab).
             </p>
             <ul className="space-y-2 text-sm text-[var(--workspace-text-muted)]">
-              <li><strong className="text-[var(--workspace-text)]">Undo / Redo</strong> &mdash; <Kbd>Cmd Z</Kbd> / <Kbd>Cmd Shift Z</Kbd>, toolbar arrow buttons, or command palette.</li>
-              <li><strong className="text-[var(--workspace-text)]">Browse history panel</strong> &mdash; Command palette &rarr; "Browse history". Opens a side panel listing all entries. Click any entry to restore.</li>
-              <li><strong className="text-[var(--workspace-text)]">Export history</strong> &mdash; Downloads all undo entries as a JSON file.</li>
+              <li><strong className="text-[var(--workspace-text)]">Undo / Redo</strong> - <Kbd>Cmd Z</Kbd> / <Kbd>Cmd Shift Z</Kbd>, toolbar arrow buttons, or command palette.</li>
+              <li><strong className="text-[var(--workspace-text)]">Browse history panel</strong> - Command palette &rarr; &quot;Browse history&quot;. Opens a side panel listing all entries. Click any entry to restore.</li>
+              <li><strong className="text-[var(--workspace-text)]">Export history</strong> - Downloads all undo entries as a JSON file.</li>
             </ul>
           </Section>
 
@@ -578,12 +578,12 @@ export default function DocsPage() {
           <Section id="share" query={query} keywords={["share","export","download","embed","iframe","link","url","copy","cloud","disable"]}>
             <SectionTitle id="share">Share &amp; Export</SectionTitle>
             <ul className="space-y-3 text-sm text-[var(--workspace-text-muted)]">
-              <li><strong className="text-[var(--workspace-text)]">Share</strong> &mdash; Confirms first (only action that can leave your device), then saves a short link. Recipients see the same input/output/settings. Toolbar or command palette.</li>
-              <li><strong className="text-[var(--workspace-text)]">Embed</strong> &mdash; After sharing, command palette &rarr; "Copy embed / iframe URL" for a read-only embeddable frame.</li>
-              <li><strong className="text-[var(--workspace-text)]">Disable sharing</strong> &mdash; Click the disable icon next to the shared link in the status bar.</li>
-              <li><strong className="text-[var(--workspace-text)]">Download</strong> &mdash; Saves output as a file (or graph as PNG/JPG). Output toolbar or command palette.</li>
-              <li><strong className="text-[var(--workspace-text)]">Copy / Copy as</strong> &mdash; Output toolbar (never covers text). Copy as Base64, escaped, URL-encoded, or Data URI. Optional draggable floating bar in Settings.</li>
-              <li><strong className="text-[var(--workspace-text)]">Use output as input</strong> &mdash; Chain transforms (toolbar back-arrow or command palette).</li>
+              <li><strong className="text-[var(--workspace-text)]">Share</strong> - Confirms first (only action that can leave your device), then saves a short link. Recipients see the same input/output/settings. Toolbar or command palette.</li>
+              <li><strong className="text-[var(--workspace-text)]">Embed</strong> - After sharing, command palette &rarr; &quot;Copy embed / iframe URL&quot; for a read-only embeddable frame.</li>
+              <li><strong className="text-[var(--workspace-text)]">Disable sharing</strong> - Click the disable icon next to the shared link in the status bar.</li>
+              <li><strong className="text-[var(--workspace-text)]">Download</strong> - Saves output as a file (or graph as PNG/JPG). Output toolbar or command palette.</li>
+              <li><strong className="text-[var(--workspace-text)]">Copy / Copy as</strong> - Output toolbar (never covers text). Copy as Base64, escaped, URL-encoded, or Data URI. Optional draggable floating bar in Settings.</li>
+              <li><strong className="text-[var(--workspace-text)]">Use output as input</strong> - Chain transforms (toolbar back-arrow or command palette).</li>
             </ul>
           </Section>
 
@@ -608,7 +608,7 @@ export default function DocsPage() {
           <Section id="pinning" query={query} keywords={["pinning","pin","star","toolbar","persist","quick access","favorite","unpin"]}>
             <SectionTitle id="pinning">Toolbar Pinning</SectionTitle>
             <p className="text-sm leading-relaxed text-[var(--workspace-text-muted)]">
-              Every item &mdash; format, view, action, type language, setting &mdash; has a{" "}
+              Every item - format, view, action, type language, setting - has a{" "}
               <strong className="text-[var(--workspace-text)]">&#9734;</strong> icon. Click it to pin the item to the quick-access toolbar.
               Pinned items persist across sessions via localStorage. You can also pin/unpin via command palette &rarr; search{" "}
               <strong className="text-[var(--workspace-text)]">pin</strong>.
@@ -622,7 +622,7 @@ export default function DocsPage() {
               <p className="mb-2 font-bold text-emerald-600">Local-first by default</p>
               <p>
                 formaty processes everything locally using a Web Worker. No input, output, or transform result is sent
-                to any server &mdash; except when you explicitly click{" "}
+                to any server - except when you explicitly click{" "}
                 <strong className="text-[var(--workspace-text)]">Share</strong> and confirm the privacy dialog.
                 Session state (pinned items, theme, tabs, settings) is stored in localStorage. Shared links can be disabled from the status bar.
               </p>
@@ -635,7 +635,7 @@ export default function DocsPage() {
               <p className="mb-4 text-base font-semibold text-[var(--workspace-text)]">Ready to try it?</p>
               <Link
                 href="/playground"
-                className="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-content shadow-lg shadow-primary/25 transition-all hover:scale-[1.03] hover:shadow-xl hover:shadow-primary/35"
+                className="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/25 transition-all hover:scale-[1.03] hover:shadow-xl hover:shadow-primary/35"
               >
                 Open Playground &rarr;
               </Link>

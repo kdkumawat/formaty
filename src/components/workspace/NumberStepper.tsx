@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { MinusIcon, PlusIcon } from "@heroicons/react/24/outline";
+import { Button } from "@/components/ui/button";
 
 export type NumberStepperProps = {
   value: number;
@@ -53,31 +54,29 @@ export function NumberStepper({
     setEditing(false);
   };
 
-  const group =
-    "flex items-center overflow-hidden rounded-lg border border-[var(--workspace-border)]/60 divide-x divide-[var(--workspace-border)]/40 bg-[var(--workspace-background)]/50";
-  const stepBtn =
-    "flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] transition-all duration-100 hover:bg-primary/10 hover:text-primary active:scale-95 disabled:cursor-not-allowed disabled:opacity-40";
+  const tinyBtn =
+    "h-7 w-7 !p-0 text-[var(--workspace-text-muted)] hover:!bg-primary/10 hover:!text-primary";
 
   return (
     <div className={`inline-flex items-center gap-1.5 ${className}`}>
-      {label ? (
-        <span className="text-[11px] text-[var(--workspace-text-muted)]">{label}</span>
-      ) : null}
+      {label ? <span className="text-[11px] text-[var(--workspace-text-muted)]">{label}</span> : null}
       <div
-        className={group}
+        className="flex items-center overflow-hidden rounded-lg border border-[var(--workspace-border)]/60 divide-x divide-[var(--workspace-border)]/40 bg-[var(--workspace-background)]/50"
         role="group"
         aria-label={ariaLabel ?? label ?? "Number"}
       >
-        <button
+        <Button
           type="button"
-          className={stepBtn}
+          variant="ghost"
+          size="icon"
+          className={tinyBtn}
           disabled={disabled || value <= min}
           onClick={() => step(-1)}
           aria-label="Decrease"
           title="Decrease"
         >
           <MinusIcon className="h-3.5 w-3.5" aria-hidden />
-        </button>
+        </Button>
         {editing ? (
           <input
             type="text"
@@ -101,30 +100,33 @@ export function NumberStepper({
             aria-label={ariaLabel ?? label ?? "Value"}
           />
         ) : (
-          <button
+          <Button
             type="button"
+            variant="ghost"
             disabled={disabled}
             onClick={() => {
               if (disabled) return;
               setDraft(String(value));
               setEditing(true);
             }}
-            className="flex h-7 min-w-[2.25rem] shrink-0 items-center justify-center px-1.5 text-xs font-medium tabular-nums text-[var(--workspace-text)] transition-colors hover:bg-primary/5 disabled:opacity-40"
+            className="h-7 min-w-[2.25rem] shrink-0 !px-1.5 text-xs font-medium tabular-nums !text-[var(--workspace-text)] hover:!bg-primary/5"
             title="Click to type"
           >
             {value}
-          </button>
+          </Button>
         )}
-        <button
+        <Button
           type="button"
-          className={stepBtn}
+          variant="ghost"
+          size="icon"
+          className={tinyBtn}
           disabled={disabled || value >= max}
           onClick={() => step(1)}
           aria-label="Increase"
           title="Increase"
         >
           <PlusIcon className="h-3.5 w-3.5" aria-hidden />
-        </button>
+        </Button>
       </div>
     </div>
   );

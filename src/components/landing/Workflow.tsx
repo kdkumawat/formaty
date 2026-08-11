@@ -50,7 +50,7 @@ export function Workflow() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ delay: 0.06 }}
-            className="text-2xl font-bold tracking-tight text-[var(--workspace-text)] md:text-4xl"
+            className="text-3xl font-semibold tracking-tight text-[var(--workspace-text)] md:text-[2.6rem] md:leading-[1.1]"
           >
             From raw data to insight in seconds
           </motion.h2>
@@ -92,7 +92,7 @@ export function Workflow() {
         >
           <Link
             href="/playground"
-            className="group inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-content shadow-lg shadow-primary/20 transition-all hover:scale-[1.03]"
+            className="group inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:scale-[1.03]"
           >
             Start working
             <ArrowRightIcon

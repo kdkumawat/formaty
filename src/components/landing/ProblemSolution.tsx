@@ -61,7 +61,7 @@ export function ProblemSolution() {
           <p className="text-xs font-semibold uppercase tracking-widest text-primary">
             All-in-one
           </p>
-          <h2 className="text-2xl font-bold tracking-tight text-[var(--workspace-text)] md:text-4xl">
+          <h2 className="text-3xl font-semibold tracking-tight text-[var(--workspace-text)] md:text-[2.6rem] md:leading-[1.1]">
             Stop juggling multiple tools
           </h2>
           <p className="mx-auto max-w-xl text-sm text-[var(--workspace-text-muted)] md:text-base">

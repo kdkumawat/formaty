@@ -2,7 +2,7 @@
 
 ## Overview
 
-formaty is a local-first data toolkit for working with JSON, XML, YAML, TOML, and CSV. All processing runs in your browser — no data is sent to any server unless you explicitly share a link.
+formaty is a local-first data toolkit for working with JSON, XML, YAML, TOML, and CSV. All processing runs in your browser - no data is sent to any server unless you explicitly share a link.
 
 Three workspace tools share one chrome: **Transform** (format / convert / views / types), **Compare** (document or list/set), and **Utils** (UUID, Base64, JWT, hash, time, URL, and more). Query with JSONPath or JMESPath. Paste cURL commands to fetch API responses. Generate types for TypeScript, Zod, Python, Pydantic, Go, Java, and more.
 
@@ -12,7 +12,7 @@ Three workspace tools share one chrome: **Transform** (format / convert / views 
 
 | Tool | Description |
 |------|-------------|
-| **Transform** | Left input / right output — format, convert, views, types |
+| **Transform** | Left input / right output - format, convert, views, types |
 | **Compare** | Full-width Document diff or List/Set compare (Document \| Lists on the same toolbar row) |
 | **Utils** | Full-width developer helpers; tool tabs (UUID, Base64, …) sit on the same row as Transform \| Compare \| Utils |
 
@@ -57,10 +57,10 @@ Compare and Utils are first-class tools (not nested under Actions).
 | View | Description |
 |------|-------------|
 | **Raw** | Code editor with syntax highlighting, line numbers, copy |
-| **Tree** | Expandable tree — copy path/value, expand/collapse all |
+| **Tree** | Expandable tree - copy path/value, expand/collapse all |
 | **Graph** | Interactive graph visualization (best for medium payloads) |
 | **Query** | JSONPath / JMESPath playground with samples, history, promote result |
-| **Table** | Tabular view for **arrays of objects** — sort, search, hide columns |
+| **Table** | Tabular view for **arrays of objects** - sort, search, hide columns |
 
 Use **Use output as input** (toolbar arrow) to chain workflows (e.g. convert → types → query).
 
@@ -80,13 +80,13 @@ Star languages in settings to pin them when using the expanded toolbar.
 
 | Option | Description |
 |--------|-------------|
-| **Indent** | 0–10 spaces |
+| **Indent** | 0-10 spaces |
 | **Quote style** | Double or single quotes for JSON strings |
 | **Sort keys** | Alphabetize object keys in output |
 | **Remove empty** | Strip null and empty values |
 | **CSV delimiter** | Comma, Tab, Semicolon, or Pipe |
 | **Line wrap** | Wrap long lines in the editor |
-| **Floating actions** | Optional draggable Share/Copy chip (default is toolbar — never covers text) |
+| **Floating actions** | Optional draggable Share/Copy chip (default is toolbar - never covers text) |
 
 ---
 
@@ -114,7 +114,7 @@ Developer helpers that run entirely in the browser. Each tool has its own input/
 
 | Tool | Description |
 |------|-------------|
-| **UUID** | Generate v4 UUIDs (count 1–50), copy per id, or NIL |
+| **UUID** | Generate v4 UUIDs (count 1-50), copy per id, or NIL |
 | **Base64** | Encode / decode (auto or forced) |
 | **JWT** | Decode header + payload (no verify) |
 | **Hash** | SHA-256 / SHA-1 hex |
@@ -160,15 +160,15 @@ Search and run any action without the mouse.
 
 Share, Copy, Copy as (Base64 / escaped / URL / Data URI), Download, Maximize, and **Use output as input** sit on the **right side of the output toolbar** so they never cover editor text. Optionally enable a **draggable floating bar** in Settings.
 
-**Share** always asks for confirmation — it is the only path that can leave your device.
+**Share** always asks for confirmation - it is the only path that can leave your device.
 
 ---
 
 ## Input History
 
-- **Undo / Redo** — `Ctrl+Z` / `Ctrl+Shift+Z`
-- **Browse history** — Command palette → “Browse input history”
-- **Export history** — Download undo stack as JSON
+- **Undo / Redo** - `Ctrl+Z` / `Ctrl+Shift+Z`
+- **Browse history** - Command palette → “Browse input history”
+- **Export history** - Download undo stack as JSON
 
 ---
 
@@ -193,7 +193,7 @@ Default chrome uses **compact menus** (Format · View · Actions · Types). Unch
 ## Large files
 
 - **~400KB+**: tree shows a caution; graph warns about performance
-- **~2MB+**: tree/graph disabled; live transform auto-off — use Raw + Query
+- **~2MB+**: tree/graph disabled; live transform auto-off - use Raw + Query
 
 ---
 

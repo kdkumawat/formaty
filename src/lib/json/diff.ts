@@ -62,7 +62,7 @@ function walk(
   const leftIsArr = Array.isArray(left);
   const rightIsArr = Array.isArray(right);
 
-  // Both objects (not arrays) — walk keys
+  // Both objects (not arrays) - walk keys
   if (leftIsObj && rightIsObj && !leftIsArr && !rightIsArr) {
     const leftObj = left as Record<string, JsonValue>;
     const rightObj = right as Record<string, JsonValue>;
@@ -75,7 +75,7 @@ function walk(
     return;
   }
 
-  // Both arrays — walk by index, report length-only extras
+  // Both arrays - walk by index, report length-only extras
   if (leftIsArr && rightIsArr) {
     const la = left as JsonValue[];
     const ra = right as JsonValue[];
@@ -165,7 +165,7 @@ export function formatDiffReport(
           truncated: summary.truncated,
           changes: summary.rows,
         }
-      : { error: "One or both sides are not valid JSON — structural path diff unavailable." },
+      : { error: "One or both sides are not valid JSON - structural path diff unavailable." },
     lineLevel: lineStats
       ? {
           hunks: lineStats.hunks,

@@ -91,11 +91,11 @@ export function PowerFeatures() {
           <p className="text-xs font-semibold uppercase tracking-widest text-primary">
             Workspace features
           </p>
-          <h2 className="text-2xl font-bold tracking-tight text-[var(--workspace-text)] md:text-4xl">
+          <h2 className="text-3xl font-semibold tracking-tight text-[var(--workspace-text)] md:text-[2.6rem] md:leading-[1.1]">
             Built for your workflow
           </h2>
           <p className="mx-auto max-w-xl text-sm text-[var(--workspace-text-muted)] md:text-base">
-            Formaty isn't just a formatter - it's a full workspace that remembers how you work.
+            Formaty isn&apos;t just a formatter - it&apos;s a full workspace that remembers how you work.
           </p>
         </motion.div>
 
@@ -118,7 +118,7 @@ export function PowerFeatures() {
                 </span>
               </div>
               <div className="space-y-2">
-                <h3 className="text-xl font-bold tracking-tight text-[var(--workspace-text)]">
+                <h3 className="text-xl font-semibold tracking-tight text-[var(--workspace-text)]">
                   Command palette
                 </h3>
                 <p className="text-sm leading-relaxed text-[var(--workspace-text-muted)]">

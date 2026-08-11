@@ -28,7 +28,7 @@ export function Differentiation() {
             initial={{ opacity: 0, y: 16 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="text-2xl font-bold tracking-tight text-[var(--workspace-text)] md:text-4xl"
+            className="text-3xl font-semibold tracking-tight text-[var(--workspace-text)] md:text-[2.6rem] md:leading-[1.1]"
           >
             Replace 5 tools with one
           </motion.h2>

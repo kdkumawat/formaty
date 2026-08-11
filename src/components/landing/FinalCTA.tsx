@@ -14,7 +14,7 @@ export function FinalCTA() {
       <div
         className="blob-drift-a pointer-events-none absolute -left-20 -top-20 h-[500px] w-[500px]"
         style={{
-          background: "radial-gradient(circle, rgba(124,58,237,0.14) 0%, transparent 65%)",
+          background: "radial-gradient(circle, rgba(109,109,244,0.16) 0%, transparent 65%)",
           filter: "blur(60px)",
         }}
         aria-hidden
@@ -35,17 +35,17 @@ export function FinalCTA() {
         viewport={{ once: true }}
         className="relative mx-auto max-w-2xl space-y-8 text-center"
       >
-        <h2 className="text-3xl font-bold leading-tight tracking-tight text-[var(--workspace-text)] sm:text-4xl md:text-5xl">
+        <h2 className="text-3xl font-semibold leading-tight tracking-tight text-[var(--workspace-text)] sm:text-4xl md:text-5xl">
           Start working with your data.{" "}
           <span className="gradient-text">Right now.</span>
         </h2>
         <p className="text-base text-[var(--workspace-text-muted)] md:text-lg">
-          Format · Convert · Compare · Utils — no install, no sign-up, nothing leaves your browser.
+          Format · Convert · Compare · Utils - no install, no sign-up, nothing leaves your browser.
         </p>
         <div className="flex flex-wrap items-center justify-center gap-3">
           <Link
             href="/playground"
-            className="group inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3.5 text-base font-semibold text-primary-content shadow-xl shadow-primary/25 transition-all hover:scale-[1.03] hover:shadow-primary/35 hover:shadow-2xl"
+            className="group inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3.5 text-base font-semibold text-primary-foreground shadow-xl shadow-primary/25 transition-all hover:scale-[1.03] hover:shadow-primary/35 hover:shadow-2xl"
           >
             Open Playground
             <ArrowRightIcon

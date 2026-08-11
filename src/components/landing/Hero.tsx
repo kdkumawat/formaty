@@ -23,11 +23,11 @@ function JsonInput() {
   return (
     <pre className="font-mono text-[11px] leading-[1.8]">
       <span className="text-[var(--workspace-text)]">{"{"}</span>{"\n"}
-      {"  "}<span className="text-sky-500">"id"</span><span className="text-[var(--workspace-text)]">: </span><span className="text-amber-500">42</span><span className="text-[var(--workspace-text)]">,</span>{"\n"}
-      {"  "}<span className="text-sky-500">"name"</span><span className="text-[var(--workspace-text)]">: </span><span className="text-emerald-500">"Alice"</span><span className="text-[var(--workspace-text)]">,</span>{"\n"}
-      {"  "}<span className="text-sky-500">"roles"</span><span className="text-[var(--workspace-text)]">: [</span>{"\n"}
-      {"    "}<span className="text-emerald-500">"admin"</span><span className="text-[var(--workspace-text)]">,</span>{"\n"}
-      {"    "}<span className="text-emerald-500">"dev"</span>{"\n"}
+      {"  "}<span className="text-sky-500">&quot;id&quot;</span><span className="text-[var(--workspace-text)]">: </span><span className="text-amber-500">42</span><span className="text-[var(--workspace-text)]">,</span>{"\n"}
+      {"  "}<span className="text-sky-500">&quot;name&quot;</span><span className="text-[var(--workspace-text)]">: </span><span className="text-emerald-500">&quot;Alice&quot;</span><span className="text-[var(--workspace-text)]">,</span>{"\n"}
+      {"  "}<span className="text-sky-500">&quot;roles&quot;</span><span className="text-[var(--workspace-text)]">: [</span>{"\n"}
+      {"    "}<span className="text-emerald-500">&quot;admin&quot;</span><span className="text-[var(--workspace-text)]">,</span>{"\n"}
+      {"    "}<span className="text-emerald-500">&quot;dev&quot;</span>{"\n"}
       {"  "}<span className="text-[var(--workspace-text)]">]</span>{"\n"}
       <span className="text-[var(--workspace-text)]">{"}"}</span>
     </pre>
@@ -37,7 +37,7 @@ function JsonInput() {
 function XmlInput() {
   return (
     <pre className="font-mono text-[11px] leading-[1.8]">
-      <span className="text-[var(--workspace-text-muted)]">{"<?"}xml version="1.0"{"?>"}</span>{"\n"}
+      <span className="text-[var(--workspace-text-muted)]">{"<?"}xml version=&quot;1.0&quot;{"?>"}</span>{"\n"}
       <span className="text-[var(--workspace-text)]">{"<"}</span><span className="text-sky-500">product</span><span className="text-[var(--workspace-text)]">{">"}</span>{"\n"}
       {"  "}<span className="text-[var(--workspace-text)]">{"<"}</span><span className="text-sky-500">sku</span><span className="text-[var(--workspace-text)]">{">"}</span><span className="text-amber-500">X-42</span><span className="text-[var(--workspace-text)]">{"</"}</span><span className="text-sky-500">sku</span><span className="text-[var(--workspace-text)]">{">"}</span>{"\n"}
       {"  "}<span className="text-[var(--workspace-text)]">{"<"}</span><span className="text-sky-500">price</span><span className="text-[var(--workspace-text)]">{">"}</span><span className="text-amber-500">29.99</span><span className="text-[var(--workspace-text)]">{"</"}</span><span className="text-sky-500">price</span><span className="text-[var(--workspace-text)]">{">"}</span>{"\n"}
@@ -68,7 +68,7 @@ function CurlInput() {
       <span className="text-emerald-500 break-all">{"\""}https://api.github.com{"\n"}{"  "}/users/octocat{"\""}
       </span>{"\n"}
       <span className="text-[var(--workspace-text-muted)]">  -H </span>
-      <span className="text-amber-500">"Accept:{"\n"}{"    "}application/json"</span>
+      <span className="text-amber-500">&quot;Accept:{"\n"}{"    "}application/json&quot;</span>
     </pre>
   );
 }
@@ -112,7 +112,7 @@ function YamlToTomlOut() {
   return (
     <pre className="font-mono text-[11px] leading-[1.8]">
       <span className="text-[var(--workspace-text-muted)]">[server]</span>{"\n"}
-      <span className="text-sky-400">host</span><span className="text-[var(--workspace-text)]"> = </span><span className="text-emerald-500">"api.example.com"</span>{"\n"}
+      <span className="text-sky-400">host</span><span className="text-[var(--workspace-text)]"> = </span><span className="text-emerald-500">&quot;api.example.com&quot;</span>{"\n"}
       <span className="text-sky-400">port</span><span className="text-[var(--workspace-text)]"> = </span><span className="text-amber-500">8080</span>{"\n"}
       <span className="text-sky-400">tls</span><span className="text-[var(--workspace-text)]"> = </span><span className="text-violet-400">true</span>{"\n"}
       <span className="text-sky-400">timeout</span><span className="text-[var(--workspace-text)]"> = </span><span className="text-amber-500">30</span>
@@ -124,9 +124,9 @@ function CurlToJsonOut() {
   return (
     <pre className="font-mono text-[11px] leading-[1.8]">
       <span className="text-[var(--workspace-text)]">{"{"}</span>{"\n"}
-      {"  "}<span className="text-sky-500">"login"</span><span className="text-[var(--workspace-text)]">: </span><span className="text-emerald-500">"octocat"</span><span className="text-[var(--workspace-text)]">,</span>{"\n"}
-      {"  "}<span className="text-sky-500">"id"</span><span className="text-[var(--workspace-text)]">: </span><span className="text-amber-500">583231</span><span className="text-[var(--workspace-text)]">,</span>{"\n"}
-      {"  "}<span className="text-sky-500">"type"</span><span className="text-[var(--workspace-text)]">: </span><span className="text-emerald-500">"User"</span>{"\n"}
+      {"  "}<span className="text-sky-500">&quot;login&quot;</span><span className="text-[var(--workspace-text)]">: </span><span className="text-emerald-500">&quot;octocat&quot;</span><span className="text-[var(--workspace-text)]">,</span>{"\n"}
+      {"  "}<span className="text-sky-500">&quot;id&quot;</span><span className="text-[var(--workspace-text)]">: </span><span className="text-amber-500">583231</span><span className="text-[var(--workspace-text)]">,</span>{"\n"}
+      {"  "}<span className="text-sky-500">&quot;type&quot;</span><span className="text-[var(--workspace-text)]">: </span><span className="text-emerald-500">&quot;User&quot;</span>{"\n"}
       <span className="text-[var(--workspace-text)]">{"}"}</span>
     </pre>
   );
@@ -160,7 +160,7 @@ function CsvTableOut() {
 function CompareIn() {
   return (
     <pre className="font-mono text-[10px] leading-[1.75]">
-      <span className="text-[var(--workspace-text-muted)]">// Left · Right</span>{"\n"}
+      <span className="text-[var(--workspace-text-muted)]">{"// Left · Right"}</span>{"\n"}
       <span className="text-red-400/90">{"{"} id: 1, role: </span><span className="text-emerald-500">&quot;admin&quot;</span> <span className="text-red-400/90">{"}"}</span>{"\n"}
       <span className="text-emerald-500/90">{"{"} id: 1, role: </span><span className="text-emerald-500">&quot;owner&quot;</span><span className="text-emerald-500/90">, active: true {"}"}</span>{"\n"}
       <span className="mt-1 block text-[var(--workspace-text-muted)]">or list: a,b,c  vs  b,c,d</span>
@@ -187,7 +187,7 @@ function CompareOut() {
 function UtilsIn() {
   return (
     <pre className="font-mono text-[10px] leading-[1.75] break-all">
-      <span className="text-[var(--workspace-text-muted)]">// JWT · Base64 · UUID</span>{"\n"}
+      <span className="text-[var(--workspace-text-muted)]">{"// JWT · Base64 · UUID"}</span>{"\n"}
       <span className="text-violet-400">eyJhbGciOi…</span>
       <span className="text-[var(--workspace-text-muted)]">.payload.</span>
       <span className="text-violet-400">sig</span>{"\n"}
@@ -282,7 +282,7 @@ export function Hero() {
       <div
         className="blob-drift-a pointer-events-none absolute -right-24 -top-36 h-[700px] w-[700px]"
         style={{
-          background: "radial-gradient(circle, rgba(124,58,237,0.13) 0%, rgba(124,58,237,0.04) 45%, transparent 65%)",
+          background: "radial-gradient(circle, rgba(109,109,244,0.14) 0%, rgba(109,109,244,0.05) 45%, transparent 65%)",
           filter: "blur(64px)",
         }}
         aria-hidden
@@ -291,7 +291,7 @@ export function Hero() {
       <div
         className="blob-drift-b pointer-events-none absolute -bottom-36 -left-24 h-[600px] w-[600px]"
         style={{
-          background: "radial-gradient(circle, rgba(37,99,235,0.11) 0%, rgba(37,99,235,0.04) 45%, transparent 65%)",
+          background: "radial-gradient(circle, rgba(79,143,247,0.12) 0%, rgba(79,143,247,0.04) 45%, transparent 65%)",
           filter: "blur(64px)",
         }}
         aria-hidden
@@ -316,7 +316,7 @@ export function Hero() {
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.06 }}
-            className="text-[2.8rem] font-bold leading-[1.04] tracking-[-0.03em] text-[var(--workspace-text)] sm:text-5xl md:text-6xl lg:text-[4.5rem]"
+            className="text-[2.9rem] font-semibold leading-[1.02] tracking-[-0.035em] text-[var(--workspace-text)] sm:text-5xl md:text-6xl lg:text-[4.6rem]"
           >
             Work with data.
             <br />
@@ -334,7 +334,7 @@ export function Hero() {
             <span className="font-semibold text-[var(--workspace-text)]">
               JSON · XML · YAML · TOML · CSV · cURL
             </span>
-            {" "}— UUID, Base64, JWT, hash, and more. One workspace, zero installs.
+            {" "}- UUID, Base64, JWT, hash, and more. One workspace, zero installs.
           </motion.p>
 
           {/* CTA row */}
@@ -346,7 +346,7 @@ export function Hero() {
           >
             <Link
               href="/playground"
-              className="group inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-content shadow-lg shadow-primary/25 transition-all duration-200 hover:scale-[1.03] hover:shadow-xl hover:shadow-primary/35"
+              className="group inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/25 transition-all duration-200 hover:scale-[1.03] hover:shadow-xl hover:shadow-primary/35"
             >
               Open Playground
               <ArrowRightIcon
@@ -401,7 +401,7 @@ export function Hero() {
             <div
               className="pointer-events-none absolute -inset-px rounded-[1.15rem]"
               style={{
-                background: "linear-gradient(135deg, rgba(124,58,237,0.35) 0%, rgba(37,99,235,0.2) 60%, transparent 100%)",
+                background: "linear-gradient(135deg, rgba(109,109,244,0.4) 0%, rgba(139,92,246,0.25) 45%, rgba(79,143,247,0.18) 100%)",
                 filter: "blur(1px)",
               }}
               aria-hidden
@@ -410,7 +410,7 @@ export function Hero() {
             <div
               className="pointer-events-none absolute -inset-10 rounded-3xl"
               style={{
-                background: "radial-gradient(ellipse, rgba(124,58,237,0.12) 0%, transparent 65%)",
+                background: "radial-gradient(ellipse, rgba(109,109,244,0.14) 0%, transparent 65%)",
                 filter: "blur(30px)",
               }}
               aria-hidden
@@ -475,6 +475,8 @@ export function Hero() {
                 <span className="font-mono text-[10px] text-[var(--workspace-text-muted)]">auto-detect</span>
                 <span className="select-none text-[var(--workspace-border)]">·</span>
                 <span className="font-mono text-[10px] text-[var(--workspace-text-muted)]">UTF-8</span>
+                <span className="select-none text-[var(--workspace-border)]">·</span>
+                <span className="font-mono text-[10px] text-[var(--workspace-text-muted)]">local-first</span>
                 <AnimatePresence mode="wait">
                   <motion.span
                     key={slide.id}
@@ -510,17 +512,4 @@ export function Hero() {
     </section>
   );
 }
-
-
-type OutputMode = "typescript" | "yaml" | "xml" | "json" | "graph";
-
-const OUTPUT_MODES: OutputMode[] = ["typescript", "yaml", "xml", "json", "graph"];
-
-const MODE_META: Record<OutputMode, { label: string; labelColor: string; statusLabel: string; statusColor: string }> = {
-  typescript: { label: "TYPESCRIPT",   labelColor: "text-violet-500",  statusLabel: "JSON \u2192 TypeScript", statusColor: "text-violet-500" },
-  yaml:       { label: "YAML",         labelColor: "text-lime-600",    statusLabel: "JSON \u2192 YAML",       statusColor: "text-lime-600" },
-  xml:        { label: "XML",          labelColor: "text-red-500",     statusLabel: "JSON \u2192 XML",        statusColor: "text-red-500" },
-  json:       { label: "FORMATTED",    labelColor: "text-amber-500",   statusLabel: "JSON Beautify",         statusColor: "text-amber-500" },
-  graph:      { label: "GRAPH VIEW",   labelColor: "text-emerald-500", statusLabel: "Graph View",            statusColor: "text-emerald-500" },
-};
 

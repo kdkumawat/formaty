@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { AnimatePresence, motion } from "framer-motion";
+import React from "react";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { cn } from "@/lib/utils";
 
 interface DropdownProps {
   trigger: React.ReactNode | ((open: boolean) => React.ReactNode);
@@ -14,14 +14,19 @@ interface DropdownProps {
   align?: "start" | "end";
   side?: "top" | "bottom";
   /**
-   * Prefer anchoring to the right edge of the viewport (settings panels).
-   * Still tracks the trigger vertically.
+   * Pin the panel toward the right edge of the viewport (settings panels).
+   * Radix keeps it within the viewport via collision detection.
    */
   preferScreenRight?: boolean;
   /** Gap from viewport edges when clamping (px). */
   edgePadding?: number;
 }
 
+/**
+ * Controlled popover/menu. Backed by Radix UI `DropdownMenu` for accessible
+ * positioning and keyboard behavior; children are rendered as-is (call sites
+ * supply their own buttons/rows).
+ */
 export function Dropdown({
   trigger,
   children,
@@ -34,141 +39,31 @@ export function Dropdown({
   preferScreenRight = false,
   edgePadding = 8,
 }: DropdownProps) {
-  const triggerRef = useRef<HTMLDivElement>(null);
-  const contentRef = useRef<HTMLDivElement>(null);
-
-  const close = useCallback(() => onOpenChange(false), [onOpenChange]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onPointerDown = (e: PointerEvent) => {
-      const target = e.target as Node;
-      if (
-        triggerRef.current?.contains(target) ||
-        contentRef.current?.contains(target)
-      )
-        return;
-      close();
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    return () => document.removeEventListener("pointerdown", onPointerDown);
-  }, [open, close]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close();
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [open, close]);
-
-  const [style, setStyle] = useState<React.CSSProperties | null>(null);
-
-  const updatePosition = useCallback(() => {
-    if (!open || typeof document === "undefined") return;
-    const triggerEl = triggerRef.current;
-    const content = contentRef.current;
-    if (!triggerEl) return;
-
-    const rect = triggerEl.getBoundingClientRect();
-    const gap = 6;
-    const pad = edgePadding;
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    const cw = content?.offsetWidth ?? 320;
-    const ch = content?.offsetHeight ?? 240;
-
-    let top: number;
-    if (side === "bottom") {
-      top = rect.bottom + gap;
-      if (top + ch > vh - pad && rect.top - gap - ch > pad) {
-        top = Math.max(pad, rect.top - gap - ch);
-      } else {
-        top = Math.min(top, Math.max(pad, vh - pad - ch));
-      }
-    } else {
-      top = Math.max(pad, rect.top - gap - ch);
-    }
-
-    let left: number | undefined;
-    let right: number | undefined;
-
-    if (preferScreenRight) {
-      right = pad;
-      left = undefined;
-      if (cw > vw - pad * 2) {
-        left = pad;
-        right = pad;
-      }
-    } else if (align === "end") {
-      right = Math.max(pad, vw - rect.right);
-      const panelLeft = vw - right - cw;
-      if (panelLeft < pad) {
-        right = Math.max(pad, vw - pad - cw);
-      }
-    } else {
-      left = Math.min(Math.max(pad, rect.left), Math.max(pad, vw - pad - cw));
-    }
-
-    setStyle({
-      position: "fixed",
-      top,
-      left,
-      right,
-      zIndex: 200,
-    });
-  }, [open, align, side, preferScreenRight, edgePadding]);
-
-  useLayoutEffect(() => {
-    if (!open) {
-      setStyle(null);
-      return;
-    }
-    updatePosition();
-    const id = requestAnimationFrame(() => updatePosition());
-    window.addEventListener("resize", updatePosition);
-    window.addEventListener("scroll", updatePosition, true);
-    return () => {
-      cancelAnimationFrame(id);
-      window.removeEventListener("resize", updatePosition);
-      window.removeEventListener("scroll", updatePosition, true);
-    };
-  }, [open, updatePosition, children]);
+  const menuAlign: "start" | "center" | "end" = preferScreenRight ? "end" : align;
 
   return (
-    <div className={`relative inline-block ${rootClassName}`} ref={triggerRef}>
-      <div
-        onClick={() => onOpenChange(!open)}
-        className="cursor-pointer"
-        role="button"
-        tabIndex={0}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") onOpenChange(!open);
-        }}
-      >
-        {typeof trigger === "function" ? trigger(open) : trigger}
-      </div>
-      {typeof document !== "undefined" &&
-        createPortal(
-          <AnimatePresence>
-            {open && style && (
-              <motion.div
-                ref={contentRef}
-                className={contentClassName}
-                onPointerDown={(e) => e.stopPropagation()}
-                style={style}
-                initial={{ opacity: 0, y: side === "bottom" ? -4 : 4, scale: 0.98 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: side === "bottom" ? -3 : 3, scale: 0.98 }}
-                transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
-              >
-                {children}
-              </motion.div>
-            )}
-          </AnimatePresence>,
-          document.body,
-        )}
-    </div>
+    <DropdownMenu.Root open={open} onOpenChange={onOpenChange} modal={false}>
+      <DropdownMenu.Trigger asChild>
+        <div className={cn("cursor-pointer", rootClassName)}>
+          {typeof trigger === "function" ? trigger(open) : trigger}
+        </div>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content
+          side={side}
+          align={menuAlign}
+          collisionPadding={edgePadding}
+          alignOffset={preferScreenRight ? -6 : 0}
+          className={cn(
+            // Borderless by design - a soft shadow + hairline ring (Linear/Vercel-style).
+            "z-[200] min-w-[9rem] rounded-lg bg-popover p-1.5 text-popover-foreground shadow-xl shadow-black/15 dark:shadow-black/50 ring-1 ring-black/5 dark:ring-white/10",
+            "data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=open]:slide-in-from-top-1.5",
+            contentClassName,
+          )}
+        >
+          {children}
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
   );
 }

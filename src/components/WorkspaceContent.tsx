@@ -5,8 +5,6 @@ import { motion } from "framer-motion";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import {
   ArrowDownTrayIcon,
-  ArrowsPointingInIcon,
-  ArrowsPointingOutIcon,
   ArrowPathIcon,
   ArrowUturnLeftIcon,
   ArrowUturnRightIcon,
@@ -15,27 +13,28 @@ import {
   ChevronUpIcon,
   ClipboardDocumentIcon,
   ClockIcon,
-  Cog6ToothIcon,
-  ComputerDesktopIcon,
   DocumentArrowDownIcon,
   ListBulletIcon,
   MinusIcon,
-  MoonIcon,
   PlusIcon,
-  ShareIcon,
   StarIcon,
-  SunIcon,
   ArrowLeftCircleIcon,
   ArrowRightCircleIcon,
   XMarkIcon,
   XCircleIcon,
   LinkSlashIcon,
-  ViewColumnsIcon,
+  Cog6ToothIcon,
 } from "@heroicons/react/24/outline";
 import { StarIcon as StarSolidIcon } from "@heroicons/react/24/solid";
 import { JsonDiffEditor, type DiffNavState, type JsonDiffEditorRef } from "@/components/JsonDiffEditor";
 import { ListComparePanel, type ListCompareExport } from "@/components/ListComparePanel";
 import { DEFAULT_LIST_PARSE_OPTIONS, type ListParseOptions } from "@/lib/json/listCompare";
+import {
+  menuItemClass as sharedMenuItemClass,
+  menuItemActiveClass as sharedMenuItemActiveClass,
+  menuSectionLabel as sharedMenuSectionLabel,
+  menuCheck as sharedMenuCheck,
+} from "@/components/workspace/menuStyles";
 import {
   UtilsPanel,
   defaultUtilToolState,
@@ -70,12 +69,13 @@ import {
   type LineDiffStats,
 } from "@/lib/json/diff";
 import { useJsonWorker } from "@/hooks/useJsonWorker";
-import { detectFormat, FORMAT_LABELS, getInputFormatLabel, parseInput, stringifyOutput, type FormatKind, type InputFormatKind } from "@/lib/formats";
+import { detectFormat, FORMAT_LABELS, getInputFormatLabel, parseInput, type FormatKind, type InputFormatKind } from "@/lib/formats";
 import { ALL_TOOL_ROUTES, TOOL_PAGES, TOOL_PRESETS, type ToolRoute } from "@/lib/seo";
 import { executeCurl, parseCurl } from "@/lib/curl/parseCurl";
 import { formatJson } from "@/lib/json/core";
 import { decodeState, encodeState } from "@/lib/shareState";
 import { savePlayground, updatePlayground, deletePlayground } from "@/lib/playgroundApi";
+import { themeInlineCss } from "@/lib/utils/themeTokens";
 import { CommandPalette, type Command } from "@/components/CommandPalette";
 import type { JsonValue, TypeTargetLanguage } from "@/lib/json/core";
 
@@ -94,7 +94,7 @@ const SAMPLE_JSON = `{
   ]
 }`;
 
-/** Array of objects — best starting point for Table view */
+/** Array of objects - best starting point for Table view */
 const SAMPLE_JSON_TABLE = `[
   { "id": 1, "name": "Alice", "role": "admin", "active": true, "score": 98 },
   { "id": 2, "name": "Bob", "role": "dev", "active": true, "score": 87 },
@@ -240,7 +240,23 @@ const SAMPLES: Record<FormatKind, string> = {
   csv: SAMPLE_CSV,
 };
 
-/** Transform actions only — Compare is a separate workspace tool (not nested here). */
+/** Rotating quick tips shown in the first-run hint and empty state. */
+const QUICK_TIPS = [
+  "Press Ctrl+K (⌘K) to run any action from the command palette.",
+  "Everything runs locally - your data never leaves the browser.",
+  "Share is the only action that can leave your device - use it on purpose.",
+  "Pin favorites to the toolbar from Settings ⚙ for one-click access.",
+  "Live Transform refreshes the output as you type.",
+  "Compare does document diff AND list compare (SQL IN lists, etc.).",
+  "Copy as… encodes output as base64, URI, escaped, or SQL IN.",
+  "Maximize the output pane (top-right) for a distraction-free view.",
+  "Input format is auto-detected - JSON, XML, YAML, TOML, CSV, cURL.",
+  "Copy the output and paste it back into the input to chain transforms.",
+  "The status bar shows line count, size, validity, and cursor position.",
+  "Tabs keep separate sessions - share them all from the Share menu.",
+];
+
+/** Transform actions only - Compare is a separate workspace tool (not nested here). */
 const OPERATION_ACTIONS = [
   ["Beautify", "beautify"],
   ["Minify", "minify"],
@@ -251,7 +267,6 @@ const OPERATION_ACTIONS = [
 ] as const;
 
 const FORMAT_KINDS: FormatKind[] = ["json", "xml", "yaml", "toml", "csv"];
-const INPUT_FORMAT_KINDS: InputFormatKind[] = [...FORMAT_KINDS, "curl"];
 
 const TYPE_LANGUAGES: Array<{ id: TypeTargetLanguage; label: string; ext: string }> = [
   { id: "typescript", label: "TypeScript", ext: "ts" },
@@ -355,39 +370,6 @@ const EXT_BY_FORMAT: Record<FormatKind, string> = {
   csv: "csv",
 };
 
-const EXT_BY_ACTION: Record<Exclude<OperationAction, "generateTypes" | "utils"> | "parse", string> = {
-  parse: "json",
-  format: "json",
-  beautify: "json",
-  minify: "json",
-  sort: "json",
-  sortArrays: "json",
-  dedup: "json",
-  removeEmpty: "json",
-  flatten: "json",
-  unflatten: "json",
-  schema: "json",
-  validate: "json",
-  diff: "json",
-};
-
-const LANGUAGE_BY_ACTION: Record<Exclude<OperationAction, "generateTypes" | "utils"> | "parse", OutputLanguage> =
-  {
-    parse: "json",
-    format: "json",
-    beautify: "json",
-    minify: "json",
-    sort: "json",
-    sortArrays: "json",
-    dedup: "json",
-    removeEmpty: "json",
-    flatten: "json",
-    unflatten: "json",
-    schema: "json",
-    validate: "json",
-    diff: "json",
-  };
-
 const LANGUAGE_BY_TYPE_TARGET: Record<TypeTargetLanguage, OutputLanguage> = {
   typescript: "typescript",
   zod: "typescript",
@@ -415,6 +397,175 @@ export interface WorkspaceContentProps {
   initialState?: import("@/lib/shareState").WorkspaceState;
   sharedLinkId?: string;
   sharedLinkUrl?: string;
+}
+
+import type { ButtonHTMLAttributes } from "react";
+import { Button as UiButton } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+
+/** shadcn-backed square icon button (preserves current sizing + icon size). */
+function SquareBtn({ className = "", ...props }: ButtonHTMLAttributes<HTMLButtonElement>) {
+  return (
+    <UiButton
+      type="button"
+      variant="ghost"
+      className={`h-auto min-h-0 w-auto min-w-0 !p-0 [&_svg]:!size-3.5 ${className}`}
+      {...props}
+    />
+  );
+}
+
+/** Settings panel (redesigned) helpers. */
+
+/** Section rule header: uppercase label + hairline rule. */
+function SettingsRule({ title }: { title: string }) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--workspace-text-muted)]">
+        {title}
+      </span>
+      <span className="h-px flex-1 bg-[var(--workspace-border)]/60" aria-hidden />
+    </div>
+  );
+}
+
+/** Settings row - label left, control right, hover pill. */
+function SettingsRow({
+  label,
+  children,
+}: {
+  label: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex min-h-8 items-center justify-between gap-3 rounded-md px-1.5 py-1 transition-colors hover:bg-primary/5">
+      <span className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-[var(--workspace-text)]">
+        {label}
+      </span>
+      <div className="flex shrink-0 items-center">{children}</div>
+    </div>
+  );
+}
+
+/** Star pin toggle for settings rows. */
+function PinButton({
+  pinned,
+  label,
+  onClick,
+}: {
+  pinned: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={pinned ? `Unpin ${label} from toolbar` : `Pin ${label} to toolbar`}
+      aria-label={pinned ? `Unpin ${label}` : `Pin ${label}`}
+      className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md transition-all ${
+        pinned
+          ? "text-amber-500 hover:bg-amber-500/10"
+          : "text-[var(--workspace-text-muted)]/55 hover:bg-primary/10 hover:text-primary"
+      }`}
+    >
+      {pinned ? <StarSolidIcon className="h-3 w-3" /> : <StarIcon className="h-3 w-3" />}
+    </button>
+  );
+}
+
+/** Compact -/+ stepper pill used in settings rows. */
+function SettingsStepper({
+  value,
+  onDec,
+  onInc,
+  onReset,
+  decLabel,
+  incLabel,
+  resetLabel,
+  minWidth = "min-w-[1.75rem]",
+}: {
+  value: number;
+  onDec: () => void;
+  onInc: () => void;
+  onReset: () => void;
+  decLabel: string;
+  incLabel: string;
+  resetLabel: string;
+  minWidth?: string;
+}) {
+  const stepBtn =
+    "flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] transition-colors duration-100 hover:bg-primary/10 hover:text-primary active:bg-primary/15";
+  return (
+    <div className="inline-flex items-center overflow-hidden rounded-lg border border-[var(--workspace-border)]/50 bg-muted/50">
+      <button type="button" aria-label={decLabel} className={stepBtn} onClick={onDec}>
+        <MinusIcon className="h-3.5 w-3.5" aria-hidden />
+      </button>
+      <span
+        className={`flex h-7 ${minWidth} items-center justify-center border-x border-[var(--workspace-border)]/40 px-1.5 text-xs font-medium tabular-nums text-[var(--workspace-text)]`}
+      >
+        {value}
+      </span>
+      <button type="button" aria-label={incLabel} className={stepBtn} onClick={onInc}>
+        <PlusIcon className="h-3.5 w-3.5" aria-hidden />
+      </button>
+      <button type="button" aria-label={resetLabel} className={stepBtn} onClick={onReset}>
+        <ArrowPathIcon className="h-3 w-3" aria-hidden />
+      </button>
+    </div>
+  );
+}
+
+/** One labelled row of pin-to-toolbar chips. */
+function PinChipRow({
+  label,
+  items,
+  pinned,
+  onToggle,
+}: {
+  label: string;
+  items: Array<{ id: string; label: string }>;
+  pinned: (id: string) => boolean;
+  onToggle: (id: string) => void;
+}) {
+  return (
+    <div className="flex items-start gap-2">
+      <span className="mt-1 w-12 shrink-0 text-[9px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]">
+        {label}
+      </span>
+      <div className="flex flex-wrap gap-1">
+        {items.map((item) => {
+          const on = pinned(item.id);
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => onToggle(item.id)}
+              title={on ? `Unpin ${item.label}` : `Pin ${item.label}`}
+              className={`inline-flex h-6 items-center gap-1 rounded-md border px-1.5 text-[10px] font-medium transition-colors ${
+                on
+                  ? "border-primary/30 bg-primary/10 text-primary"
+                  : "border-[var(--workspace-border)]/70 text-[var(--workspace-text-muted)] hover:border-primary/25 hover:text-[var(--workspace-text)]"
+              }`}
+            >
+              {on ? <StarSolidIcon className="h-3 w-3 text-amber-500" /> : <StarIcon className="h-3 w-3 opacity-50" />}
+              {item.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLinkId, sharedLinkUrl: initialSharedLinkUrl }: WorkspaceContentProps = {}) {
@@ -454,21 +605,20 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   const [sharedLinkId, setSharedLinkId] = useState<string | null>(initialSharedLinkId ?? null);
   const [sharedLinkUrl, setSharedLinkUrl] = useState<string | null>(initialSharedLinkUrl ?? null);
   const [shareNotification, setShareNotification] = useState<string | null>(null);
-  const [isInputMinimized, setIsInputMinimized] = useState(false);
   const [isOutputMaximized, setIsOutputMaximized] = useState(false);
   const [isDesktopLayout, setIsDesktopLayout] = useState(true);
   const [focusedPane, setFocusedPane] = useState<"input" | "output">("input");
   const [formatOptions, setFormatOptions] = useState<FormatOptions>(DEFAULT_FORMAT_OPTIONS);
   const [convertToFormat, setConvertToFormat] = useState<FormatKind>("json");
   const [inputFormatOverride, setInputFormatOverride] = useState<InputFormatKind | null>(null);
-  const [inputFormatOpen, setInputFormatOpen] = useState(false);
   const [transformConfigOpen, setTransformConfigOpen] = useState(false);
-  /** Menu-first chrome by default — cleaner for new users; uncheck in settings for pinned toolbar. */
+  /** Menu-first chrome by default - cleaner for new users; uncheck in settings for pinned toolbar. */
   const [viewAsMenu, setViewAsMenu] = useState(true);
   const [formatMenuOpen, setFormatMenuOpen] = useState(false);
   const [viewMenuOpen, setViewMenuOpen] = useState(false);
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
   const [typesMenuOpen, setTypesMenuOpen] = useState(false);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [pinnedItems, setPinnedItems] = useState<Set<string>>(
     () => new Set(["fmt:json", "view:raw", "view:query", "action:beautify", "action:minify", "type:typescript", "type:zod"])
   );
@@ -505,6 +655,11 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   const [isSplitResizing, setIsSplitResizing] = useState(false);
   // Auto-format on paste
   const [autoFormatOnPaste, setAutoFormatOnPaste] = useState(true);
+  /** Randomized quick tip (set after mount to avoid hydration mismatch). */
+  const [quickTip, setQuickTip] = useState<string | null>(null);
+  useEffect(() => {
+    setQuickTip(QUICK_TIPS[Math.floor(Math.random() * QUICK_TIPS.length)] ?? null);
+  }, []);
 
   const toggleWindowFullscreen = useCallback(() => {
     if (!document.fullscreenElement) {
@@ -590,7 +745,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     utilTab: "uuid",
     utilsByTool: {},
   });
-  const captureTabSnapshot = (): TabSnapshot => ({
+  const captureTabSnapshot = useCallback((): TabSnapshot => ({
     input,
     inputFormatOverride,
     undoStack,
@@ -610,7 +765,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     isOutputMaximized,
     utilTab,
     utilsByTool,
-  });
+  }), [input, inputFormatOverride, undoStack, undoIndex, output, parsedOutput, outputExt, outputLanguage, activeOperation, error, convertToFormat, typeLanguage, rightView, diffLeftInput, diffRightInput, diffKind, isOutputMaximized, utilTab, utilsByTool]);
   const applyTabSnapshot = (snap: TabSnapshot) => {
     setInput(snap.input);
     setInputFormatOverride(snap.inputFormatOverride);
@@ -693,10 +848,8 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   const resolvedTheme: Exclude<ThemeMode, "system"> =
     themeMode === "system" ? (systemDark ? "dark" : "light") : themeMode;
   const isDark = resolvedTheme === "dark";
-  const toolbarBorderClass = isDark ? "border-white/45" : "border-base-300";
-  const toolbarDividerClass = isDark ? "bg-white/45" : "bg-base-300";
   const monacoTheme = isDark ? "vs-dark" : "vs";
-  const outputPanelClass = isDark ? "border-[#2d2d30] bg-[#1e1e1e]" : "border-[#e5e5e5] bg-[#ffffff]";
+  const outputPanelClass = "border-[var(--workspace-border)] bg-[var(--workspace-panel)]";
   const inputEditorBgClass = "border border-[var(--workspace-border)] border-t-0 bg-[var(--workspace-panel)]";
   const canUndo = undoIndex > 0;
   const canRedo = undoIndex < undoStack.length - 1;
@@ -754,34 +907,34 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   const selectedTypeLanguageLabel =
     TYPE_LANGUAGES.find((item) => item.id === typeLanguage)?.label ?? "Language";
 
-  const joinItemBorderClass =
-    "[&>*:not(:last-child)]:border-r [&>*:not(:last-child)]:!border-base-300/50";
-  const dropdownPanelClass = isDark ? "bg-[#1a1a1a]/98 backdrop-blur-xl text-[#e8e8e8]" : "bg-white/98 backdrop-blur-xl text-[#1a1a1a]";
-  const settingsLabelClass = isDark ? "text-[10px] font-bold uppercase tracking-[0.1em] text-primary/80" : "text-[10px] font-bold uppercase tracking-[0.1em] text-primary/65";
-  const settingsSectionClass = "space-y-2";
   const settingsBtnGroupClass =
-    "inline-flex w-fit max-w-full items-center overflow-hidden rounded-lg border border-[var(--workspace-border)]/60 divide-x divide-[var(--workspace-border)]/40 bg-[var(--workspace-background)]/60";
-  const settingsStepBtnClass =
-    "flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] transition-all duration-100 hover:bg-primary/10 hover:text-primary active:scale-95";
-  const pinStarClass = (on: boolean) =>
-    `inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition-all ${
-      on
-        ? "text-amber-500 hover:bg-amber-500/10"
-        : "text-[var(--workspace-text-muted)]/55 hover:bg-primary/10 hover:text-primary"
-    }`;
+    "inline-flex w-fit max-w-full items-center overflow-hidden rounded-lg border border-[var(--workspace-border)]/50 bg-muted/50 divide-x divide-[var(--workspace-border)]/40";
+  /** Stepper for the pinned toolbar row (matches h-7 pill buttons). */
+  const pinnedStepBtnClass =
+    "flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] transition-colors duration-100 hover:bg-primary/10 hover:text-primary active:bg-primary/15";
   const toolbarSep = (
     <span className="mx-1 h-4 w-px shrink-0 self-center bg-[var(--workspace-border)]" role="separator" aria-hidden />
   );
-  const linkBtnClass = isDark
-    ? "btn btn-xs btn-ghost cursor-pointer rounded-md px-1.5 py-1 border-0 font-medium text-[#b0b0b0] hover:bg-white/[0.1] hover:text-[#e8e8e8] transition-all duration-100"
-    : "btn btn-xs btn-ghost cursor-pointer rounded-md px-1.5 py-1 border-0 font-medium text-[#3a3a3a] hover:bg-black/[0.07] hover:text-[#0a0a0a] transition-all duration-100";
+  const linkBtnClass =
+    "inline-flex items-center justify-center gap-1 cursor-pointer rounded-lg border-0 bg-transparent px-1.5 py-1 text-xs font-medium whitespace-nowrap text-[var(--workspace-text-muted)] hover:bg-primary/10 hover:text-primary transition-all duration-100";
+  /* Select-style trigger for toolbar dropdowns (Format / View / Actions / Types) - greyed squarish, no border */
+  const selectBtnClass =
+    "inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-md bg-muted px-2 text-xs font-medium text-[var(--workspace-text)] transition-colors hover:bg-primary/10 hover:text-primary";
+  const selectBtnOpenClass = "!bg-primary/12 !text-primary";
+  /* Pinned toolbar shortcut (non-compact mode) - same greyed squarish language as select triggers */
+  const pinnedBtnClass =
+    "inline-flex h-7 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-md bg-muted px-2 text-xs font-medium text-[var(--workspace-text)] transition-colors hover:bg-primary/10 hover:text-primary disabled:opacity-40";
+  /* Dropdown menu row - shared design (see menuStyles) */
+  const menuItemClass = sharedMenuItemClass;
+  const menuItemActiveClass = sharedMenuItemActiveClass;
+  const menuSectionLabel = sharedMenuSectionLabel;
   const tbActiveClass = "!bg-primary/12 !text-primary font-semibold";
   const inputEmpty = !input.trim();
   useEffect(() => {
     if (inputEmpty) setCursorPosition(null);
   }, [inputEmpty]);
 
-  // Large payloads: keep raw editing snappy — turn off live transform automatically
+  // Large payloads: keep raw editing snappy - turn off live transform automatically
   useEffect(() => {
     if (isHugeInput && liveTransform) {
       setLiveTransform(false);
@@ -813,13 +966,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     return run<JsonValue>("parseFormat", { input, format: resolvedParseFormat });
   }, [input, resolvedInputFormat, resolvedParseFormat, run]);
 
-  const themeOptions = [
-    { mode: "system" as const, ariaLabel: "Use system theme", title: "System theme", Icon: ComputerDesktopIcon },
-    { mode: "light" as const, ariaLabel: "Use light theme", title: "Light theme", Icon: SunIcon },
-    { mode: "dark" as const, ariaLabel: "Use dark theme", title: "Dark theme", Icon: MoonIcon },
-  ];
-
-  const pushHistory = (next: string) => {
+  const pushHistory = useCallback((next: string) => {
     if (historyLock.current) return;
     setUndoStack((prev) => {
       if (prev[undoIndex] === next) return prev;
@@ -828,9 +975,9 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
       setUndoIndex(result.length - 1);
       return result;
     });
-  };
+  }, [undoIndex]);
 
-  const moveHistory = (delta: number) => {
+  const moveHistory = useCallback((delta: number) => {
     const targetIdx = undoIndex + delta;
     if (targetIdx < 0 || targetIdx >= undoStack.length) return;
     const next = undoStack[targetIdx];
@@ -840,7 +987,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     setTimeout(() => {
       historyLock.current = false;
     }, 0);
-  };
+  }, [undoIndex, undoStack]);
 
   const switchToTab = (tabId: string) => {
     if (tabId === activeTabId) return;
@@ -855,8 +1002,8 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
 
   const addTab = () => {
     tabSnapshotsRef.current.set(activeTabId, captureTabSnapshot());
-    const newId = `t${Date.now()}`;
     tabCounterRef.current += 1;
+    const newId = `t${tabCounterRef.current}`;
     setTabs((prev) => [...prev, { id: newId, label: `Tab ${tabCounterRef.current}` }]);
     setActiveTabId(newId);
     historyLock.current = true;
@@ -914,9 +1061,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     document.documentElement.setAttribute("data-theme", resolvedTheme);
     const style = document.getElementById("formaty-theme-inline");
     if (style) {
-      style.textContent = resolvedTheme === "dark"
-        ? "html,body{--workspace-background:#0d0d0d;--workspace-panel:#141414;--workspace-border:#282828;--workspace-text:#f0f0f0;--workspace-text-muted:#9a9a9a}"
-        : "html,body{--workspace-background:#f5f5f5;--workspace-panel:#ffffff;--workspace-border:#dedede;--workspace-text:#0a0a0a;--workspace-text-muted:#4a4a4a}";
+      style.textContent = themeInlineCss(resolvedTheme);
     }
   }, [resolvedTheme, themeSynced]);
 
@@ -1151,6 +1296,10 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     } catch {
       // Ignore malformed persisted sessions.
     }
+    // Restore-once effect: `initialState` may be a fresh object reference each render, so
+    // it is intentionally not a dep - re-running would re-apply shared state and clobber
+    // user edits. `executeOperation` is also referenced here (tool-preset restore).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, pathname]);
 
   useEffect(() => {
@@ -1197,7 +1346,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
         tabSnapshots: allSnapshots,
       }),
     );
-  }, [input, output, split, themeMode, typeLanguage, rightView, formatOptions, convertToFormat, liveTransform, editorFontSize, viewAsMenu, mobileShowOutput, activeOperation, pinnedItems, tabs, activeTabId, inputFormatOverride, undoStack, undoIndex, outputExt, outputLanguage, diffLeftInput, diffRightInput, diffKind, isOutputMaximized, utilTab, utilsByTool]);
+  }, [input, output, split, themeMode, typeLanguage, rightView, formatOptions, convertToFormat, liveTransform, editorFontSize, viewAsMenu, mobileShowOutput, activeOperation, pinnedItems, tabs, activeTabId, showTabs, inputFormatOverride, undoStack, undoIndex, outputExt, outputLanguage, diffLeftInput, diffRightInput, diffKind, isOutputMaximized, utilTab, utilsByTool, captureTabSnapshot]);
 
   // Prefer structured parse for views (table/tree/graph/query)
   useEffect(() => {
@@ -1293,6 +1442,9 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
       }
     }, 500);
     return () => clearTimeout(id);
+    // One-shot restore timer guarded by sessionRestoredRef. executeOperation / runConvert
+    // are declared later in the component and intentionally not in deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [input, output, activeOperation, convertToFormat, typeLanguage]);
 
   useEffect(() => {
@@ -1384,64 +1536,12 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     return () => {
       if (liveTransformTimeoutRef.current) clearTimeout(liveTransformTimeoutRef.current);
     };
+    // Debounced live transform reads the latest input via inputRef; convertJsonToOutput is
+    // declared below and intentionally not in deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liveTransform, input, convertToFormat, run]);
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const mod = event.metaKey || event.ctrlKey;
-      if (!mod) return;
-      if (event.key === "k") {
-        event.preventDefault();
-        setCommandPaletteOpen((v) => !v);
-        return;
-      }
-      if (modalKind) return;
-      if (activeOperation === "diff") {
-        // List mode uses plain textareas — let the browser handle undo/paste.
-        if (diffKind === "list") return;
-        // Document mode: route undo/redo to Monaco diff panes.
-        if (event.key.toLowerCase() === "z" && !event.shiftKey) {
-          event.preventDefault();
-          diffEditorRef.current?.undo();
-          return;
-        }
-        if (event.key.toLowerCase() === "z" && event.shiftKey) {
-          event.preventDefault();
-          diffEditorRef.current?.redo();
-          return;
-        }
-        if (event.key.toLowerCase() === "y") {
-          event.preventDefault();
-          diffEditorRef.current?.redo();
-          return;
-        }
-        return;
-      }
-      if (event.key === "Enter") {
-        event.preventDefault();
-        parseOnly();
-      }
-      if (event.key.toLowerCase() === "v") {
-        const target = event.target as HTMLElement;
-        const isEditable = target.isContentEditable || target.tagName === "INPUT" || target.tagName === "TEXTAREA";
-        // Only intercept when input is empty (paste to start) - when input has content, let editor handle paste at cursor
-        if (!isEditable && inputEmpty) {
-          event.preventDefault();
-          pasteFromClipboard();
-        }
-      }
-      if (event.key.toLowerCase() === "z" && !event.shiftKey) {
-        event.preventDefault();
-        moveHistory(-1);
-      }
-      if (event.key.toLowerCase() === "z" && event.shiftKey) {
-        event.preventDefault();
-        moveHistory(1);
-      }
-    };
-    window.addEventListener("keydown", onKeyDown, { capture: true });
-    return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
-  }, [modalKind, inputEmpty, focusedPane, activeOperation, diffKind]);
+
 
   useEffect(() => {
     if (!isResizing) return;
@@ -1500,7 +1600,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [modalKind]);
 
-  const setOutputData = (
+  const setOutputData = useCallback((
     value: string,
     action: OperationAction | "parse",
     lang?: OutputLanguage,
@@ -1516,9 +1616,9 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     }
     setOutputExt(EXT_BY_FORMAT[convertToFormat]);
     setOutputLanguage(convertToFormat);
-  };
+  }, [typeLanguage, convertToFormat]);
 
-  const convertJsonToOutput = async (
+  const convertJsonToOutput = useCallback(async (
     json: JsonValue,
     opts?: {
       toFormat?: FormatKind;
@@ -1543,9 +1643,9 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     }
 
     return run<string>("convert", { json, toFormat, formatOptions: formatOpts, csvDelimiter });
-  };
+  }, [convertToFormat, formatOptions, run, csvDelimiter]);
 
-  const parseOnly = (inputOverride?: string, formatOverride?: InputFormatKind) => {
+  const parseOnly = useCallback((inputOverride?: string, formatOverride?: InputFormatKind) => {
     const text = inputOverride ?? input;
     const fmt = formatOverride ?? resolvedInputFormat;
     if (!text.trim()) return;
@@ -1582,9 +1682,9 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
         setBusy(false);
       }
     })();
-  };
+  }, [input, resolvedInputFormat, run, convertJsonToOutput, setOutputData, isDesktopLayout]);
 
-  const executeOperation = (
+  const executeOperation = useCallback((
     action: OperationAction,
     options?: {
       schemaText?: string;
@@ -1599,7 +1699,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     void (async () => {
       try {
         if (action === "diff") {
-          // Visual diff + path stats live in Diff UI only — never overwrite the main output
+          // Visual diff + path stats live in Diff UI only - never overwrite the main output
           // panel (that left a leftover `{...}` path-diff JSON after exiting).
           setBusy(false);
           return;
@@ -1686,9 +1786,9 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
         setBusy(false);
       }
     })();
-  };
+  }, [getParsedInput, parseSchemaToObject, run, convertJsonToOutput, setOutputData, schemaInput, typeLanguage, formatOptions, convertToFormat]);
 
-  const runConvert = (toFormat: FormatKind) => {
+  const runConvert = useCallback((toFormat: FormatKind) => {
     setConvertToFormat(toFormat);
     setFocusedPane("output");
     if (!isDesktopLayout) setMobileShowOutput(true);
@@ -1709,7 +1809,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
         setBusy(false);
       }
     })();
-  };
+  }, [getParsedInput, convertJsonToOutput, isDesktopLayout]);
 
   const handleDiffLeftChange = useCallback(
     (value: string) => {
@@ -1940,7 +2040,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
         }
         return;
       }
-      // Enter Compare — preserve Transform state; do not wipe existing compare panes
+      // Enter Compare - preserve Transform state; do not wipe existing compare panes
       if (activeOperation === "utils") {
         setActiveOperation(null);
       }
@@ -1972,7 +2072,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
         outputLanguage,
       };
       setIsOutputMaximized(true);
-      // Keep rightView (e.g. table) in state — Compare renders when isDiffMode, independent of view
+      // Keep rightView (e.g. table) in state - Compare renders when isDiffMode, independent of view
       setActiveOperation("diff");
       setError(null);
       setDiffLineStats(null);
@@ -2026,7 +2126,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   };
 
   const requestShare = () => {
-    // Updating an existing share still re-uploads payload — always confirm once per open.
+    // Updating an existing share still re-uploads payload - always confirm once per open.
     setShareConfirmOpen(true);
   };
 
@@ -2111,21 +2211,6 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     window.setTimeout(() => setShareState("idle"), 1400);
   };
 
-  const useOutputAsInput = useCallback(() => {
-    if (!output.trim()) return;
-    setInput(output);
-    pushHistory(output);
-    setInputFormatOverride(null);
-    setError(null);
-    setValidationError(null);
-    setFocusedPane("input");
-    setRightView("raw");
-    setActiveOperation(null);
-    setShareNotification("Output moved to input");
-    window.setTimeout(() => setShareNotification(null), 2500);
-    if (!isDesktopLayout) setMobileShowOutput(false);
-  }, [output, isDesktopLayout]);
-
   const copyOutput = async () => {
     setActionBounce("copy");
     setTimeout(() => setActionBounce(null), 300);
@@ -2158,11 +2243,6 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
       window.setTimeout(() => setShareNotification(null), 3000);
     }
     window.setTimeout(() => setCopyState("idle"), 1400);
-  };
-
-  const toggleInputMinimized = () => {
-    setIsInputMinimized((prev) => !prev);
-    setFocusedPane((prev) => (prev === "input" ? "output" : prev));
   };
 
   const getActiveOutputText = useCallback((): string => {
@@ -2297,36 +2377,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     executeOperation("format", { formatOptions: next });
   };
 
-  const onInputFormatChange = useCallback(
-    (newFormat: InputFormatKind) => {
-      if (!input.trim()) {
-        setInputFormatOverride(newFormat === detectedInputFormat ? null : newFormat);
-        return;
-      }
-      if (newFormat === "curl" || resolvedInputFormat === "curl") {
-        setInputFormatOverride(newFormat === detectedInputFormat ? null : newFormat);
-        return;
-      }
-      try {
-        const parsed = parseInput(input, resolvedInputFormat as FormatKind);
-        const formatted = stringifyOutput(parsed, newFormat as FormatKind, {
-          indentation: formatOptions.indentation,
-          quoteStyle: formatOptions.quoteStyle,
-          sortKeys: formatOptions.sortKeys,
-        });
-        setInput(formatted);
-        pushHistory(formatted);
-        setInputFormatOverride(newFormat === detectedInputFormat ? null : newFormat);
-        setError(null);
-        setValidationError(null);
-      } catch {
-        setInputFormatOverride(newFormat === detectedInputFormat ? null : newFormat);
-      }
-    },
-    [input, resolvedInputFormat, detectedInputFormat, formatOptions, pushHistory],
-  );
-
-  const pasteFromClipboard = async () => {
+  const pasteFromClipboard = useCallback(async () => {
     try {
       const text = await navigator.clipboard.readText();
       if (!text) return;
@@ -2355,7 +2406,66 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     } catch {
       setError("Could not read clipboard.");
     }
-  };
+  }, [activeOperation, autoFormatOnPaste, run, convertJsonToOutput, pushHistory, parseOnly, isDesktopLayout]);
+
+  // Global workspace keyboard shortcuts (Cmd/Ctrl + K / Enter / V / Z). Re-registers
+  // whenever the handlers or their state change so the closure is always fresh.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const mod = event.metaKey || event.ctrlKey;
+      if (!mod) return;
+      if (event.key === "k") {
+        event.preventDefault();
+        setCommandPaletteOpen((v) => !v);
+        return;
+      }
+      if (modalKind) return;
+      if (activeOperation === "diff") {
+        // List mode uses plain textareas - let the browser handle undo/paste.
+        if (diffKind === "list") return;
+        // Document mode: route undo/redo to Monaco diff panes.
+        if (event.key.toLowerCase() === "z" && !event.shiftKey) {
+          event.preventDefault();
+          diffEditorRef.current?.undo();
+          return;
+        }
+        if (event.key.toLowerCase() === "z" && event.shiftKey) {
+          event.preventDefault();
+          diffEditorRef.current?.redo();
+          return;
+        }
+        if (event.key.toLowerCase() === "y") {
+          event.preventDefault();
+          diffEditorRef.current?.redo();
+          return;
+        }
+        return;
+      }
+      if (event.key === "Enter") {
+        event.preventDefault();
+        parseOnly();
+      }
+      if (event.key.toLowerCase() === "v") {
+        const target = event.target as HTMLElement;
+        const isEditable = target.isContentEditable || target.tagName === "INPUT" || target.tagName === "TEXTAREA";
+        // Only intercept when input is empty (paste to start) - when input has content, let editor handle paste at cursor
+        if (!isEditable && inputEmpty) {
+          event.preventDefault();
+          pasteFromClipboard();
+        }
+      }
+      if (event.key.toLowerCase() === "z" && !event.shiftKey) {
+        event.preventDefault();
+        moveHistory(-1);
+      }
+      if (event.key.toLowerCase() === "z" && event.shiftKey) {
+        event.preventDefault();
+        moveHistory(1);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown, { capture: true });
+    return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
+  }, [modalKind, inputEmpty, focusedPane, activeOperation, diffKind, moveHistory, parseOnly, pasteFromClipboard]);
 
   const importJsonFile = (file: File) => {
     const reader = new FileReader();
@@ -2482,7 +2592,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     { id: "ws-copy-dat", label: "Copy as Data URI",      category: "Workspace", keywords: ["data", "uri", "base64"], disabled: !output.trim(), action: () => copyOutputAs("datauri") },
     { id: "ws-download", label: "Download output",       category: "Workspace", keywords: ["save", "export"], disabled: !output.trim(), action: () => downloadOutput() },
     { id: "ws-share",    label: "Share workspace link",  category: "Workspace", keywords: ["link", "url"], disabled: !output.trim(), action: requestShare },
-    { id: "ws-use-output", label: "Use output as input", category: "Workspace", keywords: ["chain", "promote", "swap"], disabled: !output.trim(), action: useOutputAsInput },
+
     ...(sharedLinkUrl ? [{ id: "ws-embed", label: "Copy embed / iframe URL", category: "Workspace" as const, keywords: ["embed", "iframe", "share"], disabled: false, action: async () => { await navigator.clipboard.writeText(`${sharedLinkUrl}&embed=1`); setShareNotification("Embed URL copied"); window.setTimeout(() => setShareNotification(null), 3000); } }] : []),
     { id: "ws-clear",    label: "Clear workspace",       category: "Workspace", keywords: ["reset", "new", "empty"], disabled: inputEmpty && !output.trim(), action: () => {
       setInput(""); setOutput(""); setParsedOutput(null); setError(null);
@@ -2530,8 +2640,8 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     { id: "csv-semicolon", label: "CSV delimiter: Semicolon (;)", category: "Settings", keywords: ["csv", "delimiter", "semicolon"], badge: csvDelimiter === ";"  ? "active" : undefined, action: () => setCsvDelimiter(";")  },
     { id: "csv-pipe",      label: "CSV delimiter: Pipe (|)",      category: "Settings", keywords: ["csv", "delimiter", "pipe"], badge: csvDelimiter === "|"  ? "active" : undefined, action: () => setCsvDelimiter("|")  },
     // Pin/Unpin current view
-    { id: "pin-view",   label: pinnedItems.has(`view:${rightView}`) ? `Unpin current view (${rightView})` : `Pin current view (${rightView})`, category: "Settings", keywords: ["pin", "unpin", "toolbar", "view"], action: () => setPinnedItems((s) => { const n = new Set(s); n.has(`view:${rightView}`) ? n.delete(`view:${rightView}`) : n.add(`view:${rightView}`); return n; }) },
-    { id: "pin-format", label: pinnedItems.has(`fmt:${convertToFormat}`) ? `Unpin current format (${convertToFormat})` : `Pin current format (${convertToFormat})`, category: "Settings", keywords: ["pin", "unpin", "toolbar", "format"], action: () => setPinnedItems((s) => { const n = new Set(s); n.has(`fmt:${convertToFormat}`) ? n.delete(`fmt:${convertToFormat}`) : n.add(`fmt:${convertToFormat}`); return n; }) },
+    { id: "pin-view",   label: pinnedItems.has(`view:${rightView}`) ? `Unpin current view (${rightView})` : `Pin current view (${rightView})`, category: "Settings", keywords: ["pin", "unpin", "toolbar", "view"], action: () => setPinnedItems((s) => { const n = new Set(s); if (n.has(`view:${rightView}`)) n.delete(`view:${rightView}`); else n.add(`view:${rightView}`); return n; }) },
+    { id: "pin-format", label: pinnedItems.has(`fmt:${convertToFormat}`) ? `Unpin current format (${convertToFormat})` : `Pin current format (${convertToFormat})`, category: "Settings", keywords: ["pin", "unpin", "toolbar", "format"], action: () => setPinnedItems((s) => { const n = new Set(s); if (n.has(`fmt:${convertToFormat}`)) n.delete(`fmt:${convertToFormat}`); else n.add(`fmt:${convertToFormat}`); return n; }) },
     // Settings
     { id: "set-sort-keys",    label: formatOptions.sortKeys    ? "Sort keys: On (turn off)"    : "Sort keys: Off (turn on)",    category: "Settings", keywords: ["sort", "keys", "alphabetical"],           badge: formatOptions.sortKeys    ? "on" : undefined, disabled: inputEmpty, action: () => applyFormatWithOptions({ ...formatOptions, sortKeys:    !formatOptions.sortKeys    }) },
     { id: "set-rm-empty",     label: formatOptions.removeEmpty ? "Remove empty: On (turn off)" : "Remove empty: Off (turn on)", category: "Settings", keywords: ["remove", "empty", "null", "clean"],          badge: formatOptions.removeEmpty ? "on" : undefined, disabled: inputEmpty, action: () => applyFormatWithOptions({ ...formatOptions, removeEmpty: !formatOptions.removeEmpty }) },
@@ -2607,21 +2717,21 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
       {/* Outer: tab rail (sidebar) + workspace. Tabs must never sit in a column stack with the editors. */}
       <div className="flex min-h-0 flex-1 flex-row overflow-hidden">
         {isDesktopLayout && showTabs && (
-          <div className="flex h-full w-7 shrink-0 flex-col overflow-y-auto border-r border-[var(--workspace-border)] bg-[var(--workspace-panel)] pb-1 pt-1">
+          <div className="flex h-full w-8 shrink-0 flex-col overflow-y-auto border-r border-[var(--workspace-border)] bg-[var(--workspace-panel)] pb-1 pt-1">
             {tabs.map((tab) => (
               <div
                 key={tab.id}
                 role="tab"
                 tabIndex={0}
                 title={tab.label}
-                className={`group relative flex cursor-pointer items-center justify-center py-2.5 transition-all duration-150 ${activeTabId === tab.id ? "bg-primary/10 text-primary" : "text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)]/60 hover:text-[var(--workspace-text)]"}`}
+                className={`group relative flex cursor-pointer items-center justify-center py-0.5 transition-all duration-150 ${activeTabId === tab.id ? "bg-primary/10 text-primary" : "text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)]/60 hover:text-[var(--workspace-text)]"}`}
                 onClick={() => switchToTab(tab.id)}
                 onKeyDown={(e) => e.key === "Enter" && switchToTab(tab.id)}
               >
                 {activeTabId === tab.id && (
                   <span className="absolute inset-y-1 left-0 w-[2px] rounded-full bg-primary" />
                 )}
-                <span className="truncate font-mono text-[10px] font-semibold tracking-wider" style={{ writingMode: "vertical-rl", textOrientation: "mixed", maxHeight: 72 }}>
+                <span className="text-[10px] font-medium leading-none tracking-wide" style={{ writingMode: "vertical-rl", textOrientation: "mixed", maxHeight: 26 }}>
                   {tab.label}
                 </span>
                 {tabs.length > 1 && (
@@ -2638,7 +2748,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
             ))}
             <button
               type="button"
-              className="mt-0.5 flex items-center justify-center py-2 text-[var(--workspace-text-muted)] transition-all duration-100 hover:bg-primary/5 hover:text-primary"
+              className="mt-0.5 flex h-7 items-center justify-center text-[var(--workspace-text-muted)] transition-all duration-100 hover:bg-primary/5 hover:text-primary"
               onClick={addTab}
               title="New tab"
             >
@@ -2650,10 +2760,10 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         {/* ── Full-width secondary toolbar (Transform | Compare | Utils + output actions) ── */}
         <div
-          className={`flex h-10 shrink-0 flex-nowrap items-center gap-0.5 border-b px-1.5 text-xs ${inputEditorBgClass} text-[var(--workspace-text-muted)]`}
+          className={`flex h-10 shrink-0 flex-nowrap items-center gap-0.5 overflow-x-auto border-b px-1.5 text-xs [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${inputEditorBgClass} text-[var(--workspace-text-muted)]`}
         >
           <div
-            className="relative flex h-7 shrink-0 overflow-hidden rounded-lg border border-[var(--workspace-border)]"
+            className="relative flex h-8 shrink-0 overflow-hidden rounded-md bg-muted"
             role="group"
             aria-label="Workspace tool"
           >
@@ -2692,7 +2802,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
               <button
                 key={tab.id}
                 type="button"
-                className={`relative h-7 cursor-pointer px-2.5 text-[11px] font-semibold transition-colors duration-150 ${
+                className={`relative h-8 cursor-pointer px-3 text-xs font-semibold transition-colors duration-150 ${
                   i > 0 ? "border-l border-[var(--workspace-border)]" : ""
                 } ${
                   tab.active
@@ -2714,12 +2824,235 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
             ))}
           </div>
 
+            {!isDiffMode && !isUtilsMode && (
+            <>
+            <div className="mx-1 h-5 w-px shrink-0 bg-[var(--workspace-border)]" aria-hidden />
+            {!viewAsMenu && (() => {
+              const fmtPins = FORMAT_KINDS.filter((f) => pinnedItems.has(`fmt:${f}`));
+              const viewPins = (["raw", "tree", "graph", "query", "table"] as const).filter((v) => pinnedItems.has(`view:${v}`));
+              const actionPins = OPERATION_ACTIONS.filter(([, a]) => pinnedItems.has(`action:${a}`));
+              const typePins = TYPE_LANGUAGES.filter((t) => pinnedItems.has(`type:${t.id}`));
+              const hasPins = fmtPins.length + viewPins.length + actionPins.length + typePins.length > 0
+                || pinnedItems.has("fontSize") || pinnedItems.has("indent");
+              if (!hasPins) return null;
+              const groups: React.ReactNode[] = [];
+              if (fmtPins.length > 0) {
+                groups.push(
+                  <span key="fmt" className="flex shrink-0 items-center gap-0.5">
+                    {fmtPins.map((fmt) => (
+                      <button key={fmt} type="button" disabled={inputEmpty} className={`${pinnedBtnClass} ${convertToFormat === fmt ? tbActiveClass : ""}`} onClick={() => { setFocusedPane("output"); runConvert(fmt); }}>{FORMAT_LABELS[fmt]}</button>
+                    ))}
+                  </span>,
+                );
+              }
+              if (viewPins.length > 0) {
+                groups.push(
+                  <span key="view" className="flex shrink-0 items-center gap-0.5">
+                    {viewPins.map((view) => (
+                      <button key={view} type="button" disabled={inputEmpty || ((view === "tree" || view === "graph" || view === "query" || view === "table") && !parsedOutput)} className={`${pinnedBtnClass} ${rightView === view ? tbActiveClass : ""}`} onClick={() => { setRightView(view); setFocusedPane("output"); }}>{view[0].toUpperCase() + view.slice(1)}</button>
+                    ))}
+                  </span>,
+                );
+              }
+              if (actionPins.length > 0) {
+                groups.push(
+                  <span key="act" className="flex shrink-0 items-center gap-0.5">
+                    {actionPins.map(([label, action]) => (
+                      <button key={action} type="button" disabled={showBusy || inputEmpty} className={`${pinnedBtnClass} ${activeOperation === action ? tbActiveClass : ""}`} onClick={() => runOperation(action)}>{label}</button>
+                    ))}
+                  </span>,
+                );
+              }
+              if (typePins.length > 0) {
+                groups.push(
+                  <span key="type" className="flex shrink-0 items-center gap-0.5">
+                    {typePins.map((item) => (
+                      <button key={item.id} type="button" disabled={inputEmpty} className={`${pinnedBtnClass} ${activeOperation === "generateTypes" && typeLanguage === item.id ? tbActiveClass : ""}`} onClick={() => { setFocusedPane("output"); setActiveOperation("generateTypes"); executeOperation("generateTypes", { typeLanguage: item.id }); }}>{item.label}</button>
+                    ))}
+                  </span>,
+                );
+              }
+              if (pinnedItems.has("fontSize") || pinnedItems.has("indent")) {
+                groups.push(
+                  <span key="steps" className="flex shrink-0 items-center gap-1">
+                    {pinnedItems.has("fontSize") && (
+                      <div className={settingsBtnGroupClass} title="Font size">
+                        <button type="button" aria-label="Decrease font size" className={pinnedStepBtnClass} onClick={() => setEditorFontSize((s) => Math.max(10, s - 1))}><MinusIcon className="h-3.5 w-3.5" /></button>
+                        <span className="flex h-7 min-w-[1.5rem] items-center justify-center px-1 text-xs font-medium tabular-nums text-[var(--workspace-text)]">{editorFontSize}</span>
+                        <button type="button" aria-label="Increase font size" className={pinnedStepBtnClass} onClick={() => setEditorFontSize((s) => Math.min(24, s + 1))}><PlusIcon className="h-3.5 w-3.5" /></button>
+                      </div>
+                    )}
+                    {pinnedItems.has("indent") && (
+                      <div className={settingsBtnGroupClass} title="Indent">
+                        <button type="button" aria-label="Decrease indent" className={pinnedStepBtnClass} onClick={() => { const v = Math.max(0, formatOptions.indentation - 1); applyFormatWithOptions({ ...formatOptions, indentation: v }); }}><MinusIcon className="h-3.5 w-3.5" /></button>
+                        <span className="flex h-7 min-w-[1.25rem] items-center justify-center px-1 text-xs font-medium tabular-nums text-[var(--workspace-text)]">{formatOptions.indentation}</span>
+                        <button type="button" aria-label="Increase indent" className={pinnedStepBtnClass} onClick={() => { const v = Math.min(10, formatOptions.indentation + 1); applyFormatWithOptions({ ...formatOptions, indentation: v }); }}><PlusIcon className="h-3.5 w-3.5" /></button>
+                      </div>
+                    )}
+                  </span>,
+                );
+              }
+              return (
+                <>
+                  {groups.map((g, i) => (
+                    <React.Fragment key={i}>
+                      {i > 0 ? toolbarSep : null}
+                      {g}
+                    </React.Fragment>
+                  ))}
+                  {toolbarSep}
+                </>
+              );
+            })()}
+            {!viewAsMenu && (
+            <Dropdown open={moreMenuOpen} onOpenChange={setMoreMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`w-max min-w-[8rem] max-h-[min(70vh,32rem)] overflow-y-auto`} trigger={<div className={`${selectBtnClass} ${moreMenuOpen ? selectBtnOpenClass : ""}`} title="More actions"><span className="font-medium">More</span><ChevronDownIcon className="h-3 w-3" aria-hidden /></div>}>
+              <div className="flex flex-col" onClick={(e) => e.stopPropagation()}>
+                {menuSectionLabel("Format")}
+                {(["json", "xml", "yaml", "toml", "csv"] as const).map((fmt) => (
+                  <button key={fmt} type="button" disabled={inputEmpty} className={`${menuItemClass} ${convertToFormat === fmt ? menuItemActiveClass : ""}`} onClick={() => { setFocusedPane("output"); runConvert(fmt); setMoreMenuOpen(false); }}>
+                    {sharedMenuCheck(convertToFormat === fmt)}
+                    {FORMAT_LABELS[fmt]}
+                  </button>
+                ))}
+                <div className="my-1 h-px bg-[var(--workspace-border)]" role="separator" aria-hidden />
+                {menuSectionLabel("View")}
+                {(["raw", "tree", "graph", "query", "table"] as const).map((view) => (
+                  <button key={view} type="button" disabled={inputEmpty || ((view === "tree" || view === "graph" || view === "query" || view === "table") && !parsedOutput)} className={`${menuItemClass} ${rightView === view ? menuItemActiveClass : ""}`} onClick={() => { setRightView(view); setFocusedPane("output"); setMoreMenuOpen(false); }}>
+                    {sharedMenuCheck(rightView === view)}
+                    {view[0].toUpperCase() + view.slice(1)}
+                  </button>
+                ))}
+                <div className="my-1 h-px bg-[var(--workspace-border)]" role="separator" aria-hidden />
+                {menuSectionLabel("Actions")}
+                {(["beautify", "minify", "flatten", "unflatten", "schema", "validate"] as const).map((action) => {
+                  const [label] = OPERATION_ACTIONS.find(([, a]) => a === action) ?? [action, action];
+                  return (
+                    <button key={action} type="button" disabled={showBusy || inputEmpty} className={`${menuItemClass} ${activeOperation === action ? menuItemActiveClass : ""}`} onClick={() => { runOperation(action); setMoreMenuOpen(false); }}>
+                      {sharedMenuCheck(activeOperation === action)}
+                      {label}
+                    </button>
+                  );
+                })}
+                <div className="my-1 h-px bg-[var(--workspace-border)]" role="separator" aria-hidden />
+                {menuSectionLabel("Types")}
+                {TYPE_LANGUAGES.map((item) => (
+                  <button key={item.id} type="button" disabled={inputEmpty} className={`${menuItemClass} ${typeLanguage === item.id ? menuItemActiveClass : ""}`} onClick={() => { setFocusedPane("output"); setActiveOperation("generateTypes"); executeOperation("generateTypes", { typeLanguage: item.id }); setMoreMenuOpen(false); }}>
+                    {sharedMenuCheck(typeLanguage === item.id)}
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </Dropdown>
+            )}
+            {viewAsMenu && (<>
+            <Dropdown open={formatMenuOpen} onOpenChange={setFormatMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`w-max min-w-[8rem]`} trigger={<div className={`${selectBtnClass} ${formatMenuOpen ? selectBtnOpenClass : ""}`} title="Format"><span className="font-medium">Format</span><ChevronDownIcon className="h-3 w-3" aria-hidden /></div>}>
+              <div className="flex flex-col" onClick={(e) => e.stopPropagation()}>
+                {menuSectionLabel("Structured")}
+                {(["json", "xml", "yaml", "toml"] as const).map((fmt) => (
+                  <button key={fmt} type="button" disabled={inputEmpty} className={`${menuItemClass} ${convertToFormat === fmt ? menuItemActiveClass : ""}`} onClick={() => { setFocusedPane("output"); runConvert(fmt); setFormatMenuOpen(false); }}>
+                    {sharedMenuCheck(convertToFormat === fmt)}
+                    {FORMAT_LABELS[fmt]}
+                  </button>
+                ))}
+                <div className="my-1 h-px bg-[var(--workspace-border)]" role="separator" aria-hidden />
+                {menuSectionLabel("Tabular")}
+                <button type="button" disabled={inputEmpty} className={`${menuItemClass} ${convertToFormat === "csv" ? menuItemActiveClass : ""}`} onClick={() => { setFocusedPane("output"); runConvert("csv"); setFormatMenuOpen(false); }}>
+                  {sharedMenuCheck(convertToFormat === "csv")}
+                  {FORMAT_LABELS.csv}
+                </button>
+              </div>
+            </Dropdown>
+            <Dropdown open={viewMenuOpen} onOpenChange={setViewMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`w-max min-w-[8rem]`} trigger={<div className={`${selectBtnClass} ${viewMenuOpen ? selectBtnOpenClass : ""}`} title="View"><span className="font-medium">View</span><ChevronDownIcon className="h-3 w-3" aria-hidden /></div>}>
+              <div className="flex flex-col" onClick={(e) => e.stopPropagation()}>
+                {menuSectionLabel("Text")}
+                <button type="button" disabled={inputEmpty} className={`${menuItemClass} ${rightView === "raw" ? menuItemActiveClass : ""}`} onClick={() => { setRightView("raw"); setFocusedPane("output"); setViewMenuOpen(false); }}>
+                  {sharedMenuCheck(rightView === "raw")}
+                  Raw
+                </button>
+                <div className="my-1 h-px bg-[var(--workspace-border)]" role="separator" aria-hidden />
+                {menuSectionLabel("Visualize")}
+                {(["tree", "graph", "table"] as const).map((view) => (
+                  <button key={view} type="button" disabled={inputEmpty || !parsedOutput} className={`${menuItemClass} ${rightView === view ? menuItemActiveClass : ""}`} onClick={() => { setRightView(view); setFocusedPane("output"); setViewMenuOpen(false); }}>
+                    {sharedMenuCheck(rightView === view)}
+                    {view[0].toUpperCase() + view.slice(1)}
+                  </button>
+                ))}
+                <div className="my-1 h-px bg-[var(--workspace-border)]" role="separator" aria-hidden />
+                {menuSectionLabel("Query")}
+                <button type="button" disabled={inputEmpty || !parsedOutput} className={`${menuItemClass} ${rightView === "query" ? menuItemActiveClass : ""}`} onClick={() => { setRightView("query"); setFocusedPane("output"); setViewMenuOpen(false); }}>
+                  {sharedMenuCheck(rightView === "query")}
+                  Query
+                </button>
+              </div>
+            </Dropdown>
+            <Dropdown open={actionsMenuOpen} onOpenChange={setActionsMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`w-max min-w-[8rem]`} trigger={<div className={`${selectBtnClass} ${actionsMenuOpen ? selectBtnOpenClass : ""}`} title="Actions"><span className="font-medium">Actions</span><ChevronDownIcon className="h-3 w-3" aria-hidden /></div>}>
+              <div className="flex flex-col" onClick={(e) => e.stopPropagation()}>
+                {menuSectionLabel("Format")}
+                {(["beautify", "minify"] as const).map((action) => {
+                  const [label] = OPERATION_ACTIONS.find(([, a]) => a === action) ?? [action, action];
+                  return (
+                    <button key={action} type="button" disabled={showBusy || inputEmpty} className={`${menuItemClass} ${activeOperation === action ? menuItemActiveClass : ""}`} onClick={() => { runOperation(action); setActionsMenuOpen(false); }}>
+                      {sharedMenuCheck(activeOperation === action)}
+                      {label}
+                    </button>
+                  );
+                })}
+                <div className="my-1 h-px bg-[var(--workspace-border)]" role="separator" aria-hidden />
+                {menuSectionLabel("Structure")}
+                {(["flatten", "unflatten"] as const).map((action) => {
+                  const [label] = OPERATION_ACTIONS.find(([, a]) => a === action) ?? [action, action];
+                  return (
+                    <button key={action} type="button" disabled={showBusy || inputEmpty} className={`${menuItemClass} ${activeOperation === action ? menuItemActiveClass : ""}`} onClick={() => { runOperation(action); setActionsMenuOpen(false); }}>
+                      {sharedMenuCheck(activeOperation === action)}
+                      {label}
+                    </button>
+                  );
+                })}
+                <div className="my-1 h-px bg-[var(--workspace-border)]" role="separator" aria-hidden />
+                {menuSectionLabel("Inspect")}
+                {(["schema", "validate"] as const).map((action) => {
+                  const [label] = OPERATION_ACTIONS.find(([, a]) => a === action) ?? [action, action];
+                  return (
+                    <button key={action} type="button" disabled={showBusy || inputEmpty} className={`${menuItemClass} ${activeOperation === action ? menuItemActiveClass : ""}`} onClick={() => { runOperation(action); setActionsMenuOpen(false); }}>
+                      {sharedMenuCheck(activeOperation === action)}
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </Dropdown>
+            <Dropdown open={typesMenuOpen} onOpenChange={setTypesMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`w-max min-w-[8rem] max-h-[60vh] overflow-y-auto`} trigger={<div className={`${selectBtnClass} ${typesMenuOpen ? selectBtnOpenClass : ""}`} title="Generate Types"><span className="font-medium">Types</span><ChevronDownIcon className="h-3 w-3" aria-hidden /></div>}>
+              <div className="flex flex-col" onClick={(e) => e.stopPropagation()}>
+                {(
+                  [
+                    { label: "TypeScript", ids: ["typescript", "zod"] as const },
+                    { label: "Python", ids: ["python", "pydantic"] as const },
+                    { label: "Compiled", ids: ["java", "csharp", "go", "kotlin", "swift", "rust"] as const },
+                    { label: "Schemas", ids: ["protobuf", "sql"] as const },
+                  ] as const
+                ).map((group, gi) => (
+                  <React.Fragment key={group.label}>
+                    {gi > 0 && <div className="my-1 h-px bg-[var(--workspace-border)]" role="separator" aria-hidden />}
+                    {menuSectionLabel(group.label)}
+                    {TYPE_LANGUAGES.filter((t) => (group.ids as readonly string[]).includes(t.id)).map((item) => (
+                      <button key={item.id} type="button" disabled={inputEmpty} className={`${menuItemClass} ${typeLanguage === item.id ? menuItemActiveClass : ""}`} onClick={() => { setFocusedPane("output"); setActiveOperation("generateTypes"); executeOperation("generateTypes", { typeLanguage: item.id }); setTypesMenuOpen(false); }}>
+                        {sharedMenuCheck(typeLanguage === item.id)}
+                        {item.label}
+                      </button>
+                    ))}
+                  </React.Fragment>
+                ))}
+              </div>
+            </Dropdown>
+            </>)}
+            </>)}
+
           {isDiffMode && (
             <>
-              <div className="flex h-7 shrink-0 overflow-hidden rounded-lg border border-[var(--workspace-border)]">
+              <div className="flex h-8 shrink-0 overflow-hidden rounded-md bg-muted">
                 <button
                   type="button"
-                  className={`h-7 cursor-pointer px-2.5 text-[11px] font-semibold ${
+                  className={`h-8 cursor-pointer px-3 text-xs font-semibold ${
                     diffKind === "document"
                       ? "bg-primary/15 text-primary"
                       : "text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)]"
@@ -2731,7 +3064,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                 </button>
                 <button
                   type="button"
-                  className={`h-7 cursor-pointer border-l border-[var(--workspace-border)] px-2.5 text-[11px] font-semibold ${
+                  className={`h-8 cursor-pointer border-l border-[var(--workspace-border)] px-3 text-xs font-semibold ${
                     diffKind === "list"
                       ? "bg-primary/15 text-primary"
                       : "text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)]"
@@ -2751,13 +3084,13 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
               {diffKind === "document" && (
                 <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-0.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                   <div className="flex shrink-0 items-center gap-0.5 rounded-lg border border-[var(--workspace-border)]/60 px-0.5">
-                    <button type="button" title="Previous difference" className={`${linkBtnClass} btn-square h-7 min-h-7 w-7`} disabled={!diffNav.total} onClick={() => diffEditorRef.current?.prevChange()}>
+                    <button type="button" title="Previous difference" className={`${linkBtnClass} h-7 min-h-7 w-7`} disabled={!diffNav.total} onClick={() => diffEditorRef.current?.prevChange()}>
                       <ChevronUpIcon className="h-3.5 w-3.5" />
                     </button>
                     <span className="min-w-[2.75rem] px-0.5 text-center text-[11px] font-medium tabular-nums text-[var(--workspace-text)]" title="Current / total hunks">
                       {diffNav.total ? `${diffNav.current}/${diffNav.total}` : "0"}
                     </span>
-                    <button type="button" title="Next difference" className={`${linkBtnClass} btn-square h-7 min-h-7 w-7`} disabled={!diffNav.total} onClick={() => diffEditorRef.current?.nextChange()}>
+                    <button type="button" title="Next difference" className={`${linkBtnClass} h-7 min-h-7 w-7`} disabled={!diffNav.total} onClick={() => diffEditorRef.current?.nextChange()}>
                       <ChevronDownIcon className="h-3.5 w-3.5" />
                     </button>
                   </div>
@@ -2770,10 +3103,10 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                   ) : (diffLeftInput.trim() || diffRightInput.trim()) ? (
                     <span className="shrink-0 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">Identical</span>
                   ) : null}
-                  <button type="button" title="Undo" className={`${linkBtnClass} btn-square h-7 min-h-7 w-7`} onClick={() => diffEditorRef.current?.undo()}>
+                  <button type="button" title="Undo" className={`${linkBtnClass} h-7 min-h-7 w-7`} onClick={() => diffEditorRef.current?.undo()}>
                     <ArrowUturnLeftIcon className="h-3.5 w-3.5" />
                   </button>
-                  <button type="button" title="Redo" className={`${linkBtnClass} btn-square h-7 min-h-7 w-7`} onClick={() => diffEditorRef.current?.redo()}>
+                  <button type="button" title="Redo" className={`${linkBtnClass} h-7 min-h-7 w-7`} onClick={() => diffEditorRef.current?.redo()}>
                     <ArrowUturnRightIcon className="h-3.5 w-3.5" />
                   </button>
                   <button type="button" title={diffSideBySide ? "Inline view" : "Side-by-side"} className={`${linkBtnClass} h-7 min-h-7 px-1.5 text-[11px]`} onClick={() => setDiffSideBySide((v) => !v)}>
@@ -2782,7 +3115,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                   <button type="button" title="Ignore trim whitespace" className={`${linkBtnClass} h-7 min-h-7 px-1.5 text-[11px] ${diffIgnoreWhitespace ? "text-primary !bg-primary/10" : ""}`} onClick={() => setDiffIgnoreWhitespace((v) => !v)}>
                     {diffIgnoreWhitespace ? "Ignore WS ✓" : "Ignore WS"}
                   </button>
-                  <button type="button" title="Swap sides" className={`${linkBtnClass} btn-square h-7 min-h-7 w-7`} onClick={swapDiffSides}>
+                  <button type="button" title="Swap sides" className={`${linkBtnClass} h-7 min-h-7 w-7`} onClick={swapDiffSides}>
                     <ArrowsRightLeftIcon className="h-3.5 w-3.5" />
                   </button>
                   <button
@@ -2811,21 +3144,21 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                     side="bottom"
                     align="end"
                     rootClassName="shrink-0"
-                    contentClassName={`dropdown-content z-[100] min-w-[11rem] p-1.5 shadow-2xl rounded-xl border border-[var(--workspace-border)]/50 ${dropdownPanelClass}`}
+                    contentClassName={`w-max min-w-[8rem]`}
                     trigger={
-                      <div className={`${linkBtnClass} flex h-7 min-h-7 items-center gap-1 px-1.5 text-[11px]`} title="Copy / export">
+                      <div className={`${selectBtnClass} ${downloadMenuOpen && isDiffMode ? selectBtnOpenClass : ""}`} title="Copy / export">
                         <ArrowDownTrayIcon className="h-3.5 w-3.5" />
                         <span className="hidden sm:inline">Export</span>
-                        <ChevronDownIcon className="h-3 w-3 shrink-0" />
+                        <ChevronDownIcon className="h-3 w-3 shrink-0" aria-hidden />
                       </div>
                     }
                   >
                     <div className="flex flex-col gap-0.5" onClick={(e) => e.stopPropagation()}>
-                      <button type="button" className={`${linkBtnClass} h-7 min-h-7 w-full justify-start px-2.5 text-[11px] font-medium`} onClick={() => { void copyDiffText("left"); setDownloadMenuOpen(false); }}>Copy left</button>
-                      <button type="button" className={`${linkBtnClass} h-7 min-h-7 w-full justify-start px-2.5 text-[11px] font-medium`} onClick={() => { void copyDiffText("right"); setDownloadMenuOpen(false); }}>Copy right</button>
-                      <button type="button" className={`${linkBtnClass} h-7 min-h-7 w-full justify-start px-2.5 text-[11px] font-medium`} onClick={() => { void copyDiffText("paths"); setDownloadMenuOpen(false); }}>Copy path changes</button>
-                      <button type="button" className={`${linkBtnClass} h-7 min-h-7 w-full justify-start px-2.5 text-[11px] font-medium`} onClick={() => { void copyDiffText("report"); setDownloadMenuOpen(false); }}>Copy full report</button>
-                      <button type="button" className={`${linkBtnClass} h-7 min-h-7 w-full justify-start px-2.5 text-[11px] font-medium`} onClick={() => { downloadDiffReport(); setDownloadMenuOpen(false); }}>Download report JSON</button>
+                      <button type="button" className={menuItemClass} onClick={() => { void copyDiffText("left"); setDownloadMenuOpen(false); }}>Copy left</button>
+                      <button type="button" className={menuItemClass} onClick={() => { void copyDiffText("right"); setDownloadMenuOpen(false); }}>Copy right</button>
+                      <button type="button" className={menuItemClass} onClick={() => { void copyDiffText("paths"); setDownloadMenuOpen(false); }}>Copy path changes</button>
+                      <button type="button" className={menuItemClass} onClick={() => { void copyDiffText("report"); setDownloadMenuOpen(false); }}>Copy full report</button>
+                      <button type="button" className={menuItemClass} onClick={() => { downloadDiffReport(); setDownloadMenuOpen(false); }}>Download report JSON</button>
                     </div>
                   </Dropdown>
                   {diffActionFlash && <span className="shrink-0 text-[10px] font-medium text-primary animate-pulse">{diffActionFlash}</span>}
@@ -2845,349 +3178,324 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
               copyLabel={copyLabel}
               shareLabel={shareLabel}
               actionBounce={actionBounce}
-              linkBtnClass={linkBtnClass}
-              dropdownPanelClass={dropdownPanelClass}
               downloadMenuOpen={downloadMenuOpen && !isDiffMode}
               onDownloadMenuOpenChange={setDownloadMenuOpen}
               settingsOpen={transformConfigOpen}
               onSettingsOpenChange={setTransformConfigOpen}
               settingsContent={
-                <div className="space-y-3">
-                  {/* Active tab */}
-                  <div className="flex items-center gap-1 rounded-lg border border-[var(--workspace-border)] bg-[var(--workspace-background)] p-1">
-                    {(
-                      [
-                        ["transform", !isDiffMode && !isUtilsMode],
-                        ["compare", isDiffMode],
-                        ["utils", isUtilsMode],
-                      ] as const
-                    ).map(([m, active]) => (
-                      <span
-                        key={m}
-                        className={`flex-1 rounded-md px-2 py-1 text-center text-[10px] font-semibold uppercase tracking-wide transition-colors ${
-                          active ? "bg-primary/12 text-primary" : "text-[var(--workspace-text-muted)]"
-                        }`}
-                      >
-                        {m}
-                      </span>
-                    ))}
-                  </div>
+                <div className="w-[20rem] max-w-[85vw]">
+  {/* Header */}
+  <div className="flex items-center gap-2">
+    <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/12 text-primary">
+      <Cog6ToothIcon className="h-3.5 w-3.5" aria-hidden />
+    </span>
+    <div className="min-w-0 flex-1">
+      <p className="text-xs font-semibold leading-tight tracking-tight text-[var(--workspace-text)]">Settings</p>
+      <p className="truncate text-[10px] leading-snug text-[var(--workspace-text-muted)]">
+        Saved automatically · applies to this tab
+      </p>
+    </div>
+    <span className="inline-flex h-4 shrink-0 items-center rounded-full bg-emerald-500/10 px-1.5 text-[9px] font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+      Local
+    </span>
+  </div>
 
-                  {!isDiffMode && !isUtilsMode && (
-                  <>
-                  <div className="flex flex-wrap gap-1.5">
-                    {(
-                      [
-                        ["Compact menus", viewAsMenu, () => setViewAsMenu((v) => !v)],
-                        ["Live transform", liveTransform, () => setLiveTransform((v) => !v)],
-                        ["Line wrap", lineWrap, () => setLineWrap((v) => !v)],
-                        ["Format on paste", autoFormatOnPaste, () => setAutoFormatOnPaste((v) => !v)],
-                      ] as const
-                    ).map(([label, on, toggle]) => (
-                      <button
-                        key={label}
-                        type="button"
-                        onClick={toggle}
-                        className={`inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-medium transition-colors ${
-                          on
-                            ? "border-primary/30 bg-primary/12 text-primary"
-                            : "border-[var(--workspace-border)] text-[var(--workspace-text-muted)] hover:border-primary/20 hover:text-[var(--workspace-text)]"
-                        }`}
-                      >
-                        <span className={`h-1.5 w-1.5 rounded-full ${on ? "bg-primary" : "bg-[var(--workspace-border)]"}`} />
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                  </>
-                  )}
-                  {isDiffMode && (
-                  <>
-                    <p className="rounded-md bg-primary/5 px-2 py-1.5 text-[10px] leading-snug text-[var(--workspace-text-muted)]">
-                      <strong className="text-primary">Compare</strong> — options below save preferences only.
-                    </p>
-                    <div className="flex flex-col gap-1">
-                      <p className={settingsLabelClass}>Font</p>
-                      <div className={settingsBtnGroupClass}>
-                        <button type="button" aria-label="Decrease font size" className={settingsStepBtnClass} onClick={() => setEditorFontSize((s) => Math.max(10, s - 1))}><MinusIcon className="h-3.5 w-3.5" aria-hidden /></button>
-                        <span className="flex h-7 min-w-[1.75rem] items-center justify-center px-1.5 text-xs font-medium tabular-nums text-[var(--workspace-text)]">{editorFontSize}</span>
-                        <button type="button" aria-label="Increase font size" className={settingsStepBtnClass} onClick={() => setEditorFontSize((s) => Math.min(24, s + 1))}><PlusIcon className="h-3.5 w-3.5" aria-hidden /></button>
-                        <button type="button" aria-label="Reset font size" className={settingsStepBtnClass} onClick={() => setEditorFontSize(14)}><ArrowPathIcon className="h-3 w-3" aria-hidden /></button>
-                      </div>
-                    </div>
-                    {diffKind === "list" && (
-                    <div className="space-y-2">
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]">List parse options</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {(
-                          [
-                            ["trim", "Trim whitespace"],
-                            ["ignoreEmpty", "Skip empty"],
-                            ["caseInsensitive", "Ignore case"],
-                            ["stripQuotes", "Strip quotes"],
-                            ["numericNormalize", "Normalize numbers"],
-                          ] as const
-                        ).map(([key, label]) => (
-                          <button
-                            key={key}
-                            type="button"
-                            onClick={() =>
-                              setListCompareOptions((prev) => ({ ...prev, [key]: !prev[key as keyof ListParseOptions] }))
-                            }
-                            className={`inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-medium transition-colors ${
-                              listCompareOptions[key as keyof ListParseOptions]
-                                ? "border-primary/30 bg-primary/12 text-primary"
-                                : "border-[var(--workspace-border)] text-[var(--workspace-text-muted)] hover:border-primary/20 hover:text-[var(--workspace-text)]"
-                            }`}
-                          >
-                            <span
-                              className={`h-1.5 w-1.5 rounded-full ${listCompareOptions[key as keyof ListParseOptions] ? "bg-primary" : "bg-[var(--workspace-border)]"}`}
-                            />
-                            {label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    )}
-                  </>
-                  )}
-                  {isUtilsMode && (
-                  <>
-                    <p className="rounded-md bg-primary/5 px-2 py-1.5 text-[10px] leading-snug text-[var(--workspace-text-muted)]">
-                      <strong className="text-primary">Utils</strong> — tools update live as you type.
-                    </p>
-                    <div className="flex flex-col gap-1">
-                      <p className={settingsLabelClass}>Font</p>
-                      <div className={settingsBtnGroupClass}>
-                        <button type="button" aria-label="Decrease font size" className={settingsStepBtnClass} onClick={() => setEditorFontSize((s) => Math.max(10, s - 1))}><MinusIcon className="h-3.5 w-3.5" aria-hidden /></button>
-                        <span className="flex h-7 min-w-[1.75rem] items-center justify-center px-1.5 text-xs font-medium tabular-nums text-[var(--workspace-text)]">{editorFontSize}</span>
-                        <button type="button" aria-label="Increase font size" className={settingsStepBtnClass} onClick={() => setEditorFontSize((s) => Math.min(24, s + 1))}><PlusIcon className="h-3.5 w-3.5" aria-hidden /></button>
-                        <button type="button" aria-label="Reset font size" className={settingsStepBtnClass} onClick={() => setEditorFontSize(14)}><ArrowPathIcon className="h-3 w-3" aria-hidden /></button>
-                      </div>
-                    </div>
-                  </>
-                  )}
-                  {!isDiffMode && !isUtilsMode && (
-                  <>
-                  {/* Steppers — content-width only */}
-                  <div className="flex flex-wrap items-end gap-3">
-                    <div className="flex flex-col gap-1">
-                      <div className="flex items-center gap-1">
-                        <p className={settingsLabelClass}>Font</p>
-                        <button
-                          type="button"
-                          className={pinStarClass(pinnedItems.has("fontSize"))}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setPinnedItems((s) => {
-                              const n = new Set(s);
-                              n.has("fontSize") ? n.delete("fontSize") : n.add("fontSize");
-                              return n;
-                            });
-                          }}
-                          title={pinnedItems.has("fontSize") ? "Unpin from toolbar" : "Pin to toolbar"}
-                          aria-label={pinnedItems.has("fontSize") ? "Unpin font size" : "Pin font size"}
-                        >
-                          {pinnedItems.has("fontSize") ? (
-                            <StarSolidIcon className="h-3.5 w-3.5" />
-                          ) : (
-                            <StarIcon className="h-3.5 w-3.5" />
-                          )}
-                        </button>
-                      </div>
-                      <div className={settingsBtnGroupClass}>
-                        <button type="button" aria-label="Decrease font size" className={settingsStepBtnClass} onClick={() => setEditorFontSize((s) => Math.max(10, s - 1))}><MinusIcon className="h-3.5 w-3.5" aria-hidden /></button>
-                        <span className="flex h-7 min-w-[1.75rem] items-center justify-center px-1.5 text-xs font-medium tabular-nums text-[var(--workspace-text)]">{editorFontSize}</span>
-                        <button type="button" aria-label="Increase font size" className={settingsStepBtnClass} onClick={() => setEditorFontSize((s) => Math.min(24, s + 1))}><PlusIcon className="h-3.5 w-3.5" aria-hidden /></button>
-                        <button type="button" aria-label="Reset font size" className={settingsStepBtnClass} onClick={() => setEditorFontSize(14)}><ArrowPathIcon className="h-3 w-3" aria-hidden /></button>
-                      </div>
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <div className="flex items-center gap-1">
-                        <p className={settingsLabelClass}>Indent</p>
-                        <button
-                          type="button"
-                          className={pinStarClass(pinnedItems.has("indent"))}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setPinnedItems((s) => {
-                              const n = new Set(s);
-                              n.has("indent") ? n.delete("indent") : n.add("indent");
-                              return n;
-                            });
-                          }}
-                          title={pinnedItems.has("indent") ? "Unpin from toolbar" : "Pin to toolbar"}
-                          aria-label={pinnedItems.has("indent") ? "Unpin indent" : "Pin indent"}
-                        >
-                          {pinnedItems.has("indent") ? (
-                            <StarSolidIcon className="h-3.5 w-3.5" />
-                          ) : (
-                            <StarIcon className="h-3.5 w-3.5" />
-                          )}
-                        </button>
-                      </div>
-                      <div className={settingsBtnGroupClass}>
-                        <button type="button" aria-label="Decrease indent" className={settingsStepBtnClass} onClick={() => { const v = Math.max(0, formatOptions.indentation - 1); applyFormatWithOptions({ ...formatOptions, indentation: v }); }}><MinusIcon className="h-3.5 w-3.5" aria-hidden /></button>
-                        <span className="flex h-7 min-w-[1.5rem] items-center justify-center px-1.5 text-xs font-medium tabular-nums text-[var(--workspace-text)]">{formatOptions.indentation}</span>
-                        <button type="button" aria-label="Increase indent" className={settingsStepBtnClass} onClick={() => { const v = Math.min(10, formatOptions.indentation + 1); applyFormatWithOptions({ ...formatOptions, indentation: v }); }}><PlusIcon className="h-3.5 w-3.5" aria-hidden /></button>
-                        <button type="button" aria-label="Reset indent" className={settingsStepBtnClass} onClick={() => applyFormatWithOptions({ ...formatOptions, indentation: 2 })}><ArrowPathIcon className="h-3 w-3" aria-hidden /></button>
-                      </div>
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <p className={settingsLabelClass}>Quotes</p>
-                      <div className="inline-flex w-fit overflow-hidden rounded-lg border border-[var(--workspace-border)]/60">
-                        {(["double", "single"] as const).map((q) => (
-                          <button key={q} type="button" className={`h-7 px-2 text-[11px] font-medium ${formatOptions.quoteStyle === q ? "bg-primary/12 text-primary" : "text-[var(--workspace-text-muted)] hover:bg-primary/5"}`} onClick={() => applyFormatWithOptions({ ...formatOptions, quoteStyle: q })}>{q === "double" ? '" "' : "' '"}</button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <p className={settingsLabelClass}>JSON</p>
-                      <div className="flex flex-wrap gap-1">
-                        <label className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-md border border-[var(--workspace-border)]/60 px-2 text-[11px] hover:bg-primary/5">
-                          <input type="checkbox" className="checkbox checkbox-xs checkbox-primary" checked={formatOptions.sortKeys} onChange={(e) => applyFormatWithOptions({ ...formatOptions, sortKeys: e.target.checked })} />
-                          Sort keys
-                        </label>
-                        <label className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-md border border-[var(--workspace-border)]/60 px-2 text-[11px] hover:bg-primary/5">
-                          <input type="checkbox" className="checkbox checkbox-xs checkbox-primary" checked={formatOptions.removeEmpty} onChange={(e) => applyFormatWithOptions({ ...formatOptions, removeEmpty: e.target.checked })} />
-                          Drop empty
-                        </label>
-                      </div>
-                    </div>
-                  </div>
-                  {/* Pin favorites — only used when compact menus is off */}
-                  {!isDiffMode && !isUtilsMode && !viewAsMenu && (
-                    <>
-                      <div className="h-px bg-[var(--workspace-border)]/50" />
-                      <p className={settingsLabelClass}>Pin to toolbar · star to show</p>
-                      <div className="space-y-1.5">
-                        <div className="flex flex-wrap items-center gap-0.5">
-                          <span className="mr-1 w-12 shrink-0 text-[9px] font-semibold uppercase tracking-wide text-[var(--workspace-text-muted)]">Format</span>
-                          {FORMAT_KINDS.map((fmt) => {
-                            const on = pinnedItems.has(`fmt:${fmt}`);
-                            return (
-                              <button
-                                key={fmt}
-                                type="button"
-                                className={`inline-flex h-7 items-center gap-0.5 rounded-md border px-1.5 text-[11px] font-medium transition-colors ${on ? "border-primary/30 bg-primary/10 text-primary" : "border-[var(--workspace-border)]/70 text-[var(--workspace-text-muted)] hover:border-primary/20"}`}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setPinnedItems((s) => {
-                                    const n = new Set(s);
-                                    n.has(`fmt:${fmt}`) ? n.delete(`fmt:${fmt}`) : n.add(`fmt:${fmt}`);
-                                    return n;
-                                  });
-                                }}
-                                title={on ? `Unpin ${FORMAT_LABELS[fmt]}` : `Pin ${FORMAT_LABELS[fmt]}`}
-                              >
-                                {on ? <StarSolidIcon className="h-3 w-3 text-amber-500" /> : <StarIcon className="h-3 w-3 opacity-50" />}
-                                {FORMAT_LABELS[fmt]}
-                              </button>
-                            );
-                          })}
-                        </div>
-                        <div className="flex flex-wrap items-center gap-0.5">
-                          <span className="mr-1 w-12 shrink-0 text-[9px] font-semibold uppercase tracking-wide text-[var(--workspace-text-muted)]">View</span>
-                          {(["raw", "tree", "graph", "query", "table"] as const).map((view) => {
-                            const on = pinnedItems.has(`view:${view}`);
-                            const label = view[0].toUpperCase() + view.slice(1);
-                            return (
-                              <button
-                                key={view}
-                                type="button"
-                                className={`inline-flex h-7 items-center gap-0.5 rounded-md border px-1.5 text-[11px] font-medium transition-colors ${on ? "border-primary/30 bg-primary/10 text-primary" : "border-[var(--workspace-border)]/70 text-[var(--workspace-text-muted)] hover:border-primary/20"}`}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setPinnedItems((s) => {
-                                    const n = new Set(s);
-                                    n.has(`view:${view}`) ? n.delete(`view:${view}`) : n.add(`view:${view}`);
-                                    return n;
-                                  });
-                                }}
-                                title={on ? `Unpin ${label}` : `Pin ${label}`}
-                              >
-                                {on ? <StarSolidIcon className="h-3 w-3 text-amber-500" /> : <StarIcon className="h-3 w-3 opacity-50" />}
-                                {label}
-                              </button>
-                            );
-                          })}
-                        </div>
-                        <div className="flex flex-wrap items-center gap-0.5">
-                          <span className="mr-1 w-12 shrink-0 text-[9px] font-semibold uppercase tracking-wide text-[var(--workspace-text-muted)]">Action</span>
-                          {OPERATION_ACTIONS.map(([label, action]) => {
-                            const on = pinnedItems.has(`action:${action}`);
-                            return (
-                              <button
-                                key={action}
-                                type="button"
-                                className={`inline-flex h-7 items-center gap-0.5 rounded-md border px-1.5 text-[11px] font-medium transition-colors ${on ? "border-primary/30 bg-primary/10 text-primary" : "border-[var(--workspace-border)]/70 text-[var(--workspace-text-muted)] hover:border-primary/20"}`}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setPinnedItems((s) => {
-                                    const n = new Set(s);
-                                    n.has(`action:${action}`) ? n.delete(`action:${action}`) : n.add(`action:${action}`);
-                                    return n;
-                                  });
-                                }}
-                                title={on ? `Unpin ${label}` : `Pin ${label}`}
-                              >
-                                {on ? <StarSolidIcon className="h-3 w-3 text-amber-500" /> : <StarIcon className="h-3 w-3 opacity-50" />}
-                                {label}
-                              </button>
-                            );
-                          })}
-                        </div>
-                        <div className="flex flex-wrap items-center gap-0.5">
-                          <span className="mr-1 w-12 shrink-0 text-[9px] font-semibold uppercase tracking-wide text-[var(--workspace-text-muted)]">Types</span>
-                          {TYPE_LANGUAGES.slice(0, 8).map((item) => {
-                            const on = pinnedItems.has(`type:${item.id}`);
-                            return (
-                              <button
-                                key={item.id}
-                                type="button"
-                                className={`inline-flex h-7 items-center gap-0.5 rounded-md border px-1.5 text-[11px] font-medium transition-colors ${on ? "border-primary/30 bg-primary/10 text-primary" : "border-[var(--workspace-border)]/70 text-[var(--workspace-text-muted)] hover:border-primary/20"}`}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setPinnedItems((s) => {
-                                    const n = new Set(s);
-                                    n.has(`type:${item.id}`) ? n.delete(`type:${item.id}`) : n.add(`type:${item.id}`);
-                                    return n;
-                                  });
-                                }}
-                                title={on ? `Unpin ${item.label}` : `Pin ${item.label}`}
-                              >
-                                {on ? <StarSolidIcon className="h-3 w-3 text-amber-500" /> : <StarIcon className="h-3 w-3 opacity-50" />}
-                                {item.label}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </>
-                  )}
-                  {!isDiffMode && !isUtilsMode && viewAsMenu && (
-                    <p className="text-[10px] leading-snug text-[var(--workspace-text-muted)]">
-                      Compact menus on — toolbar uses Format / View / Actions / Types. Turn off compact to pin shortcuts.
-                    </p>
-                  )}
-                  <button
-                    type="button"
-                    className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-[var(--workspace-border)]/50 py-1.5 text-[11px] font-medium text-[var(--workspace-text-muted)] transition-all hover:bg-primary/8 hover:text-primary"
-                    onClick={() => {
-                      setFormatOptions(DEFAULT_FORMAT_OPTIONS);
-                      setConvertToFormat("json");
-                      setRightView("raw");
-                      setEditorFontSize(14);
-                      setViewAsMenu(true);
-                      setPinnedItems(new Set(["fmt:json", "view:raw", "view:query", "action:beautify", "action:minify", "type:typescript", "type:zod"]));
-                    }}
-                  >
-                    <ArrowPathIcon className="h-3.5 w-3.5" />
-                    Reset to default
-                  </button>
-                  </>
-                  )}
-                </div>
+  {/* Behavior */}
+  <SettingsRule title="Behavior" />
+  <div className="mt-1 space-y-px">
+    {(
+      [
+        ["Compact menus", viewAsMenu, (v: boolean) => setViewAsMenu(v)],
+        ["Live transform", liveTransform, (v: boolean) => setLiveTransform(v)],
+        ["Line wrap", lineWrap, (v: boolean) => setLineWrap(v)],
+        ["Format on paste", autoFormatOnPaste, (v: boolean) => setAutoFormatOnPaste(v)],
+      ] as const
+    ).map(([label, on, setOn]) => (
+      <label
+        key={label}
+        className="flex min-h-7 cursor-pointer items-center justify-between gap-3 rounded-md px-1.5 py-1 text-xs text-[var(--workspace-text)] transition-colors hover:bg-primary/5"
+      >
+        <span className="min-w-0">{label}</span>
+        <Switch checked={on} onCheckedChange={setOn} />
+      </label>
+    ))}
+  </div>
+
+  {/* Editor */}
+  <SettingsRule title="Editor" />
+  <div className="mt-1">
+    <SettingsRow
+      label={
+        <>
+          Font size
+          <PinButton
+            pinned={pinnedItems.has("fontSize")}
+            label="font size"
+            onClick={() =>
+              setPinnedItems((s) => {
+                const n = new Set(s);
+                if (n.has("fontSize")) n.delete("fontSize");
+                else n.add("fontSize");
+                return n;
+              })
+            }
+          />
+        </>
+      }
+    >
+      <SettingsStepper
+        value={editorFontSize}
+        decLabel="Decrease font size"
+        incLabel="Increase font size"
+        resetLabel="Reset font size"
+        onDec={() => setEditorFontSize((s) => Math.max(10, s - 1))}
+        onInc={() => setEditorFontSize((s) => Math.min(24, s + 1))}
+        onReset={() => setEditorFontSize(14)}
+      />
+    </SettingsRow>
+  </div>
+
+  {isDiffMode && diffKind === "list" && (
+    <>
+      <SettingsRule title="List parsing" />
+      <div className="mt-1 space-y-2">
+        <div>
+          <p className="pb-1 text-[10px] font-medium text-[var(--workspace-text-muted)]">Split by</p>
+          <div className="flex flex-wrap gap-1">
+            {(
+              [
+                ["auto", "Auto"],
+                ["comma", "Comma"],
+                ["semicolon", "Semicolon"],
+                ["pipe", "Pipe"],
+                ["whitespace", "Whitespace"],
+                ["json", "JSON array"],
+              ] as const
+            ).map(([delim, label]) => (
+              <button
+                key={delim}
+                type="button"
+                onClick={() => setListCompareOptions((prev) => ({ ...prev, delimiter: delim }))}
+                className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors ${
+                  listCompareOptions.delimiter === delim
+                    ? "bg-primary/15 text-primary"
+                    : "bg-muted text-[var(--workspace-text-muted)] hover:bg-primary/10 hover:text-[var(--workspace-text)]"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <p className="pb-1 text-[10px] font-medium text-[var(--workspace-text-muted)]">Parsing</p>
+          <div className="flex flex-wrap gap-1">
+            {(
+              [
+                ["trim", "Trim whitespace"],
+                ["ignoreEmpty", "Skip empty"],
+                ["caseInsensitive", "Ignore case"],
+                ["stripQuotes", "Strip quotes"],
+                ["numericNormalize", "Normalize numbers"],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() =>
+                  setListCompareOptions((prev) => ({ ...prev, [key]: !prev[key as keyof ListParseOptions] }))
+                }
+                className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors ${
+                  listCompareOptions[key as keyof ListParseOptions]
+                    ? "bg-primary/15 text-primary"
+                    : "bg-muted text-[var(--workspace-text-muted)] hover:bg-primary/10 hover:text-[var(--workspace-text)]"
+                }`}
+              >
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${listCompareOptions[key as keyof ListParseOptions] ? "bg-primary" : "bg-[var(--workspace-border)]"}`}
+                />
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </>
+  )}
+  {isDiffMode && diffKind !== "list" && (
+    <p className="rounded-md bg-primary/5 px-2 py-1.5 text-[10px] leading-snug text-[var(--workspace-text-muted)]">
+      Open <strong className="text-primary">Compare → List</strong> to tune how lists are split.
+    </p>
+  )}
+  {isUtilsMode && (
+    <p className="rounded-md bg-primary/5 px-2 py-1.5 text-[10px] leading-snug text-[var(--workspace-text-muted)]">
+      Each utility keeps its own options (count, length, character sets) right in the tool pane.
+    </p>
+  )}
+  {!isDiffMode && !isUtilsMode && (
+    <>
+      {/* Formatting */}
+      <SettingsRule title="Formatting" />
+      <div className="mt-1 space-y-px">
+        <SettingsRow
+          label={
+            <>
+              Indent
+              <PinButton
+                pinned={pinnedItems.has("indent")}
+                label="indent"
+                onClick={() =>
+                  setPinnedItems((s) => {
+                    const n = new Set(s);
+                    if (n.has("indent")) n.delete("indent");
+                    else n.add("indent");
+                    return n;
+                  })
+                }
+              />
+            </>
+          }
+        >
+          <SettingsStepper
+            value={formatOptions.indentation}
+            decLabel="Decrease indent"
+            incLabel="Increase indent"
+            resetLabel="Reset indent"
+            minWidth="min-w-[1.5rem]"
+            onDec={() => {
+              const v = Math.max(0, formatOptions.indentation - 1);
+              applyFormatWithOptions({ ...formatOptions, indentation: v });
+            }}
+            onInc={() => {
+              const v = Math.min(10, formatOptions.indentation + 1);
+              applyFormatWithOptions({ ...formatOptions, indentation: v });
+            }}
+            onReset={() => applyFormatWithOptions({ ...formatOptions, indentation: 2 })}
+          />
+        </SettingsRow>
+        <SettingsRow label="Quotes">
+          <div className="inline-flex overflow-hidden rounded-md border border-[var(--workspace-border)]/60 bg-muted/50">
+            {(["double", "single"] as const).map((q) => (
+              <button
+                key={q}
+                type="button"
+                className={`flex h-7 min-w-[2.25rem] items-center justify-center px-2 text-xs font-medium transition-colors ${
+                  formatOptions.quoteStyle === q
+                    ? "bg-primary/15 text-primary"
+                    : "text-[var(--workspace-text-muted)] hover:bg-primary/5 hover:text-[var(--workspace-text)]"
+                }`}
+                onClick={() => applyFormatWithOptions({ ...formatOptions, quoteStyle: q })}
+              >
+                {q === "double" ? "\u201C \u201D" : "' '"}
+              </button>
+            ))}
+          </div>
+        </SettingsRow>
+        <SettingsRow label="JSON">
+          <div className="flex items-center gap-1">
+            <label className="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-md border border-[var(--workspace-border)]/60 bg-muted/30 px-2 text-xs font-medium text-[var(--workspace-text)] transition-colors hover:border-primary/30 hover:bg-primary/5 has-[[data-state=checked]]:border-primary/40 has-[[data-state=checked]]:bg-primary/10">
+              <Checkbox checked={formatOptions.sortKeys} onCheckedChange={(c) => applyFormatWithOptions({ ...formatOptions, sortKeys: c === true })} />
+              Sort keys
+            </label>
+            <label className="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-md border border-[var(--workspace-border)]/60 bg-muted/30 px-2 text-xs font-medium text-[var(--workspace-text)] transition-colors hover:border-primary/30 hover:bg-primary/5 has-[[data-state=checked]]:border-primary/40 has-[[data-state=checked]]:bg-primary/10">
+              <Checkbox checked={formatOptions.removeEmpty} onCheckedChange={(c) => applyFormatWithOptions({ ...formatOptions, removeEmpty: c === true })} />
+              Drop empty
+            </label>
+          </div>
+        </SettingsRow>
+      </div>
+
+      {/* Toolbar - inline pins */}
+      <SettingsRule title="Toolbar" />
+      <div className="mt-1 space-y-2">
+        {!viewAsMenu ? (
+          <div className="space-y-1.5">
+            <PinChipRow
+              label="Format"
+              items={FORMAT_KINDS.map((fmt) => ({ id: `fmt:${fmt}`, label: FORMAT_LABELS[fmt] }))}
+              pinned={(id) => pinnedItems.has(id)}
+              onToggle={(id) =>
+                setPinnedItems((s) => {
+                  const n = new Set(s);
+                  if (n.has(id)) n.delete(id);
+                  else n.add(id);
+                  return n;
+                })
+              }
+            />
+            <PinChipRow
+              label="View"
+              items={(["raw", "tree", "graph", "query", "table"] as const).map((view) => ({
+                id: `view:${view}`,
+                label: view[0].toUpperCase() + view.slice(1),
+              }))}
+              pinned={(id) => pinnedItems.has(id)}
+              onToggle={(id) =>
+                setPinnedItems((s) => {
+                  const n = new Set(s);
+                  if (n.has(id)) n.delete(id);
+                  else n.add(id);
+                  return n;
+                })
+              }
+            />
+            <PinChipRow
+              label="Action"
+              items={OPERATION_ACTIONS.map(([label, action]) => ({ id: `action:${action}`, label }))}
+              pinned={(id) => pinnedItems.has(id)}
+              onToggle={(id) =>
+                setPinnedItems((s) => {
+                  const n = new Set(s);
+                  if (n.has(id)) n.delete(id);
+                  else n.add(id);
+                  return n;
+                })
+              }
+            />
+            <PinChipRow
+              label="Types"
+              items={TYPE_LANGUAGES.slice(0, 8).map((item) => ({ id: `type:${item.id}`, label: item.label }))}
+              pinned={(id) => pinnedItems.has(id)}
+              onToggle={(id) =>
+                setPinnedItems((s) => {
+                  const n = new Set(s);
+                  if (n.has(id)) n.delete(id);
+                  else n.add(id);
+                  return n;
+                })
+              }
+            />
+          </div>
+        ) : (
+          <p className="rounded-md bg-primary/5 px-2 py-1.5 text-[10px] leading-snug text-[var(--workspace-text-muted)]">
+            Compact menus is on - the toolbar uses{" "}
+            <strong className="text-primary">Format · View · Actions · Types</strong> dropdowns. Turn off{" "}
+            <strong className="text-primary">Compact menus</strong> in Behavior to show pinned shortcuts instead.
+          </p>
+        )}
+      </div>
+    </>
+  )}
+
+  {/* Footer */}
+  <div className="mt-2.5 border-t border-[var(--workspace-border)]/60 pt-2">
+    <button
+      type="button"
+      className="flex h-7 w-full items-center justify-center gap-1.5 rounded-md border border-[var(--workspace-border)]/60 bg-muted/40 text-xs font-medium text-[var(--workspace-text-muted)] transition-all hover:border-primary/25 hover:bg-primary/10 hover:text-primary"
+      onClick={() => {
+        setFormatOptions(DEFAULT_FORMAT_OPTIONS);
+        setConvertToFormat("json");
+        setRightView("raw");
+        setEditorFontSize(14);
+        setViewAsMenu(true);
+        setPinnedItems(new Set(["fmt:json", "view:raw", "view:query", "action:beautify", "action:minify", "type:typescript", "type:zod"]));
+      }}
+    >
+      <ArrowPathIcon className="h-3.5 w-3.5" />
+      Reset to default
+    </button>
+  </div>
+</div>
               }
               onShare={() => {
                 setShareAllTabs(false);
@@ -3252,7 +3560,6 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                   ? undefined
                   : () => setIsOutputMaximized((v) => !v)
               }
-              onUseAsInput={isDiffMode || isUtilsMode ? undefined : useOutputAsInput}
               onCopyAs={copyOutputAs}
               copyAsOptions={activeCopyAsOptions}
               onReset={handleWorkspaceReset}
@@ -3292,101 +3599,20 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
             </button>
           )}
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          <div
-            className={`flex h-10 shrink-0 flex-nowrap items-center gap-0.5 border-b px-1.5 text-xs ${inputEditorBgClass} text-[var(--workspace-text-muted)]`}
-          >
-            <div className="flex shrink-0 items-center gap-1">
-              <button
-                type="button"
-                title="Undo (Ctrl+Z)"
-                disabled={!canUndo}
-                className={`${linkBtnClass} btn-square h-7 min-h-7 w-7 shrink-0`}
-                onClick={() => moveHistory(-1)}
-              >
-                <ArrowUturnLeftIcon className="h-3.5 w-3.5" />
-              </button>
-              <button
-                type="button"
-                title="Redo (Shift+Ctrl+Z)"
-                disabled={!canRedo}
-                className={`${linkBtnClass} btn-square h-7 min-h-7 w-7 shrink-0`}
-                onClick={() => moveHistory(1)}
-              >
-                <ArrowUturnRightIcon className="h-3.5 w-3.5" />
-              </button>
-            </div>
-            <div className="flex shrink-0 items-center gap-1">
-              <input
-                id="import-json-file"
-                type="file"
-                accept=".json,.yaml,.yml,.xml,.toml,.csv,application/json,text/plain"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) {
-                    importJsonFile(file);
-                    e.currentTarget.value = "";
-                  }
-                }}
-              />
-              <button
-                type="button"
-                className={`${linkBtnClass} h-7 min-h-7 shrink-0`}
-                onClick={pasteFromClipboard}
-              >
-                <ClipboardDocumentIcon className="h-3.5 w-3.5 shrink-0" />
-                Paste
-              </button>
-              <button
-                type="button"
-                className={`${linkBtnClass} h-7 min-h-7 shrink-0`}
-                onClick={() => document.getElementById("import-json-file")?.click()}
-              >
-                <DocumentArrowDownIcon className="h-3.5 w-3.5 shrink-0" />
-                Import
-              </button>
-              <Dropdown
-              open={inputFormatOpen}
-              onOpenChange={setInputFormatOpen}
-              side="bottom"
-              align="start"
-              rootClassName="shrink-0"
-              contentClassName={`dropdown-content z-[100] min-w-[7rem] p-1.5 shadow-2xl rounded-xl border border-[var(--workspace-border)]/50 ${dropdownPanelClass}`}
-              trigger={
-                <div className={`${linkBtnClass} flex h-7 min-h-7 shrink-0 items-center gap-1 ${inputFormatOpen ? "text-primary" : ""}`} title="Input format">
-                  <span className="truncate font-medium">{getInputFormatLabel(resolvedInputFormat)}</span>
-                  <ChevronDownIcon className="h-3 w-3 shrink-0" />
-                </div>
+                    <input
+            id="import-json-file"
+            type="file"
+            accept=".json,.yaml,.yml,.xml,.toml,.csv,application/json,text/plain"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) {
+                importJsonFile(file);
+                e.currentTarget.value = "";
               }
-            >
-              <div className="flex flex-col gap-0.5 p-0.5" onClick={(e) => e.stopPropagation()}>
-                    {INPUT_FORMAT_KINDS.map((fmt) => (
-                  <button
-                    key={fmt}
-                    type="button"
-                    className={`${linkBtnClass} h-7 min-h-7 px-2.5 text-[11px] font-medium w-full text-left ${resolvedInputFormat === fmt ? "!text-primary !bg-primary/10" : ""}`}
-                    onClick={() => {
-                      onInputFormatChange(fmt);
-                      setInputFormatOpen(false);
-                    }}
-                  >
-                    {getInputFormatLabel(fmt)}
-                  </button>
-                ))}
-              </div>
-            </Dropdown>
-            </div>
-            <div className="flex shrink-0 items-center gap-1 hidden">
-              <button
-                type="button"
-                title={splitInputOpen ? "Close split pane" : "Split input pane"}
-                className={`${linkBtnClass} btn-square h-7 min-h-7 w-7 shrink-0 ${splitInputOpen ? "text-primary" : ""}`}
-                onClick={() => setSplitInputOpen((v) => !v)}
-              >
-                <ViewColumnsIcon className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          </div>
+            }}
+          />
+
           {splitInputOpen && isDesktopLayout ? (
             <div
               ref={splitContainerInputRef}
@@ -3404,7 +3630,6 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                   className="h-full"
                   language={resolvedInputFormat === "toml" || resolvedInputFormat === "csv" || resolvedInputFormat === "curl" ? "plaintext" : resolvedInputFormat}
                   monacoTheme={monacoTheme}
-                  panelTone="input"
                   fontSize={editorFontSize}
                   wordWrap={lineWrap ? "on" : "off"}
                   onEditorMount={(api) => { inputEditorApiRef.current = api; }}
@@ -3418,7 +3643,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                 className="group relative flex shrink-0 cursor-col-resize justify-center"
                 onMouseDown={() => setIsSplitResizing(true)}
               >
-                <div className="absolute inset-y-0 left-1/2 w-px -translate-x-px bg-[var(--workspace-border)] transition-all duration-200 group-hover:w-[2px] group-hover:bg-gradient-to-b group-hover:from-transparent group-hover:via-primary group-hover:to-transparent group-hover:opacity-100 group-hover:[box-shadow:0_0_8px_rgba(124,58,237,0.4)]" />
+                <div className="absolute inset-y-0 left-1/2 w-px -translate-x-px bg-[var(--workspace-border)] transition-all duration-200 group-hover:w-[2px] group-hover:bg-gradient-to-b group-hover:from-transparent group-hover:via-primary group-hover:to-transparent group-hover:opacity-100 group-hover:[box-shadow:0_0_8px_rgba(109,109,244,0.4)]" />
               </div>
               <div
                 className="relative min-h-0 flex-1 overflow-hidden cursor-text"
@@ -3430,7 +3655,6 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                   className="h-full"
                   language="json"
                   monacoTheme={monacoTheme}
-                  panelTone="input"
                   fontSize={editorFontSize}
                   wordWrap={lineWrap ? "on" : "off"}
                   onEditorMount={(api) => { splitInput2ApiRef.current = api; }}
@@ -3454,7 +3678,6 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                 className="h-full"
                 language={resolvedInputFormat === "toml" || resolvedInputFormat === "csv" || resolvedInputFormat === "curl" ? "plaintext" : resolvedInputFormat}
                 monacoTheme={monacoTheme}
-                panelTone="input"
                 fontSize={editorFontSize}
                 wordWrap={lineWrap ? "on" : "off"}
                 onEditorMount={(api) => { inputEditorApiRef.current = api; }}
@@ -3495,7 +3718,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
             style={{ width: 9, marginLeft: -4, marginRight: -4, zIndex: 10 }}
             onMouseDown={() => setIsResizing(true)}
           >
-            <div className="pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-[var(--workspace-border)] transition-all duration-150 group-hover:w-[3px] group-hover:bg-primary/60 group-hover:shadow-[0_0_6px_rgba(124,58,237,0.35)] group-active:w-[3px] group-active:bg-primary group-active:shadow-[0_0_8px_rgba(124,58,237,0.5)]" />
+            <div className="pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-[var(--workspace-border)] transition-all duration-150 group-hover:w-[3px] group-hover:bg-primary/60 group-hover:shadow-[0_0_6px_rgba(109,109,244,0.35)] group-active:w-[3px] group-active:bg-primary group-active:shadow-[0_0_8px_rgba(109,109,244,0.5)]" />
           </div>
         )}
         <div
@@ -3514,128 +3737,6 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
               <ArrowLeftCircleIcon className="h-4 w-4 shrink-0" />
               Back to input
             </button>
-          )}
-          {/* Transform-only secondary row — mode switcher lives on full-width bar above */}
-          {!isDiffMode && !isUtilsMode && (
-          <div
-            className={`flex h-10 shrink-0 flex-nowrap items-center gap-0.5 border-b px-1.5 text-xs ${inputEditorBgClass} text-[var(--workspace-text-muted)]`}
-          >
-            {viewAsMenu && (
-              <>
-            <Dropdown open={formatMenuOpen} onOpenChange={setFormatMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`dropdown-content z-[100] min-w-[7rem] p-1.5 shadow-2xl rounded-xl border border-[var(--workspace-border)]/50 ${dropdownPanelClass}`} trigger={<div className={`${linkBtnClass} flex h-7 min-h-7 shrink-0 items-center gap-1 ${formatMenuOpen ? "text-primary" : ""}`} title="Format"><span className="font-medium">Format</span><ChevronDownIcon className="h-3 w-3" /></div>}>
-              <div className="flex flex-col gap-0.5 p-0.5" onClick={(e) => e.stopPropagation()}>
-                {FORMAT_KINDS.map((fmt) => (
-                  <button key={fmt} type="button" disabled={inputEmpty} className={`${linkBtnClass} h-7 min-h-7 px-2.5 text-[11px] font-medium w-full text-left disabled:opacity-40 ${convertToFormat === fmt ? "!text-primary !bg-primary/10" : ""}`} onClick={() => { setFocusedPane("output"); runConvert(fmt); setFormatMenuOpen(false); }}>{FORMAT_LABELS[fmt]}</button>
-                ))}
-              </div>
-            </Dropdown>
-            <Dropdown open={viewMenuOpen} onOpenChange={setViewMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`dropdown-content z-[100] min-w-[14rem] p-3 shadow-2xl rounded-xl border border-[var(--workspace-border)]/50 ${dropdownPanelClass}`} trigger={<div className={`${linkBtnClass} flex h-7 min-h-7 shrink-0 items-center gap-1 ${viewMenuOpen ? "text-primary" : ""}`} title="View"><span className="font-medium">View</span><ChevronDownIcon className="h-3 w-3" /></div>}>
-              <div className="space-y-3" onClick={(e) => e.stopPropagation()}>
-                <div>
-                  <p className={`${settingsLabelClass} mb-1.5`}>View mode</p>
-                  <div className="flex flex-wrap gap-0.5">
-                    {(["raw", "tree", "graph", "query", "table"] as const).map((view) => (
-                      <button key={view} type="button" disabled={inputEmpty || ((view === "tree" || view === "graph" || view === "query" || view === "table") && !parsedOutput)} className={`${linkBtnClass} h-7 min-h-7 px-2 text-[11px] font-medium disabled:opacity-40 ${rightView === view ? "!text-primary !bg-primary/10" : ""}`} onClick={() => { setRightView(view); setFocusedPane("output"); setViewMenuOpen(false); }}>{view[0].toUpperCase() + view.slice(1)}</button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </Dropdown>
-            <Dropdown open={actionsMenuOpen} onOpenChange={setActionsMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`dropdown-content z-[100] min-w-[7rem] p-1.5 shadow-2xl rounded-xl border border-[var(--workspace-border)]/50 ${dropdownPanelClass}`} trigger={<div className={`${linkBtnClass} flex h-7 min-h-7 shrink-0 items-center gap-1 ${actionsMenuOpen ? "text-primary" : ""}`} title="Actions"><span className="font-medium">Actions</span><ChevronDownIcon className="h-3 w-3" /></div>}>
-              <div className="flex flex-col gap-0.5 p-0.5" onClick={(e) => e.stopPropagation()}>
-                {OPERATION_ACTIONS.map(([label, action]) => (
-                  <button key={action} type="button" disabled={showBusy || inputEmpty} className={`${linkBtnClass} h-7 min-h-7 px-2.5 text-[11px] font-medium w-full text-left disabled:opacity-40 ${activeOperation === action ? "!text-primary !bg-primary/10" : ""}`} onClick={() => { runOperation(action); setActionsMenuOpen(false); }}>{label}</button>
-                ))}
-              </div>
-            </Dropdown>
-            <Dropdown open={typesMenuOpen} onOpenChange={setTypesMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`dropdown-content z-[100] min-w-[8rem] max-h-[50vh] overflow-y-auto p-1.5 shadow-2xl rounded-xl border border-[var(--workspace-border)]/50 ${dropdownPanelClass}`} trigger={<div className={`${linkBtnClass} flex h-7 min-h-7 shrink-0 items-center gap-1 ${typesMenuOpen ? "text-primary" : ""}`} title="Generate Types"><span className="font-medium">Types</span><ChevronDownIcon className="h-3 w-3" /></div>}>
-              <div className="flex flex-col gap-0.5 p-0.5" onClick={(e) => e.stopPropagation()}>
-                {TYPE_LANGUAGES.map((item) => (
-                  <button key={item.id} type="button" disabled={inputEmpty} className={`${linkBtnClass} h-7 min-h-7 px-2.5 text-[11px] font-medium w-full text-left disabled:opacity-40 ${typeLanguage === item.id ? "!text-primary !bg-primary/10" : ""}`} onClick={() => { setFocusedPane("output"); setActiveOperation("generateTypes"); executeOperation("generateTypes", { typeLanguage: item.id }); setTypesMenuOpen(false); }}>{item.label}</button>
-                ))}
-              </div>
-            </Dropdown>
-              </>
-            )}
-            {/* Pinned shortcuts only when compact menus is OFF */}
-            {!viewAsMenu && (() => {
-              const fmtPins = FORMAT_KINDS.filter((f) => pinnedItems.has(`fmt:${f}`));
-              const viewPins = (["raw", "tree", "graph", "query", "table"] as const).filter((v) => pinnedItems.has(`view:${v}`));
-              const actionPins = OPERATION_ACTIONS.filter(([, a]) => pinnedItems.has(`action:${a}`));
-              const typePins = TYPE_LANGUAGES.filter((t) => pinnedItems.has(`type:${t.id}`));
-              const hasPins = fmtPins.length + viewPins.length + actionPins.length + typePins.length > 0
-                || pinnedItems.has("fontSize") || pinnedItems.has("indent");
-              if (!hasPins) return null;
-              const groups: React.ReactNode[] = [];
-              if (fmtPins.length > 0) {
-                groups.push(
-                  <span key="fmt" className="flex shrink-0 items-center gap-0.5">
-                    {fmtPins.map((fmt) => (
-                      <button key={fmt} type="button" disabled={inputEmpty} className={`${linkBtnClass} h-7 min-h-7 shrink-0 disabled:opacity-40 ${convertToFormat === fmt ? tbActiveClass : ""}`} onClick={() => { setFocusedPane("output"); runConvert(fmt); }}>{FORMAT_LABELS[fmt]}</button>
-                    ))}
-                  </span>,
-                );
-              }
-              if (viewPins.length > 0) {
-                groups.push(
-                  <span key="view" className="flex shrink-0 items-center gap-0.5">
-                    {viewPins.map((view) => (
-                      <button key={view} type="button" disabled={inputEmpty || ((view === "tree" || view === "graph" || view === "query" || view === "table") && !parsedOutput)} className={`${linkBtnClass} h-7 min-h-7 shrink-0 disabled:opacity-40 ${rightView === view ? tbActiveClass : ""}`} onClick={() => { setRightView(view); setFocusedPane("output"); }}>{view[0].toUpperCase() + view.slice(1)}</button>
-                    ))}
-                  </span>,
-                );
-              }
-              if (actionPins.length > 0) {
-                groups.push(
-                  <span key="act" className="flex shrink-0 items-center gap-0.5">
-                    {actionPins.map(([label, action]) => (
-                      <button key={action} type="button" disabled={showBusy || inputEmpty} className={`${linkBtnClass} h-7 min-h-7 shrink-0 disabled:opacity-40 ${activeOperation === action ? tbActiveClass : ""}`} onClick={() => runOperation(action)}>{label}</button>
-                    ))}
-                  </span>,
-                );
-              }
-              if (typePins.length > 0) {
-                groups.push(
-                  <span key="type" className="flex shrink-0 items-center gap-0.5">
-                    {typePins.map((item) => (
-                      <button key={item.id} type="button" disabled={inputEmpty} className={`${linkBtnClass} h-7 min-h-7 shrink-0 disabled:opacity-40 ${activeOperation === "generateTypes" && typeLanguage === item.id ? tbActiveClass : ""}`} onClick={() => { setFocusedPane("output"); setActiveOperation("generateTypes"); executeOperation("generateTypes", { typeLanguage: item.id }); }}>{item.label}</button>
-                    ))}
-                  </span>,
-                );
-              }
-              if (pinnedItems.has("fontSize") || pinnedItems.has("indent")) {
-                groups.push(
-                  <span key="steps" className="flex shrink-0 items-center gap-1">
-                    {pinnedItems.has("fontSize") && (
-                      <div className={settingsBtnGroupClass} title="Font size">
-                        <button type="button" aria-label="Decrease font size" className={settingsStepBtnClass} onClick={() => setEditorFontSize((s) => Math.max(10, s - 1))}><MinusIcon className="h-3 w-3" /></button>
-                        <span className="flex h-7 min-w-[1.5rem] items-center justify-center px-1 text-[11px] font-medium tabular-nums text-[var(--workspace-text)]">{editorFontSize}</span>
-                        <button type="button" aria-label="Increase font size" className={settingsStepBtnClass} onClick={() => setEditorFontSize((s) => Math.min(24, s + 1))}><PlusIcon className="h-3 w-3" /></button>
-                      </div>
-                    )}
-                    {pinnedItems.has("indent") && (
-                      <div className={settingsBtnGroupClass} title="Indent">
-                        <button type="button" aria-label="Decrease indent" className={settingsStepBtnClass} onClick={() => { const v = Math.max(0, formatOptions.indentation - 1); applyFormatWithOptions({ ...formatOptions, indentation: v }); }}><MinusIcon className="h-3 w-3" /></button>
-                        <span className="flex h-7 min-w-[1.25rem] items-center justify-center px-1 text-[11px] font-medium tabular-nums text-[var(--workspace-text)]">{formatOptions.indentation}</span>
-                        <button type="button" aria-label="Increase indent" className={settingsStepBtnClass} onClick={() => { const v = Math.min(10, formatOptions.indentation + 1); applyFormatWithOptions({ ...formatOptions, indentation: v }); }}><PlusIcon className="h-3 w-3" /></button>
-                      </div>
-                    )}
-                  </span>,
-                );
-              }
-              return (
-                <>
-                  {groups.map((g, i) => (
-                    <React.Fragment key={i}>
-                      {i > 0 ? toolbarSep : null}
-                      {g}
-                    </React.Fragment>
-                  ))}
-                </>
-              );
-            })()}
-            <span className="flex-1" />
-          </div>
           )}
           <div className="relative flex min-h-[200px] min-h-0 flex-1 flex-col overflow-hidden">
             <div
@@ -3673,13 +3774,11 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                     onRightChange={setDiffRightInput}
                     linkBtnClass={linkBtnClass}
                     panelClass={outputPanelClass}
-                    dropdownPanelClass={dropdownPanelClass}
-                    isDark={isDark}
+                          isDark={isDark}
                     toolbarHost={listToolbarHost}
                     onExportChange={setListCompareExport}
                     fontSize={editorFontSize}
                     options={listCompareOptions}
-                    onOptionsChange={setListCompareOptions}
                   />
                 ) : (
                   <div className="flex min-h-0 flex-1 overflow-hidden">
@@ -3722,16 +3821,15 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                           <ListBulletIcon className="h-3.5 w-3.5 text-[var(--workspace-text-muted)]" />
                           <span className="text-[11px] font-semibold text-[var(--workspace-text)]">Path changes</span>
                           <span className="ml-auto text-[10px] tabular-nums text-[var(--workspace-text-muted)]">
-                            {structuralDiff ? structuralDiff.total : "—"}
+                            {structuralDiff ? structuralDiff.total : "-"}
                           </span>
-                          <button
-                            type="button"
-                            className={`${linkBtnClass} btn-square h-6 min-h-6 w-6`}
+                          <SquareBtn
+                            className={`${linkBtnClass} h-6 min-h-6 w-6`}
                             title="Close path list"
                             onClick={() => setDiffShowPaths(false)}
                           >
                             <XMarkIcon className="h-3.5 w-3.5" />
-                          </button>
+                          </SquareBtn>
                         </div>
                         <div className="flex shrink-0 gap-0.5 border-b border-[var(--workspace-border)] px-1.5 py-1">
                           {([
@@ -3880,7 +3978,6 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                   passiveReadOnly
                   language={outputLanguage === "toml" || outputLanguage === "csv" ? "plaintext" : outputLanguage}
                   monacoTheme={monacoTheme}
-                  panelTone="output"
                   fontSize={editorFontSize}
                   wordWrap={lineWrap ? "on" : "off"}
                   onEditorMount={(api) => { outputEditorApiRef.current = api; }}
@@ -3899,11 +3996,9 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                       <span className="text-xl font-extrabold tracking-tight text-primary">ormaty</span>
                     </div>
                     <p className="max-w-md text-sm text-[var(--workspace-text-muted)] leading-relaxed">
-                      Format, convert, compare, and developer utils — JSON, XML, YAML, and more. Everything runs locally in your browser.
+                      Format, convert, compare, and developer utils - JSON, XML, YAML, and more. Everything runs locally in your browser.
                     </p>
-                    <p className="text-[11px] text-[var(--workspace-text-muted)]">
-                      Tip: <kbd className="rounded border border-[var(--workspace-border)] px-1 font-mono text-[10px]">Ctrl+K</kbd> opens commands · Share is the only action that can leave your device
-                    </p>
+                    <p className="text-[11px] text-[var(--workspace-text-muted)]">{quickTip ?? QUICK_TIPS[0]}</p>
                   </motion.div>
 
                   {/* Quick actions */}
@@ -4080,7 +4175,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                 ) : isLargeInput ? (
                   <div className={`flex h-full min-h-0 flex-1 flex-col overflow-hidden ${outputPanelClass}`}>
                     <div className="shrink-0 border-b border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-[11px] text-amber-700 dark:text-amber-300">
-                      Large file — graph may be slow. Prefer Query or Tree for exploration.
+                      Large file - graph may be slow. Prefer Query or Tree for exploration.
                     </div>
                     <GraphView
                       ref={graphViewRef}
@@ -4225,9 +4320,11 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
               >
                 {sharedLinkUrl.replace(/^https?:\/\/[^/]+/, "")}
               </a>
-              <button
+              <UiButton
                 type="button"
-                className="btn btn-ghost btn-xs shrink-0 rounded p-0.5"
+                variant="ghost"
+                size="icon"
+                className="h-5 w-5 shrink-0 rounded text-[var(--workspace-text-muted)] hover:text-[var(--workspace-text)] [&_svg]:!h-3.5 [&_svg]:!w-3.5"
                 title="Copy link"
                 onClick={async () => {
                   try {
@@ -4240,10 +4337,12 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                 }}
               >
                 <ClipboardDocumentIcon className="h-3.5 w-3.5" />
-              </button>
-              <button
+              </UiButton>
+              <UiButton
                 type="button"
-                className="btn btn-ghost btn-xs shrink-0 rounded p-0.5"
+                variant="ghost"
+                size="icon"
+                className="h-5 w-5 shrink-0 rounded text-[var(--workspace-text-muted)] hover:text-[var(--workspace-text)] [&_svg]:!h-3.5 [&_svg]:!w-3.5"
                 title="Disable sharing"
                 onClick={async () => {
                   const idToDelete = sharedLinkId;
@@ -4256,7 +4355,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                 }}
               >
                 <LinkSlashIcon className="h-3.5 w-3.5" />
-              </button>
+              </UiButton>
             </span>
           ) : undefined
         }
@@ -4295,7 +4394,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
         {showHistoryPanel && (
           <div className="fixed inset-0 z-[200] flex items-stretch justify-end" onClick={() => setShowHistoryPanel(false)}>
             <div
-              className={`flex h-full w-full max-w-sm flex-col shadow-2xl shadow-black/20 border-l ${isDark ? "bg-[#141414]/95 backdrop-blur-xl border-white/[0.06]" : "bg-white/95 backdrop-blur-xl border-black/[0.06]"}`}
+              className={`flex h-full w-full max-w-sm flex-col shadow-2xl shadow-black/20 border-l ${isDark ? "bg-[var(--workspace-panel)]/95 backdrop-blur-xl border-[var(--workspace-border)]/60" : "bg-white/95 backdrop-blur-xl border-black/[0.06]"}`}
               onClick={(e) => e.stopPropagation()}
             >
               <div className={`flex shrink-0 items-center justify-between border-b px-4 py-3 ${isDark ? "border-white/[0.06]" : "border-black/[0.06]"}`}>
@@ -4306,7 +4405,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                 </div>
                 <div className="flex items-center gap-1">
                   <button type="button" className={`${linkBtnClass} h-7 min-h-7 text-[11px] font-medium`} onClick={exportHistory}>Export</button>
-                  <button type="button" className={`${linkBtnClass} btn-square h-7 min-h-7 w-7`} onClick={() => setShowHistoryPanel(false)}><XMarkIcon className="h-4 w-4" /></button>
+                  <SquareBtn className={`${linkBtnClass} h-7 min-h-7 w-7 [&_svg]:!size-4`} onClick={() => setShowHistoryPanel(false)}><XMarkIcon className="h-4 w-4" /></SquareBtn>
                 </div>
               </div>
               <div className="flex-1 overflow-y-auto">
@@ -4342,113 +4441,90 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
           </div>
         )}
 
-        {modalKind === "validate" ? (
-          <div className="modal modal-open">
-            <div className="modal-box w-full max-w-3xl">
-              <div className="mb-2 flex items-center justify-between">
-                <h3 className="text-sm font-semibold">Schema (JSON or YAML) for Validate</h3>
-                <button
-                  type="button"
-                  className="btn btn-xs btn-soft"
-                  onClick={() => setModalKind(null)}
-                >
-                  Close
-                </button>
-              </div>
-              <textarea
-                className="textarea textarea-bordered h-60 w-full text-xs"
-                value={modalValue}
-                onChange={(e) => setModalValue(e.target.value)}
-              />
-              <div className="mt-2 flex justify-end gap-2">
-                <button
-                  type="button"
-                  className="btn btn-sm btn-soft"
-                  onClick={() => setModalKind(null)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  disabled={!isModalInputValid}
-                  className="btn btn-primary btn-sm"
-                  onClick={() => {
-                    if (!isModalInputValid) return;
-                    setSchemaInput(modalValue);
-                    setModalKind(null);
-                    executeOperation("validate", { schemaText: modalValue });
-                  }}
-                >
-                  Apply
-                </button>
-              </div>
-            </div>
-            <form method="dialog" className="modal-backdrop">
-              <button onClick={() => setModalKind(null)}>close</button>
-            </form>
-          </div>
-        ) : null}
+        <Dialog
+          open={modalKind === "validate"}
+          onOpenChange={(open) => {
+            if (!open) setModalKind(null);
+          }}
+        >
+          <DialogContent className="max-w-3xl">
+            <DialogHeader>
+              <DialogTitle className="text-sm">Schema (JSON or YAML) for Validate</DialogTitle>
+            </DialogHeader>
+            <Textarea
+              className="h-60 w-full font-mono text-xs"
+              value={modalValue}
+              onChange={(e) => setModalValue(e.target.value)}
+              placeholder="Paste a JSON Schema or YAML schema…"
+            />
+            <DialogFooter>
+              <UiButton variant="outline" onClick={() => setModalKind(null)}>
+                Cancel
+              </UiButton>
+              <UiButton
+                disabled={!isModalInputValid}
+                onClick={() => {
+                  if (!isModalInputValid) return;
+                  setSchemaInput(modalValue);
+                  setModalKind(null);
+                  executeOperation("validate", { schemaText: modalValue });
+                }}
+              >
+                Apply
+              </UiButton>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
-        {shareConfirmOpen ? (
-          <div className="modal modal-open">
-            <div className="modal-box max-w-md border border-[var(--workspace-border)] bg-[var(--workspace-panel)]">
-              <h3 className="text-sm font-semibold text-[var(--workspace-text)]">Share this workspace?</h3>
-              <p className="mt-2 text-xs leading-relaxed text-[var(--workspace-text-muted)]">
-                Everything else in Formaty runs <strong className="text-[var(--workspace-text)]">locally in your browser</strong>.
+        <Dialog
+          open={shareConfirmOpen}
+          onOpenChange={(open) => {
+            if (!open) setShareConfirmOpen(false);
+          }}
+        >
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-sm">Share this workspace?</DialogTitle>
+              <DialogDescription className="text-xs leading-relaxed">
+                Everything else in Formaty runs{" "}
+                <strong className="text-[var(--workspace-text)]">locally in your browser</strong>.
                 Sharing uploads your current input (and related settings) so others can open a link.
                 Do not share secrets, tokens, or personal data.
-              </p>
-              {showTabs && tabs.length > 1 && (
-                <label className="mt-3 flex cursor-pointer items-start gap-2.5 rounded-lg border border-[var(--workspace-border)] bg-[var(--workspace-background)]/60 px-3 py-2.5">
-                  <input
-                    type="checkbox"
-                    className="checkbox checkbox-sm checkbox-primary mt-0.5"
-                    checked={shareAllTabs}
-                    onChange={(e) => setShareAllTabs(e.target.checked)}
-                  />
-                  <span className="text-xs leading-relaxed text-[var(--workspace-text)]">
-                    <strong className="font-semibold">Share all {tabs.length} tabs</strong>
-                    <span className="mt-0.5 block text-[var(--workspace-text-muted)]">
-                      Include every tab’s input, output, Compare sides, and Utils state. Unchecked shares only the active tab.
-                    </span>
+              </DialogDescription>
+            </DialogHeader>
+            {showTabs && tabs.length > 1 && (
+              <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-[var(--workspace-border)] bg-[var(--workspace-background)]/60 px-3 py-2.5">
+                <Checkbox
+                  className="mt-0.5"
+                  checked={shareAllTabs}
+                  onCheckedChange={(c) => setShareAllTabs(c === true)}
+                />
+                <span className="text-xs leading-relaxed text-[var(--workspace-text)]">
+                  <strong className="font-semibold">Share all {tabs.length} tabs</strong>
+                  <span className="mt-0.5 block text-[var(--workspace-text-muted)]">
+                    Include every tab’s input, output, Compare sides, and Utils state. Unchecked shares only the active tab.
                   </span>
-                </label>
-              )}
-              <ul className="mt-3 list-inside list-disc text-[11px] text-[var(--workspace-text-muted)]">
-                <li>Link can be disabled later from the status bar</li>
-                <li>If cloud share is unavailable, a URL hash fallback is used in the browser</li>
-              </ul>
-              <div className="mt-4 flex justify-end gap-2">
-                <button
-                  type="button"
-                  className="rounded-lg border border-[var(--workspace-border)] px-3 py-1.5 text-xs font-medium text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)]"
-                  onClick={() => setShareConfirmOpen(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-content hover:opacity-90"
-                  onClick={() => void shareWorkspace()}
-                >
-                  Create link &amp; copy
-                </button>
-              </div>
-            </div>
-            <form method="dialog" className="modal-backdrop">
-              <button type="button" onClick={() => setShareConfirmOpen(false)}>close</button>
-            </form>
-          </div>
-        ) : null}
+                </span>
+              </label>
+            )}
+            <ul className="list-inside list-disc text-[11px] text-[var(--workspace-text-muted)]">
+              <li>Link can be disabled later from the status bar</li>
+              <li>If cloud share is unavailable, a URL hash fallback is used in the browser</li>
+            </ul>
+            <DialogFooter>
+              <UiButton variant="outline" onClick={() => setShareConfirmOpen(false)}>
+                Cancel
+              </UiButton>
+              <UiButton onClick={() => void shareWorkspace()}>Create link &amp; copy</UiButton>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {showFirstRunHint && (
           <div className="fixed bottom-20 left-1/2 z-50 flex max-w-[min(92vw,28rem)] -translate-x-1/2 items-start gap-3 rounded-xl border border-[var(--workspace-border)] bg-[var(--workspace-panel)]/95 px-4 py-3 text-xs shadow-xl backdrop-blur-md">
             <div className="min-w-0 flex-1">
               <p className="font-semibold text-[var(--workspace-text)]">Quick tip</p>
-              <p className="mt-0.5 text-[var(--workspace-text-muted)]">
-                Press <kbd className="rounded border border-[var(--workspace-border)] px-1 font-mono text-[10px]">Ctrl+K</kbd> for any action.
-                Output Share / Copy / Download live in the <strong>toolbar</strong> (never over your text).
-              </p>
+              <p className="mt-0.5 text-[var(--workspace-text-muted)]">{quickTip ?? QUICK_TIPS[0]}</p>
             </div>
             <button
               type="button"

@@ -9,8 +9,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "Powerful local-first JSON tooling platform.",
     start_url: "/",
     display: "standalone",
-    background_color: "#0b0f1a",
-    theme_color: "#0b0f1a",
+    background_color: "#0a0a10",
+    theme_color: "#0a0a10",
     icons: [
       {
         src: "/icon.svg",
