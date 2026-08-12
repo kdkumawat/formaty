@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { CheckCircleIcon, XCircleIcon } from "@heroicons/react/24/outline";
 import { ArrowPathIcon, NoSymbolIcon } from "@heroicons/react/24/solid";
+import { Tooltip } from "./Tooltip";
 
 interface StatusBarProps {
   valid: boolean | null;
@@ -40,10 +41,10 @@ export function StatusBar({
   sharedLink,
 }: StatusBarProps) {
   const validInvalidEl = errorMessage ? (
-    <span className="flex min-w-0 max-w-full shrink items-center gap-1 text-red-400" title={errorMessage}>
+    <Tooltip content={errorMessage} className="flex min-w-0 max-w-full shrink items-center gap-1 text-red-400">
       <XCircleIcon className="h-3 w-3 shrink-0" aria-hidden />
       <span className="min-w-0 truncate">{errorMessage}</span>
-    </span>
+    </Tooltip>
   ) : valid === true ? (
     <span className="flex items-center gap-1 font-medium text-emerald-500">
       <CheckCircleIcon className="h-3 w-3 shrink-0" aria-hidden />
@@ -92,6 +93,7 @@ export function StatusBar({
         {onLiveTransformToggle && (
           <>
             <span className="shrink-0 select-none text-[var(--workspace-border)]">·</span>
+            <Tooltip content={liveTransform ? "Live transform on" : "Live transform off"} className="shrink-0">
             <button
               type="button"
               className={`inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 transition-all hover:bg-[var(--workspace-border)]/40 ${
@@ -99,7 +101,6 @@ export function StatusBar({
                   ? "text-primary"
                   : "opacity-50 hover:opacity-100 hover:text-[var(--workspace-text)]"
               }`}
-              title={liveTransform ? "Live transform on" : "Live transform off"}
               onClick={onLiveTransformToggle}
             >
               {liveTransform ? (
@@ -109,6 +110,7 @@ export function StatusBar({
               )}
               <span className="min-w-[5.5rem]">Live Transform</span>
             </button>
+            </Tooltip>
           </>
         )}
         <>

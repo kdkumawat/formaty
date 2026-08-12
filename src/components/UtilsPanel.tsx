@@ -1,25 +1,31 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { motion } from "framer-motion";
 import {
   ArrowLongRightIcon,
-  ArrowUturnLeftIcon,
-  ArrowUturnRightIcon,
   CheckIcon,
+  ClipboardDocumentIcon,
   DocumentDuplicateIcon,
 } from "@heroicons/react/24/outline";
 import { NumberStepper } from "@/components/workspace/NumberStepper";
+import { Dropdown } from "@/components/workspace/Dropdown";
 import { Tooltip } from "@/components/workspace/Tooltip";
+import {
+  menuItemClass as sharedMenuItemClass,
+  menuCheck as sharedMenuCheck,
+} from "@/components/workspace/menuStyles";
 import { toast } from "@/components/Toast";
-import { Switch } from "@/components/ui/switch";
+import { TreeView } from "@/components/TreeView";
+import type { JsonValue } from "@/lib/json/core";
 import {
   convertNumberBase,
   decodeJwt,
+  explainCron,
   fromBase64,
   fromHex,
+  generateLorem,
   generatePassword,
-  generateUuidV4,
+  generateUuid,
   htmlDecode,
   htmlEncode,
   isoToUnix,
@@ -28,7 +34,10 @@ import {
   nowIso,
   nowUnixMs,
   nowUnixSeconds,
+  parseColor,
+  parseUrl,
   prettyJson,
+  regexTest,
   sha1Hex,
   sha256Hex,
   textStats,
@@ -40,8 +49,13 @@ import {
   urlEncode,
   utilPlaceholder,
   uuidNil,
+  type ColorParts,
+  type LoremUnit,
+  type RegexMatch,
   type TextCaseMode,
+  type UrlParts,
   type UtilTab,
+  type UuidVariant,
   UTIL_SAMPLES,
   UTIL_TABS,
 } from "@/lib/utils/devtools";
@@ -51,7 +65,7 @@ export type { UtilTab };
 /** Codec tools that support bidirectional plain ⇄ encoded editing. */
 const CODEC_TABS: ReadonlySet<UtilTab> = new Set(["base64", "url", "hex", "escape", "html"]);
 /** Generator tools that have options instead of a text input (options + output only). */
-const GENERATOR_TABS: ReadonlySet<UtilTab> = new Set(["uuid", "password"]);
+const GENERATOR_TABS: ReadonlySet<UtilTab> = new Set(["uuid", "password", "lorem"]);
 
 function encodeText(tab: UtilTab, text: string): string {
   switch (tab) {
@@ -93,6 +107,8 @@ export interface UtilToolState {
   error: string | null;
   uuidCount: number;
   uuidList: string[];
+  uuidVariant: UuidVariant;
+  uuidName: string;
   caseMode: TextCaseMode;
   hashAlgo: "sha256" | "sha1";
   passwordLen: number;
@@ -100,6 +116,12 @@ export interface UtilToolState {
   pwUpper: boolean;
   pwDigits: boolean;
   pwSymbols: boolean;
+  pwCount: number;
+  pwList: string[];
+  regexPattern: string;
+  regexFlags: string;
+  loremUnit: LoremUnit;
+  loremCount: number;
   /** Which side is being edited for codec tools (left = plain, right = encoded). */
   editSide: "left" | "right";
   touched: boolean;
@@ -114,6 +136,8 @@ export function defaultUtilToolState(tab: UtilTab): UtilToolState {
     error: null,
     uuidCount: 5,
     uuidList: [],
+    uuidVariant: "v4",
+    uuidName: "formaty",
     caseMode: "snake",
     hashAlgo: "sha256",
     passwordLen: 16,
@@ -121,6 +145,12 @@ export function defaultUtilToolState(tab: UtilTab): UtilToolState {
     pwUpper: true,
     pwDigits: true,
     pwSymbols: true,
+    pwCount: 5,
+    pwList: [],
+    regexPattern: "\\b(\\w+)@(\\w+)\\b",
+    regexFlags: "g",
+    loremUnit: "paragraphs",
+    loremCount: 3,
     editSide: "left",
     touched: false,
   };
@@ -133,10 +163,13 @@ export function applyUtilSample(tab: UtilTab, cur?: UtilToolState): UtilToolStat
     return { ...base, uuidCount: 5, uuidList: [], output: "", error: null, touched: true };
   }
   if (tab === "password") {
-    return { ...base, passwordLen: 16, output: "", error: null, touched: true };
+    return { ...base, passwordLen: 16, pwCount: 5, pwList: [], output: "", error: null, touched: true };
   }
   if (tab === "time") {
     return { ...base, input: "", output: "", error: null, touched: true };
+  }
+  if (tab === "lorem") {
+    return { ...base, loremUnit: "paragraphs", loremCount: 3, output: "", error: null, touched: true };
   }
   return {
     ...base,
@@ -148,11 +181,6 @@ export function applyUtilSample(tab: UtilTab, cur?: UtilToolState): UtilToolStat
 }
 
 async function computeUtil(tab: UtilTab, s: UtilToolState): Promise<Partial<UtilToolState>> {
-  if (tab === "uuid") {
-    const n = Math.max(1, Math.min(50, s.uuidCount));
-    const list = Array.from({ length: n }, () => generateUuidV4());
-    return { uuidList: list, output: list.join("\n"), error: null };
-  }
   // Bidirectional codec: editing the right (encoded) side decodes back to the left.
   if (CODEC_TABS.has(tab)) {
     if (s.editSide === "right") {
@@ -204,16 +232,22 @@ async function computeUtil(tab: UtilTab, s: UtilToolState): Promise<Partial<Util
     if (!s.input.trim()) return { output: "", error: null };
     return { output: convertNumberBase(s.input), error: null };
   }
-  if (tab === "password") {
-    return {
-      output: generatePassword(s.passwordLen, {
-        lower: s.pwLower,
-        upper: s.pwUpper,
-        digits: s.pwDigits,
-        symbols: s.pwSymbols,
-      }),
-      error: null,
-    };
+  if (tab === "regex") {
+    if (!s.input.trim() && !s.regexPattern.trim()) return { output: "", error: null };
+    const { matches, count } = regexTest(s.regexPattern, s.regexFlags, s.input);
+    return { output: prettyJson({ count, matches }), error: null };
+  }
+  if (tab === "color") {
+    if (!s.input.trim()) return { output: "", error: null };
+    return { output: prettyJson(parseColor(s.input)), error: null };
+  }
+  if (tab === "cron") {
+    if (!s.input.trim()) return { output: "", error: null };
+    return { output: explainCron(s.input), error: null };
+  }
+  if (tab === "urlparse") {
+    if (!s.input.trim()) return { output: "", error: null };
+    return { output: prettyJson(parseUrl(s.input)), error: null };
   }
   if (tab === "stats") {
     return { output: textStats(s.input), error: null };
@@ -239,26 +273,12 @@ function selectFieldAll(e: React.KeyboardEvent<HTMLTextAreaElement | HTMLPreElem
   }
 }
 
-function utilInputKeyDown(
-  e: React.KeyboardEvent<HTMLTextAreaElement>,
-  undo: () => void,
-  redo: () => void,
-) {
-  selectFieldAll(e);
-  if (!(e.ctrlKey || e.metaKey)) return;
-  const k = e.key.toLowerCase();
-  if (k === "z" && !e.shiftKey) {
-    e.preventDefault();
-    e.stopPropagation();
-    undo();
-    return;
-  }
-  if (k === "y" || (k === "z" && e.shiftKey)) {
-    e.preventDefault();
-    e.stopPropagation();
-    redo();
-  }
-}
+const UUID_VARIANT_LABELS: Array<{ id: UuidVariant; label: string; title: string }> = [
+  { id: "v4", label: "v4", title: "Random (most common)" },
+  { id: "v1", label: "v1", title: "Time-based" },
+  { id: "v7", label: "v7", title: "Timestamp + random (RFC 9562)" },
+  { id: "v5", label: "v5", title: "SHA-1 of namespace + name" },
+];
 
 interface UtilsPanelProps {
   linkBtnClass: string;
@@ -275,11 +295,12 @@ interface UtilsPanelProps {
 export function UtilsPanel({
   linkBtnClass,
   panelClass,
+  isDark,
   activeTab,
   onActiveTabChange,
   stateByTool,
   onStateByToolChange,
-  fontSize = 14,
+  fontSize = 13,
 }: UtilsPanelProps) {
   const state = useMemo(
     () => stateByTool[activeTab] ?? defaultUtilToolState(activeTab),
@@ -289,18 +310,6 @@ export function UtilsPanel({
   const mapRef = useRef(stateByTool);
   mapRef.current = stateByTool;
 
-  /** Per-tool input undo stacks (textarea history - independent of transform undo) */
-  const inputHistory = useRef<Partial<Record<UtilTab, { stack: string[]; idx: number }>>>({});
-  const [, bumpHist] = useState(0);
-  const histBusy = useRef(false);
-
-  const ensureHist = useCallback((tab: UtilTab, seed: string) => {
-    if (!inputHistory.current[tab]) {
-      inputHistory.current[tab] = { stack: [seed], idx: 0 };
-    }
-    return inputHistory.current[tab]!;
-  }, []);
-
   useEffect(() => {
     if (mapRef.current[activeTab]) return;
     onStateByToolChange({
@@ -309,95 +318,15 @@ export function UtilsPanel({
     });
   }, [activeTab, onStateByToolChange]);
 
-  // Seed history when tab opens
-  useEffect(() => {
-    const s = mapRef.current[activeTab] ?? defaultUtilToolState(activeTab);
-    ensureHist(activeTab, s.input);
-    bumpHist((n) => n + 1);
-  }, [activeTab, ensureHist]);
-
-  // External input changes (Sample / Reset from toolbar) → append history
-  useEffect(() => {
-    if (histBusy.current) return;
-    const h = ensureHist(activeTab, state.input);
-    if (h.stack[h.idx] !== state.input) {
-      const stack = h.stack.slice(0, h.idx + 1);
-      stack.push(state.input);
-      if (stack.length > 80) stack.shift();
-      inputHistory.current[activeTab] = { stack, idx: stack.length - 1 };
-      bumpHist((n) => n + 1);
-    }
-  }, [state.input, activeTab, ensureHist]);
-
-  const pushInputHistory = useCallback(
-    (tab: UtilTab, next: string) => {
-      if (histBusy.current) return;
-      const h = ensureHist(tab, next);
-      if (h.stack[h.idx] === next) return;
-      const stack = h.stack.slice(0, h.idx + 1);
-      stack.push(next);
-      if (stack.length > 80) stack.shift();
-      inputHistory.current[tab] = { stack, idx: stack.length - 1 };
-      bumpHist((n) => n + 1);
-    },
-    [ensureHist],
-  );
-
-  const utilCanUndo = (() => {
-    const h = inputHistory.current[activeTab];
-    return Boolean(h && h.idx > 0);
-  })();
-  const utilCanRedo = (() => {
-    const h = inputHistory.current[activeTab];
-    return Boolean(h && h.idx < h.stack.length - 1);
-  })();
-
-  const utilUndo = useCallback(() => {
-    const h = inputHistory.current[activeTab];
-    if (!h || h.idx <= 0) return;
-    histBusy.current = true;
-    h.idx -= 1;
-    const text = h.stack[h.idx] ?? "";
-    const cur = mapRef.current[activeTab] ?? defaultUtilToolState(activeTab);
-    onStateByToolChange({
-      ...mapRef.current,
-      [activeTab]: { ...cur, input: text, touched: true },
-    });
-    bumpHist((n) => n + 1);
-    queueMicrotask(() => {
-      histBusy.current = false;
-    });
-  }, [activeTab, onStateByToolChange]);
-
-  const utilRedo = useCallback(() => {
-    const h = inputHistory.current[activeTab];
-    if (!h || h.idx >= h.stack.length - 1) return;
-    histBusy.current = true;
-    h.idx += 1;
-    const text = h.stack[h.idx] ?? "";
-    const cur = mapRef.current[activeTab] ?? defaultUtilToolState(activeTab);
-    onStateByToolChange({
-      ...mapRef.current,
-      [activeTab]: { ...cur, input: text, touched: true },
-    });
-    bumpHist((n) => n + 1);
-    queueMicrotask(() => {
-      histBusy.current = false;
-    });
-  }, [activeTab, onStateByToolChange]);
-
   const patch = useCallback(
     (partial: Partial<UtilToolState>) => {
       const cur = mapRef.current[activeTab] ?? defaultUtilToolState(activeTab);
-      if (typeof partial.input === "string" && partial.input !== cur.input) {
-        pushInputHistory(activeTab, partial.input);
-      }
       onStateByToolChange({
         ...mapRef.current,
         [activeTab]: { ...cur, ...partial, touched: true },
       });
     },
-    [activeTab, onStateByToolChange, pushInputHistory],
+    [activeTab, onStateByToolChange],
   );
 
   const flash = useCallback(
@@ -414,38 +343,23 @@ export function UtilsPanel({
     }
   };
 
-  /** Auto-copy the generated batch to the clipboard (persisted, default off). */
-  const [copyOnGenerate, setCopyOnGenerate] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem("formaty-util-copy-on-generate") === "1";
-    } catch {
-      return false;
-    }
-  });
-  useEffect(() => {
-    try {
-      localStorage.setItem("formaty-util-copy-on-generate", copyOnGenerate ? "1" : "0");
-    } catch {
-      /* ignore */
-    }
-  }, [copyOnGenerate]);
-
-  /** UUID card that was just copied — shows a checkmark flash. */
+  /** Which UUID card was just copied — shows a checkmark flash. */
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const copiedTimerRef = useRef<number | null>(null);
   const gridRef = useRef<HTMLUListElement | null>(null);
   const [focusIndex, setFocusIndex] = useState<number | null>(null);
 
-  const copyUuid = (i: number, id: string) => {
+  const copyCard = (i: number, value: string, label: string) => {
     setCopiedIndex(i);
     if (copiedTimerRef.current) window.clearTimeout(copiedTimerRef.current);
     copiedTimerRef.current = window.setTimeout(() => setCopiedIndex(null), 900);
-    void copy(id, "UUID copied");
+    void copy(value, label);
   };
 
   /** Keyboard grid navigation: arrows move focus, Enter copies the focused card. */
-  const handleUuidGridKeyDown = (e: React.KeyboardEvent<HTMLUListElement>) => {
-    const n = state.uuidList.length;
+  const handleGridKeyDown = (e: React.KeyboardEvent<HTMLUListElement>) => {
+    const list = state.uuidList.length > 0 ? state.uuidList : state.pwList;
+    const n = list.length;
     if (n === 0) return;
     const target = e.target as HTMLElement;
     const current = Math.min(
@@ -458,10 +372,11 @@ export function UtilsPanel({
       els?.[next]?.focus();
     };
     if (e.key === "Enter") {
-      const id = state.uuidList[current];
-      if (id) {
+      const value = list[current];
+      if (value) {
         e.preventDefault();
-        copyUuid(current, id);
+        if (activeTab === "password") copyCard(current, value, "Password copied");
+        else copyCard(current, value, "UUID copied");
       }
       return;
     }
@@ -479,14 +394,153 @@ export function UtilsPanel({
     }
   };
 
+  /** Bump to force full regeneration of the active generator tool. */
+  const [batchSeed, setBatchSeed] = useState(0);
+  const bumpBatch = useCallback(() => setBatchSeed((n) => n + 1), []);
+
+  const isV5 = state.uuidVariant === "v5";
+  const v5Namespace = "6ba7b810-9dad-11d1-80b4-00c04fd430c8";
+  /** v5 is deterministic: give each slot a unique name so a batch isn't all-identical. */
+  const v5NameFor = (i: number) => (isV5 ? `${state.uuidName || "formaty"}-${i + 1}` : state.uuidName);
+
+  /** Full regeneration for UUID (New / One / NIL / variant / name / count changes handled separately). */
+  useEffect(() => {
+    if (activeTab !== "uuid") return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const n = Math.max(1, Math.min(50, state.uuidCount));
+        const list = await Promise.all(
+          Array.from({ length: n }, (_, i) =>
+            Promise.resolve(generateUuid(state.uuidVariant, v5Namespace, v5NameFor(i))),
+          ),
+        );
+        if (cancelled) return;
+        patch({ uuidList: list, output: list.join("\n"), error: null });
+      } catch (e) {
+        if (cancelled) return;
+        patch({ error: e instanceof Error ? e.message : "Failed", output: "", uuidList: [] });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, state.uuidVariant, state.uuidName, batchSeed]);
+
+  /** Count changes: append or trim only - never regenerate existing IDs. */
+  const prevUuidCount = useRef(state.uuidCount);
+  useEffect(() => {
+    if (activeTab !== "uuid") return;
+    if (prevUuidCount.current === state.uuidCount) return;
+    prevUuidCount.current = state.uuidCount;
+    const cur = mapRef.current[activeTab] ?? defaultUtilToolState(activeTab);
+    const list = cur.uuidList ?? [];
+    const n = Math.max(1, Math.min(50, state.uuidCount));
+    if (list.length === n) return;
+    if (list.length > n) {
+      const trimmed = list.slice(0, n);
+      patch({ uuidList: trimmed, output: trimmed.join("\n"), error: null });
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const extra = await Promise.all(
+          Array.from({ length: n - list.length }, (_, i) =>
+            Promise.resolve(generateUuid(state.uuidVariant, v5Namespace, v5NameFor(list.length + i))),
+          ),
+        );
+        if (cancelled) return;
+        const next = [...list, ...extra];
+        patch({ uuidList: next, output: next.join("\n"), error: null });
+      } catch (e) {
+        if (cancelled) return;
+        patch({ error: e instanceof Error ? e.message : "Failed" });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, state.uuidCount, state.uuidVariant, state.uuidName, batchSeed]);
+
+  /** Full regeneration for passwords. */
+  useEffect(() => {
+    if (activeTab !== "password") return;
+    const n = Math.max(1, Math.min(50, state.pwCount));
+    const list = Array.from({ length: n }, () =>
+      generatePassword(state.passwordLen, {
+        lower: state.pwLower,
+        upper: state.pwUpper,
+        digits: state.pwDigits,
+        symbols: state.pwSymbols,
+      }),
+    );
+    patch({ pwList: list, output: list.join("\n"), error: null });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    activeTab,
+    state.passwordLen,
+    state.pwLower,
+    state.pwUpper,
+    state.pwDigits,
+    state.pwSymbols,
+    batchSeed,
+  ]);
+
+  /** Password count: append or trim only. */
+  const prevPwCount = useRef(state.pwCount);
+
+  // Reset count-tracking refs when switching tools so a tab switch never trims
+  // a persisted batch (each tool keeps its own count in state).
+  useEffect(() => {
+    prevUuidCount.current = state.uuidCount;
+    prevPwCount.current = state.pwCount;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+  useEffect(() => {
+    if (activeTab !== "password") return;
+    if (prevPwCount.current === state.pwCount) return;
+    prevPwCount.current = state.pwCount;
+    const cur = mapRef.current[activeTab] ?? defaultUtilToolState(activeTab);
+    const list = cur.pwList ?? [];
+    const n = Math.max(1, Math.min(50, state.pwCount));
+    if (list.length === n) return;
+    if (list.length > n) {
+      const trimmed = list.slice(0, n);
+      patch({ pwList: trimmed, output: trimmed.join("\n"), error: null });
+      return;
+    }
+    const extra = Array.from({ length: n - list.length }, () =>
+      generatePassword(state.passwordLen, {
+        lower: state.pwLower,
+        upper: state.pwUpper,
+        digits: state.pwDigits,
+        symbols: state.pwSymbols,
+      }),
+    );
+    const next = [...list, ...extra];
+    patch({ pwList: next, output: next.join("\n"), error: null });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, state.pwCount, state.passwordLen, state.pwLower, state.pwUpper, state.pwDigits, state.pwSymbols, batchSeed]);
+
+  /** Lorem regeneration. */
+  useEffect(() => {
+    if (activeTab !== "lorem") return;
+    const text = generateLorem(state.loremCount, state.loremUnit);
+    patch({ output: text, error: null });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, state.loremCount, state.loremUnit, batchSeed]);
+
   const runGen = useRef(0);
   useEffect(() => {
     const s = mapRef.current[activeTab] ?? defaultUtilToolState(activeTab);
+    if (GENERATOR_TABS.has(activeTab)) return; // handled by dedicated effects above
     // Codec right-side (encoded) editing is handled by a dedicated effect below.
     if (CODEC_TABS.has(activeTab) && s.editSide === "right") return;
     const gen = ++runGen.current;
-    const delay =
-      activeTab === "uuid" || activeTab === "password" || activeTab === "time" ? 0 : 160;
+    const delay = activeTab === "time" ? 0 : 160;
     const id = window.setTimeout(() => {
       void (async () => {
         try {
@@ -497,7 +551,8 @@ export function UtilsPanel({
           if (
             next.output === cur.output &&
             next.error === cur.error &&
-            (next.uuidList?.join("\n") ?? "") === (cur.uuidList?.join("\n") ?? "")
+            (next.uuidList?.join("\n") ?? "") === (cur.uuidList?.join("\n") ?? "") &&
+            (next.pwList?.join("\n") ?? "") === (cur.pwList?.join("\n") ?? "")
           ) {
             return;
           }
@@ -512,8 +567,7 @@ export function UtilsPanel({
             [activeTab]: {
               ...cur,
               error: msg,
-              output: activeTab === "uuid" ? cur.output : "",
-              uuidList: activeTab === "uuid" ? cur.uuidList : [],
+              output: "",
             },
           });
         }
@@ -523,14 +577,10 @@ export function UtilsPanel({
   }, [
     activeTab,
     state.input,
-    state.uuidCount,
     state.caseMode,
     state.hashAlgo,
-    state.passwordLen,
-    state.pwLower,
-    state.pwUpper,
-    state.pwDigits,
-    state.pwSymbols,
+    state.regexPattern,
+    state.regexFlags,
     onStateByToolChange,
   ]);
 
@@ -553,32 +603,6 @@ export function UtilsPanel({
     }, 160);
     return () => window.clearTimeout(id);
   }, [activeTab, state.output, state.editSide, patch]);
-
-  const regeneratePassword = () => {
-    try {
-      const pw = generatePassword(state.passwordLen, {
-        lower: state.pwLower,
-        upper: state.pwUpper,
-        digits: state.pwDigits,
-        symbols: state.pwSymbols,
-      });
-      patch({ output: pw, error: null });
-      if (copyOnGenerate) void copy(pw, "Password copied");
-    } catch (e) {
-      patch({ error: e instanceof Error ? e.message : "Failed" });
-    }
-  };
-
-  const regenerateUuids = () => {
-    const n = Math.max(1, Math.min(50, state.uuidCount));
-    const list = Array.from({ length: n }, () => generateUuidV4());
-    patch({ uuidList: list, output: list.join("\n"), error: null });
-    if (copyOnGenerate) void copy(list.join("\n"), n === 1 ? "UUID copied" : `${n} UUIDs copied`);
-  };
-
-  const insertNow = () => {
-    patch({ input: nowIso(), error: null });
-  };
 
   const charSetChip = (active: boolean) =>
     `h-6 shrink-0 cursor-pointer rounded-md border px-2 text-[11px] font-medium transition-colors ${active
@@ -607,8 +631,60 @@ export function UtilsPanel({
   const modeGroup = "flex h-7 shrink-0 overflow-hidden rounded-lg border border-[var(--workspace-border)]";
   const paneHeader =
     "flex h-10 shrink-0 items-center gap-1 border-b border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-2";
+  const smallInput =
+    "h-7 shrink-0 rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-background)]/50 px-2 font-mono text-[11px] text-[var(--workspace-text)] outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/30";
 
   const activeLabel = UTIL_TABS.find((t) => t.id === activeTab)?.label ?? activeTab;
+
+  const CASE_MODES: TextCaseMode[] = [
+    "snake",
+    "kebab",
+    "camel",
+    "pascal",
+    "constant",
+    "slug",
+    "upper",
+    "lower",
+    "title",
+    "reverse",
+    "trim",
+  ];
+  const [caseMenuOpen, setCaseMenuOpen] = useState(false);
+  const [variantMenuOpen, setVariantMenuOpen] = useState(false);
+  const [loremMenuOpen, setLoremMenuOpen] = useState(false);
+
+  /** UUID toolbar - shared buttons for One / NIL. */
+  const uuidOne = () => {
+    void (async () => {
+      try {
+        const id = await Promise.resolve(generateUuid(state.uuidVariant, v5Namespace, state.uuidName));
+        patch({ uuidList: [id], output: id, error: null });
+      } catch (e) {
+        patch({ error: e instanceof Error ? e.message : "Failed" });
+      }
+    })();
+  };
+  const uuidNilNow = () => {
+    const id = uuidNil();
+    patch({ uuidList: [id], output: id, error: null });
+  };
+
+  /** Structured-view helpers: parse the JSON stored in state.output. */
+  const parsedOutput = useMemo<unknown>(() => {
+    if (!state.output) return null;
+    try {
+      return JSON.parse(state.output) as unknown;
+    } catch {
+      return null;
+    }
+  }, [state.output]);
+
+  const [jwtView, setJwtView] = useState<"raw" | "tree">("raw");
+
+  const structuredCopy = (label: string, value: string) => void copy(value, `${label} copied`);
+
+  const partKeyClass =
+    "shrink-0 truncate text-[11px] font-semibold text-[var(--workspace-text-muted)]";
 
   return (
     <div className={`flex h-full min-h-0 flex-1 flex-col overflow-hidden md:flex-row ${panelClass}`}>
@@ -675,26 +751,112 @@ export function UtilsPanel({
             <span className="flex-1" />
             {activeTab === "uuid" ? (
               <>
+                <Dropdown
+                  open={variantMenuOpen}
+                  onOpenChange={setVariantMenuOpen}
+                  side="bottom"
+                  align="end"
+                  contentClassName="w-64"
+                  trigger={
+                    <Tooltip content="UUID variant">
+                      <button
+                        type="button"
+                        className={`${toolBtn(false)} uppercase`}
+                        aria-label="UUID variant"
+                      >
+                        {state.uuidVariant}
+                        <span className="text-[9px] opacity-60">▾</span>
+                      </button>
+                    </Tooltip>
+                  }
+                >
+                  <div className="flex flex-col" onClick={(e) => e.stopPropagation()}>
+                    {UUID_VARIANT_LABELS.map((v) => (
+                      <button
+                        key={v.id}
+                        type="button"
+                        className={`${sharedMenuItemClass} ${state.uuidVariant === v.id ? "!bg-primary/12 !text-primary" : ""}`}
+                        onClick={() => {
+                          patch({ uuidVariant: v.id });
+                          setVariantMenuOpen(false);
+                        }}
+                      >
+                        {sharedMenuCheck(state.uuidVariant === v.id)}
+                        <span className="w-6 shrink-0 uppercase">{v.label}</span>
+                        <span className="min-w-0 flex-1 truncate text-right text-[9px] font-normal text-[var(--workspace-text-muted)]">{v.title}</span>
+                      </button>
+                    ))}
+                  </div>
+                </Dropdown>
+                {isV5 && (
+                  <input
+                    type="text"
+                    value={state.uuidName}
+                    onChange={(e) => patch({ uuidName: e.target.value })}
+                    placeholder="Name for v5"
+                    aria-label="v5 name"
+                    className={`${smallInput} w-28`}
+                  />
+                )}
                 <NumberStepper label="Count" value={state.uuidCount} min={1} max={50} onChange={(n) => patch({ uuidCount: n })} aria-label="UUID count" />
-                <button type="button" className={toolBtn(false)} onClick={regenerateUuids} title="Generate a new batch">New</button>
-                <button type="button" className={toolBtn(false)} onClick={() => { const id = generateUuidV4(); patch({ uuidList: [id], output: id, error: null }); if (copyOnGenerate) void copy(id, "UUID copied"); }}>One</button>
-                <button type="button" className={toolBtn(false)} onClick={() => { const id = uuidNil(); patch({ uuidList: [id], output: id, error: null }); if (copyOnGenerate) void copy(id, "UUID copied"); }}>NIL</button>
-                <button type="button" className={toolBtn(false)} disabled={!state.output} onClick={() => void copy(state.output, "UUIDs copied")} title="Copy all">Copy all</button>
+                <Tooltip content="Generate a new batch">
+                <button type="button" className={toolBtn(false)} onClick={bumpBatch}>New</button>
+                </Tooltip>
+                <Tooltip content="Replace with one UUID">
+                <button type="button" className={toolBtn(false)} onClick={uuidOne}>One</button>
+                </Tooltip>
+                <Tooltip content="Replace with nil UUID">
+                <button type="button" className={toolBtn(false)} onClick={uuidNilNow}>NIL</button>
+                </Tooltip>
+              </>
+            ) : activeTab === "password" ? (
+              <>
+                <NumberStepper label="Count" value={state.pwCount} min={1} max={50} onChange={(n) => patch({ pwCount: n })} aria-label="Password count" />
+                <NumberStepper label="Len" value={state.passwordLen} min={4} max={128} onChange={(n) => patch({ passwordLen: n })} aria-label="Password length" />
+                <button type="button" className={toolBtn(false)} onClick={bumpBatch}>New</button>
               </>
             ) : (
               <>
-                <NumberStepper label="Len" value={state.passwordLen} min={4} max={128} onChange={(n) => patch({ passwordLen: n })} aria-label="Password length" />
-                <button type="button" className={toolBtn(false)} onClick={regeneratePassword}>New</button>
-                <button type="button" className={toolBtn(false)} disabled={!state.output} onClick={() => void copy(state.output, "Password copied")} title="Copy password">Copy</button>
+                <Dropdown
+                  open={loremMenuOpen}
+                  onOpenChange={setLoremMenuOpen}
+                  side="bottom"
+                  align="end"
+                  contentClassName="w-36"
+                  trigger={
+                    <Tooltip content="Lorem unit">
+                      <button
+                        type="button"
+                        className={`${toolBtn(false)} capitalize`}
+                        aria-label="Lorem unit"
+                      >
+                        {state.loremUnit}
+                        <span className="text-[9px] opacity-60">▾</span>
+                      </button>
+                    </Tooltip>
+                  }
+                >
+                  <div className="flex flex-col" onClick={(e) => e.stopPropagation()}>
+                    {(["words", "sentences", "paragraphs"] as LoremUnit[]).map((u) => (
+                      <button
+                        key={u}
+                        type="button"
+                        className={`${sharedMenuItemClass} capitalize ${state.loremUnit === u ? "!bg-primary/12 !text-primary" : ""}`}
+                        onClick={() => {
+                          patch({ loremUnit: u });
+                          setLoremMenuOpen(false);
+                        }}
+                      >
+                        {sharedMenuCheck(state.loremUnit === u)}
+                        {u}
+                      </button>
+                    ))}
+                  </div>
+                </Dropdown>
+                <NumberStepper label="Count" value={state.loremCount} min={1} max={100} onChange={(n) => patch({ loremCount: n })} aria-label="Lorem count" />
+                <button type="button" className={toolBtn(false)} onClick={bumpBatch}>New</button>
               </>
             )}
-            <label
-              className="flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-md border border-[var(--workspace-border)]/60 bg-muted/30 px-2 text-[10px] font-medium text-[var(--workspace-text-muted)] transition-colors hover:border-primary/30 hover:text-[var(--workspace-text)]"
-              title="Auto-copy the generated result to the clipboard"
-            >
-              <Switch checked={copyOnGenerate} onCheckedChange={setCopyOnGenerate} className="scale-75" />
-              <span>Auto-copy</span>
-            </label>
           </div>
           {activeTab === "password" && (
             <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-[var(--workspace-border)] bg-[var(--workspace-background)]/50 px-2 py-1.5">
@@ -706,18 +868,19 @@ export function UtilsPanel({
                   ["!@#", "pwSymbols", "Symbols"],
                 ] as const
               ).map(([label, key, title]) => (
+                <Tooltip key={key} content={title} className="shrink-0">
                 <button
-                  key={key}
                   type="button"
-                  title={title}
                   aria-pressed={state[key]}
                   className={charSetChip(state[key])}
                   onClick={() => patch({ [key]: !state[key] })}
                 >
                   {label}
                 </button>
+                </Tooltip>
               ))}
-              <span className="ml-auto flex items-center gap-1.5" title={`Estimated strength: ${pwStrength.label}`}>
+              <Tooltip content={`Estimated strength: ${pwStrength.label}`} className="ml-auto flex items-center gap-1.5">
+              <span className="flex items-center gap-1.5">
                 <span className="flex items-end gap-0.5" aria-hidden>
                   {[0, 1, 2, 3].map((i) => (
                     <span key={i} className={`h-1.5 w-3 rounded-sm ${i < pwStrength.score ? pwStrength.color : "bg-[var(--workspace-border)]/60"}`} />
@@ -725,83 +888,79 @@ export function UtilsPanel({
                 </span>
                 <span className="text-[10px] font-semibold text-[var(--workspace-text-muted)]">{pwStrength.label}</span>
               </span>
+              </Tooltip>
             </div>
           )}
           <div className="flex min-h-0 flex-1 flex-col bg-[var(--workspace-panel)]">
-            {activeTab === "uuid" && state.uuidList.length > 0 ? (
+            {activeTab === "lorem" ? (
+              <pre
+                className={`${fieldClass} overflow-auto whitespace-pre-wrap break-words`}
+                style={{ fontSize }}
+                tabIndex={0}
+                onKeyDown={selectFieldAll}
+              >
+                {state.output || <span className="text-[var(--workspace-text-muted)]">Set a count, then press New.</span>}
+              </pre>
+            ) : (activeTab === "uuid" && state.uuidList.length > 0) || (activeTab === "password" && state.pwList.length > 0) ? (
               <ul
                 ref={gridRef}
                 className="grid min-h-0 flex-1 auto-rows-min grid-cols-[repeat(auto-fill,minmax(min(19rem,100%),1fr))] content-start gap-1.5 overflow-auto p-2"
                 role="grid"
-                aria-label="Generated UUIDs — click a card or press Enter to copy"
-                onKeyDown={handleUuidGridKeyDown}
+                aria-label={`Generated ${activeLabel}s — click a card or press Enter to copy`}
+                onKeyDown={handleGridKeyDown}
               >
-                {state.uuidList.map((id, i) => {
+                {(activeTab === "uuid" ? state.uuidList : state.pwList).map((value, i) => {
                   const isCopied = copiedIndex === i;
-                  return (
-                  <motion.li
-                    key={`${id}-${i}`}
-                    initial={{ opacity: 0, y: 6, scale: 0.98 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    transition={{ duration: 0.18, delay: Math.min(i * 0.035, 0.35), ease: "easeOut" }}
-                    data-index={i}
-                    role="gridcell"
-                    tabIndex={0}
-                    aria-label={`Copy UUID ${i + 1}: ${id}`}
-                    onClick={() => copyUuid(i, id)}
-                    onFocus={() => setFocusIndex(i)}
-                    className={`group flex min-w-0 cursor-pointer items-center gap-2.5 rounded-lg border px-2.5 py-1.5 font-mono text-[12px] text-[var(--workspace-text)] transition-all duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary/60 ${
-                      isCopied
-                        ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-500"
-                        : "border-[var(--workspace-border)]/70 bg-[var(--workspace-background)]/50 hover:-translate-y-px hover:border-primary/40 hover:bg-[var(--workspace-background)] hover:shadow-[0_2px_8px_-2px_rgba(0,0,0,0.35)]"
-                    }`}
-                    style={{ fontSize }}
-                  >
-                    <span
-                      className={`w-5 shrink-0 select-none text-center text-[10px] tabular-nums ${
-                        isCopied ? "text-emerald-500/80" : "rounded bg-[var(--workspace-border)]/40 py-0.5 text-[var(--workspace-text-muted)]"
-                      }`}
-                    >
-                      {i + 1}
-                    </span>
-                    <span className="min-w-0 flex-1 truncate select-all" title={id}>
-                      {id}
-                    </span>
-                    {isCopied ? (
-                      <motion.span
-                        key="check"
-                        initial={{ scale: 0.5 }}
-                        animate={{ scale: 1 }}
-                        transition={{ type: "spring", stiffness: 420, damping: 18 }}
+                  const cardClass = `group flex min-w-0 cursor-pointer items-center gap-2.5 rounded-lg border px-2.5 py-1.5 font-mono text-[12px] text-[var(--workspace-text)] transition-all duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary/60 ${
+                    isCopied
+                      ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-500"
+                      : "border-[var(--workspace-border)]/70 bg-[var(--workspace-background)]/50 hover:-translate-y-px hover:border-primary/40 hover:bg-[var(--workspace-background)] hover:shadow-[0_2px_8px_-2px_rgba(0,0,0,0.35)]"
+                  }`;
+                  const cardInner = (
+                    <>
+                      <span
+                        className={`w-5 shrink-0 select-none text-center text-[10px] tabular-nums ${
+                          isCopied ? "text-emerald-500/80" : "rounded bg-[var(--workspace-border)]/40 py-0.5 text-[var(--workspace-text-muted)]"
+                        }`}
                       >
-                        <CheckIcon className="h-4 w-4 shrink-0 text-emerald-500" />
-                      </motion.span>
-                    ) : (
-                      <DocumentDuplicateIcon className="h-3.5 w-3.5 shrink-0 text-[var(--workspace-text-muted)]/50 transition-colors duration-150 group-hover:text-[var(--workspace-text)]" />
-                    )}
-                  </motion.li>
+                        {i + 1}
+                      </span>
+                      <Tooltip content={value} className="min-w-0 flex-1">
+                      <span className="block truncate select-all">
+                        {value}
+                      </span>
+                      </Tooltip>
+                      {isCopied ? (
+                        <span className="shrink-0">
+                          <CheckIcon className="h-4 w-4 shrink-0 text-emerald-500" />
+                        </span>
+                      ) : (
+                        <DocumentDuplicateIcon className="h-3.5 w-3.5 shrink-0 text-[var(--workspace-text-muted)]/50 transition-colors duration-150 group-hover:text-[var(--workspace-text)]" />
+                      )}
+                    </>
+                  );
+                  return (
+                    <li
+                      key={`${value}-${i}`}
+                      data-index={i}
+                      role="gridcell"
+                      tabIndex={0}
+                      aria-label={`Copy ${activeTab === "uuid" ? `UUID ${i + 1}` : `password ${i + 1}`}`}
+                      onClick={() => copyCard(i, value, activeTab === "uuid" ? "UUID copied" : "Password copied")}
+                      onFocus={() => setFocusIndex(i)}
+                      className={cardClass}
+                      style={{ fontSize }}
+                    >
+                      {cardInner}
+                    </li>
                   );
                 })}
               </ul>
-            ) : activeTab === "password" && state.output ? (
-              <pre
-                className={`${fieldClass} cursor-pointer overflow-auto whitespace-pre-wrap break-all`}
-                style={{ fontSize }}
-                tabIndex={0}
-                title="Click to copy"
-                onClick={() => void copy(state.output, "Password copied")}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") void copy(state.output, "Password copied");
-                  else selectFieldAll(e);
-                }}
-              >
-                {state.output}
-              </pre>
             ) : (
               <div className="flex flex-1 items-center justify-center px-4 text-center text-[13px] text-[var(--workspace-text-muted)]">
                 {activeTab === "uuid"
                   ? "Set a count, then press New to generate UUIDs."
-                  : "Set a length, then press New to generate a password."}
+                  : "Set a length, then press New to generate passwords."}
               </div>
             )}
           </div>
@@ -823,7 +982,7 @@ export function UtilsPanel({
                 style={{ fontSize }}
                 value={state.input}
                 onChange={(e) => patch({ input: e.target.value, editSide: "left" })}
-                onKeyDown={(e) => utilInputKeyDown(e, utilUndo, utilRedo)}
+                onKeyDown={selectFieldAll}
                 placeholder={utilPlaceholder(activeTab)}
                 spellCheck={false}
               />
@@ -839,15 +998,6 @@ export function UtilsPanel({
               )}
               <span className="flex-1" />
               {state.error && <span className="text-[10px] text-red-500">{state.error}</span>}
-              <button
-                type="button"
-                className={toolBtn(false)}
-                disabled={!state.output}
-                title="Copy encoded result"
-                onClick={() => void copy(state.output, "Copied")}
-              >
-                Copy
-              </button>
             </div>
             <div className="flex min-h-0 flex-1 flex-col bg-[var(--workspace-panel)]">
               <textarea
@@ -858,6 +1008,369 @@ export function UtilsPanel({
                 placeholder="Encoded result - edit here to decode back to plain text"
                 spellCheck={false}
               />
+            </div>
+          </div>
+        </div>
+      ) : activeTab === "jwt" ? (
+        <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 md:grid-cols-2">
+          <div className="flex min-h-0 flex-col border-b border-[var(--workspace-border)] md:border-b-0 md:border-r">
+            <div className={paneHeader}>
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--workspace-text-muted)]">
+                Input
+              </span>
+            </div>
+            <div className="flex min-h-0 flex-1 flex-col bg-[var(--workspace-panel)]">
+              <textarea
+                className={fieldClass}
+                style={{ fontSize }}
+                value={state.input}
+                onChange={(e) => patch({ input: e.target.value })}
+                onKeyDown={selectFieldAll}
+                placeholder={utilPlaceholder(activeTab)}
+                spellCheck={false}
+              />
+            </div>
+          </div>
+          <div className="flex min-h-0 flex-col">
+            <div className={paneHeader}>
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--workspace-text-muted)]">
+                Output
+              </span>
+              <span className="ml-1.5 flex h-6 shrink-0 overflow-hidden rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-background)]/50">
+                {(["raw", "tree"] as const).map((v, i) => (
+                  <button
+                    key={v}
+                    type="button"
+                    className={`h-6 px-2 text-[10px] font-semibold capitalize transition-colors ${
+                      i > 0 ? "border-l border-[var(--workspace-border)]" : ""
+                    } ${jwtView === v ? "bg-primary/15 text-primary" : "text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)] hover:text-[var(--workspace-text)]"}`}
+                    onClick={() => setJwtView(v)}
+                  >
+                    {v}
+                  </button>
+                ))}
+              </span>
+              <span className="flex-1" />
+              {state.error && <span className="text-[10px] text-red-500">{state.error}</span>}
+            </div>
+            <div className="flex min-h-0 flex-1 flex-col bg-[var(--workspace-panel)]">
+              {jwtView === "tree" ? (
+                state.output ? (
+                  <div className="min-h-0 flex-1 overflow-auto p-2">
+                    <TreeView
+                      data={(parsedOutput ?? {}) as JsonValue}
+                      isDark={isDark}
+                      showTypeBadges={false}
+                      defaultExpanded
+                      onNotify={(msg) => toast({ message: msg })}
+                    />
+                  </div>
+                ) : (
+                  <div className="flex flex-1 items-center justify-center px-4 text-center text-[13px] text-[var(--workspace-text-muted)]">
+                    Paste a JWT to decode it.
+                  </div>
+                )
+              ) : state.error ? (
+                <div className="m-2 flex flex-col gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-600 dark:text-red-400">
+                  <span>{state.error}</span>
+                </div>
+              ) : (
+                <pre
+                  className={`${fieldClass} overflow-auto whitespace-pre-wrap break-all`}
+                  style={{ fontSize }}
+                  tabIndex={0}
+                  onKeyDown={selectFieldAll}
+                >
+                  {state.output || (
+                    <span className="text-[var(--workspace-text-muted)]">Decoded JWT appears here</span>
+                  )}
+                </pre>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : activeTab === "regex" ? (
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <div className={paneHeader}>
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--workspace-text-muted)]">Pattern</span>
+            <input
+              type="text"
+              value={state.regexPattern}
+              onChange={(e) => patch({ regexPattern: e.target.value })}
+              placeholder="\b(\w+)@(\w+)\b"
+              spellCheck={false}
+              aria-label="Regex pattern"
+              className={`${smallInput} min-w-0 flex-1`}
+            />
+            <input
+              type="text"
+              value={state.regexFlags}
+              onChange={(e) => patch({ regexFlags: e.target.value })}
+              placeholder="g"
+              spellCheck={false}
+              aria-label="Regex flags"
+              className={`${smallInput} w-16`}
+            />
+            {state.error && <span className="shrink-0 text-[10px] text-red-500">{state.error}</span>}
+          </div>
+          <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 md:grid-cols-2">
+            <div className="flex min-h-0 flex-col border-b border-[var(--workspace-border)] md:border-b-0 md:border-r">
+              <div className={paneHeader}>
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--workspace-text-muted)]">Test text</span>
+              </div>
+              <div className="flex min-h-0 flex-1 flex-col bg-[var(--workspace-panel)]">
+                <textarea
+                  className={fieldClass}
+                  style={{ fontSize }}
+                  value={state.input}
+                  onChange={(e) => patch({ input: e.target.value })}
+                  onKeyDown={selectFieldAll}
+                  placeholder={utilPlaceholder(activeTab)}
+                  spellCheck={false}
+                />
+              </div>
+            </div>
+            <div className="flex min-h-0 flex-col">
+              <div className={paneHeader}>
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--workspace-text-muted)]">
+                  Matches
+                </span>
+                {(() => {
+                  const p = parsedOutput as { count?: number } | null;
+                  return typeof p?.count === "number" ? (
+                    <span className="ml-1.5 rounded bg-primary/10 px-1.5 py-px text-[10px] font-semibold tabular-nums text-primary">
+                      {p.count}
+                    </span>
+                  ) : null;
+                })()}
+              </div>
+              <div className="min-h-0 flex-1 overflow-auto bg-[var(--workspace-panel)] p-1.5">
+                {(() => {
+                  const p = parsedOutput as { matches?: RegexMatch[] } | null;
+                  const matches = p?.matches ?? [];
+                  if (matches.length === 0) {
+                    return (
+                      <p className="px-2 py-3 text-[11px] text-[var(--workspace-text-muted)]">
+                        No matches yet. Enter a pattern and some test text.
+                      </p>
+                    );
+                  }
+                  return (
+                    <ul className="flex flex-col gap-1">
+                      {matches.map((m, i) => (
+                        <li
+                          key={i}
+                          className="group flex min-w-0 items-center gap-2 rounded-lg border border-[var(--workspace-border)]/50 bg-[var(--workspace-background)]/50 px-2 py-1.5"
+                        >
+                          <span className="shrink-0 rounded bg-[var(--workspace-border)]/40 px-1 py-px text-[10px] tabular-nums text-[var(--workspace-text-muted)]">
+                            {m.index}
+                          </span>
+                          <Tooltip content={m.match} className="min-w-0 flex-1">
+                          <code className="block truncate font-mono text-[11px] text-[var(--workspace-text)]">
+                            {m.match}
+                          </code>
+                          </Tooltip>
+                          {m.groups.length > 0 && (
+                            <span className="hidden shrink-0 text-[9px] text-[var(--workspace-text-muted)] sm:inline">
+                              {m.groups.length} group{m.groups.length === 1 ? "" : "s"}
+                            </span>
+                          )}
+                          <Tooltip content="Copy match">
+                          <button
+                            type="button"
+                            className={`${linkBtnClass} h-6 min-h-6 w-6 !p-0 opacity-0 transition-opacity group-hover:opacity-100`}
+                            aria-label="Copy match"
+                            onClick={() => void copy(m.match, "Match copied")}
+                          >
+                            <ClipboardDocumentIcon className="h-3 w-3" />
+                          </button>
+                          </Tooltip>
+                        </li>
+                      ))}
+                    </ul>
+                  );
+                })()}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : activeTab === "color" ? (
+        <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 md:grid-cols-2">
+          <div className="flex min-h-0 flex-col border-b border-[var(--workspace-border)] md:border-b-0 md:border-r">
+            <div className={paneHeader}>
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--workspace-text-muted)]">Input</span>
+              <span className="flex-1" />
+              {state.error && <span className="text-[10px] text-red-500">{state.error}</span>}
+            </div>
+            <div className="flex min-h-0 flex-1 flex-col bg-[var(--workspace-panel)]">
+              <textarea
+                className={fieldClass}
+                style={{ fontSize }}
+                value={state.input}
+                onChange={(e) => patch({ input: e.target.value })}
+                onKeyDown={selectFieldAll}
+                placeholder={utilPlaceholder(activeTab)}
+                spellCheck={false}
+              />
+            </div>
+          </div>
+          <div className="flex min-h-0 flex-col">
+            <div className={paneHeader}>
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--workspace-text-muted)]">Converted</span>
+            </div>
+            <div className="min-h-0 flex-1 overflow-auto bg-[var(--workspace-panel)] p-2">
+              {(() => {
+                const p = parsedOutput as ColorParts | null;
+                if (!p) {
+                  return (
+                    <p className="px-2 py-3 text-[11px] text-[var(--workspace-text-muted)]">
+                      Enter a hex, rgb(), hsl(), or CSS color name.
+                    </p>
+                  );
+                }
+                const hexMatch = /^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.exec(p.hex);
+                const swatchStyle = hexMatch
+                  ? { backgroundColor: p.hex }
+                  : { background: "linear-gradient(90deg, red, orange, yellow, green, blue, indigo, violet)" };
+                return (
+                  <div className="flex flex-col gap-1">
+                    <div
+                      className="mb-1 h-14 shrink-0 rounded-lg border border-[var(--workspace-border)]"
+                      style={swatchStyle}
+                      aria-label="Color preview"
+                    />
+                    {(
+                      [
+                        ["HEX", p.hex],
+                        ["RGB", p.rgb],
+                        ["HSL", p.hsl],
+                        ["CMYK", p.cmyk],
+                      ] as const
+                    ).map(([label, value]) => (
+                      <div key={label} className="group flex min-h-8 items-center gap-2 rounded-md px-2 py-1 transition-colors hover:bg-primary/5">
+                        <span className={`${partKeyClass} !w-12`}>{label}</span>
+                        <Tooltip content={value} className="min-w-0 flex-1">
+                        <code className="block truncate font-mono text-[11px] text-[var(--workspace-text)]">
+                          {value}
+                        </code>
+                        </Tooltip>
+                        <Tooltip content={`Copy ${label}`}>
+                        <button
+                          type="button"
+                          className={`${linkBtnClass} h-6 min-h-6 w-6 !p-0 opacity-0 transition-opacity group-hover:opacity-100`}
+                          aria-label={`Copy ${label}`}
+                          onClick={() => structuredCopy(label, value)}
+                        >
+                          <ClipboardDocumentIcon className="h-3 w-3" />
+                        </button>
+                        </Tooltip>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      ) : activeTab === "urlparse" ? (
+        <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 md:grid-cols-2">
+          <div className="flex min-h-0 flex-col border-b border-[var(--workspace-border)] md:border-b-0 md:border-r">
+            <div className={paneHeader}>
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--workspace-text-muted)]">Input</span>
+              <span className="flex-1" />
+              {state.error && <span className="text-[10px] text-red-500">{state.error}</span>}
+            </div>
+            <div className="flex min-h-0 flex-1 flex-col bg-[var(--workspace-panel)]">
+              <textarea
+                className={fieldClass}
+                style={{ fontSize }}
+                value={state.input}
+                onChange={(e) => patch({ input: e.target.value })}
+                onKeyDown={selectFieldAll}
+                placeholder={utilPlaceholder(activeTab)}
+                spellCheck={false}
+              />
+            </div>
+          </div>
+          <div className="flex min-h-0 flex-col">
+            <div className={paneHeader}>
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--workspace-text-muted)]">Parts</span>
+            </div>
+            <div className="min-h-0 flex-1 overflow-auto bg-[var(--workspace-panel)] p-2">
+              {(() => {
+                const p = parsedOutput as UrlParts | null;
+                if (!p) {
+                  return (
+                    <p className="px-2 py-3 text-[11px] text-[var(--workspace-text-muted)]">
+                      Enter a URL to split it into parts.
+                    </p>
+                  );
+                }
+                const rows: Array<[string, string]> = [
+                  ["Href", p.href],
+                  ["Protocol", p.protocol],
+                  ["Username", p.username],
+                  ["Password", p.password],
+                  ["Hostname", p.hostname],
+                  ["Port", p.port],
+                  ["Path", p.pathname],
+                  ["Search", p.search],
+                  ["Hash", p.hash],
+                ];
+                return (
+                  <div className="flex flex-col gap-1">
+                    {rows.map(([label, value]) =>
+                      value ? (
+                        <div key={label} className="group flex min-h-8 items-center gap-2 rounded-md px-2 py-1 transition-colors hover:bg-primary/5">
+                          <span className={`${partKeyClass} !w-16`}>{label}</span>
+                          <Tooltip content={value} className="min-w-0 flex-1">
+                          <code className="block truncate font-mono text-[11px] text-[var(--workspace-text)]">
+                            {value}
+                          </code>
+                          </Tooltip>
+                          <Tooltip content={`Copy ${label}`}>
+                          <button
+                            type="button"
+                            className={`${linkBtnClass} h-6 min-h-6 w-6 !p-0 opacity-0 transition-opacity group-hover:opacity-100`}
+                            aria-label={`Copy ${label}`}
+                            onClick={() => structuredCopy(label, value)}
+                          >
+                            <ClipboardDocumentIcon className="h-3 w-3" />
+                          </button>
+                          </Tooltip>
+                        </div>
+                      ) : null,
+                    )}
+                    {p.params.length > 0 && (
+                      <div className="mt-2">
+                        <p className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--workspace-text-muted)]">
+                          Query params
+                        </p>
+                        {p.params.map((param, i) => (
+                          <div key={i} className="group flex min-h-8 items-center gap-2 rounded-md px-2 py-1 transition-colors hover:bg-primary/5">
+                            <span className={`${partKeyClass} !w-16`}>{param.key}</span>
+                            <Tooltip content={param.value} className="min-w-0 flex-1">
+                            <code className="block truncate font-mono text-[11px] text-[var(--workspace-text)]">
+                              {param.value}
+                            </code>
+                            </Tooltip>
+                            <Tooltip content={`Copy ${param.key}`}>
+                            <button
+                              type="button"
+                              className={`${linkBtnClass} h-6 min-h-6 w-6 !p-0 opacity-0 transition-opacity group-hover:opacity-100`}
+                              aria-label={`Copy ${param.key}`}
+                              onClick={() => structuredCopy(param.key, param.value)}
+                            >
+                              <ClipboardDocumentIcon className="h-3 w-3" />
+                            </button>
+                            </Tooltip>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>
@@ -872,30 +1385,6 @@ export function UtilsPanel({
             <span className="hidden text-[10px] text-[var(--workspace-text-muted)] sm:inline">
               · {activeLabel}
             </span>
-            <span className="ml-1 flex items-center gap-0.5">
-                <Tooltip content="Undo (Ctrl+Z)">
-                  <button
-                    type="button"
-                    className={`${linkBtnClass} h-7 min-h-7 w-7`}
-                    disabled={!utilCanUndo}
-                    onClick={utilUndo}
-                    aria-label="Undo"
-                  >
-                    <ArrowUturnLeftIcon className="h-3.5 w-3.5" />
-                  </button>
-                </Tooltip>
-                <Tooltip content="Redo (Ctrl+Y)">
-                  <button
-                    type="button"
-                    className={`${linkBtnClass} h-7 min-h-7 w-7`}
-                    disabled={!utilCanRedo}
-                    onClick={utilRedo}
-                    aria-label="Redo"
-                  >
-                    <ArrowUturnRightIcon className="h-3.5 w-3.5" />
-                  </button>
-                </Tooltip>
-              </span>
             <span className="flex-1" />
             {activeTab === "hash" && (
               <div className={modeGroup} role="group" aria-label="Hash algorithm">
@@ -912,41 +1401,49 @@ export function UtilsPanel({
               </div>
             )}
             {activeTab === "case" && (
-              <select
-                value={state.caseMode}
-                onChange={(e) => patch({ caseMode: e.target.value as TextCaseMode })}
-                className="h-7 max-w-[7.5rem] rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-1.5 text-[11px] text-[var(--workspace-text)]"
+              <Dropdown
+                open={caseMenuOpen}
+                onOpenChange={setCaseMenuOpen}
+                side="bottom"
+                align="end"
+                contentClassName="w-36"
+                trigger={
+                  <Tooltip content="Case mode">
+                    <button type="button" className={`${toolBtn(false)}`} aria-label="Case mode">
+                      {state.caseMode}
+                      <span className="text-[9px] opacity-60">▾</span>
+                    </button>
+                  </Tooltip>
+                }
               >
-                {(
-                  [
-                    "snake",
-                    "kebab",
-                    "camel",
-                    "pascal",
-                    "constant",
-                    "slug",
-                    "upper",
-                    "lower",
-                    "title",
-                    "reverse",
-                    "trim",
-                  ] as TextCaseMode[]
-                ).map((m) => (
-                  <option key={m} value={m}>
-                    {m}
-                  </option>
-                ))}
-              </select>
+                <div className="flex flex-col" onClick={(e) => e.stopPropagation()}>
+                  {CASE_MODES.map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      className={`${sharedMenuItemClass} capitalize ${state.caseMode === m ? "!bg-primary/12 !text-primary" : ""}`}
+                      onClick={() => {
+                        patch({ caseMode: m });
+                        setCaseMenuOpen(false);
+                      }}
+                    >
+                      {sharedMenuCheck(state.caseMode === m)}
+                      {m}
+                    </button>
+                  ))}
+                </div>
+              </Dropdown>
             )}
             {activeTab === "time" && (
+              <Tooltip content="Insert current time (ISO)">
               <button
                 type="button"
                 className={toolBtn(false)}
-                title="Insert current time (ISO)"
-                onClick={insertNow}
+                onClick={() => patch({ input: nowIso(), error: null })}
               >
                 Now
               </button>
+              </Tooltip>
             )}
           </div>
           <div className="flex min-h-0 flex-1 flex-col bg-[var(--workspace-panel)]">
@@ -955,7 +1452,7 @@ export function UtilsPanel({
               style={{ fontSize }}
               value={state.input}
               onChange={(e) => patch({ input: e.target.value })}
-              onKeyDown={(e) => utilInputKeyDown(e, utilUndo, utilRedo)}
+              onKeyDown={selectFieldAll}
               placeholder={utilPlaceholder(activeTab)}
               spellCheck={false}
             />

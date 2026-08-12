@@ -27,22 +27,26 @@ export async function generateMetadata({
   const config = getToolConfig(tool as ToolRoute);
   const canonical = getCanonicalUrl(`/${tool}`);
   const toolKeywords = SEO_KEYWORDS[tool as ToolRoute] ?? [];
+  // Titles already include the brand; strip it so the root template `%s | Formaty` doesn't double it.
+  const pageTitle = config.title.replace(/\s*\|\s*Formaty\s*$/i, "");
   return {
-    title: config.title,
+    title: pageTitle,
     description: config.description,
     keywords: [...toolKeywords, "developer tools", "local-first", "no signup", "browser tool"],
     alternates: { canonical },
     openGraph: {
-      title: config.title,
+      title: pageTitle,
       description: config.description,
       url: canonical,
       siteName: "Formaty",
       type: "website",
+      images: [{ url: `${SITE_URL}/og.png`, width: 1200, height: 630, alt: config.h1 }],
     },
     twitter: {
-      card: "summary",
-      title: config.title,
+      card: "summary_large_image",
+      title: pageTitle,
       description: config.description,
+      images: [`${SITE_URL}/og.png`],
     },
   };
 }
@@ -67,6 +71,7 @@ export default async function ToolRoutePage({
     operatingSystem: "Any",
     offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
     featureList: config.useCases,
+    screenshot: `${SITE_URL}/og.png`,
     breadcrumb: {
       "@type": "BreadcrumbList",
       itemListElement: [
@@ -76,11 +81,46 @@ export default async function ToolRoutePage({
     },
   };
 
+  const faqJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: [
+      {
+        "@type": "Question",
+        name: `How do I use the ${config.h1} tool?`,
+        acceptedAnswer: {
+          "@type": "Answer",
+          text: `Open the ${config.h1} page, paste or type your data, and the tool formats and validates it instantly - all in your browser with no upload.`,
+        },
+      },
+      {
+        "@type": "Question",
+        name: `Is the ${config.h1} tool free?`,
+        acceptedAnswer: {
+          "@type": "Answer",
+          text: "Yes. Every Formaty tool is free, requires no sign-up, and runs 100% locally in your browser.",
+        },
+      },
+      {
+        "@type": "Question",
+        name: `Does the ${config.h1} tool upload my data?`,
+        acceptedAnswer: {
+          "@type": "Answer",
+          text: `No. The ${config.h1} tool processes everything locally in your browser using WebWorkers - your data never leaves your device.`,
+        },
+      },
+    ],
+  };
+
   return (
     <>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
       />
       <ToolPage config={config} />
     </>

@@ -218,6 +218,7 @@ export const JsonDiffEditor = forwardRef<JsonDiffEditorRef, JsonDiffEditorProps>
       scrollBeyondLastLine: false,
       renderSideBySide,
       minimap: { enabled: false },
+      fontFamily: "var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
       wordWrap: "on" as const,
       fontSize,
       originalEditable,

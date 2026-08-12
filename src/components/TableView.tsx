@@ -11,6 +11,7 @@ import {
 } from "@heroicons/react/24/outline";
 import type { JsonValue } from "@/lib/json/core";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Tooltip } from "@/components/workspace/Tooltip";
 import {
   Table,
   TableBody,
@@ -212,6 +213,7 @@ export function TableView({ data, className = "" }: TableViewProps) {
               {i > 0 && (
                 <ChevronRightIcon className="h-3 w-3 shrink-0 text-[var(--workspace-text-muted)]" />
               )}
+              <Tooltip content={frame.label}>
               <button
                 type="button"
                 disabled={i === stack.length - 1}
@@ -221,10 +223,10 @@ export function TableView({ data, className = "" }: TableViewProps) {
                     ? "text-primary"
                     : "text-[var(--workspace-text-muted)] hover:bg-primary/10 hover:text-primary"
                 }`}
-                title={frame.label}
               >
                 {frame.label}
               </button>
+              </Tooltip>
             </span>
           ))}
         </div>
@@ -300,11 +302,11 @@ export function TableView({ data, className = "" }: TableViewProps) {
               <TableRow className={cn(headerClass, "sticky top-0 z-10 hover:bg-[var(--workspace-background)]")}>
                 {visibleHeaders.map((h) => (
                   <TableHead key={h} className={`${cellClass} whitespace-nowrap p-0`}>
+                    <Tooltip content="Sort">
                     <button
                       type="button"
                       className="inline-flex h-8 w-full cursor-pointer items-center gap-1 px-2 text-left font-medium hover:bg-primary/5"
                       onClick={() => toggleSort(h)}
-                      title="Sort"
                     >
                       <span className="truncate font-mono text-[11px] leading-none">{h}</span>
                       <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center">
@@ -321,6 +323,7 @@ export function TableView({ data, className = "" }: TableViewProps) {
                         )}
                       </span>
                     </button>
+                    </Tooltip>
                   </TableHead>
                 ))}
               </TableRow>
@@ -352,10 +355,10 @@ export function TableView({ data, className = "" }: TableViewProps) {
                               : h;
                         return (
                           <TableCell key={h} className={`${cellClass} max-w-[280px] px-1.5 py-0.5`}>
+                            <Tooltip content={`Open as table: ${nestedMeta(val)}`} className="block max-w-full">
                             <button
                               type="button"
                               onClick={() => drillInto(label, val)}
-                              title={`Open as table: ${nestedMeta(val)}`}
                               className="group inline-flex max-w-full items-center gap-1.5 rounded-md border border-primary/20 bg-primary/5 px-2 py-1 text-left transition-colors hover:border-primary/40 hover:bg-primary/10"
                             >
                               <TableCellsIcon className="h-3.5 w-3.5 shrink-0 text-primary" />
@@ -367,17 +370,16 @@ export function TableView({ data, className = "" }: TableViewProps) {
                               </span>
                               <ChevronRightIcon className="h-3 w-3 shrink-0 text-primary opacity-60 group-hover:opacity-100" />
                             </button>
+                            </Tooltip>
                           </TableCell>
                         );
                       }
 
                       return (
-                        <TableCell
-                          key={h}
-                          className={`${cellClass} max-w-[240px] truncate px-2 py-1 font-mono text-[11px]`}
-                          title={display}
-                        >
-                          {display}
+                        <TableCell key={h} className={`${cellClass} max-w-[240px] px-2 py-1 font-mono text-[11px]`}>
+                          <Tooltip content={display} className="block max-w-full truncate">
+                            {display}
+                          </Tooltip>
                         </TableCell>
                       );
                     })}

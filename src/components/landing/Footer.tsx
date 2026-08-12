@@ -85,6 +85,12 @@ export function Footer() {
             >
               Documentation
             </Link>
+            <Link
+              href="/docs#privacy"
+              className="text-xs text-[var(--workspace-text-muted)] transition-colors hover:text-primary"
+            >
+              Privacy
+            </Link>
           </div>
           <span className="text-xs text-[var(--workspace-text-muted)]">
             © {new Date().getFullYear()} Formaty · Local-first developer tools
