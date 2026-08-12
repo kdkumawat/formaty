@@ -22,6 +22,7 @@ import {
 import "jsoncrack-react/style.css";
 import type { JSONCrackProps, JSONCrackRef, LayoutDirection } from "jsoncrack-react";
 import type { JsonValue } from "@/lib/json/core";
+import { Tooltip } from "@/components/workspace/Tooltip";
 
 const JSONCrackDynamic = dynamic(
   () => import("jsoncrack-react").then((module) => module.JSONCrack),
@@ -36,6 +37,8 @@ interface GraphViewProps {
 
 export interface GraphViewRef {
   copyPngToClipboard: () => Promise<void>;
+  copyJpgToClipboard: () => Promise<void>;
+  copySvgToClipboard: () => Promise<void>;
   downloadPng: () => Promise<void>;
   downloadImage: (format: "png" | "jpg") => Promise<void>;
 }
@@ -225,6 +228,27 @@ export const GraphView = forwardRef<GraphViewRef, GraphViewProps>(function Graph
     }
   };
 
+  /** Copy the graph as a vector SVG (serialized from the live <svg> element). */
+  const copySvgToClipboard = async () => {
+    if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") {
+      throw new Error("SVG clipboard copy is not supported in this browser.");
+    }
+    const source = exportRef.current;
+    if (!source) throw new Error("Graph canvas is not ready yet.");
+    const svgEl = source.querySelector("svg") as SVGElement | null;
+    if (!svgEl) throw new Error("Graph SVG is not ready yet.");
+    const clone = svgEl.cloneNode(true) as SVGElement;
+    clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+    const rect = source.getBoundingClientRect();
+    if (rect.width && rect.height) {
+      clone.setAttribute("width", String(Math.round(rect.width)));
+      clone.setAttribute("height", String(Math.round(rect.height)));
+    }
+    const svgString = new XMLSerializer().serializeToString(clone);
+    const blob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
+    await navigator.clipboard.write([new ClipboardItem({ "image/svg+xml": blob })]);
+  };
+
   useImperativeHandle(ref, () => ({
     copyPngToClipboard: async () => {
       if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") {
@@ -233,6 +257,14 @@ export const GraphView = forwardRef<GraphViewRef, GraphViewProps>(function Graph
       const blob = await renderGraphImage("png");
       await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
     },
+    copyJpgToClipboard: async () => {
+      if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") {
+        throw new Error("JPG clipboard copy is not supported in this browser.");
+      }
+      const blob = await renderGraphImage("jpg");
+      await navigator.clipboard.write([new ClipboardItem({ "image/jpeg": blob })]);
+    },
+    copySvgToClipboard,
     downloadPng: async () => {
       await renderGraphImage("png").then((blob) => {
         const url = URL.createObjectURL(blob);
@@ -272,42 +304,46 @@ export const GraphView = forwardRef<GraphViewRef, GraphViewProps>(function Graph
 
       <div className="absolute bottom-2 left-2 z-10 flex items-center gap-2">
         <div className="flex items-center gap-0.5 rounded-lg border border-[var(--workspace-border)] p-0.5 bg-[var(--workspace-background)]/95 backdrop-blur-sm">
+          <Tooltip content="Focus root">
           <button
             type="button"
             className="rounded p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors"
             onClick={() => graphRef.current?.focusFirstNode()}
             aria-label="Focus root"
-            title="Focus root"
           >
             <HomeIcon className="h-4 w-4" />
           </button>
+          </Tooltip>
+          <Tooltip content="Fit graph">
           <button
             type="button"
             className="rounded p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors"
             onClick={() => graphRef.current?.centerView()}
             aria-label="Fit graph"
-            title="Fit graph"
           >
             <ArrowsPointingOutIcon className="h-4 w-4" />
           </button>
+          </Tooltip>
+          <Tooltip content="Rotate layout">
           <button
             type="button"
             className="rounded p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors"
             onClick={rotateLayout}
             aria-label="Rotate layout"
-            title={`Rotate layout`}
           >
             <ArrowPathRoundedSquareIcon className="h-4 w-4" />
           </button>
+          </Tooltip>
+          <Tooltip content={showGrid ? "Hide rulers" : "Show rulers"}>
           <button
             type="button"
             className={`rounded p-1 transition-colors ${showGrid ? "bg-primary text-primary-foreground" : "text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)]"}`}
             onClick={() => setShowGrid((prev) => !prev)}
             aria-label={showGrid ? "Hide rulers" : "Show rulers"}
-            title={showGrid ? "Hide rulers" : "Show rulers"}
           >
             <ScaleIcon className="h-4 w-4" />
           </button>
+          </Tooltip>
         </div>
 
         <label className={searchInputClass}>

@@ -8,6 +8,7 @@ import {
   InformationCircleIcon,
   XMarkIcon,
 } from "@heroicons/react/24/outline";
+import { Tooltip } from "@/components/workspace/Tooltip";
 
 export type ToastType = "success" | "error" | "info";
 
@@ -107,7 +108,6 @@ function ToastCard({ item, onDismiss }: { item: ToastItem; onDismiss: () => void
       exit={{ opacity: 0, x: 28, scale: 0.96 }}
       transition={{ type: "spring", stiffness: 420, damping: 34 }}
       role={item.type === "error" ? "alert" : "status"}
-      title="Dismiss"
       onClick={onDismiss}
       className="pointer-events-auto flex cursor-pointer items-start gap-2.5 rounded-lg border border-[var(--workspace-border)]/60 bg-[var(--workspace-panel)]/95 px-3 py-2.5 text-xs shadow-xl backdrop-blur-md transition-colors hover:border-primary/30"
     >
@@ -121,12 +121,14 @@ function ToastCard({ item, onDismiss }: { item: ToastItem; onDismiss: () => void
           {item.message}
         </p>
         {item.url && (
-          <p className="mt-0.5 truncate leading-snug text-[var(--workspace-text-muted)]" title={item.url}>
+          <Tooltip content={item.url} className="mt-0.5 block max-w-full truncate leading-snug text-[var(--workspace-text-muted)]">
             {item.url}
-          </p>
+          </Tooltip>
         )}
       </span>
-      <XMarkIcon className="mt-0.5 h-3 w-3 shrink-0 text-[var(--workspace-text-muted)]/70" aria-hidden />
+      <Tooltip content="Dismiss">
+        <XMarkIcon className="mt-0.5 h-3 w-3 shrink-0 cursor-pointer text-[var(--workspace-text-muted)]/70" aria-hidden />
+      </Tooltip>
     </motion.div>
   );
 }

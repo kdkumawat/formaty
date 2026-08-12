@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { trackEvent } from "@/components/Analytics";
 
 export type ThemeMode = "system" | "dark" | "light";
 
@@ -59,6 +60,7 @@ export function useTheme() {
   }, [themeMode]);
 
   const setThemeMode = (mode: ThemeMode) => {
+    trackEvent("theme", { mode, surface: "landing" });
     setThemeModeState(mode);
     try {
       const raw = localStorage.getItem("formaty-session");

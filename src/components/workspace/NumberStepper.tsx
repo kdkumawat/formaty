@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { MinusIcon, PlusIcon } from "@heroicons/react/24/outline";
 import { Button } from "@/components/ui/button";
+import { Tooltip } from "./Tooltip";
 
 export type NumberStepperProps = {
   value: number;
@@ -65,18 +66,19 @@ export function NumberStepper({
         role="group"
         aria-label={ariaLabel ?? label ?? "Number"}
       >
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className={tinyBtn}
-          disabled={disabled || value <= min}
-          onClick={() => step(-1)}
-          aria-label="Decrease"
-          title="Decrease"
-        >
-          <MinusIcon className="h-3.5 w-3.5" aria-hidden />
-        </Button>
+        <Tooltip content="Decrease">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className={tinyBtn}
+            disabled={disabled || value <= min}
+            onClick={() => step(-1)}
+            aria-label="Decrease"
+          >
+            <MinusIcon className="h-3.5 w-3.5" aria-hidden />
+          </Button>
+        </Tooltip>
         {editing ? (
           <input
             type="text"
@@ -100,33 +102,35 @@ export function NumberStepper({
             aria-label={ariaLabel ?? label ?? "Value"}
           />
         ) : (
+          <Tooltip content="Click to type">
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={disabled}
+              onClick={() => {
+                if (disabled) return;
+                setDraft(String(value));
+                setEditing(true);
+              }}
+              className="h-7 min-w-[2.25rem] shrink-0 !px-1.5 text-xs font-medium tabular-nums !text-[var(--workspace-text)] hover:!bg-primary/5"
+            >
+              {value}
+            </Button>
+          </Tooltip>
+        )}
+        <Tooltip content="Increase">
           <Button
             type="button"
             variant="ghost"
-            disabled={disabled}
-            onClick={() => {
-              if (disabled) return;
-              setDraft(String(value));
-              setEditing(true);
-            }}
-            className="h-7 min-w-[2.25rem] shrink-0 !px-1.5 text-xs font-medium tabular-nums !text-[var(--workspace-text)] hover:!bg-primary/5"
-            title="Click to type"
+            size="icon"
+            className={tinyBtn}
+            disabled={disabled || value >= max}
+            onClick={() => step(1)}
+            aria-label="Increase"
           >
-            {value}
+            <PlusIcon className="h-3.5 w-3.5" aria-hidden />
           </Button>
-        )}
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className={tinyBtn}
-          disabled={disabled || value >= max}
-          onClick={() => step(1)}
-          aria-label="Increase"
-          title="Increase"
-        >
-          <PlusIcon className="h-3.5 w-3.5" aria-hidden />
-        </Button>
+        </Tooltip>
       </div>
     </div>
   );

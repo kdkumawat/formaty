@@ -7,6 +7,7 @@ import {
   ClipboardDocumentIcon,
 } from "@heroicons/react/24/outline";
 import type { JsonValue } from "@/lib/json/core";
+import { Tooltip } from "@/components/workspace/Tooltip";
 
 interface TreeViewProps {
   data: JsonValue;
@@ -15,6 +16,10 @@ interface TreeViewProps {
   /** Soft cap: skip expanding huge branches to keep UI responsive */
   largeFile?: boolean;
   onNotify?: (msg: string) => void;
+  /** Hide the "string · 12" type badge next to each key (used by JWT tree). */
+  showTypeBadges?: boolean;
+  /** Open every node by default (JWT tree). */
+  defaultExpanded?: boolean;
 }
 
 const MAX_INITIAL_DEPTH = 2;
@@ -61,6 +66,8 @@ function Node({
   collapseGen,
   largeFile,
   onNotify,
+  showTypeBadges = true,
+  defaultExpanded = false,
 }: {
   nodeKey: string;
   value: JsonValue;
@@ -71,6 +78,8 @@ function Node({
   collapseGen: number;
   largeFile?: boolean;
   onNotify?: (msg: string) => void;
+  showTypeBadges?: boolean;
+  defaultExpanded?: boolean;
 }) {
   const canExpand = value !== null && typeof value === "object";
   const childCount = canExpand
@@ -78,7 +87,9 @@ function Node({
       ? value.length
       : Object.keys(value as object).length
     : 0;
-  const [open, setOpen] = useState(depth < MAX_INITIAL_DEPTH);
+  const [open, setOpen] = useState(
+    defaultExpanded ? true : depth < MAX_INITIAL_DEPTH,
+  );
   const [showAll, setShowAll] = useState(false);
 
   // Sync expand/collapse all
@@ -151,50 +162,58 @@ function Node({
         ) : (
           <span className="inline-block h-5 w-5 shrink-0" />
         )}
+        <Tooltip content={path}>
         <button
           type="button"
           className={`${keyClass} hover:underline`}
-          title={path}
           onClick={() => void copy("path")}
         >
           {nodeKey}
         </button>
-        <span
-          className={`shrink-0 rounded px-1 py-px text-[10px] font-medium ${
-            isDark ? "bg-white/10 text-white/80" : "bg-black/5 text-black/65"
-          }`}
-        >
-          {valueType(value)}
-          {canExpand ? ` · ${childCount}` : ""}
-        </span>
+        </Tooltip>
+        {showTypeBadges ? (
+          <span
+            className={`shrink-0 rounded px-1 py-px text-[10px] font-medium ${
+              isDark ? "bg-white/10 text-white/80" : "bg-black/5 text-black/65"
+            }`}
+          >
+            {valueType(value)}
+            {canExpand ? ` · ${childCount}` : ""}
+          </span>
+        ) : null}
         {!canExpand ? (
+          <Tooltip content="Copy value">
           <button
             type="button"
             className={`min-w-0 truncate font-mono text-[12px] ${text} hover:text-primary`}
-            title="Copy value"
             onClick={() => void copy("value")}
           >
             {prettyValue(value)}
           </button>
+          </Tooltip>
         ) : null}
-        <span className="ml-auto hidden shrink-0 items-center gap-0.5 group-hover:flex">
+        {/* Copy path / value - visible on hover, right next to the node */}
+        <span className="ml-1 hidden shrink-0 items-center gap-0.5 group-hover:flex">
+          <Tooltip content="Copy path">
           <button
             type="button"
             className={`inline-flex h-5 items-center gap-0.5 rounded px-1 text-[10px] ${muted} hover:bg-primary/10 hover:text-primary`}
-            title="Copy path"
             onClick={() => void copy("path")}
           >
             <ClipboardDocumentIcon className="h-3 w-3" />
             path
           </button>
+          </Tooltip>
+          <Tooltip content="Copy value">
           <button
             type="button"
             className={`inline-flex h-5 items-center gap-0.5 rounded px-1 text-[10px] ${muted} hover:bg-primary/10 hover:text-primary`}
-            title="Copy value"
             onClick={() => void copy("value")}
           >
+            <ClipboardDocumentIcon className="h-3 w-3" />
             value
           </button>
+          </Tooltip>
         </span>
       </div>
       {open && canExpand ? (
@@ -211,6 +230,8 @@ function Node({
               collapseGen={collapseGen}
               largeFile={largeFile}
               onNotify={onNotify}
+              showTypeBadges={showTypeBadges}
+              defaultExpanded={defaultExpanded}
             />
           ))}
           {truncated ? (
@@ -234,6 +255,8 @@ export function TreeView({
   isDark = false,
   largeFile = false,
   onNotify,
+  showTypeBadges = true,
+  defaultExpanded = false,
 }: TreeViewProps) {
   const rootLabel = useMemo(
     () => (Array.isArray(data) ? "$[]" : "$"),
@@ -284,6 +307,8 @@ export function TreeView({
           collapseGen={collapseGen}
           largeFile={largeFile}
           onNotify={onNotify}
+          showTypeBadges={showTypeBadges}
+          defaultExpanded={defaultExpanded}
         />
       </div>
     </div>

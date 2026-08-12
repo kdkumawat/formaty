@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { SunIcon, MoonIcon, ComputerDesktopIcon } from "@heroicons/react/24/outline";
 import { Logo } from "@/components/Logo";
+import { Tooltip } from "@/components/workspace/Tooltip";
 import { useTheme, type ThemeMode } from "@/hooks/useTheme";
 
 const themeOptions: { mode: ThemeMode; label: string; Icon: typeof SunIcon }[] = [
@@ -58,11 +59,10 @@ export function LandingHeader() {
           {/* Theme switcher */}
           <div className="flex rounded-lg border border-[var(--workspace-border)] bg-[var(--workspace-panel)]/60 p-0.5">
             {themeOptions.map(({ mode, label, Icon }) => (
+              <Tooltip content={label} key={mode}>
               <button
-                key={mode}
                 type="button"
                 aria-label={`${label} theme`}
-                title={label}
                 onClick={() => setThemeMode(mode)}
                 className={`rounded p-1.5 transition-colors ${
                   themeMode === mode
@@ -72,6 +72,7 @@ export function LandingHeader() {
               >
                 <Icon className="h-3.5 w-3.5" aria-hidden />
               </button>
+              </Tooltip>
             ))}
           </div>
         </nav>

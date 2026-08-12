@@ -1,5 +1,9 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
+import { Suspense } from "react";
 import { Inter, JetBrains_Mono, Space_Grotesk } from "next/font/google";
+import { Analytics } from "@/components/Analytics";
+import { ConsentBanner } from "@/components/ConsentBanner";
 import "./globals.css";
 
 const inter = Inter({
@@ -27,6 +31,11 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 5,
   viewportFit: "cover",
+  colorScheme: "dark light",
+  themeColor: [
+    { media: "(prefers-color-scheme: dark)", color: "#0a0a10" },
+    { media: "(prefers-color-scheme: light)", color: "#f7f7fa" },
+  ],
 };
 
 const SITE_URL = process.env.SITE_URL || "https://formaty.dev";
@@ -93,6 +102,12 @@ export const metadata: Metadata = {
   creator: CREATOR_NAME,
   publisher: CREATOR_NAME,
   category: "developer tools",
+  appleWebApp: {
+    capable: true,
+    title: SITE_NAME,
+    statusBarStyle: "black-translucent",
+  },
+  formatDetection: { telephone: false, address: false, email: false },
   alternates: {
     canonical: "/",
   },
@@ -108,12 +123,14 @@ export const metadata: Metadata = {
     siteName: SITE_NAME,
     locale: "en_US",
     type: "website",
+    images: [{ url: `${SITE_URL}/og.png`, width: 1200, height: 630, alt: SITE_TITLE }],
   },
   twitter: {
-    card: "summary",
+    card: "summary_large_image",
     title: SITE_TITLE,
     description: SITE_DESCRIPTION,
     creator: "@kuldeep_kumawat",
+    images: [`${SITE_URL}/og.png`],
   },
   other: {
     "profile:linkedin": CREATOR_LINKEDIN,
@@ -136,6 +153,53 @@ export const metadata: Metadata = {
       "OKeIhvNauwJmKVtoeNvnqFWvMdkwy_07r9VaQWqeOSA",
     ],
   },
+};
+
+const faqJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: [
+    {
+      "@type": "Question",
+      name: "Is Formaty really free?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "Yes. Formaty is completely free with no sign-up required. Every tool - formatters, converters, compare, and developer utils - is free to use forever.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "Does Formaty upload my data to a server?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "No. Everything runs locally in your browser using WebWorkers. Your input never leaves your device, except when you explicitly use the Share feature to create a link.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "Which formats does Formaty support?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "JSON, XML, YAML, TOML, and CSV formatting and conversion, plus cURL import, JSONPath/JMESPath querying, schema and type generation, diff, and developer utils like UUID, Base64, JWT, hash, regex, and color conversion.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "Can I use Formaty offline?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "Yes. Formaty is a local-first tool that works without a network connection once loaded. Your session is also persisted so data is restored on reload.",
+      },
+    },
+  ],
+};
+
+const webSiteJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  name: SITE_NAME,
+  url: SITE_URL,
+  description: SITE_DESCRIPTION,
 };
 
 const jsonLd = {
@@ -195,9 +259,51 @@ export default function RootLayout({
       <body className="antialiased">
         <script
           type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(webSiteJsonLd) }}
+        />
+        <script
+          type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
+        />
+        {/* Google Analytics 4 - only loads when NEXT_PUBLIC_GA_MEASUREMENT_ID is set */}
+        {process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID ? (
+          <>
+            <Script
+              src={`https://www.googletagmanager.com/gtag/js?id=${process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID}`}
+              strategy="afterInteractive"
+            />
+            <Script id="formaty-ga-init" strategy="afterInteractive">
+              {`
+                window.dataLayer = window.dataLayer || [];
+                function gtag(){dataLayer.push(arguments);}
+                gtag('js', new Date());
+                gtag('consent', 'default', {
+                  ad_storage: 'denied',
+                  analytics_storage: 'denied',
+                  personalization_storage: 'denied',
+                  functionality_storage: 'denied',
+                  security_storage: 'granted',
+                  wait_for_update: 500,
+                });
+                try {
+                  if (localStorage.getItem('formaty-ga-consent') === 'accepted') {
+                    gtag('consent', 'update', { analytics_storage: 'granted', functionality_storage: 'granted' });
+                    gtag('config', '${process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID}', { anonymize_ip: true });
+                  }
+                } catch(e) {}
+              `}
+            </Script>
+          </>
+        ) : null}
         {children}
+        <Suspense fallback={null}>
+          <Analytics />
+        </Suspense>
+        <ConsentBanner />
       </body>
     </html>
   );

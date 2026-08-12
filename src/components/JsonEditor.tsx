@@ -63,6 +63,7 @@ export function JsonEditor({
         }}
         options={{
           minimap: { enabled: false },
+          fontFamily: "var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
           fontSize,
           lineHeight: 20,
           automaticLayout: true,

@@ -11,8 +11,10 @@ export {
   DEFAULT_COPY_AS_OPTIONS,
   LIST_COPY_AS_OPTIONS,
   UUID_COPY_AS_OPTIONS,
+  BATCH_COPY_AS_OPTIONS,
   type CopyAsFormat,
   type CopyAsOption,
+  type GraphCopyFormat,
   type OutputActionId,
   type OutputActionVisibility,
 } from "./OutputActionBar";

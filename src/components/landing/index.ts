@@ -7,6 +7,7 @@ export { Capabilities } from "./Capabilities";
 export { ConversionGrid } from "./ConversionGrid";
 export { Workflow } from "./Workflow";
 export { UseCases } from "./UseCases";
+export { Testimonials } from "./Testimonials";
 export { Differentiation } from "./Differentiation";
 export { FinalCTA } from "./FinalCTA";
 export { Footer } from "./Footer";

@@ -47,6 +47,8 @@ export type CopyAsFormat =
   | "sql-in-single"
   | "sql-in-double";
 
+export type GraphCopyFormat = "png" | "jpg" | "svg" | "json";
+
 export type CopyAsOption = { id: CopyAsFormat; label: string; group?: string };
 
 export type OutputActionVisibility = Record<OutputActionId, boolean>;
@@ -102,6 +104,13 @@ export type OutputActionBarProps = {
   onToggleMaximize?: () => void;
   onCopyAs?: (format: CopyAsFormat) => void;
   copyAsOptions?: CopyAsOption[];
+  /** Last selected copy-as format (per-tool, per-tab) - controlled from the parent. */
+  lastCopyAsId?: CopyAsFormat;
+  onLastCopyAsIdChange?: (id: CopyAsFormat) => void;
+  /** Graph view: image copy options (PNG / JPG / SVG / JSON). */
+  onGraphCopy?: (format: GraphCopyFormat) => void;
+  graphCopyFormat?: GraphCopyFormat;
+  onGraphCopyFormatChange?: (format: GraphCopyFormat) => void;
   onReset?: () => void;
   resetLabel?: string;
   onUndo?: () => void;
@@ -175,6 +184,24 @@ export const UUID_COPY_AS_OPTIONS: CopyAsOption[] = [
   { id: "json-array", label: "JSON array", group: "Data" },
 ];
 
+/** Shared batch formats (password lists, etc.) - newline / comma / quotes, no SQL. */
+export const BATCH_COPY_AS_OPTIONS: CopyAsOption[] = [
+  { id: "newline", label: "Newline list", group: "List" },
+  { id: "comma", label: "Comma-separated", group: "List" },
+  { id: "single-quotes", label: "Single-quoted lines", group: "Quotes" },
+  { id: "double-quotes", label: "Double-quoted lines", group: "Quotes" },
+  { id: "comma-single", label: "Comma + single quotes", group: "Quotes" },
+  { id: "comma-double", label: "Comma + double quotes", group: "Quotes" },
+  { id: "json-array", label: "JSON array", group: "Data" },
+];
+
+export const GRAPH_COPY_OPTIONS: Array<{ id: GraphCopyFormat; label: string; group: string }> = [
+  { id: "png", label: "PNG image", group: "Image" },
+  { id: "jpg", label: "JPG image", group: "Image" },
+  { id: "svg", label: "SVG image", group: "Image" },
+  { id: "json", label: "JSON data", group: "Data" },
+];
+
 export function formatCopyAsText(raw: string, format: CopyAsFormat): string {
   const lines = raw
     .split(/\r?\n/)
@@ -233,6 +260,11 @@ export function OutputActionBar({
   onToggleMaximize,
   onCopyAs,
   copyAsOptions = DEFAULT_COPY_AS_OPTIONS,
+  lastCopyAsId,
+  onLastCopyAsIdChange,
+  onGraphCopy,
+  graphCopyFormat,
+  onGraphCopyFormatChange,
   onReset,
   resetLabel = "Reset",
   onUndo,
@@ -246,17 +278,25 @@ export function OutputActionBar({
 }: OutputActionBarProps) {
   const [copyAsOpen, setCopyAsOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
-  const [lastCopyAsId, setLastCopyAsId] = useState<CopyAsFormat>(copyAsOptions[0]?.id ?? "base64");
-
+  const [localLastCopyAsId, setLocalLastCopyAsId] = useState<CopyAsFormat>(
+    copyAsOptions[0]?.id ?? "base64",
+  );
+  const effectiveLastCopyAsId = lastCopyAsId ?? localLastCopyAsId;
+  const setLastCopyAsId = (id: CopyAsFormat) => {
+    if (onLastCopyAsIdChange) onLastCopyAsIdChange(id);
+    else setLocalLastCopyAsId(id);
+  };
 
   // Keep the remembered copy format valid when options change (tool/mode switch).
   useEffect(() => {
-    if (copyAsOptions.length > 0 && !copyAsOptions.some((o) => o.id === lastCopyAsId)) {
+    if (copyAsOptions.length > 0 && !copyAsOptions.some((o) => o.id === effectiveLastCopyAsId)) {
       setLastCopyAsId(copyAsOptions[0].id);
     }
-  }, [copyAsOptions, lastCopyAsId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [copyAsOptions, effectiveLastCopyAsId]);
 
-  const lastCopyAs = copyAsOptions.find((o) => o.id === lastCopyAsId) ?? copyAsOptions[0];
+  const lastCopyAs =
+    copyAsOptions.find((o) => o.id === effectiveLastCopyAsId) ?? copyAsOptions[0];
 
   /** Compact fixed width - sized to the longest label so the menu never balloons. */
   const copyMenuWidth =
@@ -304,6 +344,88 @@ export function OutputActionBar({
       </button>
     </Tooltip>
   );
+
+  /**
+   * Graph view copy: dropdown with image + data options. The main button repeats
+   * the last selected format (per-tool memory), the chevron picks another.
+   */
+  const graphCopyControl =
+    show("copy") && isGraphView && onGraphCopy ? (
+      <Dropdown
+        open={copyAsOpen}
+        onOpenChange={setCopyAsOpen}
+        side="bottom"
+        align="end"
+        contentClassName="w-36"
+        trigger={
+          <Tooltip content={`Copy as ${GRAPH_COPY_OPTIONS.find((o) => o.id === graphCopyFormat)?.label ?? "PNG"}`}>
+            <div className="flex items-center">
+              <button
+                type="button"
+                className={`${iconBtn} !w-6 ${actionBounce === "copy" ? "scale-90" : ""}`}
+                disabled={!canCopy}
+                aria-label={`Copy as ${graphCopyFormat ?? "png"}`}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  if (graphCopyFormat === "json") onCopy();
+                  else onGraphCopy(graphCopyFormat ?? "png");
+                }}
+              >
+                <ClipboardDocumentIcon className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                className={`${iconBtn} !w-4 rounded-l-none`}
+                disabled={!canCopy}
+                aria-label="Copy options"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  setCopyAsOpen((v) => !v);
+                }}
+              >
+                <ChevronDownIcon className="h-2 w-2 opacity-70" />
+              </button>
+            </div>
+          </Tooltip>
+        }
+      >
+        <div className="flex flex-col" onClick={(e) => e.stopPropagation()}>
+          {(() => {
+            const groups = new Map<string, typeof GRAPH_COPY_OPTIONS>();
+            for (const opt of GRAPH_COPY_OPTIONS) {
+              const g = opt.group ?? "Copy as";
+              if (!groups.has(g)) groups.set(g, []);
+              groups.get(g)!.push(opt);
+            }
+            return Array.from(groups.entries()).map(([group, opts]) => (
+              <div key={group}>
+                {groups.size > 1 && sharedMenuSectionLabel(group)}
+                {opts.map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    className={`${sharedMenuItemClass} !w-auto !px-1.5 !gap-1.5 ${graphCopyFormat === opt.id ? "!bg-primary/12 !text-primary" : ""}`}
+                    onClick={() => {
+                      onGraphCopyFormatChange?.(opt.id);
+                      if (opt.id === "json") onCopy();
+                      else onGraphCopy(opt.id);
+                      setCopyAsOpen(false);
+                    }}
+                  >
+                    {sharedMenuCheck(graphCopyFormat === opt.id)}
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            ));
+          })()}
+        </div>
+      </Dropdown>
+    ) : null;
 
   /**
    * Copy with dropdown - clicking the main button copies the LAST selected format,
@@ -370,14 +492,14 @@ export function OutputActionBar({
                   <button
                     key={opt.id}
                     type="button"
-                    className={`${sharedMenuItemClass} !w-auto !px-1.5 !gap-1.5 ${lastCopyAsId === opt.id ? "!bg-primary/12 !text-primary" : ""}`}
+                    className={`${sharedMenuItemClass} !w-auto !px-1.5 !gap-1.5 ${effectiveLastCopyAsId === opt.id ? "!bg-primary/12 !text-primary" : ""}`}
                     onClick={() => {
                       setLastCopyAsId(opt.id);
                       onCopyAs(opt.id);
                       setCopyAsOpen(false);
                     }}
                   >
-                    {sharedMenuCheck(lastCopyAsId === opt.id)}
+                    {sharedMenuCheck(effectiveLastCopyAsId === opt.id)}
                     {opt.label}
                   </button>
                 ))}
@@ -505,7 +627,7 @@ export function OutputActionBar({
         </Tooltip>
       )}
       {shareControl}
-      {copyControl}
+      {graphCopyControl ?? copyControl}
       {show("download") && downloadControl}
       {show("maximize") && onToggleMaximize && (
         <Tooltip content={isMaximized ? "Restore layout" : "Maximize output"}>

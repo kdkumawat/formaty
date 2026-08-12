@@ -495,24 +495,30 @@ export default function DocsPage() {
             <TableWrap>
               <THead cols={["Tool", "What it does"]} />
               <tbody className="divide-y divide-[var(--workspace-border)]/50">
-                <Row label="UUID" value="Generate v4 UUIDs (count 1-50) with copy-per-id, or NIL UUID." />
+                <Row label="UUID" value="v4 / v1 / v7 / v5 batches (count 1-50). Counter adds or removes IDs without regenerating the rest; copy per card or the whole batch." />
                 <Row label="Base64" value="Encode / decode with auto-detect or forced mode." />
-                <Row label="JWT" value="Decode header + payload (no signature verification)." />
+                <Row label="JWT" value="Decode header + payload (no signature verification) with a Tree / Raw toggle." />
                 <Row label="Hash" value="SHA-256 or SHA-1 hex digest of any text." />
-                <Row label="Time" value="Unix ↔ ISO conversion; empty input shows current now." />
-                <Row label="URL" value="Percent-encode / decode with auto-detect." />
+                <Row label="Password" value="Cryptographically random passwords (count + length) as copyable cards, with strength meter." />
+                <Row label="URL Encode" value="Percent-encode / decode with auto-detect." />
                 <Row label="Case" value="snake, kebab, camel, pascal, constant, slug, title, reverse, trim…" />
-                <Row label="Hex" value="UTF-8 text ↔ hex bytes." />
-                <Row label="Number" value="Decimal / hex / binary / octal conversion." />
+                <Row label="Regex" value="Live regex tester with flags, match count, and copy-per-match." />
                 <Row label="Escape" value="JSON string escape / unescape." />
                 <Row label="HTML" value="HTML entity encode / decode." />
-                <Row label="Password" value="Cryptographically random passwords (configurable length)." />
+                <Row label="Time" value="Unix ↔ ISO conversion; empty input shows current now." />
+                <Row label="Hex" value="UTF-8 text ↔ hex bytes." />
+                <Row label="Number" value="Decimal / hex / binary / octal conversion." />
+                <Row label="URL Parse" value="Split a URL into protocol, host, port, path, query params, and hash - copy any part." />
+                <Row label="Color" value="HEX / RGB / HSL / CMYK conversion with a live preview swatch." />
+                <Row label="Cron" value="Human-readable explanation of a 5/6-field cron expression." />
+                <Row label="Lorem" value="Lorem ipsum generator - words, sentences, or paragraphs." />
                 <Row label="Stats" value="Lines, words, characters, and byte counts." />
               </tbody>
             </TableWrap>
             <p className="mt-3 text-sm text-[var(--workspace-text-muted)]">
               Output updates <strong className="text-[var(--workspace-text)]">live</strong> as you type (no Run required).
-              Use <strong className="text-[var(--workspace-text)]">Sample</strong> for example input and the reset icon to clear the active tool.
+              Copy via the <strong className="text-[var(--workspace-text)]">toolbar copy button</strong> - each tool remembers its own last
+              copy format (per tab). Use <strong className="text-[var(--workspace-text)]">Sample</strong> for example input and the reset icon to clear the active tool.
               Each workspace tab remembers its Utils tool and I/O independently.
               All processing stays in your browser.
             </p>

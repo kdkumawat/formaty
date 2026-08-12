@@ -45,6 +45,7 @@ import { GraphView, type GraphViewRef } from "@/components/GraphView";
 import { TreeView } from "@/components/TreeView";
 import { QueryView } from "@/components/QueryView";
 import { TableView } from "@/components/TableView";
+import { trackEvent } from "@/components/Analytics";
 import {
   Dropdown,
   getSizeFormatted,
@@ -59,7 +60,9 @@ import {
   DEFAULT_COPY_AS_OPTIONS,
   LIST_COPY_AS_OPTIONS,
   UUID_COPY_AS_OPTIONS,
+  BATCH_COPY_AS_OPTIONS,
   type CopyAsFormat,
+  type GraphCopyFormat,
   type OutputActionId,
   type OutputActionVisibility,
 } from "@/components/workspace";
@@ -472,10 +475,10 @@ function PinButton({
   onClick: () => void;
 }) {
   return (
+    <Tooltip content={pinned ? `Unpin ${label} from toolbar` : `Pin ${label} to toolbar`}>
     <button
       type="button"
       onClick={onClick}
-      title={pinned ? `Unpin ${label} from toolbar` : `Pin ${label} to toolbar`}
       aria-label={pinned ? `Unpin ${label}` : `Pin ${label}`}
       className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md transition-all ${
         pinned
@@ -485,6 +488,7 @@ function PinButton({
     >
       {pinned ? <StarSolidIcon className="h-3 w-3" /> : <StarIcon className="h-3 w-3" />}
     </button>
+    </Tooltip>
   );
 }
 
@@ -551,11 +555,10 @@ function PinChipRow({
         {items.map((item) => {
           const on = pinned(item.id);
           return (
+            <Tooltip key={item.id} content={on ? `Unpin ${item.label}` : `Pin ${item.label}`}>
             <button
-              key={item.id}
               type="button"
               onClick={() => onToggle(item.id)}
-              title={on ? `Unpin ${item.label}` : `Pin ${item.label}`}
               className={`inline-flex h-6 items-center gap-1 rounded-md border px-1.5 text-[10px] font-medium transition-colors ${
                 on
                   ? "border-primary/30 bg-primary/10 text-primary"
@@ -565,6 +568,7 @@ function PinChipRow({
               {on ? <StarSolidIcon className="h-3 w-3 text-amber-500" /> : <StarIcon className="h-3 w-3 opacity-50" />}
               {item.label}
             </button>
+            </Tooltip>
           );
         })}
       </div>
@@ -603,6 +607,12 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   const [modalKind, setModalKind] = useState<ModalKind>(null);
   const [modalValue, setModalValue] = useState("");
   const [rightView, setRightView] = useState<RightView>("raw");
+  /** Latest query-view result - lifted so the global toolbar copies / downloads it. */
+  const [queryResult, setQueryResult] = useState("");
+  /** Last 'copy as' format per tool (keyed by tool id) - preserved per tab. */
+  const [copyAsMemory, setCopyAsMemory] = useState<Record<string, CopyAsFormat>>({});
+  /** Last graph copy format (PNG / JPG / SVG / JSON) - preserved per tab. */
+  const [graphCopyFormat, setGraphCopyFormat] = useState<GraphCopyFormat>("png");
   const [typeLanguage, setTypeLanguage] = useState<TypeTargetLanguage>("typescript");
   const [copyState, setCopyState] = useState<"idle" | "done" | "error">("idle");
   const [shareState, setShareState] = useState<"idle" | "done" | "error">("idle");
@@ -632,7 +642,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   const [showFirstRunHint, setShowFirstRunHint] = useState(false);
 
   const [liveTransform, setLiveTransform] = useState(true);
-  const [editorFontSize, setEditorFontSize] = useState(14);
+  const [editorFontSize, setEditorFontSize] = useState(13);
   const [lineWrap, setLineWrap] = useState(true);
   const [diffSideBySide, setDiffSideBySide] = useState(true);
   const [diffIgnoreWhitespace, setDiffIgnoreWhitespace] = useState(false);
@@ -691,6 +701,20 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
   const [actionBounce, setActionBounce] = useState<"share" | "copy" | null>(null);
   const [mobileShowOutput, setMobileShowOutput] = useState(true);
+
+  // Auto-hide the first-run quick tip after a few seconds (dismissal marks it seen).
+  useEffect(() => {
+    if (!showFirstRunHint) return;
+    const id = window.setTimeout(() => {
+      setShowFirstRunHint(false);
+      try {
+        localStorage.setItem("formaty-onboarded", "1");
+      } catch {
+        /* ignore */
+      }
+    }, 8000);
+    return () => window.clearTimeout(id);
+  }, [showFirstRunHint]);
   const [loadedToolPreset, setLoadedToolPreset] = useState<ToolRoute | null>(null);
   const [cursorPosition, setCursorPosition] = useState<{ line: number; column: number } | null>(null);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -728,10 +752,17 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     diffLeftInput: string;
     diffRightInput: string;
     diffKind: "document" | "list";
+    /** Per-tab diff toolbar preferences - preserved like other toolbar settings. */
+    diffSideBySide: boolean;
+    diffIgnoreWhitespace: boolean;
+    diffShowPaths: boolean;
     isOutputMaximized: boolean;
     /** Per-tab Utils selection + each util tool’s own I/O. */
     utilTab: UtilTab;
     utilsByTool: UtilsStateMap;
+    /** Per-tool, per-tab 'last copy as' memory. */
+    copyAsMemory: Record<string, CopyAsFormat>;
+    graphCopyFormat: GraphCopyFormat;
   };
   const emptyTabSnapshot = (): TabSnapshot => ({
     input: "",
@@ -750,9 +781,14 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     diffLeftInput: "",
     diffRightInput: "",
     diffKind: "document",
+    diffSideBySide: true,
+    diffIgnoreWhitespace: false,
+    diffShowPaths: false,
     isOutputMaximized: false,
     utilTab: "uuid",
     utilsByTool: {},
+    copyAsMemory: {},
+    graphCopyFormat: "png",
   });
   const captureTabSnapshot = useCallback((): TabSnapshot => ({
     input,
@@ -771,10 +807,15 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     diffLeftInput,
     diffRightInput,
     diffKind,
+    diffSideBySide,
+    diffIgnoreWhitespace,
+    diffShowPaths,
     isOutputMaximized,
     utilTab,
     utilsByTool,
-  }), [input, inputFormatOverride, undoStack, undoIndex, output, parsedOutput, outputExt, outputLanguage, activeOperation, error, convertToFormat, typeLanguage, rightView, diffLeftInput, diffRightInput, diffKind, isOutputMaximized, utilTab, utilsByTool]);
+    copyAsMemory,
+    graphCopyFormat,
+  }), [input, inputFormatOverride, undoStack, undoIndex, output, parsedOutput, outputExt, outputLanguage, activeOperation, error, convertToFormat, typeLanguage, rightView, diffLeftInput, diffRightInput, diffKind, diffSideBySide, diffIgnoreWhitespace, diffShowPaths, isOutputMaximized, utilTab, utilsByTool, copyAsMemory, graphCopyFormat]);
   const applyTabSnapshot = (snap: TabSnapshot) => {
     setInput(snap.input);
     setInputFormatOverride(snap.inputFormatOverride);
@@ -793,6 +834,9 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     setDiffLeftInput(snap.diffLeftInput ?? "");
     setDiffRightInput(snap.diffRightInput ?? "");
     setDiffKind(snap.diffKind ?? "document");
+    setDiffSideBySide(snap.diffSideBySide ?? true);
+    setDiffIgnoreWhitespace(snap.diffIgnoreWhitespace ?? false);
+    setDiffShowPaths(snap.diffShowPaths ?? false);
     setIsOutputMaximized(
       Boolean(snap.isOutputMaximized) ||
         snap.activeOperation === "diff" ||
@@ -800,6 +844,9 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     );
     setUtilTab(snap.utilTab ?? "uuid");
     setUtilsByTool(snap.utilsByTool ?? {});
+    setCopyAsMemory(snap.copyAsMemory ?? {});
+    setGraphCopyFormat(snap.graphCopyFormat ?? "png");
+    setQueryResult("");
     setDiffLineStats(null);
     setDiffNav({ current: 0, total: 0 });
     // Recover structured views after tab switch / Compare exit
@@ -1008,6 +1055,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
 
   const switchToTab = (tabId: string) => {
     if (tabId === activeTabId) return;
+    trackEvent("tab_switch");
     tabSnapshotsRef.current.set(activeTabId, captureTabSnapshot());
     const snap = tabSnapshotsRef.current.get(tabId) ?? emptyTabSnapshot();
     historyLock.current = true;
@@ -1018,6 +1066,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   };
 
   const addTab = () => {
+    trackEvent("tab_add");
     tabSnapshotsRef.current.set(activeTabId, captureTabSnapshot());
     tabCounterRef.current += 1;
     const newId = `t${tabCounterRef.current}`;
@@ -1031,6 +1080,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
 
   const closeTab = (tabId: string) => {
     if (tabs.length <= 1) return;
+    trackEvent("tab_close");
     const tabIdx = tabs.findIndex((t) => t.id === tabId);
     tabSnapshotsRef.current.delete(tabId);
     const newTabs = tabs.filter((t) => t.id !== tabId);
@@ -1348,6 +1398,11 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
             if (activeSnap.diffKind) setDiffKind(activeSnap.diffKind);
             if (typeof activeSnap.diffLeftInput === "string") setDiffLeftInput(activeSnap.diffLeftInput);
             if (typeof activeSnap.diffRightInput === "string") setDiffRightInput(activeSnap.diffRightInput);
+            if (typeof activeSnap.diffSideBySide === "boolean") setDiffSideBySide(activeSnap.diffSideBySide);
+            if (typeof activeSnap.diffIgnoreWhitespace === "boolean") setDiffIgnoreWhitespace(activeSnap.diffIgnoreWhitespace);
+            if (typeof activeSnap.diffShowPaths === "boolean") setDiffShowPaths(activeSnap.diffShowPaths);
+            if (activeSnap.copyAsMemory && typeof activeSnap.copyAsMemory === "object") setCopyAsMemory(activeSnap.copyAsMemory);
+            if (activeSnap.graphCopyFormat) setGraphCopyFormat(activeSnap.graphCopyFormat);
           }
         }
       }
@@ -1497,6 +1552,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     if (activeOperation === "diff") return;
     const id = setTimeout(() => {
       if (activeOperation === "generateTypes") {
+        trackEvent("generate_types", { language: typeLanguage });
         executeOperation("generateTypes", { typeLanguage });
         return;
       }
@@ -1856,6 +1912,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   }, [getParsedInput, parseSchemaToObject, run, convertJsonToOutput, setOutputData, schemaInput, typeLanguage, formatOptions, convertToFormat]);
 
   const runConvert = useCallback((toFormat: FormatKind) => {
+    trackEvent("convert", { to_format: toFormat, mode: "transform" });
     setConvertToFormat(toFormat);
     setFocusedPane("output");
     if (!isDesktopLayout) setMobileShowOutput(true);
@@ -2016,6 +2073,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   }, []);
 
   const runOperation = (action: OperationAction) => {
+    trackEvent("operation", { action, mode: isUtilsMode ? "utils" : isDiffMode ? "compare" : "transform" });
     setFocusedPane("output");
     if (!isDesktopLayout) setMobileShowOutput(true);
     setActiveOperation(action);
@@ -2161,6 +2219,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   };
 
   const downloadOutput = (format?: "png" | "jpg") => {
+    trackEvent("download", { format: format ?? "text", mode: isUtilsMode ? "utils" : isDiffMode ? "compare" : "transform" });
     if (isGraphView) {
       void (async () => {
         try {
@@ -2174,6 +2233,19 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
           toast({ message: "Download failed", type: "error" });
         }
       })();
+      setDownloadMenuOpen(false);
+      return;
+    }
+    // Query view: download the query result, not the raw output.
+    if (!isDiffMode && !isUtilsMode && rightView === "query" && queryResult) {
+      const blob = new Blob([queryResult], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "formaty-query-result.json";
+      a.click();
+      URL.revokeObjectURL(url);
+      toast({ message: "Downloaded" });
       setDownloadMenuOpen(false);
       return;
     }
@@ -2195,6 +2267,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   };
 
   const shareWorkspace = async () => {
+    trackEvent("share", { all_tabs: shareAllTabs && showTabs && tabs.length > 1 });
     setShareConfirmOpen(false);
     setActionBounce("share");
     setTimeout(() => setActionBounce(null), 300);
@@ -2275,6 +2348,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   };
 
   const copyOutput = async () => {
+    trackEvent("copy", { format: isGraphView ? "png" : "text", mode: isUtilsMode ? "utils" : isDiffMode ? "compare" : "transform" });
     setActionBounce("copy");
     setTimeout(() => setActionBounce(null), 300);
     if (isGraphView) {
@@ -2308,6 +2382,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     if (isUtilsMode) {
       const s = utilsByTool[utilTab];
       if (s?.uuidList && s.uuidList.length > 0) return s.uuidList.join("\n");
+      if (s?.pwList && s.pwList.length > 0) return s.pwList.join("\n");
       return s?.output ?? "";
     }
     if (isDiffMode) {
@@ -2325,6 +2400,8 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
         return diffRightInput || diffLeftInput;
       }
     }
+    // Query view: global copy should copy the query result, not the raw output.
+    if (rightView === "query" && queryResult) return queryResult;
     return output;
   }, [
     isUtilsMode,
@@ -2337,22 +2414,56 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     diffRightInput,
     structuralDiff,
     diffLineStats,
+    rightView,
+    queryResult,
     output,
   ]);
 
   const copyOutputAs = async (format: CopyAsFormat) => {
     const raw = getActiveOutputText();
     if (!raw.trim()) return;
+    trackEvent("copy", { format, mode: isUtilsMode ? "utils" : isDiffMode ? "compare" : "transform" });
     try {
       const text = formatCopyAsText(raw, format);
       await navigator.clipboard.writeText(text);
-      toast({ message: "Copied" });
+      const label = activeCopyAsOptions.find((o) => o.id === format)?.label ?? format;
+      toast({ message: `Copied as ${label}` });
     } catch {
       toast({ message: "Copy failed", type: "error" });
     }
   };
 
+  /** Graph view image/data copy - PNG / JPG / SVG blobs or raw JSON text. */
+  const graphCopy = useCallback(
+    async (format: GraphCopyFormat) => {
+      trackEvent("graph_copy", { format });
+      setActionBounce("copy");
+      setTimeout(() => setActionBounce(null), 300);
+      try {
+        if (format === "json") {
+          const text = getActiveOutputText();
+          if (!text.trim()) return;
+          await navigator.clipboard.writeText(text);
+          toast({ message: "JSON copied" });
+        } else {
+          if (!graphViewRef.current) throw new Error("Graph export is not ready yet.");
+          if (format === "svg") await graphViewRef.current.copySvgToClipboard();
+          else if (format === "jpg") await graphViewRef.current.copyJpgToClipboard();
+          else await graphViewRef.current.copyPngToClipboard();
+          toast({ message: format.toUpperCase() + " copied" });
+        }
+        setCopyState("done");
+      } catch {
+        setCopyState("error");
+        toast({ message: "Copy failed", type: "error" });
+      }
+      window.setTimeout(() => setCopyState("idle"), 1400);
+    },
+    [getActiveOutputText],
+  );
+
   const handleWorkspaceReset = useCallback(() => {
+    trackEvent("reset", { mode: isUtilsMode ? "utils" : isDiffMode ? "compare" : "transform" });
     if (isUtilsMode) {
       setUtilsByTool((prev) => ({
         ...prev,
@@ -2401,12 +2512,25 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     router,
   ]);
 
+  /**
+   * Copy-as variants must relate to the active tool's output. Batch tools (UUID /
+   * password) offer list formats; everything else in Utils copies its plain output
+   * (its own copy-as variants would re-encode the result - meaningless).
+   */
   const activeCopyAsOptions = useMemo(() => {
     if (isUtilsMode && utilTab === "uuid") return UUID_COPY_AS_OPTIONS;
-    if (isUtilsMode) return [...DEFAULT_COPY_AS_OPTIONS, ...UUID_COPY_AS_OPTIONS.filter((o) => o.id === "newline" || o.id === "comma")];
+    if (isUtilsMode && utilTab === "password") return BATCH_COPY_AS_OPTIONS;
+    if (isUtilsMode) return [];
     if (isDiffMode && diffKind === "list") return LIST_COPY_AS_OPTIONS;
     return DEFAULT_COPY_AS_OPTIONS;
   }, [isUtilsMode, utilTab, isDiffMode, diffKind]);
+
+  /** Stable per-tool key used for the per-tab 'last copy as' memory. */
+  const copyMemoryKey = isUtilsMode
+    ? `utils:${utilTab}`
+    : isDiffMode
+      ? `diff:${diffKind}`
+      : `transform:${rightView}`;
 
   const exportHistory = () => {
     const entries = undoStack.slice(0, undoIndex + 1).map((content, i) => ({ index: i, content }));
@@ -2470,6 +2594,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
       if (!mod) return;
       if (event.key === "k") {
         event.preventDefault();
+        trackEvent("command_palette", { source: "shortcut" });
         setCommandPaletteOpen((v) => !v);
         return;
       }
@@ -2578,7 +2703,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
       keywords: [t.id, t.label, "types", "interface", "struct"],
       badge: activeOperation === "generateTypes" && typeLanguage === t.id ? "active" : undefined,
       disabled: inputEmpty,
-      action: () => { setFocusedPane("output"); setActiveOperation("generateTypes"); executeOperation("generateTypes", { typeLanguage: t.id }); },
+      action: () => { trackEvent("generate_types", { language: t.id, source: "palette" }); setFocusedPane("output"); setActiveOperation("generateTypes"); executeOperation("generateTypes", { typeLanguage: t.id }); },
     })),
     // Samples
     ...FORMAT_KINDS.map((fmt) => ({
@@ -3135,8 +3260,14 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     >
       <WorkspaceHeader
         themeMode={themeMode}
-        onThemeChange={setThemeMode}
-        onOpenCommandPalette={() => setCommandPaletteOpen(true)}
+        onThemeChange={(m) => {
+          trackEvent("theme", { mode: m });
+          setThemeMode(m);
+        }}
+        onOpenCommandPalette={() => {
+          trackEvent("command_palette", { source: "header" });
+          setCommandPaletteOpen(true);
+        }}
         settingsOpen={transformConfigOpen}
         onSettingsOpenChange={setTransformConfigOpen}
         settingsContent={settingsPanelContent}
@@ -3218,14 +3349,15 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
               </div>
               );
             })}
+            <Tooltip content="New tab">
             <button
               type="button"
               className="mt-0.5 flex h-7 items-center justify-center text-[var(--workspace-text-muted)] transition-all duration-100 hover:bg-primary/5 hover:text-primary"
               onClick={addTab}
-              title="New tab"
             >
               <PlusIcon className="h-3.5 w-3.5" />
             </button>
+            </Tooltip>
           </div>
         )}
         {renamingTabId && renameRect && (
@@ -3247,7 +3379,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         {/* ── Full-width secondary toolbar (Transform | Compare | Utils + output actions) ── */}
         <div
-          className={`flex h-9 shrink-0 flex-nowrap items-center gap-0.5 overflow-x-auto border-b px-1.5 text-xs [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${inputEditorBgClass} text-[var(--workspace-text-muted)]`}
+          className={`flex min-h-9 shrink-0 flex-wrap items-center gap-0.5 overflow-hidden border-b px-1.5 py-0.5 text-xs ${inputEditorBgClass} text-[var(--workspace-text-muted)]`}
         >
           <div
             className="relative flex h-7 shrink-0 overflow-hidden rounded-md bg-muted"
@@ -3286,8 +3418,8 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                 },
               ] as const
             ).map((tab, i) => (
+              <Tooltip key={tab.id} content={tab.title}>
               <button
-                key={tab.id}
                 type="button"
                 className={`relative h-7 cursor-pointer px-3 text-xs font-semibold transition-colors duration-150 ${
                   i > 0 ? "border-l border-[var(--workspace-border)]" : ""
@@ -3297,9 +3429,8 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                     : "text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)] hover:text-[var(--workspace-text)]"
                 }`}
                 onClick={tab.onClick}
-                title={tab.title}
               >
-                {tab.active && (
+                  {tab.active && (
                   <motion.span
                     layoutId="tool-mode-pill"
                     className="absolute inset-0 bg-primary/15"
@@ -3308,6 +3439,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                 )}
                 <span className="relative z-[1]">{tab.label}</span>
               </button>
+              </Tooltip>
             ))}
           </div>
 
@@ -3354,7 +3486,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                 groups.push(
                   <span key="type" className="flex shrink-0 items-center gap-0.5">
                     {typePins.map((item) => (
-                      <button key={item.id} type="button" disabled={inputEmpty} className={`${pinnedBtnClass} ${activeOperation === "generateTypes" && typeLanguage === item.id ? tbActiveClass : ""}`} onClick={() => { setFocusedPane("output"); setActiveOperation("generateTypes"); executeOperation("generateTypes", { typeLanguage: item.id }); }}>{item.label}</button>
+                      <button key={item.id} type="button" disabled={inputEmpty} className={`${pinnedBtnClass} ${activeOperation === "generateTypes" && typeLanguage === item.id ? tbActiveClass : ""}`} onClick={() => { trackEvent("generate_types", { language: item.id, source: "pinned" }); setFocusedPane("output"); setActiveOperation("generateTypes"); executeOperation("generateTypes", { typeLanguage: item.id }); }}>{item.label}</button>
                     ))}
                   </span>,
                 );
@@ -3363,18 +3495,22 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                 groups.push(
                   <span key="steps" className="flex shrink-0 items-center gap-1">
                     {pinnedItems.has("fontSize") && (
-                      <div className={settingsBtnGroupClass} title="Font size">
+                      <Tooltip content="Font size" className="shrink-0">
+                      <div className={settingsBtnGroupClass}>
                         <button type="button" aria-label="Decrease font size" className={pinnedStepBtnClass} onClick={() => setEditorFontSize((s) => Math.max(10, s - 1))}><MinusIcon className="h-3.5 w-3.5" /></button>
                         <span className="flex h-7 min-w-[1.5rem] items-center justify-center px-1 text-xs font-medium tabular-nums text-[var(--workspace-text)]">{editorFontSize}</span>
                         <button type="button" aria-label="Increase font size" className={pinnedStepBtnClass} onClick={() => setEditorFontSize((s) => Math.min(24, s + 1))}><PlusIcon className="h-3.5 w-3.5" /></button>
                       </div>
+                      </Tooltip>
                     )}
                     {pinnedItems.has("indent") && (
-                      <div className={settingsBtnGroupClass} title="Indent">
+                      <Tooltip content="Indent" className="shrink-0">
+                      <div className={settingsBtnGroupClass}>
                         <button type="button" aria-label="Decrease indent" className={pinnedStepBtnClass} onClick={() => { const v = Math.max(0, formatOptions.indentation - 1); applyFormatWithOptions({ ...formatOptions, indentation: v }); }}><MinusIcon className="h-3.5 w-3.5" /></button>
                         <span className="flex h-7 min-w-[1.25rem] items-center justify-center px-1 text-xs font-medium tabular-nums text-[var(--workspace-text)]">{formatOptions.indentation}</span>
                         <button type="button" aria-label="Increase indent" className={pinnedStepBtnClass} onClick={() => { const v = Math.min(10, formatOptions.indentation + 1); applyFormatWithOptions({ ...formatOptions, indentation: v }); }}><PlusIcon className="h-3.5 w-3.5" /></button>
                       </div>
+                      </Tooltip>
                     )}
                   </span>,
                 );
@@ -3392,7 +3528,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
               );
             })()}
             {!viewAsMenu && (
-            <Dropdown open={moreMenuOpen} onOpenChange={setMoreMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`w-max min-w-[8rem] max-h-[min(70vh,32rem)] overflow-y-auto`} trigger={<div className={`${selectBtnClass} ${moreMenuOpen ? selectBtnOpenClass : ""}`} title="More actions"><span className="font-medium">More</span><ChevronDownIcon className="h-3 w-3" aria-hidden /></div>}>
+            <Dropdown open={moreMenuOpen} onOpenChange={setMoreMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`w-max min-w-[8rem] max-h-[min(70vh,32rem)] overflow-y-auto`} trigger={<Tooltip content="More actions"><div className={`${selectBtnClass} ${moreMenuOpen ? selectBtnOpenClass : ""}`}><span className="font-medium">More</span><ChevronDownIcon className="h-3 w-3" aria-hidden /></div></Tooltip>}>
               <div className="flex flex-col" onClick={(e) => e.stopPropagation()}>
                 {menuSectionLabel("Format")}
                 {(["json", "xml", "yaml", "toml", "csv"] as const).map((fmt) => (
@@ -3422,9 +3558,13 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                 })}
                 <div className="my-1 h-px bg-[var(--workspace-border)]" role="separator" aria-hidden />
                 {menuSectionLabel("Types")}
+                <button type="button" disabled={inputEmpty} className={`${menuItemClass} ${activeOperation === "generateTypes" ? "" : "!bg-primary/12 !text-primary"}`} onClick={() => { setFocusedPane("output"); runOperation("beautify"); setMoreMenuOpen(false); }}>
+                  {sharedMenuCheck(activeOperation !== "generateTypes")}
+                  None - format output
+                </button>
                 {TYPE_LANGUAGES.map((item) => (
-                  <button key={item.id} type="button" disabled={inputEmpty} className={`${menuItemClass} ${typeLanguage === item.id ? menuItemActiveClass : ""}`} onClick={() => { setFocusedPane("output"); setActiveOperation("generateTypes"); executeOperation("generateTypes", { typeLanguage: item.id }); setMoreMenuOpen(false); }}>
-                    {sharedMenuCheck(typeLanguage === item.id)}
+                  <button key={item.id} type="button" disabled={inputEmpty} className={`${menuItemClass} ${activeOperation === "generateTypes" && typeLanguage === item.id ? menuItemActiveClass : ""}`} onClick={() => { trackEvent("generate_types", { language: item.id, source: "menu" }); setFocusedPane("output"); setActiveOperation("generateTypes"); executeOperation("generateTypes", { typeLanguage: item.id }); setMoreMenuOpen(false); }}>
+                    {sharedMenuCheck(activeOperation === "generateTypes" && typeLanguage === item.id)}
                     {item.label}
                   </button>
                 ))}
@@ -3432,7 +3572,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
             </Dropdown>
             )}
             {viewAsMenu && (<>
-            <Dropdown open={formatMenuOpen} onOpenChange={setFormatMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`w-max min-w-[8rem]`} trigger={<div className={`${selectBtnClass} ${formatMenuOpen ? selectBtnOpenClass : ""}`} title="Format"><span className="font-medium">Format</span><ChevronDownIcon className="h-3 w-3" aria-hidden /></div>}>
+            <Dropdown open={formatMenuOpen} onOpenChange={setFormatMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`w-max min-w-[8rem]`} trigger={<Tooltip content="Format"><div className={`${selectBtnClass} ${formatMenuOpen ? selectBtnOpenClass : ""}`}><span className="font-medium">Format</span><ChevronDownIcon className="h-3 w-3" aria-hidden /></div></Tooltip>}>
               <div className="flex flex-col" onClick={(e) => e.stopPropagation()}>
                 {menuSectionLabel("Structured")}
                 {(["json", "xml", "yaml", "toml"] as const).map((fmt) => (
@@ -3449,7 +3589,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                 </button>
               </div>
             </Dropdown>
-            <Dropdown open={viewMenuOpen} onOpenChange={setViewMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`w-max min-w-[8rem]`} trigger={<div className={`${selectBtnClass} ${viewMenuOpen ? selectBtnOpenClass : ""}`} title="View"><span className="font-medium">View</span><ChevronDownIcon className="h-3 w-3" aria-hidden /></div>}>
+            <Dropdown open={viewMenuOpen} onOpenChange={setViewMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`w-max min-w-[8rem]`} trigger={<Tooltip content="View"><div className={`${selectBtnClass} ${viewMenuOpen ? selectBtnOpenClass : ""}`}><span className="font-medium">View</span><ChevronDownIcon className="h-3 w-3" aria-hidden /></div></Tooltip>}>
               <div className="flex flex-col" onClick={(e) => e.stopPropagation()}>
                 {menuSectionLabel("Text")}
                 <button type="button" disabled={inputEmpty} className={`${menuItemClass} ${rightView === "raw" ? menuItemActiveClass : ""}`} onClick={() => { setRightView("raw"); setFocusedPane("output"); setViewMenuOpen(false); }}>
@@ -3459,20 +3599,20 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                 <div className="my-1 h-px bg-[var(--workspace-border)]" role="separator" aria-hidden />
                 {menuSectionLabel("Visualize")}
                 {(["tree", "graph", "table"] as const).map((view) => (
-                  <button key={view} type="button" disabled={inputEmpty || !parsedOutput} className={`${menuItemClass} ${rightView === view ? menuItemActiveClass : ""}`} onClick={() => { setRightView(view); setFocusedPane("output"); setViewMenuOpen(false); }}>
+                  <button key={view} type="button" disabled={inputEmpty || !parsedOutput} className={`${menuItemClass} ${rightView === view ? menuItemActiveClass : ""}`} onClick={() => { trackEvent("view", { view }); setRightView(view); setFocusedPane("output"); setViewMenuOpen(false); }}>
                     {sharedMenuCheck(rightView === view)}
                     {view[0].toUpperCase() + view.slice(1)}
                   </button>
                 ))}
                 <div className="my-1 h-px bg-[var(--workspace-border)]" role="separator" aria-hidden />
                 {menuSectionLabel("Query")}
-                <button type="button" disabled={inputEmpty || !parsedOutput} className={`${menuItemClass} ${rightView === "query" ? menuItemActiveClass : ""}`} onClick={() => { setRightView("query"); setFocusedPane("output"); setViewMenuOpen(false); }}>
+                <button type="button" disabled={inputEmpty || !parsedOutput} className={`${menuItemClass} ${rightView === "query" ? menuItemActiveClass : ""}`} onClick={() => { trackEvent("view", { view: "query" }); setRightView("query"); setFocusedPane("output"); setViewMenuOpen(false); }}>
                   {sharedMenuCheck(rightView === "query")}
                   Query
                 </button>
               </div>
             </Dropdown>
-            <Dropdown open={actionsMenuOpen} onOpenChange={setActionsMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`w-max min-w-[8rem]`} trigger={<div className={`${selectBtnClass} ${actionsMenuOpen ? selectBtnOpenClass : ""}`} title="Actions"><span className="font-medium">Actions</span><ChevronDownIcon className="h-3 w-3" aria-hidden /></div>}>
+            <Dropdown open={actionsMenuOpen} onOpenChange={setActionsMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`w-max min-w-[8rem]`} trigger={<Tooltip content="Actions"><div className={`${selectBtnClass} ${actionsMenuOpen ? selectBtnOpenClass : ""}`}><span className="font-medium">Actions</span><ChevronDownIcon className="h-3 w-3" aria-hidden /></div></Tooltip>}>
               <div className="flex flex-col" onClick={(e) => e.stopPropagation()}>
                 {menuSectionLabel("Format")}
                 {(["beautify", "minify"] as const).map((action) => {
@@ -3508,8 +3648,13 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                 })}
               </div>
             </Dropdown>
-            <Dropdown open={typesMenuOpen} onOpenChange={setTypesMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`w-max min-w-[8rem] max-h-[60vh] overflow-y-auto`} trigger={<div className={`${selectBtnClass} ${typesMenuOpen ? selectBtnOpenClass : ""}`} title="Generate Types"><span className="font-medium">Types</span><ChevronDownIcon className="h-3 w-3" aria-hidden /></div>}>
+            <Dropdown open={typesMenuOpen} onOpenChange={setTypesMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`w-max min-w-[8rem] max-h-[60vh] overflow-y-auto`} trigger={<Tooltip content="Generate Types"><div className={`${selectBtnClass} ${typesMenuOpen || activeOperation === "generateTypes" ? selectBtnOpenClass : ""}`}><span className="font-medium">{activeOperation === "generateTypes" ? (TYPE_LANGUAGES.find((t) => t.id === typeLanguage)?.label ?? "Types") : "Types"}</span><ChevronDownIcon className="h-3 w-3" aria-hidden /></div></Tooltip>}>
               <div className="flex flex-col" onClick={(e) => e.stopPropagation()}>
+                <button type="button" disabled={inputEmpty} className={`${menuItemClass} ${activeOperation === "generateTypes" ? "" : "!bg-primary/12 !text-primary"}`} onClick={() => { setFocusedPane("output"); runOperation("beautify"); setTypesMenuOpen(false); }}>
+                  {sharedMenuCheck(activeOperation !== "generateTypes")}
+                  None - format output
+                </button>
+                <div className="my-1 h-px bg-[var(--workspace-border)]" role="separator" aria-hidden />
                 {(
                   [
                     { label: "TypeScript", ids: ["typescript", "zod"] as const },
@@ -3522,8 +3667,8 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                     {gi > 0 && <div className="my-1 h-px bg-[var(--workspace-border)]" role="separator" aria-hidden />}
                     {menuSectionLabel(group.label)}
                     {TYPE_LANGUAGES.filter((t) => (group.ids as readonly string[]).includes(t.id)).map((item) => (
-                      <button key={item.id} type="button" disabled={inputEmpty} className={`${menuItemClass} ${typeLanguage === item.id ? menuItemActiveClass : ""}`} onClick={() => { setFocusedPane("output"); setActiveOperation("generateTypes"); executeOperation("generateTypes", { typeLanguage: item.id }); setTypesMenuOpen(false); }}>
-                        {sharedMenuCheck(typeLanguage === item.id)}
+                      <button key={item.id} type="button" disabled={inputEmpty} className={`${menuItemClass} ${activeOperation === "generateTypes" && typeLanguage === item.id ? menuItemActiveClass : ""}`} onClick={() => { trackEvent("generate_types", { language: item.id, source: "types_menu" }); setFocusedPane("output"); setActiveOperation("generateTypes"); executeOperation("generateTypes", { typeLanguage: item.id }); setTypesMenuOpen(false); }}>
+                        {sharedMenuCheck(activeOperation === "generateTypes" && typeLanguage === item.id)}
                         {item.label}
                       </button>
                     ))}
@@ -3538,11 +3683,11 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
             <>
               <div className="mx-1 h-5 w-px shrink-0 bg-[var(--workspace-border)]" aria-hidden />
               <div className="flex h-7 shrink-0 overflow-hidden rounded-md bg-muted">
+                <Tooltip content="Document text/JSON diff">
                 <button
                   type="button"
                   className={`relative h-7 cursor-pointer px-3 text-xs font-semibold transition-colors duration-150 ${diffKind === "document" ? "text-primary" : "text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)] hover:text-[var(--workspace-text)]"}`}
                   onClick={() => setDiffKind("document")}
-                  title="Document text/JSON diff"
                 >
                   {diffKind === "document" && (
                     <motion.span
@@ -3553,11 +3698,12 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                   )}
                   <span className="relative z-[1]">Document</span>
                 </button>
+                </Tooltip>
+                <Tooltip content="List / set compare">
                 <button
                   type="button"
                   className={`relative h-7 cursor-pointer border-l border-[var(--workspace-border)] px-3 text-xs font-semibold transition-colors duration-150 ${diffKind === "list" ? "text-primary" : "text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)] hover:text-[var(--workspace-text)]"}`}
                   onClick={() => setDiffKind("list")}
-                  title="List / set compare"
                 >
                   {diffKind === "list" && (
                     <motion.span
@@ -3568,25 +3714,32 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                   )}
                   <span className="relative z-[1]">Lists</span>
                 </button>
+                </Tooltip>
               </div>
               {diffKind === "list" && (
                 <div
                   ref={setListToolbarHost}
-                  className="flex min-h-7 min-w-0 flex-1 flex-nowrap items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                  className="flex min-h-7 min-w-0 flex-1 flex-nowrap items-center gap-1 overflow-hidden"
                 />
               )}
               {diffKind === "document" && (
-                <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-0.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                  <div className="flex shrink-0 items-center gap-0.5 rounded-lg border border-[var(--workspace-border)]/60 px-0.5">
-                    <button type="button" title="Previous difference" className={`${linkBtnClass} h-7 min-h-7 w-7`} disabled={!diffNav.total} onClick={() => diffEditorRef.current?.prevChange()}>
+                <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-0.5 overflow-hidden">
+                  <div className="flex h-7 shrink-0 overflow-hidden rounded-md bg-muted">
+                    <Tooltip content="Previous difference" className="shrink-0">
+                    <button type="button" className="flex h-7 w-7 cursor-pointer items-center justify-center text-[var(--workspace-text-muted)] transition-colors hover:bg-primary/10 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40" disabled={!diffNav.total} onClick={() => diffEditorRef.current?.prevChange()}>
                       <ChevronUpIcon className="h-3.5 w-3.5" />
                     </button>
-                    <span className="min-w-[2.75rem] px-0.5 text-center text-[11px] font-medium tabular-nums text-[var(--workspace-text)]" title="Current / total hunks">
+                    </Tooltip>
+                    <Tooltip content="Current / total hunks" className="shrink-0">
+                    <span className="flex h-7 min-w-[2.75rem] items-center justify-center border-x border-[var(--workspace-border)]/60 px-1 text-center text-[11px] font-medium tabular-nums text-[var(--workspace-text)]">
                       {diffNav.total ? `${diffNav.current}/${diffNav.total}` : "0"}
                     </span>
-                    <button type="button" title="Next difference" className={`${linkBtnClass} h-7 min-h-7 w-7`} disabled={!diffNav.total} onClick={() => diffEditorRef.current?.nextChange()}>
+                    </Tooltip>
+                    <Tooltip content="Next difference" className="shrink-0">
+                    <button type="button" className="flex h-7 w-7 cursor-pointer items-center justify-center text-[var(--workspace-text-muted)] transition-colors hover:bg-primary/10 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40" disabled={!diffNav.total} onClick={() => diffEditorRef.current?.nextChange()}>
                       <ChevronDownIcon className="h-3.5 w-3.5" />
                     </button>
+                    </Tooltip>
                   </div>
                   {diffLineStats && diffLineStats.hunks > 0 ? (
                     <div className="flex shrink-0 items-center gap-1 text-[10px] font-medium tabular-nums">
@@ -3597,21 +3750,27 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                   ) : (diffLeftInput.trim() || diffRightInput.trim()) ? (
                     <span className="shrink-0 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">Identical</span>
                   ) : null}
-                  <button type="button" title={diffSideBySide ? "Inline view" : "Side-by-side"} className={diffToolBtn} onClick={() => setDiffSideBySide((v) => !v)}>
+                  <Tooltip content={diffSideBySide ? "Inline view" : "Side-by-side"} className="shrink-0">
+                  <button type="button" className={diffToolBtn} onClick={() => { trackEvent("diff_toggle", { setting: "layout", value: !diffSideBySide }); setDiffSideBySide((v) => !v); }}>
                     {diffSideBySide ? "Inline" : "Side-by-side"}
                   </button>
-                  <button type="button" title="Ignore trim whitespace" className={`${diffToolBtn} ${diffIgnoreWhitespace ? "!bg-primary/12 !text-primary" : ""}`} onClick={() => setDiffIgnoreWhitespace((v) => !v)}>
+                  </Tooltip>
+                  <Tooltip content="Ignore trim whitespace" className="shrink-0">
+                  <button type="button" className={`${diffToolBtn} ${diffIgnoreWhitespace ? "!bg-primary/12 !text-primary" : ""}`} onClick={() => { trackEvent("diff_toggle", { setting: "ignore_ws", value: !diffIgnoreWhitespace }); setDiffIgnoreWhitespace((v) => !v); }}>
                     {diffIgnoreWhitespace ? "Ignore WS ✓" : "Ignore WS"}
                   </button>
-                  <button type="button" title="Swap sides" className={`${diffToolBtn} w-7 !px-0`} onClick={swapDiffSides}>
+                  </Tooltip>
+                  <Tooltip content="Swap sides" className="shrink-0">
+                  <button type="button" className={`${diffToolBtn} w-7 !px-0`} onClick={swapDiffSides}>
                     <ArrowsRightLeftIcon className="h-3.5 w-3.5" />
                   </button>
+                  </Tooltip>
+                  <Tooltip content={canShowPathDiff ? "JSON path-level changes" : "Path diff needs valid JSON on both sides"} className="shrink-0">
                   <button
                     type="button"
-                    title={canShowPathDiff ? "JSON path-level changes" : "Path diff needs valid JSON on both sides"}
                     disabled={!canShowPathDiff}
                     className={`${diffToolBtn} ${diffShowPaths ? "!bg-primary/12 !text-primary" : ""}`}
-                    onClick={() => setDiffShowPaths((v) => !v)}
+                    onClick={() => { trackEvent("diff_toggle", { setting: "paths", value: !diffShowPaths }); setDiffShowPaths((v) => !v); }}
                   >
                     <ListBulletIcon className="h-3.5 w-3.5 shrink-0" />
                     <span className="hidden sm:inline">Paths</span>
@@ -3619,15 +3778,22 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                       <span className="tabular-nums opacity-80">{structuralDiff.total}</span>
                     )}
                   </button>
-                  <button type="button" title="Beautify both sides" className={diffToolBtn} onClick={() => beautifyDiffSides("both")}>
+                  </Tooltip>
+                  <Tooltip content="Beautify both sides" className="shrink-0">
+                  <button type="button" className={diffToolBtn} onClick={() => beautifyDiffSides("both")}>
                     Beautify
                   </button>
+                  </Tooltip>
                 </div>
               )}
             </>
           )}
 
-          <span className="min-w-2 flex-1" />
+          {isDiffMode ? (
+            <span className="w-2 shrink-0" aria-hidden />
+          ) : (
+            <span className="min-w-2 flex-1" />
+          )}
 
           <OutputActionBar
               canCopy={Boolean(getActiveOutputText().trim()) || (!isDiffMode && !isUtilsMode && canDownload)}
@@ -3713,6 +3879,13 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
               }
               onCopyAs={copyOutputAs}
               copyAsOptions={activeCopyAsOptions}
+              lastCopyAsId={copyAsMemory[copyMemoryKey]}
+              onLastCopyAsIdChange={(id) =>
+                setCopyAsMemory((m) => ({ ...m, [copyMemoryKey]: id }))
+              }
+              onGraphCopy={graphCopy}
+              graphCopyFormat={graphCopyFormat}
+              onGraphCopyFormatChange={setGraphCopyFormat}
               onReset={handleWorkspaceReset}
               resetLabel={
                 isUtilsMode
@@ -3908,7 +4081,10 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                 panelClass={outputPanelClass}
                 isDark={isDark}
                 activeTab={utilTab}
-                onActiveTabChange={setUtilTab}
+                onActiveTabChange={(t) => {
+                  trackEvent("util_tool", { tool: t });
+                  setUtilTab(t);
+                }}
                 stateByTool={utilsByTool}
                 onStateByToolChange={setUtilsByTool}
                 fontSize={editorFontSize}
@@ -3972,13 +4148,14 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                           <span className="ml-auto text-[10px] tabular-nums text-[var(--workspace-text-muted)]">
                             {structuralDiff ? structuralDiff.total : "-"}
                           </span>
+                          <Tooltip content="Close path list">
                           <SquareBtn
                             className={`${linkBtnClass} h-6 min-h-6 w-6`}
-                            title="Close path list"
                             onClick={() => setDiffShowPaths(false)}
                           >
                             <XMarkIcon className="h-3.5 w-3.5" />
                           </SquareBtn>
+                          </Tooltip>
                         </div>
                         <div className="flex shrink-0 gap-0.5 border-b border-[var(--workspace-border)] px-1.5 py-1">
                           {([
@@ -4026,9 +4203,11 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                                       {row.change === "added" ? "+" : row.change === "removed" ? "−" : "~"}
                                     </span>
                                     <div className="min-w-0 flex-1">
-                                      <p className="truncate font-mono text-[10px] font-semibold text-[var(--workspace-text)]" title={row.path}>
+                                      <Tooltip content={row.path} className="block max-w-full">
+                                      <p className="truncate font-mono text-[10px] font-semibold text-[var(--workspace-text)]">
                                         {row.path}
                                       </p>
+                                      </Tooltip>
                                     </div>
                                   </div>
                                 </li>
@@ -4047,10 +4226,10 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                   <XCircleIcon className="h-5 w-5 shrink-0" />
                   Error
                   <span className="flex-1" />
+                  <Tooltip content="Clear input and error">
                   <button
                     type="button"
                     className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--workspace-border)] px-3 py-1.5 text-xs font-medium text-[var(--workspace-text)] hover:bg-primary/10 hover:text-primary"
-                    title="Clear input and error"
                     onClick={() => {
                       setInput("");
                       setOutput("");
@@ -4066,6 +4245,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                     <XMarkIcon className="h-3.5 w-3.5" />
                     Clear
                   </button>
+                  </Tooltip>
                 </div>
                 <pre className="w-full text-left text-sm text-[var(--workspace-text-muted)] whitespace-pre-wrap break-words font-mono">
                   {error ?? validationError}
@@ -4362,17 +4542,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                   isDark={isDark}
                   fontSize={editorFontSize}
                   monacoTheme={monacoTheme}
-                  onPromoteResult={(text) => {
-                    setInput(text);
-                    pushHistory(text);
-                    setInputFormatOverride(null);
-                    setError(null);
-                    setValidationError(null);
-                    setRightView("raw");
-                    setFocusedPane("input");
-                    toast({ message: "Query result moved to input" });
-                  }}
-                  onNotify={(msg) => toast({ message: msg })}
+                  onResultChange={setQueryResult}
                 />
               ) : (
                 <div className={`flex h-full min-h-[200px] items-center justify-center border text-sm text-[var(--workspace-text-muted)] ${outputPanelClass}`}>
@@ -4479,21 +4649,22 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
           sharedLinkUrl ? (
             <span className="flex shrink-0 items-center gap-1">
               <span className="shrink-0 text-primary">Shared</span>
+              <Tooltip content={sharedLinkUrl} className="min-w-0 flex-1">
               <a
                 href={sharedLinkUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="max-w-[8rem] truncate hover:underline sm:max-w-[12rem]"
-                title={sharedLinkUrl}
+                className="block max-w-[8rem] truncate hover:underline sm:max-w-[12rem]"
               >
                 {sharedLinkUrl.replace(/^https?:\/\/[^/]+/, "")}
               </a>
+              </Tooltip>
+              <Tooltip content="Copy link">
               <UiButton
                 type="button"
                 variant="ghost"
                 size="icon"
                 className="h-5 w-5 shrink-0 rounded text-[var(--workspace-text-muted)] hover:text-[var(--workspace-text)] [&_svg]:!h-3.5 [&_svg]:!w-3.5"
-                title="Copy link"
                 onClick={async () => {
                   try {
                     await navigator.clipboard.writeText(sharedLinkUrl);
@@ -4505,12 +4676,13 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
               >
                 <ClipboardDocumentIcon className="h-3.5 w-3.5" />
               </UiButton>
+              </Tooltip>
+              <Tooltip content="Disable sharing">
               <UiButton
                 type="button"
                 variant="ghost"
                 size="icon"
                 className="h-5 w-5 shrink-0 rounded text-[var(--workspace-text-muted)] hover:text-[var(--workspace-text)] [&_svg]:!h-3.5 [&_svg]:!w-3.5"
-                title="Disable sharing"
                 onClick={async () => {
                   const idToDelete = sharedLinkId;
                   setSharedLinkId(null);
@@ -4522,6 +4694,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
               >
                 <LinkSlashIcon className="h-3.5 w-3.5" />
               </UiButton>
+              </Tooltip>
             </span>
           ) : undefined
         }
@@ -4601,7 +4774,13 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
         >
           <DialogContent className="max-w-3xl">
             <DialogHeader>
-              <DialogTitle className="text-sm">Schema (JSON or YAML) for Validate</DialogTitle>
+              <DialogTitle className="text-sm">Validate against a schema</DialogTitle>
+              <DialogDescription className="text-xs leading-relaxed">
+                Paste a{" "}
+                <strong className="text-[var(--workspace-text)]">JSON Schema</strong> or{" "}
+                <strong className="text-[var(--workspace-text)]">YAML schema</strong> to validate
+                the current input against. Validation runs locally - nothing leaves your device.
+              </DialogDescription>
             </DialogHeader>
             <Textarea
               className="h-60 w-full font-mono text-xs"
@@ -4622,7 +4801,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                   executeOperation("validate", { schemaText: modalValue });
                 }}
               >
-                Apply
+                Validate
               </UiButton>
             </DialogFooter>
           </DialogContent>

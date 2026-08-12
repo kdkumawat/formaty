@@ -8,6 +8,7 @@ import {
   PowerFeatures,
   Workflow,
   UseCases,
+  Testimonials,
   Differentiation,
   FinalCTA,
   Footer,
@@ -25,6 +26,7 @@ export function HomePage() {
         <PowerFeatures />
         <Workflow />
         <UseCases />
+        <Testimonials />
         <Differentiation />
         <FinalCTA />
         <Footer />

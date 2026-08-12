@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
-import { ArrowUturnLeftIcon, ClipboardDocumentIcon } from "@heroicons/react/24/outline";
+import { Tooltip } from "@/components/workspace/Tooltip";
 import { JsonEditor } from "@/components/JsonEditor";
 import { runQuery, type QueryLanguage } from "@/lib/query/runQuery";
 import { formatJson } from "@/lib/json/core";
@@ -13,8 +13,8 @@ interface QueryViewProps {
   isDark?: boolean;
   fontSize?: number;
   monacoTheme?: string;
-  onPromoteResult?: (text: string) => void;
-  onNotify?: (msg: string) => void;
+  /** Report the latest query result up so the global toolbar can copy it. */
+  onResultChange?: (text: string) => void;
 }
 
 const QUERY_LANGUAGES: Array<{ id: QueryLanguage; label: string; placeholder: string }> = [
@@ -63,8 +63,7 @@ export function QueryView({
   isDark = false,
   fontSize = 13,
   monacoTheme = "vs-dark",
-  onPromoteResult,
-  onNotify,
+  onResultChange,
 }: QueryViewProps) {
   const [queryLang, setQueryLang] = useState<QueryLanguage>("jsonpath");
   const [query, setQuery] = useState("");
@@ -107,6 +106,11 @@ export function QueryView({
     run();
   }, [run]);
 
+  // Lift the result up so the global toolbar copy / download / share work.
+  useEffect(() => {
+    onResultChange?.(result);
+  }, [result, onResultChange]);
+
   const linkBtnClass =
     "inline-flex h-7 items-center rounded-md px-2 text-[11px] font-medium text-[var(--workspace-text-muted)] transition-colors hover:bg-primary/10 hover:text-primary";
 
@@ -133,35 +137,9 @@ export function QueryView({
           ))}
           <span className="flex-1" />
           {result.trim() && (
-            <>
-              <button
-                type="button"
-                className={linkBtnClass}
-                title="Copy result"
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText(result);
-                    onNotify?.("Result copied");
-                  } catch {
-                    onNotify?.("Copy failed");
-                  }
-                }}
-              >
-                <ClipboardDocumentIcon className="mr-1 h-3.5 w-3.5" />
-                Copy
-              </button>
-              {onPromoteResult && (
-                <button
-                  type="button"
-                  className={linkBtnClass}
-                  title="Use result as input"
-                  onClick={() => onPromoteResult(result)}
-                >
-                  <ArrowUturnLeftIcon className="mr-1 h-3.5 w-3.5" />
-                  Use as input
-                </button>
-              )}
-            </>
+            <span className="shrink-0 text-[10px] font-medium tabular-nums text-[var(--workspace-text-muted)]">
+              Use the toolbar above to copy or use as input
+            </span>
           )}
         </div>
         <textarea
@@ -187,15 +165,15 @@ export function QueryView({
             <>
               <span className="mx-1 h-3 w-px bg-[var(--workspace-border)]" />
               {history.slice(0, 4).map((h) => (
+                <Tooltip content={h} key={h}>
                 <button
-                  key={h}
                   type="button"
                   className="max-w-[8rem] truncate rounded border border-[var(--workspace-border)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--workspace-text-muted)] hover:border-primary/40 hover:text-primary"
-                  title={h}
                   onClick={() => setQuery(h)}
                 >
                   {h}
                 </button>
+                </Tooltip>
               ))}
             </>
           )}

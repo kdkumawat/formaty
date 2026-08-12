@@ -66,16 +66,17 @@ export function Header({
       {/* Command palette trigger - centered absolutely (hidden on narrow screens so it never overlaps the brand/actions) */}
       {onOpenCommandPalette && (
         <div className="absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 md:block">
+          <Tooltip content="Command palette (⌘K)">
           <Button
             variant="ghost"
             onClick={onOpenCommandPalette}
-            title="Command palette (⌘K)"
             className="h-auto min-h-0 w-[220px] items-center gap-2 rounded-lg border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-3 py-1.5 text-left text-[12px] text-[var(--workspace-text-muted)] transition-all hover:border-primary/30 hover:text-[var(--workspace-text)] hover:shadow-sm sm:w-[280px] [&_svg]:!size-3.5"
           >
             <MagnifyingGlassIcon className="h-3.5 w-3.5 shrink-0" />
             <span className="flex-1 text-left">Search commands…</span>
             <kbd className="hidden rounded border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-1.5 py-0.5 font-mono text-[10px] sm:flex">⌘K</kbd>
           </Button>
+          </Tooltip>
         </div>
       )}
 
@@ -101,21 +102,21 @@ export function Header({
         {/* Theme segment control */}
         <div className="ml-0.5 flex items-center gap-px rounded-lg border border-[var(--workspace-border)] bg-[var(--workspace-panel)] p-0.5">
           {themeOptions.map(({ mode, label, Icon }) => (
-            <Button
-              key={mode}
-              type="button"
-              variant="ghost"
-              aria-label={`${label} theme`}
-              title={label}
-              onClick={() => onThemeChange(mode)}
-              className={`h-auto min-h-0 !p-1 rounded transition-all duration-150 [&_svg]:!size-3.5 ${
-                themeMode === mode
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)] hover:text-[var(--workspace-text)]"
-              }`}
-            >
-              <Icon className="h-3.5 w-3.5" aria-hidden />
-            </Button>
+            <Tooltip content={label} key={mode}>
+              <Button
+                type="button"
+                variant="ghost"
+                aria-label={`${label} theme`}
+                onClick={() => onThemeChange(mode)}
+                className={`h-auto min-h-0 !p-1 rounded transition-all duration-150 [&_svg]:!size-3.5 ${
+                  themeMode === mode
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)] hover:text-[var(--workspace-text)]"
+                }`}
+              >
+                <Icon className="h-3.5 w-3.5" aria-hidden />
+              </Button>
+            </Tooltip>
           ))}
         </div>
 
@@ -134,7 +135,6 @@ export function Header({
                 <button
                   type="button"
                   aria-label="Settings"
-                  title="Settings"
                   className={`inline-flex h-auto min-h-0 items-center justify-center rounded-lg border border-[var(--workspace-border)] bg-[var(--workspace-panel)] p-1.5 transition-all duration-150 [&_svg]:!size-3.5 ${
                     settingsOpen
                       ? "border-primary/40 bg-primary/10 text-primary"

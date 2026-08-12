@@ -9,6 +9,7 @@ import {
   ChevronDownIcon,
 } from "@heroicons/react/24/outline";
 import { Dropdown } from "@/components/workspace/Dropdown";
+import { Tooltip } from "@/components/workspace/Tooltip";
 import {
   menuItemClass as sharedMenuItemClass,
   menuItemActiveClass as sharedMenuItemActiveClass,
@@ -92,13 +93,13 @@ function CycleSortButton({
         ? `${titlePrefix}: A → Z - click for Z → A`
         : `${titlePrefix}: Z → A - click to reset`;
   return (
+    <Tooltip content={title}>
     <button
       type="button"
       className={`${linkBtnClass} h-7 min-h-7 w-7 disabled:opacity-40 ${
         mode !== "none" ? "!bg-primary/12 !text-primary" : ""
       }`}
       disabled={disabled}
-      title={title}
       onClick={onCycle}
     >
       {mode === "desc" ? (
@@ -107,6 +108,7 @@ function CycleSortButton({
         <BarsArrowUpIcon className={`h-3.5 w-3.5 ${mode === "none" ? "opacity-50" : ""}`} />
       )}
     </button>
+    </Tooltip>
   );
 }
 
@@ -127,7 +129,7 @@ export function ListComparePanel({
   trailingControls,
   toolbarHost = null,
   onExportChange,
-  fontSize = 14,
+  fontSize = 13,
   options,
 }: ListComparePanelProps) {
   const effectiveOptions = options ?? DEFAULT_LIST_PARSE_OPTIONS;
@@ -329,17 +331,17 @@ export function ListComparePanel({
       {visibleDupes.map((b) => {
         const n = bucketCount(b);
         return (
+          <Tooltip key={b} content={BUCKET_LABELS[b]} className="shrink-0">
           <button
-            key={b}
             type="button"
             onClick={() => setActiveBucket(b)}
-            title={BUCKET_LABELS[b]}
             className={`${linkBtnClass} h-7 min-h-7 shrink-0 px-2 text-[11px] font-semibold tabular-nums ${
               activeBucket === b ? `!ring-1 !ring-primary/40 ${bucketColor(b)}` : ""
             }`}
           >
             {shortBucket(b)} {n}
           </button>
+          </Tooltip>
         );
       })}
 
@@ -415,14 +417,15 @@ export function ListComparePanel({
 
           {/* Middle divider - swap appears on hover */}
           <div className="hidden lg:flex h-10 w-4 shrink-0 flex-col items-center justify-center border-x border-[var(--workspace-border)] bg-[var(--workspace-panel)] group/swap">
+            <Tooltip content="Swap sides">
             <button
               type="button"
-              title="Swap sides"
               onClick={swap}
               className={`${linkBtnClass} h-7 min-h-7 w-7 opacity-0 transition-opacity duration-150 group-hover/swap:opacity-100`}
             >
               <ArrowsRightLeftIcon className="h-3.5 w-3.5" />
             </button>
+            </Tooltip>
           </div>
 
           {/* Right */}
@@ -475,14 +478,15 @@ export function ListComparePanel({
               align="start"
               contentClassName={`w-max min-w-[8rem]`}
               trigger={
+                <Tooltip content="Select bucket">
                 <button
                   type="button"
                   className={`${linkBtnClass} h-7 min-h-7 gap-0.5 px-2 text-[11px] font-semibold ${bucketColor(activeBucket)}`}
-                  title="Select bucket"
                 >
                   {BUCKET_LABELS[activeBucket]} · {bucketItems.length}
                   <ChevronDownIcon className="h-3 w-3 opacity-60" />
                 </button>
+                </Tooltip>
               }
             >
               <div className="flex flex-col">
@@ -536,14 +540,15 @@ export function ListComparePanel({
               align="end"
               contentClassName={`max-h-[50vh] w-52 overflow-y-auto`}
               trigger={
+                <Tooltip content="Result format (copy via output actions)" className="shrink-0">
                 <button
                   type="button"
                   className={`${linkBtnClass} h-7 min-h-7 max-w-[10rem] gap-0.5 truncate px-2 text-[11px] font-medium`}
-                  title="Result format (copy via output actions)"
                 >
                   <span className="truncate">{listExportFormatLabel(exportFormat)}</span>
                   <ChevronDownIcon className="h-3 w-3 shrink-0 opacity-60" />
                 </button>
+                </Tooltip>
               }
             >
               <div className="flex flex-col">
@@ -570,17 +575,18 @@ export function ListComparePanel({
 
             <div className="mx-0.5 h-4 w-px shrink-0 bg-[var(--workspace-border)]" />
 
+            <Tooltip content="SQL column name">
             <input
               type="text"
               value={sqlColumn}
               onChange={(e) => setSqlColumn(e.target.value)}
               className="h-7 w-14 shrink-0 rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-1.5 font-mono text-[11px] text-[var(--workspace-text)]"
-              title="SQL column"
               aria-label="SQL column name"
             />
+            </Tooltip>
+            <Tooltip content="NOT IN" className="shrink-0">
             <label
               className="flex shrink-0 cursor-pointer items-center gap-0.5 text-[11px] text-[var(--workspace-text-muted)]"
-              title="NOT IN"
             >
               <Checkbox
                 checked={sqlNotIn}
@@ -588,15 +594,17 @@ export function ListComparePanel({
               />
               NOT
             </label>
+            </Tooltip>
+            <Tooltip content="Copy SQL IN / NOT IN clause" className="shrink-0">
             <button
               type="button"
               className={`${linkBtnClass} h-7 min-h-7 shrink-0 px-2 text-[11px] font-semibold text-primary`}
-              title="Copy SQL IN / NOT IN clause"
               disabled={bucketItems.length === 0}
               onClick={() => void copyText(sqlClause, "SQL clause")}
             >
               SQL
             </button>
+            </Tooltip>
           </div>
 
           <pre

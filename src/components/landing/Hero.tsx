@@ -334,7 +334,7 @@ export function Hero() {
             <span className="font-semibold text-[var(--workspace-text)]">
               JSON · XML · YAML · TOML · CSV · cURL
             </span>
-            {" "}- UUID, Base64, JWT, hash, and more. One workspace, zero installs.
+            {" "}- UUID, Base64, JWT, hash, regex, color, cron, and more. One workspace, zero installs.
           </motion.p>
 
           {/* CTA row */}
@@ -360,6 +360,29 @@ export function Hero() {
             >
               Format JSON
             </Link>
+          </motion.div>
+
+          {/* Stats row - light social proof */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.28 }}
+            className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 lg:justify-start"
+          >
+            {[
+              { value: "5", label: "Formats" },
+              // 18 tool pages + 18 utils
+              { value: "36", label: "Tools & Utils" },
+              { value: "0", label: "Sign-ups" },
+              { value: "100%", label: "Local" },
+            ].map((s) => (
+              <div key={s.label} className="flex items-center gap-2">
+                <span className="font-mono text-lg font-bold tabular-nums text-[var(--workspace-text)]">
+                  {s.value}
+                </span>
+                <span className="text-xs font-medium text-[var(--workspace-text-muted)]">{s.label}</span>
+              </div>
+            ))}
           </motion.div>
 
           {/* Format pills - with active slide highlighted */}
