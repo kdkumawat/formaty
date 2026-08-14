@@ -1,14 +1,17 @@
 import Link from "next/link";
 import { ArrowRightIcon, ArrowLeftIcon, CheckCircleIcon } from "@heroicons/react/24/outline";
 import { Logo } from "@/components/Logo";
-import type { ToolPageConfig, ToolRoute } from "@/lib/seo";
-import { TOOL_PAGES } from "@/lib/seo";
+import type { ToolPageConfig } from "@/lib/seo";
+import type { UtilPageConfig } from "@/lib/seoUtils";
+import { UTIL_PAGES, getPageConfigByRoute } from "@/lib/seoUtils";
+
+type PageConfig = ToolPageConfig | UtilPageConfig;
 
 interface ToolPageProps {
-  config: ToolPageConfig;
+  config: PageConfig;
 }
 
-function RelatedTools({ related }: { related: ToolRoute[] }) {
+function RelatedTools({ related }: { related: string[] }) {
   return (
     <aside className="mt-12">
       <h2 className="mb-4 text-xs font-semibold uppercase tracking-widest text-[var(--workspace-text-muted)]">
@@ -16,11 +19,13 @@ function RelatedTools({ related }: { related: ToolRoute[] }) {
       </h2>
       <ul className="grid gap-2 sm:grid-cols-2">
         {related.map((route) => {
-          const c = TOOL_PAGES[route];
+          const c = getPageConfigByRoute(route);
+          if (!c) return null;
+          const href = route in UTIL_PAGES ? `/utils/${route}` : `/${route}`;
           return (
             <li key={route}>
               <Link
-                href={`/${route}`}
+                href={href}
                 className="group flex items-center justify-between rounded-xl border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-4 py-3 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md hover:shadow-primary/5"
               >
                 <span className="text-sm font-medium text-[var(--workspace-text)] group-hover:text-primary">
@@ -37,6 +42,8 @@ function RelatedTools({ related }: { related: ToolRoute[] }) {
 }
 
 export function ToolPage({ config }: ToolPageProps) {
+  const playUrl =
+    "util" in config ? `/playground?util=${config.util}` : `/playground?tool=${config.route}`;
   return (
     <article className="min-h-screen bg-[var(--workspace-background)]">
       {/* Header */}
@@ -94,7 +101,7 @@ export function ToolPage({ config }: ToolPageProps) {
 
           <div className="mt-6 flex flex-wrap gap-3">
             <Link
-              href={`/playground?tool=${config.route}`}
+              href={playUrl}
               className="group inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:scale-[1.03] hover:shadow-primary/30"
             >
               Try {config.h1}
@@ -193,7 +200,7 @@ export function ToolPage({ config }: ToolPageProps) {
                 Free, local-first - no data leaves your browser.
               </p>
               <Link
-                href={`/playground?tool=${config.route}`}
+                href={playUrl}
                 className="group flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:scale-[1.02]"
               >
                 Open Tool

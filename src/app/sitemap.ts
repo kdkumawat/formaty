@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { ALL_TOOL_ROUTES } from "@/lib/seo";
+import { UTIL_ROUTES } from "@/lib/seoUtils";
 
 export const dynamic = "force-static";
 
@@ -25,6 +26,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "weekly" as const,
       priority: 0.9,
     },
+    {
+      url: `${SITE_URL}/changelog`,
+      lastModified: new Date(),
+      changeFrequency: "monthly" as const,
+      priority: 0.4,
+    },
   ];
   const toolPages: MetadataRoute.Sitemap = ALL_TOOL_ROUTES.map((route) => ({
     url: `${SITE_URL}/${route}`,
@@ -32,5 +39,11 @@ export default function sitemap(): MetadataRoute.Sitemap {
     changeFrequency: "monthly" as const,
     priority: 0.85,
   }));
-  return [...base, ...toolPages];
+  const utilPages: MetadataRoute.Sitemap = UTIL_ROUTES.map((route) => ({
+    url: `${SITE_URL}/utils/${route}`,
+    lastModified: new Date(),
+    changeFrequency: "monthly" as const,
+    priority: 0.8,
+  }));
+  return [...base, ...toolPages, ...utilPages];
 }

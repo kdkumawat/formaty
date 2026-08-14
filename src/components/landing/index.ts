@@ -1,4 +1,6 @@
 export { Hero } from "./Hero";
+export { TryIt } from "./TryIt";
+export { Recipes } from "./Recipes";
 export { TrustStrip } from "./TrustStrip";
 export { ProblemSolution } from "./ProblemSolution";
 export { FeatureGrid } from "./FeatureGrid";

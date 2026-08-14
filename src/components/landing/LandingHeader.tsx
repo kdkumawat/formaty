@@ -4,6 +4,7 @@ import Link from "next/link";
 import { SunIcon, MoonIcon, ComputerDesktopIcon } from "@heroicons/react/24/outline";
 import { Logo } from "@/components/Logo";
 import { Tooltip } from "@/components/workspace/Tooltip";
+import { GitHubStars } from "@/components/GitHubStars";
 import { useTheme, type ThemeMode } from "@/hooks/useTheme";
 
 const themeOptions: { mode: ThemeMode; label: string; Icon: typeof SunIcon }[] = [
@@ -55,6 +56,7 @@ export function LandingHeader() {
             </svg>
             <span className="hidden sm:inline">GitHub</span>
           </a>
+          <GitHubStars />
 
           {/* Theme switcher */}
           <div className="flex rounded-lg border border-[var(--workspace-border)] bg-[var(--workspace-panel)]/60 p-0.5">

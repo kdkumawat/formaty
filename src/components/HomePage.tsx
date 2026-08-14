@@ -2,16 +2,20 @@
 
 import {
   Hero,
-  TrustStrip,
+  TryIt,
   ProblemSolution,
   FeatureGrid,
+  ConversionGrid,
   PowerFeatures,
+  Capabilities,
   Workflow,
   UseCases,
+  Recipes,
   Testimonials,
   Differentiation,
   FinalCTA,
   Footer,
+  TrustStrip,
 } from "@/components/landing";
 import { LandingHeader } from "@/components/landing";
 
@@ -21,11 +25,15 @@ export function HomePage() {
       <LandingHeader />
       <main className="flex-1">
         <Hero />
+        <TryIt />
         <ProblemSolution />
         <FeatureGrid />
+        <ConversionGrid />
         <PowerFeatures />
+        <Capabilities />
         <Workflow />
         <UseCases />
+        <Recipes />
         <Testimonials />
         <Differentiation />
         <FinalCTA />

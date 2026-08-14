@@ -26,6 +26,17 @@ const CONVERSION_LINKS = [
   { route: "/csv-to-json", label: "CSV to JSON" },
 ];
 
+const UTIL_LINKS = [
+  { route: "/utils/uuid-generator", label: "UUID Generator" },
+  { route: "/utils/base64-encoder", label: "Base64 Encoder" },
+  { route: "/utils/jwt-decoder", label: "JWT Decoder" },
+  { route: "/utils/sha-hash-generator", label: "SHA Hash Generator" },
+  { route: "/utils/password-generator", label: "Password Generator" },
+  { route: "/utils/unix-timestamp-converter", label: "Unix Timestamp" },
+  { route: "/utils/color-converter", label: "Color Converter" },
+  { route: "/utils/cron-expression-explainer", label: "Cron Explainer" },
+];
+
 export function Footer() {
   return (
     <footer className="border-t border-[var(--workspace-border)] bg-[var(--workspace-background)] px-4 pb-8 pt-12">
@@ -33,7 +44,7 @@ export function Footer() {
         
 
         {/* Links grid */}
-        <div className="grid gap-6 sm:grid-cols-2">
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           <div>
             <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]">
               Tools
@@ -68,6 +79,23 @@ export function Footer() {
               ))}
             </ul>
           </div>
+          <div>
+            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]">
+              Utils
+            </h3>
+            <ul className="flex flex-wrap gap-x-4 gap-y-1.5">
+              {UTIL_LINKS.map(({ route, label }) => (
+                <li key={route}>
+                  <Link
+                    href={route}
+                    className="text-xs text-[var(--workspace-text-muted)] transition-colors hover:text-primary"
+                  >
+                    {label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
 
         {/* Bottom bar */}
@@ -91,7 +119,24 @@ export function Footer() {
             >
               Privacy
             </Link>
+            <Link
+              href="/changelog"
+              className="text-xs text-[var(--workspace-text-muted)] transition-colors hover:text-primary"
+            >
+              Changelog
+            </Link>
           </div>
+          <a
+            href="https://github.com/kdkumawat/formaty"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-3 py-1.5 text-xs font-medium text-[var(--workspace-text-muted)] transition-colors hover:border-primary/40 hover:text-[var(--workspace-text)]"
+          >
+            <svg className="h-3.5 w-3.5 text-amber-400" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+              <path d="M12 17.27 18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
+            </svg>
+            Star on GitHub
+          </a>
           <span className="text-xs text-[var(--workspace-text-muted)]">
             © {new Date().getFullYear()} Formaty · Local-first developer tools
           </span>

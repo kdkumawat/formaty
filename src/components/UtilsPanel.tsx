@@ -906,7 +906,7 @@ export function UtilsPanel({
                 ref={gridRef}
                 className="grid min-h-0 flex-1 auto-rows-min grid-cols-[repeat(auto-fill,minmax(min(19rem,100%),1fr))] content-start gap-1.5 overflow-auto p-2"
                 role="grid"
-                aria-label={`Generated ${activeLabel}s — click a card or press Enter to copy`}
+                aria-label={`Generated ${activeLabel}s, click a card or press Enter to copy`}
                 onKeyDown={handleGridKeyDown}
               >
                 {(activeTab === "uuid" ? state.uuidList : state.pwList).map((value, i) => {

@@ -149,7 +149,7 @@ export function FeatureGrid() {
             className="inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/[0.07] px-3 py-1 font-mono text-[11px] font-semibold uppercase tracking-widest text-primary"
           >
             <span className="h-1 w-1 rounded-full bg-primary" />
-            13 tools · one workspace
+            18 tools · one workspace
           </motion.p>
           <motion.h2
             initial={{ opacity: 0, y: 16 }}
