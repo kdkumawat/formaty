@@ -28,7 +28,6 @@ export function LandingHeader() {
         </Link>
 
         <nav className="flex items-center gap-1.5 sm:gap-2">
-          <GitHubStars className="hidden md:inline-flex" />
           <Link
             href="/docs"
             className="hidden rounded-lg px-3 py-1.5 text-sm text-[var(--workspace-text-muted)] transition-colors hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] sm:inline-flex"
@@ -57,6 +56,7 @@ export function LandingHeader() {
             </svg>
             <span className="hidden sm:inline">GitHub</span>
           </a>
+          <GitHubStars />
 
           {/* Theme switcher */}
           <div className="flex rounded-lg border border-[var(--workspace-border)] bg-[var(--workspace-panel)]/60 p-0.5">

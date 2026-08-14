@@ -3,7 +3,7 @@ import { Logo } from "@/components/Logo";
 
 const ENTRIES = [
   {
-    version: "2026.2",
+    version: "2.0.1",
     date: "August 2026",
     title: "Keyboard-first workspace & marketing refresh",
     items: [
@@ -16,18 +16,8 @@ const ENTRIES = [
     ],
   },
   {
-    version: "2026.1",
-    date: "Earlier 2026",
-    title: "Analytics & improvements",
-    items: [
-      "Consent-gated Google Analytics (optional, off by default)",
-      "Improved Open Graph metadata and search indexing",
-      "Multiple polish and stability fixes across the workspace",
-    ],
-  },
-  {
-    version: "2025.4",
-    date: "2025",
+    version: "2.0.0",
+    date: "June 2026",
     title: "Compare, Utils, and type generation",
     items: [
       "Document diff and list/set compare with SQL IN export",
@@ -35,6 +25,16 @@ const ENTRIES = [
       "Type generation for 10+ languages (TypeScript, Python, Go, Rust, Java, C#, Kotlin, Swift, SQL, Protobuf)",
       "Multi-tab workspace with per-tab snapshots",
       "Share links for exact-state collaboration",
+    ],
+  },
+  {
+    version: "1.1.0",
+    date: "March 2026",
+    title: "Analytics & improvements",
+    items: [
+      "Consent-gated Google Analytics (optional, off by default)",
+      "Improved Open Graph metadata and search indexing",
+      "Multiple polish and stability fixes across the workspace",
     ],
   },
 ];
