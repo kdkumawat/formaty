@@ -42,6 +42,13 @@ export function KeyboardShortcutsOverlay() {
     return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
   }, []);
 
+  // Open from the status-bar `?` button (dispatched by StatusBar).
+  useEffect(() => {
+    const onOpen = () => setOpen(true);
+    window.addEventListener("formaty:open-shortcuts", onOpen);
+    return () => window.removeEventListener("formaty:open-shortcuts", onOpen);
+  }, []);
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="max-w-lg">
