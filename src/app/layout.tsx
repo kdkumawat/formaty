@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { Inter, JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import { Analytics } from "@/components/Analytics";
 import { ConsentBanner } from "@/components/ConsentBanner";
+import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 import "./globals.css";
 
 const inter = Inter({
@@ -112,9 +113,13 @@ export const metadata: Metadata = {
     canonical: "/",
   },
   icons: {
-    icon: "/icon.svg",
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
     shortcut: "/icon.svg",
-    apple: "/icon.svg",
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
   },
   openGraph: {
     title: SITE_TITLE,
@@ -235,7 +240,7 @@ const jsonLd = {
     url: CREATOR_LINKEDIN,
     sameAs: [CREATOR_LINKEDIN, CREATOR_X],
   },
-  sameAs: ["https://github.com/kuldeep-kumawat/formaty"],
+  sameAs: ["https://github.com/kdkumawat/formaty"],
 };
 
 export default function RootLayout({
@@ -303,6 +308,7 @@ export default function RootLayout({
         <Suspense fallback={null}>
           <Analytics />
         </Suspense>
+        <ServiceWorkerRegister />
         <ConsentBanner />
       </body>
     </html>

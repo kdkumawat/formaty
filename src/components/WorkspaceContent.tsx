@@ -38,7 +38,7 @@ import {
   type UtilTab,
   type UtilsStateMap,
 } from "@/components/UtilsPanel";
-import { UTIL_TABS } from "@/lib/utils/devtools";
+import { UTIL_SAMPLES, UTIL_TABS } from "@/lib/utils/devtools";
 import { parseJsonInput } from "@/lib/json/core";
 import { JsonEditor } from "@/components/JsonEditor";
 import { GraphView, type GraphViewRef } from "@/components/GraphView";
@@ -1058,6 +1058,21 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     }, 0);
   }, [undoIndex, undoStack]);
 
+  // Utils deep-link: /playground?util=base64 opens the Utils workspace on that tool.
+  const utilDeepLink = searchParams?.get("util");
+  useEffect(() => {
+    if (pathname !== "/playground" || !utilDeepLink) return;
+    if (!UTIL_TABS.some((t) => t.id === utilDeepLink)) return;
+    setActiveOperation("utils");
+    setUtilTab(utilDeepLink as UtilTab);
+    const sample = UTIL_SAMPLES[utilDeepLink as UtilTab];
+    if (sample) {
+      setInput(sample);
+      setUndoStack([sample]);
+      setUndoIndex(0);
+    }
+  }, [utilDeepLink, pathname]);
+
   // Extended keyboard shortcuts (⌘⇧B / ⌘⇧M / ⌘⇧D / ⌘⇧U / ⌘⇧S, ⌘1–⌘5 views, ⌘F find,
   // ⌘+/−/0 zoom, ⌥1/⌥2 focus, ⌘Y redo, Esc). Core combos (⌘K / ⌘↵ / ⌘V / ⌘Z / ⌘⇧Z)
   // and the Compare-mode undo/redo routing live in the handler further down.
@@ -1455,6 +1470,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
       sessionRestoredRef.current = true;
       return;
     }
+    const utilParam = searchParams?.get("util");
     const toolParam = searchParams?.get("tool");
     if (pathname === "/playground" && toolParam && ALL_TOOL_ROUTES.includes(toolParam as ToolRoute)) {
       const preset = TOOL_PRESETS[toolParam as ToolRoute];

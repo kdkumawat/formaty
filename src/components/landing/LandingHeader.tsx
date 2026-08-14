@@ -4,6 +4,7 @@ import Link from "next/link";
 import { SunIcon, MoonIcon, ComputerDesktopIcon } from "@heroicons/react/24/outline";
 import { Logo } from "@/components/Logo";
 import { Tooltip } from "@/components/workspace/Tooltip";
+import { GitHubStars } from "@/components/GitHubStars";
 import { useTheme, type ThemeMode } from "@/hooks/useTheme";
 
 const themeOptions: { mode: ThemeMode; label: string; Icon: typeof SunIcon }[] = [
@@ -27,6 +28,7 @@ export function LandingHeader() {
         </Link>
 
         <nav className="flex items-center gap-1.5 sm:gap-2">
+          <GitHubStars className="hidden md:inline-flex" />
           <Link
             href="/docs"
             className="hidden rounded-lg px-3 py-1.5 text-sm text-[var(--workspace-text-muted)] transition-colors hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] sm:inline-flex"

@@ -1,35 +1,47 @@
 "use client";
 
+import Link from "next/link";
 import { motion } from "framer-motion";
+import {
+  BoltIcon,
+  ArrowsRightLeftIcon,
+  ShareIcon,
+  CodeBracketIcon,
+} from "@heroicons/react/24/outline";
+import { GitHubStars } from "@/components/GitHubStars";
 
-const TESTIMONIALS = [
+const WORKFLOWS = [
   {
-    quote:
-      "I keep a tab open at all times. Paste an API response, and format, diff, or query it before it even hits my editor.",
-    name: "Maya R.",
-    role: "Backend Engineer",
-    initials: "MR",
+    icon: BoltIcon,
+    color: "text-amber-400 bg-amber-400/10 border-amber-400/25",
+    title: "Debug API responses",
+    desc: "Paste a webhook payload, format it, and diff two versions side by side before it ever reaches your editor.",
+    route: "/json-formatter",
+    cta: "Start debugging",
   },
   {
-    quote:
-      "The UUID + password generators with batch cards are the fastest way to spin up test fixtures I've found - and it's all local.",
-    name: "Daniel K.",
-    role: "QA Automation",
-    initials: "DK",
+    icon: ArrowsRightLeftIcon,
+    color: "text-rose-400 bg-rose-400/10 border-rose-400/25",
+    title: "Compare configs & lists",
+    desc: "Diff documents or compare two lists with a SQL IN export - catch what changed before you deploy.",
+    route: "/json-diff",
+    cta: "Compare data",
   },
   {
-    quote:
-      "JSON to TypeScript, schema generation, and cURL import in one free workspace. This replaced three separate tools for me.",
-    name: "Priya S.",
-    role: "Full-Stack Developer",
-    initials: "PS",
+    icon: CodeBracketIcon,
+    color: "text-blue-400 bg-blue-400/10 border-blue-400/25",
+    title: "Generate types & schemas",
+    desc: "Type your API client, generate JSON Schema, or export interfaces for 10+ languages from one sample.",
+    route: "/json-to-typescript",
+    cta: "Generate types",
   },
   {
-    quote:
-      "Share links are perfect for pairing. I send a teammate a workspace link and we debug the exact payload together.",
-    name: "Tom W.",
-    role: "SRE",
-    initials: "TW",
+    icon: ShareIcon,
+    color: "text-emerald-400 bg-emerald-400/10 border-emerald-400/25",
+    title: "Share exact state",
+    desc: "Share a workspace link with a teammate and debug the exact payload together. Everything else stays local.",
+    route: "/playground",
+    cta: "Open playground",
   },
 ];
 
@@ -45,43 +57,44 @@ export function Testimonials() {
           className="mx-auto max-w-2xl text-center"
         >
           <p className="text-xs font-semibold uppercase tracking-widest text-primary">
-            Loved by developers
+            Built for real workflows
           </p>
           <h2 className="mt-2 text-3xl font-semibold tracking-tight text-[var(--workspace-text)] sm:text-4xl">
             One workspace, zero friction.
           </h2>
           <p className="mt-3 text-base text-[var(--workspace-text-muted)]">
-            Used by engineers to format payloads, build fixtures, and debug APIs - without ever uploading data.
+            The jobs developers do every day - without ever uploading data.
           </p>
+          <div className="mt-5 flex items-center justify-center gap-3">
+            <GitHubStars />
+            <span className="text-xs text-[var(--workspace-text-muted)]">
+              Free, local-first, open source
+            </span>
+          </div>
         </motion.div>
 
         <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {TESTIMONIALS.map((t, i) => (
-            <motion.figure
-              key={t.name}
+          {WORKFLOWS.map(({ icon: Icon, color, title, desc, route, cta }, i) => (
+            <motion.div
+              key={title}
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ duration: 0.4, delay: i * 0.08 }}
               className="glow-card flex flex-col gap-4 rounded-2xl border border-[var(--workspace-border)] bg-[var(--workspace-panel)] p-5 shadow-sm transition-all hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5"
             >
-              <blockquote className="text-sm leading-relaxed text-[var(--workspace-text-muted)]">
-                “{t.quote}”
-              </blockquote>
-              <figcaption className="mt-auto flex items-center gap-3">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary">
-                  {t.initials}
-                </span>
-                <span className="min-w-0">
-                  <span className="block truncate text-sm font-semibold text-[var(--workspace-text)]">
-                    {t.name}
-                  </span>
-                  <span className="block truncate text-xs text-[var(--workspace-text-muted)]">
-                    {t.role}
-                  </span>
-                </span>
-              </figcaption>
-            </motion.figure>
+              <div className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border ${color}`}>
+                <Icon className="h-5 w-5" aria-hidden />
+              </div>
+              <h3 className="text-sm font-semibold text-[var(--workspace-text)]">{title}</h3>
+              <p className="text-sm leading-relaxed text-[var(--workspace-text-muted)]">{desc}</p>
+              <Link
+                href={route}
+                className="mt-auto inline-flex items-center gap-1 font-mono text-[11px] font-semibold text-primary transition-colors hover:underline"
+              >
+                {cta}
+              </Link>
+            </motion.div>
           ))}
         </div>
       </div>

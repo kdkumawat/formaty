@@ -174,7 +174,7 @@ Share, Copy, Copy as (Base64 / escaped / URL / Data URI), Download, Maximize, an
 
 ## Keyboard Shortcuts
 
-The workspace is keyboard-first. Press **`?`** (or **`⌘/` / `Ctrl+/`**) any time to open the full shortcuts reference — or click the **`?` icon in the bottom status bar**.
+The workspace is keyboard-first. Press **`?`** (or **`⌘/` / `Ctrl+/`**) any time to open the full shortcuts reference - or click the **`?` icon in the bottom status bar**.
 
 | Shortcut | Action |
 |----------|--------|
