@@ -83,6 +83,7 @@ import { decodeState, encodeState } from "@/lib/shareState";
 import { savePlayground, updatePlayground, deletePlayground } from "@/lib/playgroundApi";
 import { themeInlineCss } from "@/lib/utils/themeTokens";
 import { CommandPalette, type Command } from "@/components/CommandPalette";
+import { isEditableTarget } from "@/lib/shortcuts";
 import { Toaster, toast } from "@/components/Toast";
 import type { JsonValue, TypeTargetLanguage } from "@/lib/json/core";
 
@@ -250,6 +251,8 @@ const SAMPLES: Record<FormatKind, string> = {
 /** Rotating quick tips shown in the first-run hint and empty state. */
 const QUICK_TIPS = [
   "Press Ctrl+K (⌘K) to run any action from the command palette.",
+  "Press ? (or ⌘/) for a full list of keyboard shortcuts.",
+  "⌘1–⌘5 switch between Raw, Tree, Graph, Query, and Table views.",
   "Everything runs locally - your data never leaves the browser.",
   "Share is the only action that can leave your device - use it on purpose.",
   "Pin favorites to the toolbar from Settings ⚙ for one-click access.",
@@ -1052,6 +1055,147 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
       historyLock.current = false;
     }, 0);
   }, [undoIndex, undoStack]);
+
+  // Extended keyboard shortcuts (⌘⇧B / ⌘⇧M / ⌘⇧D / ⌘⇧U / ⌘⇧S, ⌘1–⌘5 views, ⌘F find,
+  // ⌘+/−/0 zoom, ⌥1/⌥2 focus, ⌘Y redo, Esc). Core combos (⌘K / ⌘↵ / ⌘V / ⌘Z / ⌘⇧Z)
+  // and the Compare-mode undo/redo routing live in the handler further down.
+  const shortcutActionsRef = useRef<{
+    runOperation: (action: OperationAction) => void;
+    downloadOutput: () => void;
+    moveHistory: (delta: number) => void;
+    busy: boolean;
+  }>({ runOperation: () => {}, downloadOutput: () => {}, moveHistory: () => {}, busy: false });
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const mod = event.metaKey || event.ctrlKey;
+      const alt = event.altKey && !mod && !event.shiftKey;
+
+      // Esc — close the history panel (dialogs/palette close themselves).
+      if (event.key === "Escape") {
+        setShowHistoryPanel(false);
+        return;
+      }
+
+      if (!mod && !alt) return;
+
+      // ⌥1 / ⌥2 — focus input / output pane.
+      if (alt && (event.key === "1" || event.key === "2")) {
+        event.preventDefault();
+        if (event.key === "1") {
+          setFocusedPane("input");
+          inputEditorApiRef.current?.focus();
+        } else {
+          setFocusedPane("output");
+          outputEditorApiRef.current?.focus();
+        }
+        return;
+      }
+
+      if (modalKind) return;
+
+      // ⌘F — find in the focused pane (editors handle their own find when focused).
+      if (mod && !event.shiftKey && event.key.toLowerCase() === "f") {
+        if (!isEditableTarget(event.target)) {
+          const editor =
+            focusedPane === "input"
+              ? inputEditorApiRef.current
+              : outputEditorApiRef.current;
+          if (editor) {
+            event.preventDefault();
+            editor.find();
+          }
+        }
+        return;
+      }
+
+      // ⌘⇧D / ⌘⇧U — toggle Compare / Utils modes (work even while one is open).
+      if (mod && event.shiftKey && event.key.toLowerCase() === "d") {
+        event.preventDefault();
+        shortcutActionsRef.current.runOperation("diff");
+        return;
+      }
+      if (mod && event.shiftKey && event.key.toLowerCase() === "u") {
+        event.preventDefault();
+        shortcutActionsRef.current.runOperation("utils");
+        return;
+      }
+
+      // Compare mode routes ⌘Z / ⌘Y / ⌘⇧Z to the diff panes in the handler below — don't double-handle.
+      if (activeOperation === "diff") return;
+
+      // ⌘⇧B — Beautify.
+      if (mod && event.shiftKey && event.key.toLowerCase() === "b") {
+        event.preventDefault();
+        if (!inputEmpty && !shortcutActionsRef.current.busy) shortcutActionsRef.current.runOperation("beautify");
+        return;
+      }
+
+      // ⌘⇧M — Minify.
+      if (mod && event.shiftKey && event.key.toLowerCase() === "m") {
+        event.preventDefault();
+        if (!inputEmpty && !shortcutActionsRef.current.busy) shortcutActionsRef.current.runOperation("minify");
+        return;
+      }
+
+      // ⌘⇧S — download output.
+      if (mod && event.shiftKey && event.key.toLowerCase() === "s") {
+        if (output.trim()) {
+          event.preventDefault();
+          shortcutActionsRef.current.downloadOutput();
+        }
+        return;
+      }
+
+      // ⌘1–⌘5 — switch output view.
+      if (mod && !event.shiftKey && event.key >= "1" && event.key <= "5") {
+        const view = (["raw", "tree", "graph", "query", "table"] as const)[Number(event.key) - 1];
+        if (view === "raw" || parsedOutput) {
+          event.preventDefault();
+          setRightView(view);
+          setFocusedPane("output");
+        }
+        return;
+      }
+
+      // ⌘+ / ⌘− / ⌘0 — editor font size.
+      if (mod && (event.key === "=" || event.key === "+")) {
+        event.preventDefault();
+        setEditorFontSize((s) => Math.min(24, s + 1));
+        return;
+      }
+      if (mod && event.key === "-") {
+        event.preventDefault();
+        setEditorFontSize((s) => Math.max(10, s - 1));
+        return;
+      }
+      if (mod && event.key === "0") {
+        event.preventDefault();
+        setEditorFontSize(14);
+        return;
+      }
+
+      // ⌘Y — redo input history (⌘⇧Z is handled in the core handler below).
+      if (mod && !event.shiftKey && event.key.toLowerCase() === "y") {
+        event.preventDefault();
+        shortcutActionsRef.current.moveHistory(1);
+        return;
+      }
+    };
+    window.addEventListener("keydown", onKeyDown, { capture: true });
+    return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
+  }, [modalKind, inputEmpty, output, parsedOutput, focusedPane, activeOperation]);
+
+  // Refresh the ref with fresh closures for functions declared later in this component,
+  // so the shortcut handler above never calls a stale version.
+  useEffect(() => {
+    shortcutActionsRef.current = {
+      runOperation,
+      downloadOutput,
+      moveHistory,
+      busy: showBusy,
+    };
+  });
 
   const switchToTab = (tabId: string) => {
     if (tabId === activeTabId) return;

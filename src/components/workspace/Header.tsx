@@ -66,7 +66,7 @@ export function Header({
       {/* Command palette trigger - centered absolutely (hidden on narrow screens so it never overlaps the brand/actions) */}
       {onOpenCommandPalette && (
         <div className="absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 md:block">
-          <Tooltip content="Command palette (⌘K)">
+          <Tooltip content="Command palette" shortcut="⌘K">
           <Button
             variant="ghost"
             onClick={onOpenCommandPalette}

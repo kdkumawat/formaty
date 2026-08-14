@@ -174,13 +174,27 @@ Share, Copy, Copy as (Base64 / escaped / URL / Data URI), Download, Maximize, an
 
 ## Keyboard Shortcuts
 
+The workspace is keyboard-first. Press **`?`** (or **`⌘/` / `Ctrl+/`**) any time to open the full shortcuts reference.
+
 | Shortcut | Action |
 |----------|--------|
 | `⌘K` / `Ctrl+K` | Command palette |
+| `?` · `⌘/` / `Ctrl+/` | Keyboard shortcuts reference |
+| `⌘↵` / `Ctrl+Enter` | Parse and transform |
+| `⌘⇧B` / `Ctrl+Shift+B` | Beautify |
+| `⌘⇧M` / `Ctrl+Shift+M` | Minify |
+| `⌘⇧D` / `Ctrl+Shift+D` | Toggle Compare mode |
+| `⌘⇧U` / `Ctrl+Shift+U` | Toggle Utils mode |
+| `⌘1` – `⌘5` | Views: Raw · Tree · Graph · Query · Table |
+| `⌘F` / `Ctrl+F` | Find in focused pane |
+| `⌘⇧S` / `Ctrl+Shift+S` | Download output |
+| `⌘+` / `⌘−` | Increase / decrease editor font size |
+| `⌘0` | Reset editor font size |
+| `⌥1` / `⌥2` | Focus input / output pane |
 | `⌘Z` / `Ctrl+Z` | Undo input |
-| `⌘⇧Z` / `Ctrl+Shift+Z` | Redo input |
-| `⌘Enter` / `Ctrl+Enter` | Parse and transform |
-| `ESC` | Close palette / modals |
+| `⌘⇧Z` · `⌘Y` / `Ctrl+Y` | Redo input |
+| `⌘V` / `Ctrl+V` | Paste from clipboard (empty input) |
+| `ESC` | Close palette / dialogs / panels |
 
 ---
 

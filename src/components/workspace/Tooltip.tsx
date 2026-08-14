@@ -17,6 +17,8 @@ export type TooltipProps = {
   side?: Side;
   className?: string;
   disabled?: boolean;
+  /** Optional keyboard-shortcut hint rendered as a kbd chip at the end of the tooltip. */
+  shortcut?: string;
 };
 
 /**
@@ -29,6 +31,7 @@ export function Tooltip({
   side = "bottom",
   className,
   disabled = false,
+  shortcut,
 }: TooltipProps) {
   if (disabled || content == null || content === "") {
     return <>{children}</>;
@@ -44,7 +47,14 @@ export function Tooltip({
           side={side}
           className="max-w-[14rem] w-max border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-2 py-1 text-[10px] font-medium leading-snug text-[var(--workspace-text)] shadow-lg"
         >
-          {content}
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="min-w-0 truncate">{content}</span>
+            {shortcut && (
+              <kbd className="shrink-0 rounded border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-1.5 py-0.5 font-mono text-[9px] leading-none text-[var(--workspace-text-muted)]">
+                {shortcut}
+              </kbd>
+            )}
+          </span>
         </TooltipContent>
       </UiTooltip>
     </TooltipProvider>
