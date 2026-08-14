@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { CheckCircleIcon, QuestionMarkCircleIcon, XCircleIcon } from "@heroicons/react/24/outline";
 import { ArrowPathIcon, NoSymbolIcon } from "@heroicons/react/24/solid";
 import { Tooltip } from "./Tooltip";
+import { FeedbackDialog } from "@/components/FeedbackDialog";
 
 interface StatusBarProps {
   valid: boolean | null;
@@ -129,6 +130,7 @@ export function StatusBar({
         <div className="flex shrink-0 flex-nowrap items-center gap-1 overflow-x-auto pr-1">{rightActions}</div>
       ) : null}
       <div className="flex shrink-0 flex-nowrap items-center pr-1">
+        <FeedbackDialog trigger="icon" label="Send feedback" />
         <Tooltip content="Keyboard shortcuts" shortcut="? · ⌘/">
           <button
             type="button"

@@ -1777,6 +1777,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   useEffect(() => {
     if (isDiffMode || isUtilsMode || !parsedOutput) return;
     if (rightView !== "raw") return; // respect explicit view choices
+    if (outputLanguage === "csv") return; // keep CSV output on Raw by default
     if (
       Array.isArray(parsedOutput) &&
       parsedOutput.length > 0 &&
@@ -1787,7 +1788,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
       lastAutoTableKeyRef.current = key;
       setRightView("table");
     }
-  }, [parsedOutput, rightView, isDiffMode, isUtilsMode]);
+  }, [parsedOutput, rightView, isDiffMode, isUtilsMode, outputLanguage]);
 
   useEffect(() => {
     if (!sessionRestoredRef.current || !input.trim() || !activeOperation) return;
@@ -1889,6 +1890,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
           // Keep Transform mode (don't clobber Compare/Utils)
           setActiveOperation((op) => (op === "diff" || op === "utils" ? op : null));
           if (
+            convertToFormat !== "csv" && // never yank CSV output away from Raw
             Array.isArray(json) &&
             json.length > 0 &&
             json.every((x) => x !== null && typeof x === "object" && !Array.isArray(x))

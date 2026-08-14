@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { FeedbackDialog } from "@/components/FeedbackDialog";
 
 const TOOL_LINKS = [
   { route: "/json-formatter", label: "JSON Formatter" },
@@ -125,6 +126,7 @@ export function Footer() {
             >
               Changelog
             </Link>
+            <FeedbackDialog trigger="link" label="Feedback" />
           </div>
           <a
             href="https://github.com/kdkumawat/formaty"
