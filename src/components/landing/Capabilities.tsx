@@ -1,32 +1,32 @@
 import Link from "next/link";
 
 const FORMATS = [
-  { name: "JSON", play: "/playground" },
+  { name: "JSON", play: "/playground?tool=json-formatter" },
   { name: "XML", play: "/playground?tool=xml-to-json" },
   { name: "YAML", play: "/playground?tool=yaml-to-json" },
-  { name: "TOML", play: "/playground" },
+  { name: "TOML", play: "/playground?tool=toml-formatter" },
   { name: "CSV", play: "/playground?tool=csv-to-json" },
 ];
 
 const OPERATIONS = [
-  "Beautify",
-  "Minify",
-  "Flatten",
-  "Unflatten",
-  "Validate",
-  "Compare",
-  "Schema",
-  "Type generation",
-  "Utils (UUID, Base64, JWT…)",
+  { label: "Beautify", route: "/playground?tool=json-formatter" },
+  { label: "Minify", route: "/playground?tool=json-formatter" },
+  { label: "Flatten", route: "/playground?tool=json-formatter" },
+  { label: "Unflatten", route: "/playground?tool=json-formatter" },
+  { label: "Validate", route: "/playground?tool=json-formatter" },
+  { label: "Compare", route: "/json-diff" },
+  { label: "Schema", route: "/schema-generator" },
+  { label: "Type generation", route: "/json-to-typescript" },
+  { label: "Utils (UUID, Base64, JWT…)", route: "/playground?util=uuid" },
 ];
 
 const VIEWS = [
   { name: "Tree view", route: "/json-viewer" },
   { name: "Graph view", route: "/graph-viewer" },
-  { name: "Table view", route: "/playground" },
+  { name: "Table view", route: "/playground?tool=json-to-csv" },
   { name: "JSONPath / JMESPath", route: "/jsonpath-tester" },
   { name: "Document / list compare", route: "/json-diff" },
-  { name: "Utils (UUID, JWT, Base64…)", route: "/playground" },
+  { name: "Utils (UUID, JWT, Base64…)", route: "/playground?util=uuid" },
 ];
 
 const TYPE_LANGS = [
@@ -73,13 +73,14 @@ export function Capabilities() {
               Operations
             </h3>
             <div className="flex flex-wrap gap-2">
-              {OPERATIONS.map((op) => (
-                <span
-                  key={op}
-                  className="rounded-full border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-4 py-1.5 text-sm font-medium text-[var(--workspace-text-muted)]"
+              {OPERATIONS.map(({ label, route }) => (
+                <Link
+                  key={label}
+                  href={route}
+                  className="rounded-full border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-4 py-1.5 text-sm font-medium text-[var(--workspace-text)] transition-all hover:border-primary/60 hover:bg-primary/10 hover:text-primary"
                 >
-                  {op}
-                </span>
+                  {label}
+                </Link>
               ))}
             </div>
           </div>
