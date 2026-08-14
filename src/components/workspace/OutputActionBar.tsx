@@ -332,7 +332,7 @@ export function OutputActionBar({
       </div>
     </Dropdown>
   ) : (
-    <Tooltip content="Download result">
+    <Tooltip content="Download result" shortcut="⌘⇧S">
       <button
         type="button"
         className={iconBtn}
@@ -509,7 +509,7 @@ export function OutputActionBar({
         </div>
       </Dropdown>
     ) : (
-      <Tooltip content={copyLabel}>
+      <Tooltip content={copyLabel} shortcut={copyLabel === "Copy" ? "⌘C" : undefined}>
         <IconButton
           className={actionBounce === "copy" ? "scale-90" : ""}
           disabled={!canCopy}
@@ -605,7 +605,7 @@ export function OutputActionBar({
         </Tooltip>
       )}
       {show("undo") && onUndo && (
-        <Tooltip content="Undo (Ctrl+Z)">
+        <Tooltip content="Undo input" shortcut="⌘Z">
           <IconButton
             onClick={onUndo}
             aria-label="Undo"
@@ -616,7 +616,7 @@ export function OutputActionBar({
         </Tooltip>
       )}
       {show("redo") && onRedo && (
-        <Tooltip content="Redo (Ctrl+⇧Z)">
+        <Tooltip content="Redo input" shortcut="⌘⇧Z">
           <IconButton
             onClick={onRedo}
             aria-label="Redo"

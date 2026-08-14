@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { CheckCircleIcon, XCircleIcon } from "@heroicons/react/24/outline";
+import { CheckCircleIcon, QuestionMarkCircleIcon, XCircleIcon } from "@heroicons/react/24/outline";
 import { ArrowPathIcon, NoSymbolIcon } from "@heroicons/react/24/solid";
 import { Tooltip } from "./Tooltip";
 
@@ -128,6 +128,18 @@ export function StatusBar({
       {rightActions ? (
         <div className="flex shrink-0 flex-nowrap items-center gap-1 overflow-x-auto pr-1">{rightActions}</div>
       ) : null}
+      <div className="flex shrink-0 flex-nowrap items-center pr-1">
+        <Tooltip content="Keyboard shortcuts" shortcut="? · ⌘/">
+          <button
+            type="button"
+            aria-label="Keyboard shortcuts"
+            className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-[var(--workspace-text-muted)] transition-colors hover:bg-[var(--workspace-border)]/40 hover:text-[var(--workspace-text)]"
+            onClick={() => window.dispatchEvent(new Event("formaty:open-shortcuts"))}
+          >
+            <QuestionMarkCircleIcon className="h-3.5 w-3.5 shrink-0" />
+          </button>
+        </Tooltip>
+      </div>
     </div>
   );
 }

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { loadPlayground, type LoadPlaygroundResult } from "@/lib/playgroundApi";
 import { WorkspaceContent } from "@/components/WorkspaceContent";
+import { KeyboardShortcutsOverlay } from "@/components/KeyboardShortcutsOverlay";
 import { Logo } from "@/components/Logo";
 
 const linkBtnClass =
@@ -94,6 +95,7 @@ export default function PlaygroundPage() {
       }
     >
       <PlaygroundContent />
+      <KeyboardShortcutsOverlay />
     </Suspense>
   );
 }

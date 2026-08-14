@@ -174,13 +174,36 @@ Share, Copy, Copy as (Base64 / escaped / URL / Data URI), Download, Maximize, an
 
 ## Keyboard Shortcuts
 
+The workspace is keyboard-first. Press **`?`** (or **`⌘/` / `Ctrl+/`**) any time to open the full shortcuts reference — or click the **`?` icon in the bottom status bar**.
+
 | Shortcut | Action |
 |----------|--------|
 | `⌘K` / `Ctrl+K` | Command palette |
+| `⌘⇧P` / `Ctrl+Shift+P` | Command palette (Mac; `⌘K` works everywhere) |
+| `?` · `⌘/` / `Ctrl+/` | Keyboard shortcuts reference |
+| `⌘↵` / `Ctrl+Enter` | Parse and transform |
+| `⌘⇧B` / `Ctrl+Shift+B` | Beautify |
+| `⌘⇧M` / `Ctrl+Shift+M` | Minify |
+| `⌘⇧D` / `Ctrl+Shift+D` | Toggle Compare mode |
+| `⌘⇧U` / `Ctrl+Shift+U` | Toggle Utils mode |
+| `⌘⇧L` / `Ctrl+Shift+L` | Toggle live transform |
+| `⌘⇧E` / `Ctrl+Shift+E` | Share workspace |
+| `⌘1` – `⌘5` | Views: Raw · Tree · Graph · Query · Table |
+| `⌘C` / `Ctrl+C` | Copy output (when focus isn't in an editor) |
+| `⌘F` / `Ctrl+F` | Find in focused pane |
+| `⌘⇧S` / `Ctrl+Shift+S` | Download output |
+| `⌘+` / `⌘−` | Increase / decrease editor font size |
+| `⌘0` | Reset editor font size |
+| `⌥1` / `⌥2` | Focus input / output pane |
+| `⌥Z` / `Alt+Z` | Toggle line wrap |
+| `⌥M` / `Alt+M` | Maximize / restore output pane |
+| `⌥T` / `Alt+T` | Toggle theme (light / dark / system) |
+| `⌥N` / `Alt+N` · `⌥W` / `Alt+W` | New / close tab |
+| `⌥↑` / `Alt+↑` · `⌥↓` / `Alt+↓` | Step through input history |
 | `⌘Z` / `Ctrl+Z` | Undo input |
-| `⌘⇧Z` / `Ctrl+Shift+Z` | Redo input |
-| `⌘Enter` / `Ctrl+Enter` | Parse and transform |
-| `ESC` | Close palette / modals |
+| `⌘⇧Z` · `⌘Y` / `Ctrl+Y` | Redo input |
+| `⌘V` / `Ctrl+V` | Paste from clipboard (empty input) |
+| `ESC` | Close palette / dialogs / panels |
 
 ---
 
