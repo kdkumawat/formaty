@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowPathIcon,
   CheckIcon,
+  ClipboardDocumentListIcon,
   ClockIcon,
   ExclamationTriangleIcon,
   InboxIcon,
@@ -146,6 +147,29 @@ export default function FeedbackAdminPage() {
     setItems([]);
   };
 
+  /** Copy every loaded item as compact bullet points, ready to paste into an AI. */
+  const copyAll = async () => {
+    if (items.length === 0) return;
+    const lines = items.map((item) => {
+      const meta: string[] = [];
+      if (item.page) meta.push(`page: ${item.page}`);
+      if (item.email) meta.push(`email: ${item.email}`);
+      meta.push(`status: ${FEEDBACK_STATUSES.find((s) => s.id === item.status)?.label ?? item.status}`);
+      const metaStr = meta.length > 0 ? ` (${meta.join(", ")})` : "";
+      return `- [${categoryLabel(item.category).toLowerCase()}] ${item.message}${metaStr}`;
+    });
+    const text = lines.join("\n");
+    try {
+      await navigator.clipboard.writeText(text);
+      toast({
+        message: `Copied ${items.length} feedback item${items.length === 1 ? "" : "s"} as bullets`,
+        type: "success",
+      });
+    } catch {
+      toast({ message: "Could not copy to clipboard", type: "error" });
+    }
+  };
+
   if (!feedbackConfigured()) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-[var(--workspace-background)] p-6">
@@ -220,6 +244,16 @@ export default function FeedbackAdminPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void copyAll()}
+              disabled={loading || items.length === 0}
+            >
+              <ClipboardDocumentListIcon className="h-4 w-4" />
+              Copy all
+            </Button>
             <Button
               type="button"
               variant="outline"
