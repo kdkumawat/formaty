@@ -1,10 +1,10 @@
 /**
  * Feedback API client for Formaty.
  *
- * The feedback backend lives in the formaty-api Cloudflare Worker (see the
- * formaty-api/ directory in this repo and docs/feedback-api.md). Formaty itself
- * is a static export, so it cannot persist anything - every submission and
- * every admin read goes to that Worker.
+ * The feedback backend lives in the formaty-api Cloudflare Worker (separate
+ * repository, D1-backed /feedback endpoints). Formaty itself is a static
+ * export, so it cannot persist anything - every submission and every admin
+ * read goes to that Worker.
  *
  * Every function in this module degrades gracefully when the API is not
  * configured, so the rest of the app never breaks: dialogs show a friendly
