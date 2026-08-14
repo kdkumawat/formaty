@@ -253,7 +253,7 @@ const QUICK_TIPS = [
   "Press Ctrl+K (⌘K) to run any action from the command palette.",
   "Press ? (or ⌘/) for a full list of keyboard shortcuts.",
   "⌘1–⌘5 switch between Raw, Tree, Graph, Query, and Table views.",
-  "⌘C copies the output result - it works from any view.",
+  "Copy the output from any view with ⌘C / Ctrl+C.",
   "⌥↑ / ⌥↓ step through your input history like a shell.",
   "Everything runs locally - your data never leaves the browser.",
   "Share is the only action that can leave your device - use it on purpose.",

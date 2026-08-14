@@ -10,7 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button as UiButton } from "@/components/ui/button";
-import { isEditableTarget, SHORTCUT_GROUPS } from "@/lib/shortcuts";
+import { displayShortcut, isEditableTarget, SHORTCUT_GROUPS } from "@/lib/shortcuts";
 
 /**
  * Keyboard-shortcuts reference overlay for the Formaty workspace.
@@ -57,7 +57,7 @@ export function KeyboardShortcutsOverlay() {
           <DialogDescription className="text-xs">
             Everything is reachable from the keyboard. Press{" "}
             <kbd className="rounded border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--workspace-text)]">
-              ⌘K
+              {displayShortcut("⌘K")}
             </kbd>{" "}
             to run any action by name.
           </DialogDescription>
@@ -78,7 +78,7 @@ export function KeyboardShortcutsOverlay() {
                   >
                     <span className="text-[var(--workspace-text)]">{item.label}</span>
                     <kbd className="shrink-0 rounded border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--workspace-text-muted)]">
-                      {item.keys}
+                      {displayShortcut(item.keys)}
                     </kbd>
                   </div>
                 ))}

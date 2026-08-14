@@ -8,6 +8,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { displayShortcut } from "@/lib/shortcuts";
 
 type Side = "top" | "bottom" | "left" | "right";
 
@@ -51,7 +52,7 @@ export function Tooltip({
             <span className="min-w-0 truncate">{content}</span>
             {shortcut && (
               <kbd className="shrink-0 rounded border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-1.5 py-0.5 font-mono text-[9px] leading-none text-[var(--workspace-text-muted)]">
-                {shortcut}
+                {displayShortcut(shortcut)}
               </kbd>
             )}
           </span>
