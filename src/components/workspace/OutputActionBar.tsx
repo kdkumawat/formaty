@@ -509,7 +509,7 @@ export function OutputActionBar({
         </div>
       </Dropdown>
     ) : (
-      <Tooltip content={copyLabel}>
+      <Tooltip content={copyLabel} shortcut={copyLabel === "Copy" ? "⌘C" : undefined}>
         <IconButton
           className={actionBounce === "copy" ? "scale-90" : ""}
           disabled={!canCopy}

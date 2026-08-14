@@ -253,6 +253,8 @@ const QUICK_TIPS = [
   "Press Ctrl+K (⌘K) to run any action from the command palette.",
   "Press ? (or ⌘/) for a full list of keyboard shortcuts.",
   "⌘1–⌘5 switch between Raw, Tree, Graph, Query, and Table views.",
+  "⌘C copies the output result - it works from any view.",
+  "⌥↑ / ⌥↓ step through your input history like a shell.",
   "Everything runs locally - your data never leaves the browser.",
   "Share is the only action that can leave your device - use it on purpose.",
   "Pin favorites to the toolbar from Settings ⚙ for one-click access.",
@@ -1062,9 +1064,12 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   const shortcutActionsRef = useRef<{
     runOperation: (action: OperationAction) => void;
     downloadOutput: () => void;
+    copyOutput: () => void;
     moveHistory: (delta: number) => void;
+    newTab: () => void;
+    closeTab: () => void;
     busy: boolean;
-  }>({ runOperation: () => {}, downloadOutput: () => {}, moveHistory: () => {}, busy: false });
+  }>({ runOperation: () => {}, downloadOutput: () => {}, copyOutput: () => {}, moveHistory: () => {}, newTab: () => {}, closeTab: () => {}, busy: false });
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -1094,6 +1099,52 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
 
       if (modalKind) return;
 
+      // ⌘C — copy output (browser copy still wins inside editors/inputs).
+      if (mod && !event.shiftKey && event.key.toLowerCase() === "c") {
+        if (!isEditableTarget(event.target) && output.trim()) {
+          event.preventDefault();
+          shortcutActionsRef.current.copyOutput();
+        }
+        return;
+      }
+
+      // ⌥Z — toggle line wrap (VS Code muscle memory).
+      if (alt && event.key.toLowerCase() === "z") {
+        event.preventDefault();
+        setLineWrap((v) => !v);
+        return;
+      }
+
+      // ⌥M — maximize / restore the output pane.
+      if (alt && event.key.toLowerCase() === "m") {
+        event.preventDefault();
+        setIsOutputMaximized((v) => !v);
+        return;
+      }
+
+      // ⌥T — cycle theme: light → dark → system.
+      if (alt && event.key.toLowerCase() === "t") {
+        event.preventDefault();
+        setThemeMode((m) => (m === "light" ? "dark" : m === "dark" ? "system" : "light"));
+        return;
+      }
+
+      // ⌥N / ⌥W — new / close tab (only when the tab bar is visible).
+      if (alt && event.key.toLowerCase() === "n") {
+        if (showTabs) {
+          event.preventDefault();
+          shortcutActionsRef.current.newTab();
+        }
+        return;
+      }
+      if (alt && event.key.toLowerCase() === "w") {
+        if (showTabs && tabs.length > 1) {
+          event.preventDefault();
+          shortcutActionsRef.current.closeTab();
+        }
+        return;
+      }
+
       // ⌘F — find in the focused pane (editors handle their own find when focused).
       if (mod && !event.shiftKey && event.key.toLowerCase() === "f") {
         if (!isEditableTarget(event.target)) {
@@ -1121,6 +1172,21 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
         return;
       }
 
+      // ⌘⇧E — open the share dialog (works in any mode).
+      if (mod && event.shiftKey && event.key.toLowerCase() === "e") {
+        event.preventDefault();
+        setShareConfirmOpen(true);
+        return;
+      }
+
+      // ⌘⇧P — palette alias (⌘K works everywhere; Ctrl+Shift+P is browser-owned on Windows).
+      if (mod && event.shiftKey && event.key.toLowerCase() === "p") {
+        event.preventDefault();
+        trackEvent("command_palette", { source: "shortcut" });
+        setCommandPaletteOpen(true);
+        return;
+      }
+
       // Compare mode routes ⌘Z / ⌘Y / ⌘⇧Z to the diff panes in the handler below — don't double-handle.
       if (activeOperation === "diff") return;
 
@@ -1135,6 +1201,13 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
       if (mod && event.shiftKey && event.key.toLowerCase() === "m") {
         event.preventDefault();
         if (!inputEmpty && !shortcutActionsRef.current.busy) shortcutActionsRef.current.runOperation("minify");
+        return;
+      }
+
+      // ⌘⇧L — toggle live transform.
+      if (mod && event.shiftKey && event.key.toLowerCase() === "l") {
+        event.preventDefault();
+        setLiveTransform((v) => !v);
         return;
       }
 
@@ -1175,6 +1248,13 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
         return;
       }
 
+      // ⌥↑ / ⌥↓ — step through input history (Monaco keeps Alt+Up/Down line-move in editors).
+      if (alt && (event.key === "ArrowUp" || event.key === "ArrowDown") && !isEditableTarget(event.target)) {
+        event.preventDefault();
+        shortcutActionsRef.current.moveHistory(event.key === "ArrowUp" ? -1 : 1);
+        return;
+      }
+
       // ⌘Y — redo input history (⌘⇧Z is handled in the core handler below).
       if (mod && !event.shiftKey && event.key.toLowerCase() === "y") {
         event.preventDefault();
@@ -1184,7 +1264,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     };
     window.addEventListener("keydown", onKeyDown, { capture: true });
     return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
-  }, [modalKind, inputEmpty, output, parsedOutput, focusedPane, activeOperation]);
+  }, [modalKind, inputEmpty, output, parsedOutput, focusedPane, activeOperation, showTabs, tabs.length]);
 
   // Refresh the ref with fresh closures for functions declared later in this component,
   // so the shortcut handler above never calls a stale version.
@@ -1192,7 +1272,10 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     shortcutActionsRef.current = {
       runOperation,
       downloadOutput,
+      copyOutput,
       moveHistory,
+      newTab: addTab,
+      closeTab: () => closeTab(activeTabId),
       busy: showBusy,
     };
   });

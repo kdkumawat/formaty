@@ -19,9 +19,11 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
   {
     title: "Global",
     items: [
-      { keys: "⌘K", label: "Command palette" },
+      { keys: "⌘K · ⌘⇧P", label: "Command palette" },
       { keys: "⌘/ · ?", label: "Keyboard shortcuts" },
       { keys: "⌘↵", label: "Parse / transform input" },
+      { keys: "⌘⇧E", label: "Share workspace" },
+      { keys: "⌥N · ⌥W", label: "New / close tab" },
       { keys: "Esc", label: "Close dialogs & panels" },
     ],
   },
@@ -32,6 +34,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { keys: "⌘⇧M", label: "Minify" },
       { keys: "⌘⇧D", label: "Compare mode" },
       { keys: "⌘⇧U", label: "Utils mode" },
+      { keys: "⌘⇧L", label: "Toggle live transform" },
     ],
   },
   {
@@ -47,8 +50,10 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
   {
     title: "Editing",
     items: [
+      { keys: "⌘C", label: "Copy output" },
       { keys: "⌘Z", label: "Undo input" },
       { keys: "⌘⇧Z · ⌘Y", label: "Redo input" },
+      { keys: "⌥↑ · ⌥↓", label: "Step through input history" },
       { keys: "⌘V", label: "Paste from clipboard (empty input)" },
       { keys: "⌘F", label: "Find in focused pane" },
       { keys: "⌘⇧S", label: "Download output" },
@@ -59,6 +64,9 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     items: [
       { keys: "⌥1", label: "Focus input pane" },
       { keys: "⌥2", label: "Focus output pane" },
+      { keys: "⌥Z", label: "Toggle line wrap" },
+      { keys: "⌥M", label: "Maximize output pane" },
+      { keys: "⌥T", label: "Toggle theme" },
       { keys: "⌘+ · ⌘−", label: "Increase / decrease font size" },
       { keys: "⌘0", label: "Reset font size" },
     ],
