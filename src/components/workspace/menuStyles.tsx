@@ -2,7 +2,7 @@
    Used by WorkspaceContent toolbar menus, OutputActionBar, and ListComparePanel. */
 
 export const menuItemClass =
-  "inline-flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-xs font-medium whitespace-nowrap text-[var(--workspace-text)] transition-colors hover:bg-accent disabled:opacity-40";
+  "inline-flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-left text-xs font-medium whitespace-nowrap text-[var(--workspace-text)] transition-colors hover:bg-accent disabled:opacity-40";
 
 export const menuItemActiveClass = "!bg-primary/12 !text-primary hover:!bg-primary/15";
 

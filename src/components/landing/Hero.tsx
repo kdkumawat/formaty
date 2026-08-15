@@ -4,7 +4,20 @@ import { useEffect, useState } from "react";
 import React from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowRightIcon, BoltIcon } from "@heroicons/react/24/outline";
+import {
+  ArrowDownTrayIcon,
+  ArrowRightIcon,
+  ArrowsRightLeftIcon,
+  BoltIcon,
+  ChevronDownIcon,
+  ClipboardDocumentIcon,
+  CodeBracketIcon,
+  QueueListIcon,
+  ShareIcon,
+  SparklesIcon,
+  SwatchIcon,
+  TableCellsIcon,
+} from "@heroicons/react/24/outline";
 
 // Each slide: {inputLabel, inputColor, outputLabel, outputColor, statusText, InputPane, OutputPane}
 type Slide = {
@@ -160,10 +173,12 @@ function CsvTableOut() {
 function CompareIn() {
   return (
     <pre className="font-mono text-[10px] leading-[1.75]">
-      <span className="text-[var(--workspace-text-muted)]">{"// Left · Right"}</span>{"\n"}
-      <span className="text-red-400/90">{"{"} id: 1, role: </span><span className="text-emerald-500">&quot;admin&quot;</span> <span className="text-red-400/90">{"}"}</span>{"\n"}
-      <span className="text-emerald-500/90">{"{"} id: 1, role: </span><span className="text-emerald-500">&quot;owner&quot;</span><span className="text-emerald-500/90">, active: true {"}"}</span>{"\n"}
-      <span className="mt-1 block text-[var(--workspace-text-muted)]">or list: a,b,c  vs  b,c,d</span>
+      <span className="text-[var(--workspace-text-muted)]">{"// Production vs Staging"}</span>{"\n"}
+      <span className="text-sky-500">prod:</span>{" "}
+      <span className="text-[var(--workspace-text)]">1001, 1002, 1003, 1004</span>{"\n"}
+      <span className="text-violet-500">stage:</span>{" "}
+      <span className="text-[var(--workspace-text)]">1002, 1003, 1005</span>{"\n"}
+      <span className="mt-1 block text-[var(--workspace-text-muted)]">also: a,b,c vs b,c,d · JSON · CSV</span>
     </pre>
   );
 }
@@ -171,15 +186,13 @@ function CompareIn() {
 function CompareOut() {
   return (
     <pre className="font-mono text-[10px] leading-[1.75]">
-      <span className="rounded bg-emerald-500/15 px-1 text-emerald-600">+1</span>{" "}
-      <span className="rounded bg-red-500/15 px-1 text-red-600">−1</span>{" "}
-      <span className="rounded bg-amber-500/15 px-1 text-amber-700">~1</span>
-      {"\n"}
-      <span className="text-amber-500">~ </span><span className="text-sky-500">role</span>
-      <span className="text-[var(--workspace-text-muted)]"> admin → owner</span>{"\n"}
-      <span className="text-emerald-500">+ </span><span className="text-sky-500">active</span>
-      <span className="text-[var(--workspace-text-muted)]"> true</span>{"\n"}
-      <span className="text-[var(--workspace-text-muted)]">Lists → SQL IN (…)</span>
+      <span className="text-emerald-500">Common</span>
+      <span className="text-[var(--workspace-text-muted)]">: 1002, 1003</span>{"\n"}
+      <span className="text-sky-500">Only prod</span>
+      <span className="text-[var(--workspace-text-muted)]">: 1001, 1004</span>{"\n"}
+      <span className="text-violet-500">Only stage</span>
+      <span className="text-[var(--workspace-text-muted)]">: 1005</span>{"\n"}
+      <span className="rounded bg-primary/15 px-1 text-primary">Copy as SQL IN (…)</span>
     </pre>
   );
 }
@@ -208,6 +221,25 @@ function UtilsOut() {
   );
 }
 
+/** Inline `{}` glyph - heroicons has no braces icon in this version. */
+function BracesGlyph({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden
+    >
+      <path d="M8 4c-2 0-3 1-3 3v3c0 1.5-.5 2.5-2 3 1.5.5 2 1.5 2 3v3c0 2 1 3 3 3" />
+      <path d="M16 4c2 0 3 1 3 3v3c0 1.5.5 2.5 2 3-1.5.5-2 1.5-2 3v3c0 2-1 3-3 3" />
+    </svg>
+  );
+}
+
 const SLIDES: Slide[] = [
   {
     id: "json-ts",
@@ -218,9 +250,9 @@ const SLIDES: Slide[] = [
   },
   {
     id: "compare",
-    inputLabel: "Left / Right", inputColor: "text-rose-500",
-    outputLabel: "Diff + Lists", outputColor: "text-emerald-500",
-    statusText: "Compare: document paths + list SQL IN",
+    inputLabel: "Two ID lists", inputColor: "text-rose-500",
+    outputLabel: "Missing / Extra + SQL", outputColor: "text-emerald-500",
+    statusText: "Compare: reconcile DB exports → SQL IN",
     InputPane: CompareIn, OutputPane: CompareOut,
   },
   {
@@ -308,7 +340,7 @@ export function Hero() {
             className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/[0.07] px-3.5 py-1.5 text-xs font-semibold text-primary shadow-sm shadow-primary/10"
           >
             <BoltIcon className="h-3 w-3" aria-hidden />
-            No signup · Runs locally · Always free
+            Local-first · Offline · No signup · Free
           </motion.div>
 
           {/* Headline */}
@@ -316,11 +348,11 @@ export function Hero() {
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.06 }}
-            className="text-[2.9rem] font-semibold leading-[1.02] tracking-[-0.035em] text-[var(--workspace-text)] sm:text-5xl md:text-6xl lg:text-[4.6rem]"
+            className="text-[2.4rem] font-semibold leading-[1.05] tracking-[-0.035em] text-[var(--workspace-text)] sm:text-[2.9rem] md:text-[3.4rem] lg:text-[3.9rem]"
           >
-            Work with data.
+            The Developer
             <br />
-            <span className="gradient-text">Instantly.</span>
+            <span className="gradient-text">Data Workspace</span>
           </motion.h1>
 
           {/* Sub */}
@@ -330,11 +362,11 @@ export function Hero() {
             transition={{ duration: 0.5, delay: 0.14 }}
             className="mx-auto max-w-lg text-base leading-relaxed text-[var(--workspace-text-muted)] lg:mx-0 lg:text-lg"
           >
-            Format, convert, compare, and developer utils for{" "}
+            Format, convert, compare, reconcile, query, and generate code from structured data{" "}
             <span className="font-semibold text-[var(--workspace-text)]">
-              JSON · XML · YAML · TOML · CSV · cURL
+              directly in your browser
             </span>
-            {" "}- UUID, Base64, JWT, hash, regex, color, cron, and more. One workspace, zero installs.
+            {" "}- JSON · XML · YAML · TOML · CSV · lists · API responses.
           </motion.p>
 
           {/* CTA row */}
@@ -355,10 +387,10 @@ export function Hero() {
               />
             </Link>
             <Link
-              href="/json-formatter"
+              href="/#tools"
               className="inline-flex items-center gap-2 rounded-xl border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-6 py-3 text-sm font-medium text-[var(--workspace-text)] shadow-sm transition-all duration-200 hover:border-primary/40 hover:scale-[1.03] hover:shadow-md"
             >
-              Format JSON
+              Explore Tools
             </Link>
           </motion.div>
 
@@ -370,11 +402,10 @@ export function Hero() {
             className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 lg:justify-start"
           >
             {[
-              { value: "5", label: "Formats" },
-              // 18 tool pages + 18 utils
-              { value: "36", label: "Tools & Utils" },
+              { value: "5", label: "Data formats" },
+              { value: "12", label: "Code targets" },
               { value: "0", label: "Sign-ups" },
-              { value: "100%", label: "Local" },
+              { value: "100%", label: "Local & offline" },
             ].map((s) => (
               <div key={s.label} className="flex items-center gap-2">
                 <span className="font-mono text-lg font-bold tabular-nums text-[var(--workspace-text)]">
@@ -400,7 +431,7 @@ export function Hero() {
               { label: "YAML",       id: "yaml-toml", color: "text-lime-600 border-lime-600/25 bg-lime-600/5",       activeColor: "text-lime-700 border-lime-600/60 bg-lime-600/15 scale-105" },
               { label: "cURL",       id: "curl-json", color: "text-sky-500 border-sky-500/25 bg-sky-500/5",         activeColor: "text-sky-600 border-sky-500/60 bg-sky-500/15 scale-105" },
               { label: "CSV",        id: "csv-table", color: "text-blue-500 border-blue-500/25 bg-blue-500/5",      activeColor: "text-blue-600 border-blue-500/60 bg-blue-500/15 scale-105" },
-              { label: "TypeScript", id: "json-ts",   color: "text-violet-500 border-violet-500/25 bg-violet-500/5", activeColor: "text-violet-600 border-violet-500/60 bg-violet-500/15 scale-105" },
+              { label: "SQL",        id: "compare",   color: "text-emerald-500 border-emerald-500/25 bg-emerald-500/5", activeColor: "text-emerald-600 border-emerald-500/60 bg-emerald-500/15 scale-105" },
             ].map(({ label, id, color, activeColor }) => (
               <span
                 key={label}
@@ -451,6 +482,61 @@ export function Hero() {
                 <span className="ml-auto flex items-center gap-1 font-mono text-[10px] font-semibold text-emerald-500">
                   <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
                   Valid
+                </span>
+              </div>
+
+              {/* Workspace toolbar - mirrors the real Formaty UI */}
+              <div className="flex items-center gap-1 border-b border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-3 py-1.5">
+                {[
+                  {
+                    label: "Format",
+                    title: slide.inputLabel,
+                    icon:
+                      slide.id === "json-ts" ? (
+                        <BracesGlyph className={`h-3 w-3 ${slide.inputColor}`} />
+                      ) : slide.id === "compare" ? (
+                        <ArrowsRightLeftIcon className={`h-3 w-3 ${slide.inputColor}`} />
+                      ) : slide.id === "utils" ? (
+                        <SwatchIcon className={`h-3 w-3 ${slide.inputColor}`} />
+                      ) : slide.id === "yaml-toml" ? (
+                        <QueueListIcon className={`h-3 w-3 ${slide.inputColor}`} />
+                      ) : slide.id === "csv-table" ? (
+                        <TableCellsIcon className={`h-3 w-3 ${slide.inputColor}`} />
+                      ) : (
+                        <CodeBracketIcon className={`h-3 w-3 ${slide.inputColor}`} />
+                      ),
+                  },
+                  { label: "View", title: "Tree", icon: <QueueListIcon className="h-3 w-3 text-primary" /> },
+                  { label: "Actions", title: "Beautify", icon: <SparklesIcon className="h-3 w-3 text-primary" /> },
+                  {
+                    label: "Types",
+                    title: "TypeScript",
+                    icon: (
+                      <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-[3px] bg-[#3178c6] text-[6.5px] font-bold text-white">
+                        TS
+                      </span>
+                    ),
+                  },
+                ].map((chip) => (
+                  <span
+                    key={chip.label}
+                    title={chip.title}
+                    className="inline-flex items-center gap-1 rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-2 py-1 text-[10px] font-medium text-[var(--workspace-text-muted)]"
+                  >
+                    {chip.icon}
+                    <span className="font-semibold text-[var(--workspace-text)]">{chip.label}</span>
+                    <ChevronDownIcon className="h-2.5 w-2.5 opacity-50" aria-hidden />
+                  </span>
+                ))}
+                <span className="ml-auto hidden items-center gap-0.5 sm:inline-flex">
+                  {[ClipboardDocumentIcon, ArrowDownTrayIcon, ShareIcon].map((Icon, i) => (
+                    <span
+                      key={i}
+                      className="inline-flex h-6 w-6 items-center justify-center rounded-md text-[var(--workspace-text-muted)]"
+                    >
+                      <Icon className="h-3.5 w-3.5" aria-hidden />
+                    </span>
+                  ))}
                 </span>
               </div>
 

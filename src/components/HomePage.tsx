@@ -4,6 +4,11 @@ import {
   Hero,
   TryIt,
   ProblemSolution,
+  Reconcile,
+  JsonToSql,
+  ApiWorkflow,
+  CompareSection,
+  CodeGen,
   FeatureGrid,
   ConversionGrid,
   PowerFeatures,
@@ -11,6 +16,7 @@ import {
   Workflow,
   UseCases,
   Recipes,
+  Privacy,
   Testimonials,
   Differentiation,
   FinalCTA,
@@ -25,8 +31,13 @@ export function HomePage() {
       <LandingHeader />
       <main className="flex-1">
         <Hero />
-        <TryIt />
         <ProblemSolution />
+        <Reconcile />
+        <JsonToSql />
+        <ApiWorkflow />
+        <CompareSection />
+        <CodeGen />
+        <TryIt />
         <FeatureGrid />
         <ConversionGrid />
         <PowerFeatures />
@@ -34,6 +45,7 @@ export function HomePage() {
         <Workflow />
         <UseCases />
         <Recipes />
+        <Privacy />
         <Testimonials />
         <Differentiation />
         <FinalCTA />

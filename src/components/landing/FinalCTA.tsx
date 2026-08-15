@@ -36,11 +36,12 @@ export function FinalCTA() {
         className="relative mx-auto max-w-2xl space-y-8 text-center"
       >
         <h2 className="text-3xl font-semibold leading-tight tracking-tight text-[var(--workspace-text)] sm:text-4xl md:text-5xl">
-          Start working with your data.{" "}
-          <span className="gradient-text">Right now.</span>
+          Have some data?
+          <br />
+          <span className="gradient-text">Paste it into Formaty.</span>
         </h2>
         <p className="text-base text-[var(--workspace-text-muted)] md:text-lg">
-          Format · Convert · Compare · Utils - no install, no sign-up, nothing leaves your browser.
+          Format · Inspect · Query · Compare · Reconcile · Generate - local, offline, no signup.
         </p>
         <div className="flex flex-wrap items-center justify-center gap-3">
           <Link
@@ -54,10 +55,10 @@ export function FinalCTA() {
             />
           </Link>
           <Link
-            href="/json-formatter"
+            href="/#tools"
             className="inline-flex items-center gap-2 rounded-xl border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-6 py-3.5 text-base font-medium text-[var(--workspace-text)] shadow-sm transition-all hover:border-primary/40 hover:scale-[1.03] hover:shadow-md"
           >
-            JSON Formatter
+            Explore all tools
           </Link>
         </div>
       </motion.div>

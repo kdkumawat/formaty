@@ -21,10 +21,26 @@ import {
   XCircleIcon,
   LinkSlashIcon,
   Cog6ToothIcon,
+  BoltIcon,
+  CodeBracketIcon,
+  EyeIcon,
+  Squares2X2Icon,
+  DocumentTextIcon,
+  QueueListIcon,
+  ShareIcon,
+  MagnifyingGlassIcon,
+  TableCellsIcon,
+  SparklesIcon,
+  ArrowsPointingInIcon,
+  ArrowsPointingOutIcon,
+  RectangleStackIcon,
+  CheckBadgeIcon,
+  EqualsIcon,
 } from "@heroicons/react/24/outline";
 import { StarIcon as StarSolidIcon } from "@heroicons/react/24/solid";
 import { JsonDiffEditor, type DiffNavState, type JsonDiffEditorRef } from "@/components/JsonDiffEditor";
 import { ListComparePanel, type ListCompareExport } from "@/components/ListComparePanel";
+import { SingleListPanel } from "@/components/SingleListPanel";
 import { DEFAULT_LIST_PARSE_OPTIONS, type ListParseOptions } from "@/lib/json/listCompare";
 import {
   menuItemClass as sharedMenuItemClass,
@@ -39,10 +55,17 @@ import {
   type UtilsStateMap,
 } from "@/components/UtilsPanel";
 import { UTIL_SAMPLES, UTIL_TABS } from "@/lib/utils/devtools";
-import { parseJsonInput } from "@/lib/json/core";
+import {
+  flattenJson,
+  generateOpenApiSpec,
+  parseJsonInput,
+  toCsv,
+  toHtmlTable,
+  toMarkdownTable,
+} from "@/lib/json/core";
 import { JsonEditor } from "@/components/JsonEditor";
 import { GraphView, type GraphViewRef } from "@/components/GraphView";
-import { TreeView } from "@/components/TreeView";
+import { TreeView, type TreeViewRef } from "@/components/TreeView";
 import { QueryView } from "@/components/QueryView";
 import { TableView } from "@/components/TableView";
 import { trackEvent } from "@/components/Analytics";
@@ -57,10 +80,12 @@ import {
   loadVisibility,
   saveVisibility,
   formatCopyAsText,
+  formatCopyItemsAsText,
   DEFAULT_COPY_AS_OPTIONS,
   LIST_COPY_AS_OPTIONS,
   UUID_COPY_AS_OPTIONS,
   BATCH_COPY_AS_OPTIONS,
+  TABLE_COPY_AS_OPTIONS,
   type CopyAsFormat,
   type GraphCopyFormat,
   type OutputActionId,
@@ -77,10 +102,13 @@ import {
 import { useJsonWorker } from "@/hooks/useJsonWorker";
 import { detectFormat, FORMAT_LABELS, getInputFormatLabel, parseInput, type FormatKind, type InputFormatKind } from "@/lib/formats";
 import { ALL_TOOL_ROUTES, TOOL_PAGES, TOOL_PRESETS, type ToolRoute } from "@/lib/seo";
-import { executeCurl, parseCurl } from "@/lib/curl/parseCurl";
+import { executeCurlDetailed, parseCurl, type CurlExecutionResult } from "@/lib/curl/parseCurl";
+import { CURL_TARGETS, generateCurlCode, getCurlTarget, type CurlTargetId } from "@/lib/curl/codegen";
+import type { SqlDialect } from "@/lib/json/core";
 import { formatJson } from "@/lib/json/core";
 import { decodeState, encodeState } from "@/lib/shareState";
 import { savePlayground, updatePlayground, deletePlayground } from "@/lib/playgroundApi";
+import { PRESETS, getPreset, type PresetId } from "@/lib/presets";
 import { themeInlineCss } from "@/lib/utils/themeTokens";
 import { CommandPalette, type Command } from "@/components/CommandPalette";
 import { isEditableTarget } from "@/lib/shortcuts";
@@ -275,8 +303,91 @@ const OPERATION_ACTIONS = [
   ["Flatten", "flatten"],
   ["Unflatten", "unflatten"],
   ["Schema", "schema"],
+  ["OpenAPI spec", "openapi"],
   ["Validate", "validate"],
 ] as const;
+
+const OPERATION_ACTION_LABELS = Object.fromEntries(
+  OPERATION_ACTIONS.map(([label, id]) => [id, label]),
+) as Record<string, string>;
+
+/** Icons shown next to the selected value in the View / Actions triggers. */
+const VIEW_ICONS: Record<string, typeof EyeIcon> = {
+  raw: DocumentTextIcon,
+  tree: QueueListIcon,
+  graph: ShareIcon,
+  query: MagnifyingGlassIcon,
+  table: TableCellsIcon,
+};
+
+const ACTION_ICONS: Record<string, typeof BoltIcon> = {
+  beautify: SparklesIcon,
+  minify: MinusIcon,
+  flatten: ArrowsPointingInIcon,
+  unflatten: ArrowsPointingOutIcon,
+  schema: RectangleStackIcon,
+  openapi: CodeBracketIcon,
+  validate: CheckBadgeIcon,
+};
+
+/** Per-format icons shown in the Format trigger: JSON {}, XML <>, CSV table… */
+/** Inline `{}` glyph - heroicons has no braces icon in this version. */
+function BracesGlyph({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden
+    >
+      <path d="M8 4c-2 0-3 1-3 3v3c0 1.5-.5 2.5-2 3 1.5.5 2 1.5 2 3v3c0 2 1 3 3 3" />
+      <path d="M16 4c2 0 3 1 3 3v3c0 1.5.5 2.5 2 3-1.5.5-2 1.5-2 3v3c0 2-1 3-3 3" />
+    </svg>
+  );
+}
+
+const FORMAT_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  json: BracesGlyph,
+  xml: CodeBracketIcon,
+  yaml: QueueListIcon,
+  toml: EqualsIcon,
+  csv: TableCellsIcon,
+};
+
+/** Brand-tinted 2-letter badges for the Types trigger (no icon dependency). */
+const TYPE_BADGES: Record<string, { text: string; bg: string; fg: string }> = {
+  typescript: { text: "TS", bg: "#3178c6", fg: "#fff" },
+  zod: { text: "Z", bg: "#1e3a8a", fg: "#fff" },
+  java: { text: "Jv", bg: "#e76f00", fg: "#fff" },
+  csharp: { text: "C#", bg: "#68217a", fg: "#fff" },
+  python: { text: "Py", bg: "#3776ab", fg: "#ffd43b" },
+  pydantic: { text: "Pd", bg: "#3d7ea6", fg: "#fff" },
+  go: { text: "Go", bg: "#00add8", fg: "#00273b" },
+  protobuf: { text: "Pb", bg: "#4f5b93", fg: "#fff" },
+  kotlin: { text: "Kt", bg: "#7f52ff", fg: "#fff" },
+  swift: { text: "Sw", bg: "#f05138", fg: "#fff" },
+  rust: { text: "Rs", bg: "#ce422b", fg: "#fff" },
+  sql: { text: "SQL", bg: "#336791", fg: "#fff" },
+  fetch: { text: "JS", bg: "#f7df1e", fg: "#000" },
+  axios: { text: "JS", bg: "#5a29e4", fg: "#fff" },
+};
+
+function TypeBadge({ id }: { id: string }) {
+  const b = TYPE_BADGES[id] ?? { text: id.slice(0, 2).toUpperCase(), bg: "var(--workspace-border)", fg: "var(--workspace-text-muted)" };
+  return (
+    <span
+      className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] text-[7px] font-bold"
+      style={{ backgroundColor: b.bg, color: b.fg }}
+      aria-hidden
+    >
+      {b.text}
+    </span>
+  );
+}
 
 const FORMAT_KINDS: FormatKind[] = ["json", "xml", "yaml", "toml", "csv"];
 
@@ -319,6 +430,7 @@ type OutputLanguage =
   | "csv"
   | "sql"
   | "typescript"
+  | "javascript"
   | "python"
   | "java"
   | "csharp"
@@ -409,6 +521,8 @@ export interface WorkspaceContentProps {
   initialState?: import("@/lib/shareState").WorkspaceState;
   sharedLinkId?: string;
   sharedLinkUrl?: string;
+  /** Embed mode: hide chrome (header, status bar, footer links) for iframes. */
+  embed?: boolean;
 }
 
 import type { ButtonHTMLAttributes } from "react";
@@ -581,7 +695,12 @@ function PinChipRow({
   );
 }
 
-export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLinkId, sharedLinkUrl: initialSharedLinkUrl }: WorkspaceContentProps = {}) {
+export function WorkspaceContent({
+  initialState,
+  sharedLinkId: initialSharedLinkId,
+  sharedLinkUrl: initialSharedLinkUrl,
+  embed = false,
+}: WorkspaceContentProps = {}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -601,6 +720,16 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   /** Active list-compare result for shared OutputActionBar copy/download */
   const [listCompareExport, setListCompareExport] = useState<ListCompareExport | null>(null);
   const [listCompareOptions, setListCompareOptions] = useState<ListParseOptions>(DEFAULT_LIST_PARSE_OPTIONS);
+  /** CSV key column for compare-by-column (persisted in share links). */
+  const [csvColumn, setCsvColumn] = useState<string | null>(null);
+  /** Query-view text, lifted for share links. */
+  const [queryText, setQueryText] = useState("");
+  /** Ref into TreeView search box (Cmd/Ctrl+F). */
+  const treeViewRef = useRef<TreeViewRef | null>(null);
+  /** Info about the last file dropped/imported (shown as a chip, cleared on demand). */
+  const [droppedFile, setDroppedFile] = useState<{ name: string; size: number; format: string } | null>(null);
+  const [dragActive, setDragActive] = useState(false);
+  const dragDepthRef = useRef(0);
   const [themeMode, setThemeMode] = useState<ThemeMode>("system");
   const [systemDark, setSystemDark] = useState(false);
   const [themeSynced, setThemeSynced] = useState(false);
@@ -639,6 +768,8 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
   const [typesMenuOpen, setTypesMenuOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [curlCodeOpen, setCurlCodeOpen] = useState(false);
+  const [curlTarget, setCurlTarget] = useState<CurlTargetId | null>(null);
   const [pinnedItems, setPinnedItems] = useState<Set<string>>(
     () => new Set(["fmt:json", "view:raw", "view:query", "action:beautify", "action:minify", "type:typescript", "type:zod"])
   );
@@ -651,12 +782,21 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   const [lineWrap, setLineWrap] = useState(true);
   const [diffSideBySide, setDiffSideBySide] = useState(true);
   const [diffIgnoreWhitespace, setDiffIgnoreWhitespace] = useState(false);
+  const [diffIgnoreOrder, setDiffIgnoreOrder] = useState(false);
   const [diffShowPaths, setDiffShowPaths] = useState(false);
+  /** cURL response metadata (status / headers / size / timing) shown for curl input. */
+  const [curlMeta, setCurlMeta] = useState<CurlExecutionResult | null>(null);
+  /** True while a cURL request is in flight (cache miss) - drives the skeleton. */
+  const [curlFetching, setCurlFetching] = useState(false);
+  /** Last input value actually executed - drives the "Press ⌘⏎ to run" hint. */
+  const [lastExecutedCurlInput, setLastExecutedCurlInput] = useState("");
+  /** SQL dialect used by the JSON → SQL type generator. */
+  const [sqlDialect, setSqlDialect] = useState<SqlDialect>("sqlite");
   const [diffPathFilter, setDiffPathFilter] = useState<"all" | "added" | "removed" | "changed">("all");
   const [diffLineStats, setDiffLineStats] = useState<LineDiffStats | null>(null);
   const [diffNav, setDiffNav] = useState<DiffNavState>({ current: 0, total: 0 });
-  /** Document = Monaco text/JSON diff; List = set/list compare for SQL IN etc. */
-  const [diffKind, setDiffKind] = useState<"document" | "list">("document");
+  /** Document = Monaco text/JSON diff; List = set/list compare; Single = one-list analysis. */
+  const [diffKind, setDiffKind] = useState<"document" | "list" | "single">("document");
   const [showHistoryPanel, setShowHistoryPanel] = useState(false);
   const [csvDelimiter, setCsvDelimiter] = useState(",");
   const [isWindowFullscreen, setIsWindowFullscreen] = useState(false);
@@ -664,7 +804,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   // Multiple tabs
   const [tabs, setTabs] = useState<Tab[]>([{ id: "t1", label: "T1", num: 1 }]);
   const [activeTabId, setActiveTabId] = useState("t1");
-  const [showTabs, setShowTabs] = useState(false);
+  const [showTabs, setShowTabs] = useState(true);
   const tabCounterRef = useRef(1);
   /** Inline tab-rename editor state (floating input next to the rail). */
   const [renamingTabId, setRenamingTabId] = useState<string | null>(null);
@@ -756,7 +896,11 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     /** Per-tab Compare state (never shared across tabs). */
     diffLeftInput: string;
     diffRightInput: string;
-    diffKind: "document" | "list";
+    diffKind: "document" | "list" | "single";
+    /** Per-tab list parsing options / CSV column / query text (persisted with tab snapshots). */
+    listCompareOptions?: Partial<ListParseOptions>;
+    csvColumn?: string | null;
+    queryText?: string;
     /** Per-tab diff toolbar preferences - preserved like other toolbar settings. */
     diffSideBySide: boolean;
     diffIgnoreWhitespace: boolean;
@@ -839,6 +983,11 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     setDiffLeftInput(snap.diffLeftInput ?? "");
     setDiffRightInput(snap.diffRightInput ?? "");
     setDiffKind(snap.diffKind ?? "document");
+    if (snap.listCompareOptions) {
+      setListCompareOptions((prev) => ({ ...prev, ...snap.listCompareOptions }));
+    }
+    if (snap.csvColumn) setCsvColumn(snap.csvColumn);
+    if (snap.queryText) setQueryText(snap.queryText);
     setDiffSideBySide(snap.diffSideBySide ?? true);
     setDiffIgnoreWhitespace(snap.diffIgnoreWhitespace ?? false);
     setDiffShowPaths(snap.diffShowPaths ?? false);
@@ -877,7 +1026,14 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   const diffDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sessionRestoredRef = useRef(false);
   const skipNextPersistRef = useRef(true);
-  const curlCacheRef = useRef<{ input: string; result: string } | null>(null);
+  const curlCacheRef = useRef<{ input: string; result: string; meta: CurlExecutionResult | null } | null>(null);
+  /** Output snapshot before the last transform action - "Actions → None" restores it. */
+  const prevActionStateRef = useRef<{
+    output: string;
+    parsedOutput: JsonValue | null;
+    outputLanguage?: OutputLanguage;
+    outputExt?: string;
+  } | null>(null);
   const isViewingSharedRef = useRef(false);
 
   const isGraphView = rightView === "graph" && Boolean(parsedOutput);
@@ -929,8 +1085,11 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
   const structuralDiff = useMemo((): DiffSummary | null => {
     if (!isDiffMode) return null;
     if (!diffLeftInput.trim() && !diffRightInput.trim()) return emptyDiffSummary();
-    return summarizeDiffFromText(diffLeftInput, diffRightInput);
-  }, [isDiffMode, diffLeftInput, diffRightInput]);
+    return summarizeDiffFromText(diffLeftInput, diffRightInput, {
+      ignoreArrayOrder: diffIgnoreOrder,
+      arrayKey: diffIgnoreOrder ? "id" : undefined,
+    });
+  }, [isDiffMode, diffLeftInput, diffRightInput, diffIgnoreOrder]);
 
   /** Monaco language: JSON highlighting only when both sides parse as JSON (loose OK). */
   const documentDiffLanguage = useMemo(() => {
@@ -1024,10 +1183,19 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
       let responseText: string;
       if (cache && cache.input === input) {
         responseText = cache.result;
+        if (cache.meta) setCurlMeta(cache.meta);
       } else {
-        const parsed = parseCurl(input);
-        responseText = await executeCurl(parsed);
-        curlCacheRef.current = { input, result: responseText };
+        setCurlFetching(true);
+        try {
+          const parsed = parseCurl(input);
+          const executed = await executeCurlDetailed(parsed);
+          responseText = executed.body;
+          setCurlMeta(executed);
+          setLastExecutedCurlInput(input);
+          curlCacheRef.current = { input, result: responseText, meta: executed };
+        } finally {
+          setCurlFetching(false);
+        }
       }
       const fmt = detectFormat(responseText) === "curl" ? "json" : (detectFormat(responseText) as FormatKind);
       return run<JsonValue>("parseFormat", { input: responseText, format: fmt });
@@ -1160,16 +1328,21 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
         return;
       }
 
-      // ⌘F — find in the focused pane (editors handle their own find when focused).
+      // ⌘F — find in the focused pane; the Tree view gets its own search box.
       if (mod && !event.shiftKey && event.key.toLowerCase() === "f") {
         if (!isEditableTarget(event.target)) {
-          const editor =
-            focusedPane === "input"
-              ? inputEditorApiRef.current
-              : outputEditorApiRef.current;
-          if (editor) {
+          if (rightView === "tree" && treeViewRef.current) {
             event.preventDefault();
-            editor.find();
+            treeViewRef.current.focusSearch();
+          } else {
+            const editor =
+              focusedPane === "input"
+                ? inputEditorApiRef.current
+                : outputEditorApiRef.current;
+            if (editor) {
+              event.preventDefault();
+              editor.find();
+            }
           }
         }
         return;
@@ -1279,7 +1452,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     };
     window.addEventListener("keydown", onKeyDown, { capture: true });
     return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
-  }, [modalKind, inputEmpty, output, parsedOutput, focusedPane, activeOperation, showTabs, tabs.length]);
+  }, [modalKind, inputEmpty, output, parsedOutput, focusedPane, activeOperation, showTabs, tabs.length, rightView]);
 
   // Refresh the ref with fresh closures for functions declared later in this component,
   // so the shortcut handler above never calls a stale version.
@@ -1470,7 +1643,6 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
       sessionRestoredRef.current = true;
       return;
     }
-    const utilParam = searchParams?.get("util");
     const toolParam = searchParams?.get("tool");
     if (pathname === "/playground" && toolParam && ALL_TOOL_ROUTES.includes(toolParam as ToolRoute)) {
       const preset = TOOL_PRESETS[toolParam as ToolRoute];
@@ -1499,8 +1671,12 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
           }
         }
         if (preset.typeLanguage) setTypeLanguage(preset.typeLanguage as TypeTargetLanguage);
+        if (preset.schemaText) setSchemaInput(preset.schemaText);
         if ("diffLeftInput" in preset && preset.diffLeftInput) setDiffLeftInput(preset.diffLeftInput);
         if ("diffRightInput" in preset && preset.diffRightInput) setDiffRightInput(preset.diffRightInput);
+        if (preset.diffKind && (preset.diffKind === "document" || preset.diffKind === "list" || preset.diffKind === "single")) {
+          setDiffKind(preset.diffKind);
+        }
         if (preset.activeOperation === "diff") {
           setIsOutputMaximized(true);
           setRightView("raw");
@@ -2028,10 +2204,19 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
           const cache = curlCacheRef.current;
           if (cache && cache.input === text) {
             toParse = cache.result;
+            if (cache.meta) setCurlMeta(cache.meta);
           } else {
-            const parsed = parseCurl(text);
-            toParse = await executeCurl(parsed);
-            curlCacheRef.current = { input: text, result: toParse };
+            setCurlFetching(true);
+            try {
+              const parsed = parseCurl(text);
+              const executed = await executeCurlDetailed(parsed);
+              toParse = executed.body;
+              setCurlMeta(executed);
+              setLastExecutedCurlInput(text);
+              curlCacheRef.current = { input: text, result: toParse, meta: executed };
+            } finally {
+              setCurlFetching(false);
+            }
           }
           parseFmt = detectFormat(toParse) === "curl" ? "json" : (detectFormat(toParse) as FormatKind);
         }
@@ -2062,6 +2247,8 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
       formatOptions?: FormatOptions;
     },
   ) => {
+    // Snapshot before the action so "Actions → None" can restore the previous output.
+    prevActionStateRef.current = { output, parsedOutput };
     setBusy(true);
     setError(null);
     void (async () => {
@@ -2095,6 +2282,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
           const result = await run<string>("generateTypes", {
             json: left,
             language: targetLanguage,
+            sqlOptions: targetLanguage === "sql" ? { dialect: sqlDialect } : undefined,
           });
           setTypeLanguage(targetLanguage);
           setOutputData(result, action, undefined, targetLanguage);
@@ -2108,6 +2296,12 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
           const out = await convertJsonToOutput(result);
           setOutputData(out, action);
           setParsedOutput(result);
+          return;
+        }
+
+        if (action === "openapi") {
+          const spec = generateOpenApiSpec(left);
+          setOutputData(spec, action);
           return;
         }
 
@@ -2154,7 +2348,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
         setBusy(false);
       }
     })();
-  }, [getParsedInput, parseSchemaToObject, run, convertJsonToOutput, setOutputData, schemaInput, typeLanguage, formatOptions, convertToFormat]);
+  }, [getParsedInput, parseSchemaToObject, run, convertJsonToOutput, setOutputData, schemaInput, typeLanguage, formatOptions, convertToFormat, sqlDialect, output, parsedOutput]);
 
   const runConvert = useCallback((toFormat: FormatKind) => {
     trackEvent("convert", { to_format: toFormat, mode: "transform" });
@@ -2315,6 +2509,22 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
 
   useEffect(() => () => {
     if (diffDebounceRef.current) clearTimeout(diffDebounceRef.current);
+  }, []);
+
+  /** Actions → None: restore the output that existed before the last transform action. */
+  const restorePreviousActionOutput = useCallback(() => {
+    const prev = prevActionStateRef.current;
+    prevActionStateRef.current = null;
+    if (prev) {
+      setOutput(prev.output);
+      setParsedOutput(prev.parsedOutput);
+      if (prev.outputLanguage) setOutputLanguage(prev.outputLanguage);
+      if (prev.outputExt) setOutputExt(prev.outputExt);
+      setActiveOperation(null);
+      toast({ message: "Restored previous output" });
+    } else {
+      setActiveOperation(null);
+    }
   }, []);
 
   const runOperation = (action: OperationAction) => {
@@ -2526,7 +2736,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
       tabSnapshots?: Record<string, TabSnapshot>;
       diffLeftInput?: string;
       diffRightInput?: string;
-      diffKind?: "document" | "list";
+      diffKind?: "document" | "list" | "single";
       utilTab?: UtilTab;
     } = {
       input,
@@ -2546,6 +2756,9 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
       diffRightInput,
       diffKind,
       utilTab,
+      queryText: rightView === "query" ? queryText : undefined,
+      listCompareOptions: isDiffMode ? listCompareOptions : undefined,
+      csvColumn: isDiffMode && diffKind === "list" ? csvColumn ?? undefined : undefined,
     };
     if (includeAllTabs) {
       const all: Record<string, TabSnapshot> = {};
@@ -2631,7 +2844,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
       return s?.output ?? "";
     }
     if (isDiffMode) {
-      if (diffKind === "list") return listCompareExport?.text ?? "";
+      if (diffKind === "list" || diffKind === "single") return listCompareExport?.text ?? "";
       try {
         const left = diffEditorRef.current?.getOriginalValue() ?? diffLeftInput;
         const right = diffEditorRef.current?.getModifiedValue() ?? diffRightInput;
@@ -2669,7 +2882,51 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     if (!raw.trim()) return;
     trackEvent("copy", { format, mode: isUtilsMode ? "utils" : isDiffMode ? "compare" : "transform" });
     try {
-      const text = formatCopyAsText(raw, format);
+      let text: string;
+      // "Same as output" copies the pane exactly as shown.
+      if (format === "same-as-output") {
+        text = raw;
+      }
+      // Compare list/single: build list formats from the raw items so a format
+      // pick (e.g. SQL IN) is never applied to already-formatted output text.
+      else if (
+        isDiffMode &&
+        (diffKind === "list" || diffKind === "single") &&
+        listCompareExport &&
+        listCompareExport.items.length > 0 &&
+        (format === "newline" ||
+          format === "comma" ||
+          format === "single-quotes" ||
+          format === "double-quotes" ||
+          format === "comma-single" ||
+          format === "comma-double" ||
+          format === "json-array" ||
+          format === "sql-in-single" ||
+          format === "sql-in-double")
+      ) {
+        text = formatCopyItemsAsText(listCompareExport.items, format);
+      }
+      // Table formats are built from the parsed data, not the raw output text.
+      else if (format === "markdown-table" || format === "html-table" || format === "csv" || format === "tsv") {
+        let data: JsonValue | null = parsedOutput;
+        if (data == null) {
+          try {
+            data = JSON.parse(raw) as JsonValue;
+          } catch {
+            data = null;
+          }
+        }
+        if (data == null) throw new Error("Not tabular data");
+        text =
+          format === "markdown-table"
+            ? toMarkdownTable(data)
+            : format === "html-table"
+              ? toHtmlTable(data)
+              : toCsv(data, format === "tsv" ? "\t" : ",");
+        if (!text) throw new Error("No rows to export");
+      } else {
+        text = formatCopyAsText(raw, format);
+      }
       await navigator.clipboard.writeText(text);
       const label = activeCopyAsOptions.find((o) => o.id === format)?.label ?? format;
       toast({ message: `Copied as ${label}` });
@@ -2724,7 +2981,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
       return;
     }
     if (isDiffMode) {
-      if (diffKind === "list") {
+      if (diffKind === "list" || diffKind === "single") {
         setDiffLeftInput("");
         setDiffRightInput("");
         setListCompareExport(null);
@@ -2766,9 +3023,10 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     if (isUtilsMode && utilTab === "uuid") return UUID_COPY_AS_OPTIONS;
     if (isUtilsMode && utilTab === "password") return BATCH_COPY_AS_OPTIONS;
     if (isUtilsMode) return [];
-    if (isDiffMode && diffKind === "list") return LIST_COPY_AS_OPTIONS;
+    if (isDiffMode && (diffKind === "list" || diffKind === "single")) return LIST_COPY_AS_OPTIONS;
+    if (!isDiffMode && rightView === "table") return TABLE_COPY_AS_OPTIONS;
     return DEFAULT_COPY_AS_OPTIONS;
-  }, [isUtilsMode, utilTab, isDiffMode, diffKind]);
+  }, [isUtilsMode, utilTab, isDiffMode, diffKind, rightView]);
 
   /** Stable per-tool key used for the per-tab 'last copy as' memory. */
   const copyMemoryKey = isUtilsMode
@@ -2846,7 +3104,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
       if (modalKind) return;
       if (activeOperation === "diff") {
         // List mode uses plain textareas - let the browser handle undo/paste.
-        if (diffKind === "list") return;
+        if (diffKind === "list" || diffKind === "single") return;
         // Document mode: route undo/redo to Monaco diff panes.
         if (event.key.toLowerCase() === "z" && !event.shiftKey) {
           event.preventDefault();
@@ -2866,6 +3124,14 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
         return;
       }
       if (event.key === "Enter") {
+        // Inside a Monaco editor, Ctrl+Enter is handled by the editor's own
+        // keybinding (JsonEditor onCtrlEnter) which consumes it without
+        // inserting a newline - skip here to avoid running parse twice.
+        const target = event.target as HTMLElement | null;
+        if (target && target.closest?.(".monaco-editor")) {
+          event.preventDefault();
+          return;
+        }
         event.preventDefault();
         parseOnly();
       }
@@ -2891,18 +3157,198 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
   }, [modalKind, inputEmpty, focusedPane, activeOperation, diffKind, moveHistory, parseOnly, pasteFromClipboard]);
 
-  const importJsonFile = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const text = String(reader.result ?? "");
+  const readFileAsText = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result ?? ""));
+      reader.onerror = () => reject(new Error("Unable to read file"));
+      reader.readAsText(file);
+    });
+
+  const formatLabelForFile = (name: string, text: string): string => {
+    const detected = detectFormat(text);
+    if (detected !== "curl") return detected.toUpperCase();
+    const ext = name.split(".").pop()?.toUpperCase();
+    return ext && ext.length <= 5 ? ext : "TEXT";
+  };
+
+  /** Local-first file import: Transform input, or a Compare side. Never uploads. */
+  const importFileInto = async (file: File, side?: "left" | "right") => {
+    try {
+      const text = await readFileAsText(file);
+      const label = formatLabelForFile(file.name, text);
+      setDroppedFile({ name: file.name, size: file.size, format: label });
+      if (isDiffMode) {
+        if (side === "left") {
+          setDiffLeftInput(text);
+        } else if (side === "right") {
+          setDiffRightInput(text);
+        } else if (!diffLeftInput.trim()) {
+          setDiffLeftInput(text);
+        } else {
+          setDiffRightInput(text);
+        }
+        toast({ message: `Loaded ${file.name} into ${side === "right" ? "right" : side === "left" ? "left" : diffLeftInput.trim() ? "right" : "left"}` });
+        return;
+      }
       setInput(text);
       pushHistory(text);
       setInputFormatOverride(null);
       setError(null);
+      setValidationError(null);
       parseOnly(text, detectFormat(text));
-    };
-    reader.onerror = () => setError("Unable to read selected file.");
-    reader.readAsText(file);
+      setFocusedPane("output");
+      if (!isDesktopLayout) setMobileShowOutput(true);
+      toast({ message: `Loaded ${file.name}` });
+    } catch {
+      toast({ message: "Could not read that file", type: "error" });
+    }
+  };
+
+  /** Pipe a query result (or any text) into List Compare for ID extraction / SQL. */
+  const openInListCompare = (text: string) => {
+    if (!isDiffMode) runOperation("diff");
+    setDiffKind("list");
+    setDiffLeftInput(text);
+    setDiffRightInput("");
+    setListCompareExport(null);
+    toast({ message: "Opened in List Compare — pick a bucket, then copy SQL" });
+  };
+
+  /** One-click recipes compose existing workspace actions (see src/lib/presets.ts). */
+  const runPreset = (id: PresetId) => {
+    const preset = getPreset(id);
+    if (!preset) return;
+    trackEvent("recipe_run", { recipe: id });
+    setFocusedPane("output");
+    if (!isDesktopLayout) setMobileShowOutput(true);
+
+    const isCompareRecipe =
+      id === "compare-db-exports" || id === "extract-ids-to-sql-in" || id === "dedupe-sort-list";
+
+    if (isCompareRecipe) {
+      // Compare recipes: leave Utils, enter Compare only when not already there.
+      if (isUtilsMode) runOperation("utils");
+      if (!isDiffMode) runOperation("diff");
+    } else {
+      // Transform recipes: leave Compare / Utils so the editors have their context.
+      if (isDiffMode) runOperation("diff");
+      if (isUtilsMode) runOperation("utils");
+    }
+
+    switch (id) {
+      case "json-to-typescript":
+        setActiveOperation("generateTypes");
+        setTypeLanguage("typescript");
+        executeOperation("generateTypes", { typeLanguage: "typescript" });
+        break;
+      case "json-to-sql":
+        setActiveOperation("generateTypes");
+        setTypeLanguage("sql");
+        setOutputLanguage("sql");
+        setOutputExt("sql");
+        executeOperation("generateTypes", { typeLanguage: "sql" });
+        break;
+      case "json-to-yaml":
+        setConvertToFormat("yaml");
+        runConvert("yaml");
+        break;
+      case "flatten-json":
+        runOperation("flatten");
+        break;
+      case "flatten-to-csv": {
+        const src = input.trim() || SAMPLE_JSON_TABLE;
+        try {
+          const json = parseJsonInput(src);
+          const flat = flattenJson(json);
+          const csv = toCsv(flat);
+          setInput(src);
+          pushHistory(src);
+          setOutput(csv);
+          setParsedOutput(flat);
+          setOutputLanguage("csv");
+          setOutputExt("csv");
+          setConvertToFormat("csv");
+          setActiveOperation("format");
+          setError(null);
+          setValidationError(null);
+        } catch {
+          toast({ message: "Recipe needs valid JSON input", type: "error" });
+          return;
+        }
+        break;
+      }
+      case "api-response-types":
+        if (!input.trim()) {
+          const sample = '{"status":200,"data":{"id":1,"email":"a@b.com","roles":["admin"]}}';
+          setInput(sample);
+          pushHistory(sample);
+          setInputFormatOverride(null);
+        }
+        setActiveOperation("generateTypes");
+        setTypeLanguage("typescript");
+        executeOperation("generateTypes", { typeLanguage: "typescript" });
+        break;
+      case "compare-db-exports":
+        setDiffKind("list");
+        if (!diffLeftInput.trim() && !diffRightInput.trim()) {
+          setDiffLeftInput("id-1001\nid-1002\nid-1003\nid-1004");
+          setDiffRightInput("id-1002\nid-1003\nid-1005");
+        }
+        break;
+      case "extract-ids-to-sql-in":
+        setDiffKind("list");
+        if (!diffLeftInput.trim() && !diffRightInput.trim()) {
+          setDiffLeftInput('["7f9c1e2a-4b3d-4a1e-8c6f-2d9b1a4e5c6d", "a1b2c3d4-5678-4e90-ab12-cdef34567890"]');
+          setDiffRightInput("");
+        }
+        break;
+      case "dedupe-sort-list":
+        setDiffKind("single");
+        if (!diffLeftInput.trim()) {
+          setDiffLeftInput("alpha\nbeta\nalpha\ngamma\nbeta\nbeta\ndelta");
+        }
+        break;
+      case "validate-against-schema":
+        runOperation("validate");
+        break;
+    }
+    toast({ message: `${preset.label.replace("Recipe: ", "")}` });
+  };
+
+  // ---- File drag & drop (local-first; drop zones are the Transform input and Compare sides) ----
+  const handleDragEnter = (e: React.DragEvent) => {
+    if (e.dataTransfer?.types?.includes("Files")) {
+      e.preventDefault();
+      dragDepthRef.current += 1;
+      if (!dragActive) setDragActive(true);
+    }
+  };
+  const handleDragOver = (e: React.DragEvent) => {
+    if (e.dataTransfer?.types?.includes("Files")) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
+    }
+  };
+  const handleDragLeave = () => {
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+    if (dragDepthRef.current === 0) setDragActive(false);
+  };
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    dragDepthRef.current = 0;
+    setDragActive(false);
+    const files = Array.from(e.dataTransfer?.files ?? []);
+    if (files.length === 0) return;
+    const half = typeof window !== "undefined" && e.clientX < window.innerWidth / 2;
+    if (files.length >= 2 && isDiffMode) {
+      void importFileInto(files[0]!, "left");
+      void importFileInto(files[1]!, "right");
+    } else if (isDiffMode) {
+      void importFileInto(files[0]!, half ? "left" : "right");
+    } else {
+      void importFileInto(files[0]!);
+    }
   };
 
   const commandPaletteCommands = useMemo((): Command[] => [
@@ -2949,6 +3395,14 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
       badge: activeOperation === "generateTypes" && typeLanguage === t.id ? "active" : undefined,
       disabled: inputEmpty,
       action: () => { trackEvent("generate_types", { language: t.id, source: "palette" }); setFocusedPane("output"); setActiveOperation("generateTypes"); executeOperation("generateTypes", { typeLanguage: t.id }); },
+    })),
+    // Recipes (presets compose existing actions)
+    ...PRESETS.map((p) => ({
+      id: `recipe-${p.id}`,
+      label: p.label,
+      category: "Recipes" as const,
+      keywords: p.keywords,
+      action: () => runPreset(p.id),
     })),
     // Samples
     ...FORMAT_KINDS.map((fmt) => ({
@@ -3055,6 +3509,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
     { id: "diff-download",  label: "Diff: Download report", category: "Workspace", keywords: ["diff", "download", "export", "report", "json"], disabled: activeOperation !== "diff" || diffKind !== "document", action: downloadDiffReport },
     { id: "diff-kind-doc",  label: "Diff: Document mode (text/JSON)", category: "Workspace", keywords: ["diff", "document", "text", "json", "monaco"], disabled: activeOperation !== "diff", action: () => setDiffKind("document") },
     { id: "diff-kind-list", label: "Diff: List / set mode (SQL IN)", category: "Workspace", keywords: ["diff", "list", "set", "common", "sql", "in", "intersection", "compare lists"], disabled: activeOperation !== "diff", action: () => setDiffKind("list") },
+    { id: "diff-kind-single", label: "Diff: Single list (dedupe / count / sort)", category: "Workspace", keywords: ["diff", "single", "dedupe", "duplicates", "count", "sort", "list"], disabled: activeOperation !== "diff", action: () => setDiffKind("single") },
     // New operations
     { id: "op-sort-arrays", label: "Sort array items",         category: "Actions", keywords: ["sort", "arrays", "items", "order"], disabled: inputEmpty || showBusy, action: () => { setFocusedPane("output"); runOperation("sortArrays"); } },
     { id: "op-dedup",       label: "Remove duplicate items",   category: "Actions", keywords: ["dedup", "duplicate", "unique", "array"], disabled: inputEmpty || showBusy, action: () => { setFocusedPane("output"); runOperation("dedup"); } },
@@ -3429,6 +3884,32 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
           </div>
         </SettingsRow>
       </div>
+      <div className="mt-2">
+        <SettingsRule title="SQL generation" />
+        <div className="mt-1 flex flex-wrap gap-1">
+          {([
+            ["sqlite", "SQLite"],
+            ["postgres", "PostgreSQL"],
+            ["mysql", "MySQL"],
+          ] as const).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setSqlDialect(id)}
+              className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors ${
+                sqlDialect === id
+                  ? "bg-primary/15 text-primary"
+                  : "bg-muted text-[var(--workspace-text-muted)] hover:bg-primary/10 hover:text-[var(--workspace-text)]"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <p className="mt-1.5 rounded-md bg-primary/5 px-2 py-1.5 text-[10px] leading-snug text-[var(--workspace-text-muted)]">
+          Used by “Types → SQL”. Types are inferred from your data - review before running.
+        </p>
+      </div>
     </>
   )}
 
@@ -3500,23 +3981,58 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
 
   return (
     <main
-      className="flex flex-col overflow-hidden bg-[var(--workspace-background)] text-[var(--workspace-text)]"
+      className="relative flex flex-col overflow-hidden bg-[var(--workspace-background)] text-[var(--workspace-text)]"
       style={{ height: "100dvh", minHeight: "100dvh", maxHeight: "100dvh" }}
+      onDragEnter={handleDragEnter}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
     >
-      <WorkspaceHeader
-        themeMode={themeMode}
-        onThemeChange={(m) => {
-          trackEvent("theme", { mode: m });
-          setThemeMode(m);
-        }}
-        onOpenCommandPalette={() => {
-          trackEvent("command_palette", { source: "header" });
-          setCommandPaletteOpen(true);
-        }}
-        settingsOpen={transformConfigOpen}
-        onSettingsOpenChange={setTransformConfigOpen}
-        settingsContent={settingsPanelContent}
-      />
+      {dragActive && (
+        <div className="pointer-events-none absolute inset-0 z-[100] flex items-center justify-center bg-[var(--workspace-background)]/70 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-primary/50 bg-[var(--workspace-panel)]/90 px-10 py-8 shadow-2xl shadow-primary/10">
+            <DocumentArrowDownIcon className="h-8 w-8 text-primary" />
+            <p className="text-sm font-semibold text-[var(--workspace-text)]">
+              Drop {isDiffMode ? "one or two files" : "a file"} to import
+            </p>
+            <p className="text-[11px] text-[var(--workspace-text-muted)]">
+              {isDiffMode
+                ? "Two files → left / right · one file → side you drop on"
+                : "JSON · XML · YAML · TOML · CSV · TXT — stays in your browser"}
+            </p>
+          </div>
+        </div>
+      )}
+      {!embed && (
+        <WorkspaceHeader
+          themeMode={themeMode}
+          onThemeChange={(m) => {
+            trackEvent("theme", { mode: m });
+            setThemeMode(m);
+          }}
+          onOpenCommandPalette={() => {
+            trackEvent("command_palette", { source: "header" });
+            setCommandPaletteOpen(true);
+          }}
+          settingsOpen={transformConfigOpen}
+          onSettingsOpenChange={setTransformConfigOpen}
+          settingsContent={settingsPanelContent}
+        />
+      )}
+
+      {embed && (
+        <div className="flex shrink-0 items-center justify-end gap-2 border-b border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-3 py-1">
+          <a
+            href="/playground"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[var(--workspace-text-muted)] transition-colors hover:text-primary"
+          >
+            <Logo size={14} className="shrink-0" />
+            Open in Formaty
+          </a>
+        </div>
+      )}
 
       {loadedToolPreset && (
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-4 py-1">
@@ -3779,7 +4295,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                 {(["json", "xml", "yaml", "toml", "csv"] as const).map((fmt) => (
                   <button key={fmt} type="button" disabled={inputEmpty} className={`${menuItemClass} ${convertToFormat === fmt ? menuItemActiveClass : ""}`} onClick={() => { setFocusedPane("output"); runConvert(fmt); setMoreMenuOpen(false); }}>
                     {sharedMenuCheck(convertToFormat === fmt)}
-                    {FORMAT_LABELS[fmt]}
+                    <span className="min-w-0 flex-1 truncate text-left">{FORMAT_LABELS[fmt]}</span>
                   </button>
                 ))}
                 <div className="my-1 h-px bg-[var(--workspace-border)]" role="separator" aria-hidden />
@@ -3787,7 +4303,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                 {(["raw", "tree", "graph", "query", "table"] as const).map((view) => (
                   <button key={view} type="button" disabled={inputEmpty || ((view === "tree" || view === "graph" || view === "query" || view === "table") && !parsedOutput)} className={`${menuItemClass} ${rightView === view ? menuItemActiveClass : ""}`} onClick={() => { setRightView(view); setFocusedPane("output"); setMoreMenuOpen(false); }}>
                     {sharedMenuCheck(rightView === view)}
-                    {view[0].toUpperCase() + view.slice(1)}
+                    <span className="min-w-0 flex-1 truncate text-left">{view[0].toUpperCase() + view.slice(1)}</span>
                   </button>
                 ))}
                 <div className="my-1 h-px bg-[var(--workspace-border)]" role="separator" aria-hidden />
@@ -3797,7 +4313,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                   return (
                     <button key={action} type="button" disabled={showBusy || inputEmpty} className={`${menuItemClass} ${activeOperation === action ? menuItemActiveClass : ""}`} onClick={() => { runOperation(action); setMoreMenuOpen(false); }}>
                       {sharedMenuCheck(activeOperation === action)}
-                      {label}
+                      <span className="min-w-0 flex-1 truncate text-left">{label}</span>
                     </button>
                   );
                 })}
@@ -3805,67 +4321,76 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                 {menuSectionLabel("Types")}
                 <button type="button" disabled={inputEmpty} className={`${menuItemClass} ${activeOperation === "generateTypes" ? "" : "!bg-primary/12 !text-primary"}`} onClick={() => { setFocusedPane("output"); runOperation("beautify"); setMoreMenuOpen(false); }}>
                   {sharedMenuCheck(activeOperation !== "generateTypes")}
-                  None - format output
+                  <span className="min-w-0 flex-1 truncate text-left">None - format output</span>
                 </button>
                 {TYPE_LANGUAGES.map((item) => (
                   <button key={item.id} type="button" disabled={inputEmpty} className={`${menuItemClass} ${activeOperation === "generateTypes" && typeLanguage === item.id ? menuItemActiveClass : ""}`} onClick={() => { trackEvent("generate_types", { language: item.id, source: "menu" }); setFocusedPane("output"); setActiveOperation("generateTypes"); executeOperation("generateTypes", { typeLanguage: item.id }); setMoreMenuOpen(false); }}>
                     {sharedMenuCheck(activeOperation === "generateTypes" && typeLanguage === item.id)}
-                    {item.label}
+                    <span className="min-w-0 flex-1 truncate text-left">{item.label}</span>
                   </button>
                 ))}
               </div>
             </Dropdown>
             )}
             {viewAsMenu && (<>
-            <Dropdown open={formatMenuOpen} onOpenChange={setFormatMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`w-max min-w-[8rem]`} trigger={<Tooltip content="Format"><div className={`${selectBtnClass} ${formatMenuOpen ? selectBtnOpenClass : ""}`}><span className="font-medium">Format</span><ChevronDownIcon className="h-3 w-3" aria-hidden /></div></Tooltip>}>
+            <Dropdown open={formatMenuOpen} onOpenChange={setFormatMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`w-max min-w-[8rem]`} trigger={<Tooltip content={`Format: ${FORMAT_LABELS[convertToFormat]}`}><div className={`${selectBtnClass} ${formatMenuOpen ? selectBtnOpenClass : ""}`}>{(() => { const FI = FORMAT_ICONS[convertToFormat] ?? Squares2X2Icon; return <FI className="h-3.5 w-3.5 shrink-0 text-primary" />; })()}<span className="font-medium">Format</span><ChevronDownIcon className="h-3 w-3 shrink-0" aria-hidden /></div></Tooltip>}>
               <div className="flex flex-col" onClick={(e) => e.stopPropagation()}>
                 {menuSectionLabel("Structured")}
                 {(["json", "xml", "yaml", "toml"] as const).map((fmt) => (
                   <button key={fmt} type="button" disabled={inputEmpty} className={`${menuItemClass} ${convertToFormat === fmt ? menuItemActiveClass : ""}`} onClick={() => { setFocusedPane("output"); runConvert(fmt); setFormatMenuOpen(false); }}>
                     {sharedMenuCheck(convertToFormat === fmt)}
-                    {FORMAT_LABELS[fmt]}
+                    <span className="min-w-0 flex-1 truncate text-left">{FORMAT_LABELS[fmt]}</span>
                   </button>
                 ))}
                 <div className="my-1 h-px bg-[var(--workspace-border)]" role="separator" aria-hidden />
                 {menuSectionLabel("Tabular")}
                 <button type="button" disabled={inputEmpty} className={`${menuItemClass} ${convertToFormat === "csv" ? menuItemActiveClass : ""}`} onClick={() => { setFocusedPane("output"); runConvert("csv"); setFormatMenuOpen(false); }}>
                   {sharedMenuCheck(convertToFormat === "csv")}
-                  {FORMAT_LABELS.csv}
+                  <span className="min-w-0 flex-1 truncate text-left">{FORMAT_LABELS.csv}</span>
                 </button>
               </div>
             </Dropdown>
-            <Dropdown open={viewMenuOpen} onOpenChange={setViewMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`w-max min-w-[8rem]`} trigger={<Tooltip content="View"><div className={`${selectBtnClass} ${viewMenuOpen ? selectBtnOpenClass : ""}`}><span className="font-medium">View</span><ChevronDownIcon className="h-3 w-3" aria-hidden /></div></Tooltip>}>
+            <Dropdown open={viewMenuOpen} onOpenChange={setViewMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`w-max min-w-[9rem]`} trigger={<Tooltip content={`View: ${rightView[0].toUpperCase()}${rightView.slice(1)}`}><div className={`${selectBtnClass} ${viewMenuOpen ? selectBtnOpenClass : ""}`}>{(() => { const VI = VIEW_ICONS[rightView] ?? EyeIcon; return <VI className="h-3.5 w-3.5 shrink-0 text-primary" />; })()}<span className="font-medium">View</span><ChevronDownIcon className="h-3 w-3 shrink-0" aria-hidden /></div></Tooltip>}>
               <div className="flex flex-col" onClick={(e) => e.stopPropagation()}>
                 {menuSectionLabel("Text")}
                 <button type="button" disabled={inputEmpty} className={`${menuItemClass} ${rightView === "raw" ? menuItemActiveClass : ""}`} onClick={() => { setRightView("raw"); setFocusedPane("output"); setViewMenuOpen(false); }}>
                   {sharedMenuCheck(rightView === "raw")}
-                  Raw
+                  <span className="min-w-0 flex-1 truncate text-left">Raw</span>
+                  <kbd className="rounded border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-1 py-px font-mono text-[9px] text-[var(--workspace-text-muted)]">⌘1</kbd>
                 </button>
                 <div className="my-1 h-px bg-[var(--workspace-border)]" role="separator" aria-hidden />
                 {menuSectionLabel("Visualize")}
-                {(["tree", "graph", "table"] as const).map((view) => (
-                  <button key={view} type="button" disabled={inputEmpty || !parsedOutput} className={`${menuItemClass} ${rightView === view ? menuItemActiveClass : ""}`} onClick={() => { trackEvent("view", { view }); setRightView(view); setFocusedPane("output"); setViewMenuOpen(false); }}>
+                {(["tree", "graph", "table"] as const).map((view, vi) => (                    <button key={view} type="button" disabled={inputEmpty || !parsedOutput} className={`${menuItemClass} ${rightView === view ? menuItemActiveClass : ""}`} onClick={() => { trackEvent("view", { view }); setRightView(view); setFocusedPane("output"); setViewMenuOpen(false); }}>
                     {sharedMenuCheck(rightView === view)}
-                    {view[0].toUpperCase() + view.slice(1)}
+                    <span className="min-w-0 flex-1 truncate text-left">{view[0].toUpperCase() + view.slice(1)}</span>
+                    <kbd className="rounded border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-1 py-px font-mono text-[9px] text-[var(--workspace-text-muted)]">⌘{vi + 2}</kbd>
                   </button>
                 ))}
                 <div className="my-1 h-px bg-[var(--workspace-border)]" role="separator" aria-hidden />
                 {menuSectionLabel("Query")}
                 <button type="button" disabled={inputEmpty || !parsedOutput} className={`${menuItemClass} ${rightView === "query" ? menuItemActiveClass : ""}`} onClick={() => { trackEvent("view", { view: "query" }); setRightView("query"); setFocusedPane("output"); setViewMenuOpen(false); }}>
                   {sharedMenuCheck(rightView === "query")}
-                  Query
+                  <span className="min-w-0 flex-1 truncate text-left">Query</span>
+                  <kbd className="rounded border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-1 py-px font-mono text-[9px] text-[var(--workspace-text-muted)]">⌘4</kbd>
                 </button>
               </div>
             </Dropdown>
-            <Dropdown open={actionsMenuOpen} onOpenChange={setActionsMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`w-max min-w-[8rem]`} trigger={<Tooltip content="Actions"><div className={`${selectBtnClass} ${actionsMenuOpen ? selectBtnOpenClass : ""}`}><span className="font-medium">Actions</span><ChevronDownIcon className="h-3 w-3" aria-hidden /></div></Tooltip>}>
+            <Dropdown open={actionsMenuOpen} onOpenChange={setActionsMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`w-max min-w-[9rem]`} trigger={<Tooltip content={activeOperation && OPERATION_ACTION_LABELS[activeOperation] ? `Actions: ${OPERATION_ACTION_LABELS[activeOperation]}` : "Transform actions"}><div className={`${selectBtnClass} ${actionsMenuOpen ? selectBtnOpenClass : ""}`}>{(() => { const AI = activeOperation ? (ACTION_ICONS[activeOperation] ?? BoltIcon) : BoltIcon; return <AI className={`h-3.5 w-3.5 shrink-0 ${activeOperation && ACTION_ICONS[activeOperation] ? "text-primary" : "text-[var(--workspace-text-muted)]"}`} />; })()}<span className="font-medium">Actions</span><ChevronDownIcon className="h-3 w-3 shrink-0" aria-hidden /></div></Tooltip>}>
               <div className="flex flex-col" onClick={(e) => e.stopPropagation()}>
+                <button type="button" disabled={inputEmpty} className={`${menuItemClass} ${!OPERATION_ACTION_LABELS[activeOperation ?? ""] ? menuItemActiveClass : ""}`} onClick={() => { restorePreviousActionOutput(); setActionsMenuOpen(false); }}>
+                  {sharedMenuCheck(!OPERATION_ACTION_LABELS[activeOperation ?? ""])}
+                  <span className="min-w-0 flex-1 truncate text-left">None</span>
+                  <span className="text-[10px] opacity-60">restore output</span>
+                </button>
+                <div className="my-1 h-px bg-[var(--workspace-border)]" role="separator" aria-hidden />
                 {menuSectionLabel("Format")}
                 {(["beautify", "minify"] as const).map((action) => {
                   const [label] = OPERATION_ACTIONS.find(([, a]) => a === action) ?? [action, action];
                   return (
                     <button key={action} type="button" disabled={showBusy || inputEmpty} className={`${menuItemClass} ${activeOperation === action ? menuItemActiveClass : ""}`} onClick={() => { runOperation(action); setActionsMenuOpen(false); }}>
                       {sharedMenuCheck(activeOperation === action)}
-                      {label}
+                      <span className="min-w-0 flex-1 truncate text-left">{label}</span>
+                      <kbd className="rounded border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-1 py-px font-mono text-[9px] text-[var(--workspace-text-muted)]">{action === "beautify" ? "⌘⇧B" : "⌘⇧M"}</kbd>
                     </button>
                   );
                 })}
@@ -3876,28 +4401,28 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                   return (
                     <button key={action} type="button" disabled={showBusy || inputEmpty} className={`${menuItemClass} ${activeOperation === action ? menuItemActiveClass : ""}`} onClick={() => { runOperation(action); setActionsMenuOpen(false); }}>
                       {sharedMenuCheck(activeOperation === action)}
-                      {label}
+                      <span className="min-w-0 flex-1 truncate text-left">{label}</span>
                     </button>
                   );
                 })}
                 <div className="my-1 h-px bg-[var(--workspace-border)]" role="separator" aria-hidden />
-                {menuSectionLabel("Inspect")}
-                {(["schema", "validate"] as const).map((action) => {
+                {menuSectionLabel("Inspect / Spec")}
+                {(["schema", "openapi", "validate"] as const).map((action) => {
                   const [label] = OPERATION_ACTIONS.find(([, a]) => a === action) ?? [action, action];
                   return (
                     <button key={action} type="button" disabled={showBusy || inputEmpty} className={`${menuItemClass} ${activeOperation === action ? menuItemActiveClass : ""}`} onClick={() => { runOperation(action); setActionsMenuOpen(false); }}>
                       {sharedMenuCheck(activeOperation === action)}
-                      {label}
+                      <span className="min-w-0 flex-1 truncate text-left">{label}</span>
                     </button>
                   );
                 })}
               </div>
             </Dropdown>
-            <Dropdown open={typesMenuOpen} onOpenChange={setTypesMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`w-max min-w-[8rem] max-h-[60vh] overflow-y-auto`} trigger={<Tooltip content="Generate Types"><div className={`${selectBtnClass} ${typesMenuOpen || activeOperation === "generateTypes" ? selectBtnOpenClass : ""}`}><span className="font-medium">{activeOperation === "generateTypes" ? (TYPE_LANGUAGES.find((t) => t.id === typeLanguage)?.label ?? "Types") : "Types"}</span><ChevronDownIcon className="h-3 w-3" aria-hidden /></div></Tooltip>}>
+            <Dropdown open={typesMenuOpen} onOpenChange={setTypesMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`w-max min-w-[8rem] max-h-[60vh] overflow-y-auto`} trigger={<Tooltip content={activeOperation === "generateTypes" ? `Types: ${TYPE_LANGUAGES.find((t) => t.id === typeLanguage)?.label ?? ""}` : "Generate Types"}><div className={`${selectBtnClass} ${typesMenuOpen || activeOperation === "generateTypes" ? selectBtnOpenClass : ""}`}>{activeOperation === "generateTypes" ? <TypeBadge id={typeLanguage} /> : <CodeBracketIcon className="h-3.5 w-3.5 shrink-0 text-[var(--workspace-text-muted)]" />}<span className="font-medium">Types</span><ChevronDownIcon className="h-3 w-3 shrink-0" aria-hidden /></div></Tooltip>}>
               <div className="flex flex-col" onClick={(e) => e.stopPropagation()}>
                 <button type="button" disabled={inputEmpty} className={`${menuItemClass} ${activeOperation === "generateTypes" ? "" : "!bg-primary/12 !text-primary"}`} onClick={() => { setFocusedPane("output"); runOperation("beautify"); setTypesMenuOpen(false); }}>
                   {sharedMenuCheck(activeOperation !== "generateTypes")}
-                  None - format output
+                  <span className="min-w-0 flex-1 truncate text-left">None - format output</span>
                 </button>
                 <div className="my-1 h-px bg-[var(--workspace-border)]" role="separator" aria-hidden />
                 {(
@@ -3914,13 +4439,76 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                     {TYPE_LANGUAGES.filter((t) => (group.ids as readonly string[]).includes(t.id)).map((item) => (
                       <button key={item.id} type="button" disabled={inputEmpty} className={`${menuItemClass} ${activeOperation === "generateTypes" && typeLanguage === item.id ? menuItemActiveClass : ""}`} onClick={() => { trackEvent("generate_types", { language: item.id, source: "types_menu" }); setFocusedPane("output"); setActiveOperation("generateTypes"); executeOperation("generateTypes", { typeLanguage: item.id }); setTypesMenuOpen(false); }}>
                         {sharedMenuCheck(activeOperation === "generateTypes" && typeLanguage === item.id)}
-                        {item.label}
+                        <span className="min-w-0 flex-1 truncate text-left">{item.label}</span>
                       </button>
                     ))}
                   </React.Fragment>
                 ))}
               </div>
             </Dropdown>
+            {resolvedInputFormat === "curl" && !isDiffMode && !isUtilsMode && (
+              <Dropdown
+                open={curlCodeOpen}
+                onOpenChange={setCurlCodeOpen}
+                side="bottom"
+                align="start"
+                rootClassName="shrink-0"
+                contentClassName="w-max min-w-[10rem]"
+                trigger={
+                  <Tooltip content={curlTarget ? `Output shows ${getCurlTarget(curlTarget)?.label ?? ""} - pick another to regenerate` : "Generate code from this cURL command"}>
+                  <div className={`${selectBtnClass} ${curlCodeOpen ? selectBtnOpenClass : ""}`}>
+                    {curlTarget ? <TypeBadge id={curlTarget} /> : <CodeBracketIcon className="h-3.5 w-3.5" />}
+                    <span className="font-medium">Code</span>
+                    <ChevronDownIcon className="h-3 w-3 shrink-0" aria-hidden />
+                  </div>
+                  </Tooltip>
+                }
+              >
+                <div className="flex flex-col" onClick={(e) => e.stopPropagation()}>
+                  {CURL_TARGETS.map((target) => (
+                    <button
+                      key={target.id}
+                      type="button"
+                      className={`${sharedMenuItemClass} ${curlTarget === target.id ? sharedMenuItemActiveClass : ""}`}
+                      onClick={() => {
+                        try {
+                          prevActionStateRef.current = { output, parsedOutput, outputLanguage, outputExt };
+                          const parsed = parseCurl(input);
+                          const code = generateCurlCode(parsed, target.id as CurlTargetId);
+                          setCurlTarget(target.id as CurlTargetId);
+                          setFocusedPane("output");
+                          setOutput(code);
+                          setOutputLanguage(target.id === "python" ? "python" : target.id === "go" ? "go" : "javascript");
+                          setOutputExt(target.ext);
+                          setActiveOperation(null);
+                          if (!isDesktopLayout) setMobileShowOutput(true);
+                        } catch {
+                          toast({ message: "Could not parse this cURL command", type: "error" });
+                        }
+                        setCurlCodeOpen(false);
+                      }}
+                    >
+                      {sharedMenuCheck(curlTarget === target.id)}
+                      <span className="min-w-0 flex-1 text-left">{target.label}</span>
+                    </button>
+                  ))}
+                  <div className="my-1 h-px bg-[var(--workspace-border)]" role="separator" aria-hidden />
+                  <button
+                    type="button"
+                    className={`${sharedMenuItemClass} ${!curlTarget ? sharedMenuItemActiveClass : ""}`}
+                    onClick={() => {
+                      restorePreviousActionOutput();
+                      setCurlTarget(null);
+                      setCurlCodeOpen(false);
+                    }}
+                  >
+                    {sharedMenuCheck(!curlTarget)}
+                    <span className="min-w-0 flex-1 text-left">None</span>
+                    <span className="text-[10px] opacity-60">restore output</span>
+                  </button>
+                </div>
+              </Dropdown>
+            )}
             </>)}
             </>)}
 
@@ -3960,8 +4548,25 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                   <span className="relative z-[1]">Lists</span>
                 </button>
                 </Tooltip>
+                <Tooltip content="Single list: dedupe, count, sort">
+                <button
+                  type="button"
+                  className={`relative h-7 cursor-pointer border-l border-[var(--workspace-border)] px-3 text-xs font-semibold transition-colors duration-150 ${diffKind === "single" ? "text-primary" : "text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)] hover:text-[var(--workspace-text)]"}`}
+                  onClick={() => setDiffKind("single")}
+                >
+                  {diffKind === "single" && (
+                    <motion.span
+                      layoutId="diff-kind-pill"
+                      className="absolute inset-0 bg-primary/15"
+                      transition={{ type: "spring", stiffness: 420, damping: 34 }}
+                    />
+                  )}
+                  <span className="relative z-[1]">Single</span>
+                </button>
+                </Tooltip>
               </div>
-              {diffKind === "list" && (
+
+              {diffKind !== "document" && (
                 <div
                   ref={setListToolbarHost}
                   className="flex min-h-7 min-w-0 flex-1 flex-nowrap items-center gap-1 overflow-hidden"
@@ -4005,12 +4610,16 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                     {diffIgnoreWhitespace ? "Ignore WS ✓" : "Ignore WS"}
                   </button>
                   </Tooltip>
-                  <Tooltip content="Swap sides" className="shrink-0">
-                  <button type="button" className={`${diffToolBtn} w-7 !px-0`} onClick={swapDiffSides}>
-                    <ArrowsRightLeftIcon className="h-3.5 w-3.5" />
+                  <Tooltip content="Ignore array order in structural diff (arrays matched as sets)" className="shrink-0">
+                  <button
+                    type="button"
+                    className={`${diffToolBtn} ${diffIgnoreOrder ? "!bg-primary/12 !text-primary" : ""}`}
+                    onClick={() => setDiffIgnoreOrder((v) => !v)}
+                  >
+                    {diffIgnoreOrder ? "Order-free ✓" : "Order-free"}
                   </button>
                   </Tooltip>
-                  <Tooltip content={canShowPathDiff ? "JSON path-level changes" : "Path diff needs valid JSON on both sides"} className="shrink-0">
+                  <Tooltip content={canShowPathDiff ? "Structural path-level changes (JSON/XML/YAML/CSV)" : "Path diff needs parseable data on both sides"} className="shrink-0">
                   <button
                     type="button"
                     disabled={!canShowPathDiff}
@@ -4101,7 +4710,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                   return;
                 }
                 if (isDiffMode) {
-                  if (diffKind === "list" && listCompareExport?.text) {
+                  if ((diffKind === "list" || diffKind === "single") && listCompareExport?.text) {
                     const blob = new Blob([listCompareExport.text], { type: "text/plain;charset=utf-8" });
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement("a");
@@ -4173,16 +4782,38 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                     <input
             id="import-json-file"
             type="file"
-            accept=".json,.yaml,.yml,.xml,.toml,.csv,application/json,text/plain"
+            accept=".json,.yaml,.yml,.xml,.toml,.csv,.txt,application/json,text/plain"
             className="hidden"
             onChange={(e) => {
               const file = e.target.files?.[0];
               if (file) {
-                importJsonFile(file);
+                void importFileInto(file);
                 e.currentTarget.value = "";
               }
             }}
           />
+
+          {droppedFile && !isDiffMode && (
+            <div className="flex shrink-0 items-center gap-2 border-b border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-3 py-1.5">
+              <span className="inline-flex h-4 shrink-0 items-center rounded-full bg-primary/10 px-1.5 text-[9px] font-semibold uppercase tracking-wide text-primary">
+                {droppedFile.format}
+              </span>
+              <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-[var(--workspace-text)]">
+                {droppedFile.name}
+              </span>
+              <span className="shrink-0 text-[10px] tabular-nums text-[var(--workspace-text-muted)]">
+                {getSizeFormatted(String(droppedFile.size))}
+              </span>
+              <button
+                type="button"
+                className={`${linkBtnClass} h-6 w-6 shrink-0 !p-0`}
+                title="Dismiss file info"
+                onClick={() => setDroppedFile(null)}
+              >
+                <XMarkIcon className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
 
           {splitInputOpen && isDesktopLayout ? (
             <div
@@ -4204,6 +4835,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                   fontSize={editorFontSize}
                   wordWrap={lineWrap ? "on" : "off"}
                   onEditorMount={(api) => { inputEditorApiRef.current = api; }}
+                  onCtrlEnter={parseOnly}
                   onCursorChange={(line, column) => setCursorPosition({ line, column })}
                   placeholder="Left input…"
                 />
@@ -4252,8 +4884,25 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                 fontSize={editorFontSize}
                 wordWrap={lineWrap ? "on" : "off"}
                 onEditorMount={(api) => { inputEditorApiRef.current = api; }}
+                onCtrlEnter={parseOnly}
                 onCursorChange={(line, column) => setCursorPosition({ line, column })}
               />
+              {resolvedInputFormat === "curl" && input.trim() && input !== lastExecutedCurlInput && !curlFetching && (
+                <div className="pointer-events-none absolute inset-x-0 bottom-2 z-10 flex justify-center">
+                  <button
+                    type="button"
+                    className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-[var(--workspace-panel)]/95 px-3 py-1 text-[10px] font-medium text-primary shadow-lg backdrop-blur transition-colors hover:bg-primary/10"
+                    onClick={() => { parseOnly(); setFocusedPane("input"); }}
+                  >
+                    Press
+                    <kbd className="rounded border border-primary/30 bg-[var(--workspace-background)] px-1 py-px font-mono text-[9px]">
+                      {typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl"}
+                    </kbd>
+                    <kbd className="rounded border border-primary/30 bg-[var(--workspace-background)] px-1 py-px font-mono text-[9px]">Enter</kbd>
+                    to execute
+                  </button>
+                </div>
+              )}
               {inputEmpty && (
                 <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3 p-8 text-center select-none">
                   <div className="rounded-xl border border-dashed border-[var(--workspace-border)] bg-[var(--workspace-panel)]/50 px-6 py-4 backdrop-blur-sm">
@@ -4273,6 +4922,25 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                         ⌘V
                       </kbd>
                     </p>
+                    <p className="mt-1.5 text-[11px] text-[var(--workspace-text-muted)]">
+                      Format · Inspect · Query · Convert · Compare · Generate code
+                    </p>
+                    <button
+                      type="button"
+                      className="pointer-events-auto mt-3 rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-all hover:bg-primary/20"
+                      onClick={() => {
+                        const sample = JSON.stringify(
+                          { id: 1, name: "Alice", roles: ["admin", "dev"], active: true, meta: { plan: "pro", expires: "2026-01-01" } },
+                          null,
+                          2,
+                        );
+                        setInput(sample);
+                        pushHistory(sample);
+                        setFocusedPane("output");
+                      }}
+                    >
+                      Load sample
+                    </button>
                   </div>
                 </div>
               )}
@@ -4349,19 +5017,46 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                     onExportChange={setListCompareExport}
                     fontSize={editorFontSize}
                     options={listCompareOptions}
+                    initialCsvColumn={csvColumn}
+                    onCsvColumnChange={setCsvColumn}
+                  />
+                ) : diffKind === "single" ? (
+                  <SingleListPanel
+                    value={diffLeftInput}
+                    onChange={setDiffLeftInput}
+                    linkBtnClass={linkBtnClass}
+                    panelClass={outputPanelClass}
+                    isDark={isDark}
+                    toolbarHost={listToolbarHost}
+                    onExportChange={setListCompareExport}
+                    fontSize={editorFontSize}
+                    options={listCompareOptions}
                   />
                 ) : (
                   <div className="flex min-h-0 flex-1 overflow-hidden">
                     <div className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden ${diffShowPaths ? "" : "w-full"}`}>
                       {diffSideBySide && (
-                        <div className={`flex h-6 shrink-0 border-b text-[11px] font-medium ${outputPanelClass}`}>
-                          <div className="flex flex-1 items-center gap-1.5 border-r border-[var(--workspace-border)] px-2 text-[var(--workspace-text-muted)]">
-                            <span className="h-1.5 w-1.5 rounded-full bg-red-400/80" />
-                            Left
+                        <div className={`relative flex h-7 shrink-0 border-b text-[11px] font-medium ${outputPanelClass}`}>
+                          <div className="flex min-w-0 flex-1 items-center gap-1.5 border-r border-[var(--workspace-border)] px-2 text-[var(--workspace-text-muted)]">
+                            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-red-400/80" />
+                            <span className="truncate">Left</span>
                           </div>
-                          <div className="flex flex-1 items-center gap-1.5 px-2 text-[var(--workspace-text-muted)]">
-                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400/80" />
-                            Right
+                          {/* Swap button centered on the divider - mirrors List Compare */}
+                          <div className="flex w-6 shrink-0 items-center justify-center group/swap">
+                            <Tooltip content="Swap left and right">
+                            <button
+                              type="button"
+                              onClick={swapDiffSides}
+                              className={`${linkBtnClass} h-6 min-h-6 w-6 rounded-md opacity-0 transition-opacity duration-150 group-hover/swap:opacity-100`}
+                              aria-label="Swap left and right"
+                            >
+                              <ArrowsRightLeftIcon className="h-3.5 w-3.5" />
+                            </button>
+                            </Tooltip>
+                          </div>
+                          <div className="flex min-w-0 flex-1 items-center gap-1.5 px-2 text-[var(--workspace-text-muted)]">
+                            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400/80" />
+                            <span className="truncate">Right</span>
                           </div>
                         </div>
                       )}
@@ -4553,19 +5248,63 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                 </div>
               </div>
             ) : rightView === "raw" ? (
-              output.trim() ? (
-                <JsonEditor
-                  value={output}
-                  onChange={setOutput}
-                  className="h-full min-h-0 flex-1"
-                  readOnly
-                  passiveReadOnly
-                  language={outputLanguage === "toml" || outputLanguage === "csv" ? "plaintext" : outputLanguage}
-                  monacoTheme={monacoTheme}
-                  fontSize={editorFontSize}
-                  wordWrap={lineWrap ? "on" : "off"}
-                  onEditorMount={(api) => { outputEditorApiRef.current = api; }}
-                />
+              output.trim() || curlFetching ? (
+                <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+                  {curlMeta && resolvedInputFormat === "curl" && (
+                    <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-2.5 py-1.5">
+                      <span
+                        className={`inline-flex h-5 items-center gap-1 rounded-full px-2 text-[10px] font-bold tabular-nums ${
+                          curlMeta.ok
+                            ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                            : "bg-red-500/15 text-red-600 dark:text-red-400"
+                        }`}
+                      >
+                        HTTP {curlMeta.status}
+                      </span>
+                      <span className="text-[10px] tabular-nums text-[var(--workspace-text-muted)]">
+                        {curlMeta.size} B
+                      </span>
+                      {curlMeta.timingMs >= 0 && (
+                        <span className="text-[10px] tabular-nums text-[var(--workspace-text-muted)]">
+                          {curlMeta.timingMs} ms
+                        </span>
+                      )}
+                      {curlMeta.headers["content-type"] && (
+                        <span className="hidden truncate font-mono text-[10px] text-[var(--workspace-text-muted)] sm:inline">
+                          {curlMeta.headers["content-type"]}
+                        </span>
+                      )}
+                      <span className="ml-auto text-[10px] text-[var(--workspace-text-muted)]">Response</span>
+                    </div>
+                  )}
+                  {curlFetching ? (
+                    <div className="flex h-full min-h-0 flex-1 flex-col gap-2 overflow-hidden bg-[var(--workspace-panel)] px-4 py-3" aria-label="Fetching response">
+                      {[70, 45, 55, 80, 40, 65, 30].map((w, i) => (
+                        <div
+                          key={i}
+                          className="h-3 animate-pulse rounded bg-[var(--workspace-border)]/60"
+                          style={{ width: `${w}%`, animationDelay: `${i * 90}ms` }}
+                        />
+                      ))}
+                      <p className="mt-1 text-[10px] font-medium text-[var(--workspace-text-muted)]">
+                        Executing request…
+                      </p>
+                    </div>
+                  ) : (
+                  <JsonEditor
+                    value={output}
+                    onChange={setOutput}
+                    className="h-full min-h-0 flex-1"
+                    readOnly
+                    passiveReadOnly
+                    language={outputLanguage === "toml" || outputLanguage === "csv" ? "plaintext" : outputLanguage}
+                    monacoTheme={monacoTheme}
+                    fontSize={editorFontSize}
+                    wordWrap={lineWrap ? "on" : "off"}
+                    onEditorMount={(api) => { outputEditorApiRef.current = api; }}
+                  />
+                  )}
+                </div>
               ) : (
                 <div className="flex h-full min-h-[280px] flex-col items-center justify-center gap-6 p-6 text-center overflow-y-auto bg-[var(--workspace-panel)]">
                   {/* Brand + tagline */}
@@ -4733,9 +5472,11 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                   </div>
                 ) : (
                   <TreeView
+                    ref={treeViewRef}
                     data={parsedOutput}
                     isDark={isDark}
                     largeFile={isLargeInput}
+                    fontSize={editorFontSize}
                     onNotify={(msg) => toast({ message: msg })}
                     className={`${outputPanelClass} min-h-0 flex-1 overflow-auto`}
                   />
@@ -4788,6 +5529,9 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                   fontSize={editorFontSize}
                   monacoTheme={monacoTheme}
                   onResultChange={setQueryResult}
+                  initialQuery={queryText || undefined}
+                  onQueryChange={setQueryText}
+                  onOpenInListCompare={openInListCompare}
                 />
               ) : (
                 <div className={`flex h-full min-h-[200px] items-center justify-center border text-sm text-[var(--workspace-text-muted)] ${outputPanelClass}`}>
@@ -4818,6 +5562,7 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
                     data={data}
                     className={`${outputPanelClass} min-h-0 flex-1 overflow-auto`}
                     isDark={isDark}
+                    fontSize={editorFontSize}
                   />
                 ) : (
                   <div className={`flex h-full min-h-[200px] flex-col items-center justify-center gap-2 border p-6 text-center text-sm text-[var(--workspace-text-muted)] ${outputPanelClass}`}>
@@ -4857,6 +5602,8 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
       </div>
       </div>
 
+      {embed && <div className="h-px shrink-0 bg-[var(--workspace-border)]" aria-hidden />}
+
       <StatusBar
         valid={inputValid}
         errorMessage={error ?? validationError}
@@ -4867,13 +5614,14 @@ export function WorkspaceContent({ initialState, sharedLinkId: initialSharedLink
         cursorPosition={cursorPosition ? `Ln ${cursorPosition.line}, Col ${cursorPosition.column}` : undefined}
         indentSize={formatOptions.indentation}
         encoding="UTF-8"
+        hide={embed}
         rightActions={
           <span className="flex shrink-0 items-center gap-1 font-mono text-[11px] tracking-wide text-[var(--workspace-text-muted)]">
             {isDiffMode ? (
               <>
                 <span className="font-semibold text-[var(--workspace-text)]">Compare</span>
                 <span className="text-primary">·</span>
-                <span className="font-semibold text-[var(--workspace-text)]">{diffKind === "document" ? "Document" : "Lists"}</span>
+                <span className="font-semibold text-[var(--workspace-text)]">{diffKind === "document" ? "Document" : diffKind === "single" ? "Single list" : "Lists"}</span>
               </>
             ) : isUtilsMode ? (
               <>

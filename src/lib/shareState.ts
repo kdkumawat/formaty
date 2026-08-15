@@ -4,6 +4,7 @@ import {
 } from "lz-string";
 import type { FormatKind } from "./formats";
 import type { TypeTargetLanguage } from "./json/core";
+import type { ListParseOptions } from "./json/listCompare";
 
 export type OutputDisplayKind = FormatKind | TypeTargetLanguage | "plaintext";
 
@@ -22,6 +23,16 @@ export interface WorkspaceState {
   viewMode?: "raw" | "tree" | "graph" | "query" | "table";
   activeOperation?: OperationAction;
   split?: number;
+  /** Query-view query text (preserved in shared links when present). */
+  queryText?: string;
+  /** Compare: which comparison mode was active. */
+  diffKind?: "document" | "list" | "single";
+  /** Compare: list parsing options (only non-default fields are stored). */
+  listCompareOptions?: Partial<ListParseOptions>;
+  /** Compare: CSV column selected for column compare. */
+  csvColumn?: string;
+  /** Preset/recipe state marker (informational - recipes re-run on open). */
+  preset?: string;
 }
 
 const MAX_UNCOMPRESSED = 100_000;

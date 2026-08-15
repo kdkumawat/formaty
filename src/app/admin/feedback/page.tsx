@@ -11,6 +11,7 @@ import {
   TrashIcon,
   XMarkIcon,
 } from "@heroicons/react/24/outline";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tooltip } from "@/components/workspace/Tooltip";
@@ -180,9 +181,9 @@ export default function FeedbackAdminPage() {
             The feedback API is not configured. Set{" "}
             <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">FORMATY_API_URL</code>{" "}
             (and deploy the feedback endpoints in the formaty-api Worker) to use this page. See{" "}
-            <a href="/docs" className="text-primary hover:underline">
+            <Link href="/docs" className="text-primary hover:underline">
               docs
-            </a>
+            </Link>
             .
           </p>
         </div>

@@ -26,6 +26,8 @@ interface TableViewProps {
   data: JsonValue;
   className?: string;
   isDark?: boolean;
+  /** Content font size (px) - kept in sync with the editor font size. */
+  fontSize?: number;
 }
 
 type Row = Record<string, JsonValue>;
@@ -86,7 +88,7 @@ export function toTableRows(data: JsonValue): { rows: Row[]; headers: string[] }
   return null;
 }
 
-export function TableView({ data, className = "" }: TableViewProps) {
+export function TableView({ data, className = "", fontSize = 13 }: TableViewProps) {
   const [stack, setStack] = useState<NavFrame[]>([{ label: "Root", data }]);
 
   // Reset navigation when the root data identity/content changes from parent
@@ -200,11 +202,11 @@ export function TableView({ data, className = "" }: TableViewProps) {
   };
 
   const cellClass =
-    "border border-[var(--workspace-border)] bg-[var(--workspace-panel)] text-[var(--workspace-text)]";
+    "border border-[var(--workspace-border)] text-[var(--workspace-text)]";
   const headerClass = "bg-[var(--workspace-background)] text-[var(--workspace-text)]";
 
   return (
-    <div className={`flex h-full min-h-0 flex-col overflow-hidden ${className ?? ""}`}>
+    <div className={`flex h-full min-h-0 flex-col overflow-hidden ${className ?? ""}`} style={{ fontSize }}>
       {/* Breadcrumbs when nested */}
       {stack.length > 1 && (
         <div className="flex shrink-0 flex-wrap items-center gap-0.5 border-b border-[var(--workspace-border)] px-2 py-1.5">
@@ -297,7 +299,7 @@ export function TableView({ data, className = "" }: TableViewProps) {
         {visibleHeaders.length === 0 ? (
           <div className="p-6 text-center text-sm text-[var(--workspace-text-muted)]">No columns visible</div>
         ) : (
-          <Table className="w-full border-collapse">
+          <Table className="w-full border-collapse text-[length:inherit]">
             <TableHeader>
               <TableRow className={cn(headerClass, "sticky top-0 z-10 hover:bg-[var(--workspace-background)]")}>
                 {visibleHeaders.map((h) => (
@@ -308,7 +310,7 @@ export function TableView({ data, className = "" }: TableViewProps) {
                       className="inline-flex h-8 w-full cursor-pointer items-center gap-1 px-2 text-left font-medium hover:bg-primary/5"
                       onClick={() => toggleSort(h)}
                     >
-                      <span className="truncate font-mono text-[11px] leading-none">{h}</span>
+                      <span className="truncate font-mono leading-none">{h}</span>
                       <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center">
                         {sortKey === h ? (
                           sortDir === "asc" ? (
@@ -340,7 +342,12 @@ export function TableView({ data, className = "" }: TableViewProps) {
                 </TableRow>
               ) : (
                 processed.map((row, i) => (
-                  <TableRow key={i} className={cellClass}>
+                  <TableRow
+                    key={i}
+                    className={`${cellClass} ${
+                      i % 2 === 1 ? "bg-[var(--workspace-background)]" : "bg-transparent"
+                    }`}
+                  >
                     {visibleHeaders.map((h) => {
                       const val = row[h];
                       const display = cellDisplay(val);
@@ -362,7 +369,7 @@ export function TableView({ data, className = "" }: TableViewProps) {
                               className="group inline-flex max-w-full items-center gap-1.5 rounded-md border border-primary/20 bg-primary/5 px-2 py-1 text-left transition-colors hover:border-primary/40 hover:bg-primary/10"
                             >
                               <TableCellsIcon className="h-3.5 w-3.5 shrink-0 text-primary" />
-                              <span className="min-w-0 truncate font-mono text-[11px] text-[var(--workspace-text)]">
+                              <span className="min-w-0 truncate font-mono text-[var(--workspace-text)]">
                                 {display.length > 48 ? `${display.slice(0, 48)}…` : display}
                               </span>
                               <span className="shrink-0 text-[9px] font-semibold uppercase tracking-wide text-primary/80">
@@ -376,7 +383,7 @@ export function TableView({ data, className = "" }: TableViewProps) {
                       }
 
                       return (
-                        <TableCell key={h} className={`${cellClass} max-w-[240px] px-2 py-1 font-mono text-[11px]`}>
+                        <TableCell key={h} className={`${cellClass} max-w-[240px] px-2 py-1 font-mono`}>
                           <Tooltip content={display} className="block max-w-full truncate">
                             {display}
                           </Tooltip>

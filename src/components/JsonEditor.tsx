@@ -25,6 +25,9 @@ interface JsonEditorProps {
     expandAll(): void;
     goToLine(line: number, column?: number): void;
   }) => void;
+  /** Fired on Cmd/Ctrl+Enter - registered as a Monaco keybinding so the editor
+   *  does not insert a newline when the app consumes the shortcut. */
+  onCtrlEnter?: () => void;
 }
 
 export function JsonEditor({
@@ -41,6 +44,7 @@ export function JsonEditor({
   onCursorChange,
   wordWrap = "on",
   onEditorMount,
+  onCtrlEnter,
 }: JsonEditorProps) {
   const editorRef = React.useRef<editor.IStandaloneCodeEditor | null>(null);
   const resolvedTheme = resolveFormatyTheme(monacoTheme);
@@ -92,8 +96,13 @@ export function JsonEditor({
           parameterHints: { enabled: !passiveReadOnly },
         }}
         onChange={(next) => onChange(next ?? "")}
-        onMount={(editor) => {
+        onMount={(editor, monaco) => {
           editorRef.current = editor;
+          if (onCtrlEnter) {
+            editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
+              onCtrlEnter();
+            });
+          }
           if (onEditorMount) {
             onEditorMount({
               find: () => editor.trigger("keyboard", "actions.find", null),

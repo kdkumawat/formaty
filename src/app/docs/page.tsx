@@ -465,8 +465,9 @@ export default function DocsPage() {
           <Section id="diff" query={query} keywords={["diff","compare","delta","side-by-side","inline","navigate","changes","two documents","delta","paths","hunks","swap","whitespace","report","stats","list","set","sql","in","common","intersection"]}>
             <SectionTitle id="diff">Diff &amp; Compare</SectionTitle>
             <p className="mb-4 text-sm leading-relaxed text-[var(--workspace-text-muted)]">
-              Two modes: <strong className="text-[var(--workspace-text)]">Document</strong> (text/JSON line + path diff) and{" "}
-              <strong className="text-[var(--workspace-text)]">List / Set</strong> (common / only-left / only-right with SQL <code className="text-[var(--workspace-text)]">IN</code> export).
+              Three modes: <strong className="text-[var(--workspace-text)]">Document</strong> (text/JSON line + path diff),{" "}
+              <strong className="text-[var(--workspace-text)]">List / Set</strong> (common / only-left / only-right with SQL <code className="text-[var(--workspace-text)]">IN</code> export), and{" "}
+              <strong className="text-[var(--workspace-text)]">Single list</strong> (dedupe, counts, sort, normalize).
             </p>
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--workspace-text-muted)]">Document mode</p>
             <ul className="mb-4 space-y-2 text-sm text-[var(--workspace-text-muted)]">
@@ -477,11 +478,21 @@ export default function DocsPage() {
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--workspace-text-muted)]">List / Set mode</p>
             <ul className="space-y-2 text-sm text-[var(--workspace-text-muted)]">
               <li><strong className="text-[var(--workspace-text)]">Switch</strong> - Toolbar tab <em>List / Set</em> (or palette &rarr; &quot;Diff: List / set mode&quot;).</li>
-              <li><strong className="text-[var(--workspace-text)]">Buckets</strong> - Common, Only left, Only right, Union, Symmetric diff, Left/Right duplicates - with live counts.</li>
+              <li><strong className="text-[var(--workspace-text)]">Buckets</strong> - Common, Only left, Only right, Union, Symmetric diff, Left/Right duplicates, Changed (CSV key compare) - with live counts.</li>
+              <li><strong className="text-[var(--workspace-text)]">CSV column compare</strong> - Paste two CSVs with a shared header; pick a key column and see common, missing, extra, and changed rows.</li>
+              <li><strong className="text-[var(--workspace-text)]">Counts</strong> - Toggle <em>Counts</em> for count-aware (multiset) comparison: keys on both sides with different occurrence counts are reported (e.g. <code className="text-[var(--workspace-text)]">A: 1 extra on left</code>).</li>
               <li><strong className="text-[var(--workspace-text)]">Parse</strong> - Auto / newline / comma / semicolon / pipe / whitespace / JSON array; toggles for trim, skip empty, ignore case, strip quotes, normalize numbers.</li>
               <li><strong className="text-[var(--workspace-text)]">Sort</strong> - Original, A→Z, Z→A, numeric, by frequency.</li>
-              <li><strong className="text-[var(--workspace-text)]">Export</strong> - SQL <code className="text-[var(--workspace-text)]">IN</code> with single/double/unquoted, full <code className="text-[var(--workspace-text)]">column IN (…)</code> / <code className="text-[var(--workspace-text)]">NOT IN</code>, JSON array, CSV, YAML, JS/Python lists, regex alternation. One-click quick buttons + download.</li>
-              <li><strong className="text-[var(--workspace-text)]">Sample</strong> - Empty state offers sample fruit lists to try common vs left-only vs right-only.</li>
+              <li><strong className="text-[var(--workspace-text)]">Export</strong> - SQL <code className="text-[var(--workspace-text)]">IN</code> / <code className="text-[var(--workspace-text)]">NOT IN</code> / <code className="text-[var(--workspace-text)]">ANY(ARRAY[…])</code> / <code className="text-[var(--workspace-text)]">INSERT</code> with table/column names, quote style, and chunking; PostgreSQL ARRAY, JSON array, CSV, TSV, YAML, Markdown &amp; HTML tables, JS/Python lists, Go slices, regex alternation. One-click quick buttons + download.</li>
+              <li><strong className="text-[var(--workspace-text)]">Sample</strong> - Empty state offers sample developer lists (user IDs) to try common vs left-only vs right-only.</li>
+            </ul>
+            <p className="mb-2 mt-4 text-xs font-semibold uppercase tracking-wide text-[var(--workspace-text-muted)]">Single list mode</p>
+            <ul className="space-y-2 text-sm text-[var(--workspace-text-muted)]">
+              <li><strong className="text-[var(--workspace-text)]">Switch</strong> - Toolbar tab <em>Single</em>.</li>
+              <li><strong className="text-[var(--workspace-text)]">Views</strong> - Unique, Duplicates (with counts), and Counts (frequency).</li>
+              <li><strong className="text-[var(--workspace-text)]">Actions</strong> - Dedupe in place, sort A→Z / Z→A / numerically, copy SQL <code className="text-[var(--workspace-text)]">IN</code>.</li>
+              <li><strong className="text-[var(--workspace-text)]">Export</strong> - Same formats as List / Set, including SQL and Markdown/HTML tables.</li>
+              <li><strong className="text-[var(--workspace-text)]">Sample</strong> - &quot;Load sample&quot; loads a realistic developer ID list with duplicates.</li>
             </ul>
           </Section>
 
@@ -585,7 +596,8 @@ export default function DocsPage() {
             <SectionTitle id="share">Share &amp; Export</SectionTitle>
             <ul className="space-y-3 text-sm text-[var(--workspace-text-muted)]">
               <li><strong className="text-[var(--workspace-text)]">Share</strong> - Confirms first (only action that can leave your device), then saves a short link. Recipients see the same input/output/settings. Toolbar or command palette.</li>
-              <li><strong className="text-[var(--workspace-text)]">Embed</strong> - After sharing, command palette &rarr; &quot;Copy embed / iframe URL&quot; for a read-only embeddable frame.</li>
+              <li><strong className="text-[var(--workspace-text)]">Share state</strong> - Links preserve the tool, input, output, view, query text, compare mode and both sides, list options, CSV key column, and selected operation. Backwards compatible with older links.</li>
+              <li><strong className="text-[var(--workspace-text)]">Embed</strong> - Append <code className="text-[var(--workspace-text)]">?embed=1</code> to any playground URL (e.g. <code className="text-[var(--workspace-text)]">/playground?tool=json-diff&amp;embed=1</code>) for a chrome-free embeddable frame with an &quot;Open in Formaty&quot; link. Works with tool presets and share links.</li>
               <li><strong className="text-[var(--workspace-text)]">Disable sharing</strong> - Click the disable icon next to the shared link in the status bar.</li>
               <li><strong className="text-[var(--workspace-text)]">Download</strong> - Saves output as a file (or graph as PNG/JPG). Output toolbar or command palette.</li>
               <li><strong className="text-[var(--workspace-text)]">Copy / Copy as</strong> - Output toolbar (never covers text). Copy as Base64, escaped, URL-encoded, or Data URI. Optional draggable floating bar in Settings.</li>

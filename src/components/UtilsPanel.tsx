@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLongRightIcon,
   CheckIcon,
+  ChevronDownIcon,
   ClipboardDocumentIcon,
   DocumentDuplicateIcon,
 } from "@heroicons/react/24/outline";
@@ -302,8 +303,10 @@ export function UtilsPanel({
   onStateByToolChange,
   fontSize = 13,
 }: UtilsPanelProps) {
+  // Merge restored state over defaults so partial snapshots (older sessions /
+  // shared links) always expose every field - fixes crashes on missing lists.
   const state = useMemo(
-    () => stateByTool[activeTab] ?? defaultUtilToolState(activeTab),
+    () => ({ ...defaultUtilToolState(activeTab), ...(stateByTool[activeTab] ?? {}) }),
     [stateByTool, activeTab],
   );
 
@@ -622,6 +625,10 @@ export function UtilsPanel({
     "min-h-0 w-full flex-1 resize-none border-0 bg-[var(--workspace-panel)] px-3 py-2 font-mono leading-relaxed text-[var(--workspace-text)] outline-none focus:ring-0";
   const toolBtn = (active: boolean) =>
     `${linkBtnClass} h-7 min-h-7 px-2 text-[11px] font-medium ${active ? "!bg-primary/12 !text-primary" : ""}`;
+
+  /** Same select-trigger look as the workspace Format / View / Actions dropdowns. */
+  const selectTrigger =
+    "inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-md bg-muted px-2 text-[11px] font-medium text-[var(--workspace-text)] transition-colors hover:bg-primary/10 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40";
   const modeChip = (active: boolean) =>
     `h-7 shrink-0 cursor-pointer px-2.5 text-[11px] font-semibold transition-colors ${
       active
@@ -756,16 +763,16 @@ export function UtilsPanel({
                   onOpenChange={setVariantMenuOpen}
                   side="bottom"
                   align="end"
-                  contentClassName="w-64"
+                  maxWidth="max-w-[16rem]"
                   trigger={
                     <Tooltip content="UUID variant">
                       <button
                         type="button"
-                        className={`${toolBtn(false)} uppercase`}
+                        className={`${selectTrigger} uppercase ${variantMenuOpen ? "!bg-primary/12 !text-primary" : ""}`}
                         aria-label="UUID variant"
                       >
                         {state.uuidVariant}
-                        <span className="text-[9px] opacity-60">▾</span>
+                        <ChevronDownIcon className="h-3 w-3 shrink-0 opacity-60" />
                       </button>
                     </Tooltip>
                   }
@@ -822,16 +829,16 @@ export function UtilsPanel({
                   onOpenChange={setLoremMenuOpen}
                   side="bottom"
                   align="end"
-                  contentClassName="w-36"
+                  maxWidth="max-w-[12rem]"
                   trigger={
                     <Tooltip content="Lorem unit">
                       <button
                         type="button"
-                        className={`${toolBtn(false)} capitalize`}
+                        className={`${selectTrigger} capitalize ${loremMenuOpen ? "!bg-primary/12 !text-primary" : ""}`}
                         aria-label="Lorem unit"
                       >
                         {state.loremUnit}
-                        <span className="text-[9px] opacity-60">▾</span>
+                        <ChevronDownIcon className="h-3 w-3 shrink-0 opacity-60" />
                       </button>
                     </Tooltip>
                   }
@@ -1062,6 +1069,7 @@ export function UtilsPanel({
                       isDark={isDark}
                       showTypeBadges={false}
                       defaultExpanded
+                      fontSize={fontSize}
                       onNotify={(msg) => toast({ message: msg })}
                     />
                   </div>
@@ -1406,12 +1414,12 @@ export function UtilsPanel({
                 onOpenChange={setCaseMenuOpen}
                 side="bottom"
                 align="end"
-                contentClassName="w-36"
+                maxWidth="max-w-[12rem]"
                 trigger={
                   <Tooltip content="Case mode">
-                    <button type="button" className={`${toolBtn(false)}`} aria-label="Case mode">
+                    <button type="button" className={`${selectTrigger} ${caseMenuOpen ? "!bg-primary/12 !text-primary" : ""}`} aria-label="Case mode">
                       {state.caseMode}
-                      <span className="text-[9px] opacity-60">▾</span>
+                      <ChevronDownIcon className="h-3 w-3 shrink-0 opacity-60" />
                     </button>
                   </Tooltip>
                 }

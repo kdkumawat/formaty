@@ -2,6 +2,7 @@ import Ajv from "ajv";
 import {
   flattenJson,
   formatJson,
+  generateSql,
   generateTypes,
   generateTypeScript,
   inferJsonSchema,
@@ -18,6 +19,7 @@ import {
   unflattenJson,
   type JsonValue,
   type SearchMode,
+  type SqlGenerateOptions,
   type TypeTargetLanguage,
 } from "@/lib/json/core";
 import { parseInput, stringifyOutput, type FormatKind, type FormatStringifyOptions } from "@/lib/formats";
@@ -101,13 +103,23 @@ ctx.onmessage = (event: MessageEvent<WorkerRequest>) => {
           (payload.rootName as string) || "JsonData",
         );
         break;
-      case "generateTypes":
-        result = generateTypes(
-          payload.json as JsonValue,
-          (payload.language as TypeTargetLanguage) || "typescript",
-          (payload.rootName as string) || "JsonData",
-        );
+      case "generateTypes": {
+        const language = (payload.language as TypeTargetLanguage) || "typescript";
+        if (language === "sql") {
+          const opts = (payload.sqlOptions as Partial<SqlGenerateOptions> | undefined) ?? {};
+          result = generateSql(payload.json as JsonValue, {
+            ...opts,
+            dialect: opts.dialect ?? "sqlite",
+          });
+        } else {
+          result = generateTypes(
+            payload.json as JsonValue,
+            language,
+            (payload.rootName as string) || "JsonData",
+          );
+        }
         break;
+      }
       case "schema":
         result = inferJsonSchema(payload.json as JsonValue);
         break;

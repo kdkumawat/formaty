@@ -2,9 +2,9 @@
 
 ## Overview
 
-formaty is a local-first data toolkit for working with JSON, XML, YAML, TOML, and CSV. All processing runs in your browser - no data is sent to any server unless you explicitly share a link.
+formaty is the **Developer Data Workspace** - a local-first toolkit for working with JSON, XML, YAML, TOML, CSV, and lists. All processing runs in your browser - no data is sent to any server unless you explicitly share a link.
 
-Three workspace tools share one chrome: **Transform** (format / convert / views / types), **Compare** (document or list/set), and **Utils** (UUID, Base64, JWT, hash, time, URL, and more). Query with JSONPath or JMESPath. Paste cURL commands to fetch API responses. Generate types for TypeScript, Zod, Python, Pydantic, Go, Java, and more.
+One dataset, many workflows: paste data once and **format, convert, inspect, query, compare, reconcile, and generate code/SQL/schemas** from it. Three workspace tools share one chrome: **Transform** (format / convert / views / types), **Compare** (document, list, or single list), and **Utils** (UUID, Base64, JWT, hash, time, URL, and more). Query with JSONPath or JMESPath. Paste cURL commands to fetch API responses. Generate types for TypeScript, Zod, Python, Pydantic, Go, Java, and more.
 
 ---
 
@@ -13,7 +13,7 @@ Three workspace tools share one chrome: **Transform** (format / convert / views 
 | Tool | Description |
 |------|-------------|
 | **Transform** | Left input / right output - format, convert, views, types |
-| **Compare** | Full-width Document diff or List/Set compare (Document \| Lists on the same toolbar row) |
+| **Compare** | Full-width Document diff, List/Set compare, or Single List dedupe/counts (Document \| Lists \| Single on the same toolbar row) |
 | **Utils** | Full-width developer helpers; tool tabs (UUID, Base64, …) sit on the same row as Transform \| Compare \| Utils |
 
 On parse errors, use **Clear** or **Load table sample** in the error panel. JSON accepts common loose forms (single quotes, trailing commas) when possible.
@@ -47,6 +47,8 @@ Input format is auto-detected when you paste or import. Override it via the inpu
 | **Remove duplicate items** | Deduplicate array values recursively |
 | **Generate JSON Schema** | Infer a JSON Schema from sample data |
 | **Validate against Schema** | Validate input against a JSON Schema (paste schema in modal) |
+| **Generate OpenAPI spec** | Infer an OpenAPI 3.1 document (components.schemas) from sample data |
+| **None (restore)** | Restore the output that existed before the last transform action |
 
 Compare and Utils are first-class tools (not nested under Actions).
 
@@ -60,9 +62,11 @@ Compare and Utils are first-class tools (not nested under Actions).
 | **Tree** | Expandable tree - copy path/value, expand/collapse all |
 | **Graph** | Interactive graph visualization (best for medium payloads) |
 | **Query** | JSONPath / JMESPath playground with samples, history, promote result |
-| **Table** | Tabular view for **arrays of objects** - sort, search, hide columns |
+| **Table** | Tabular view for **arrays of objects** - sort, search, hide columns; copy as Markdown/HTML/CSV/TSV from the output bar |
 
-Use **Use output as input** (toolbar arrow) to chain workflows (e.g. convert → types → query).
+**Tree search** (`⌘F` / `Ctrl+F`): search keys and values case-insensitively, highlight matches, jump next/previous, auto-expand matching nodes.
+
+Use **Use output as input** (toolbar arrow) to chain workflows (e.g. convert → types → query). Query results offer **Open in List Compare** to pipe extracted values (e.g. `users[*].id`) straight into a comparison.
 
 ---
 
@@ -73,6 +77,27 @@ Supported targets:
 TypeScript, **Zod**, Java, C#, Python, **Pydantic**, Go, Protobuf, Kotlin, Swift, Rust, SQL
 
 Star languages in settings to pin them when using the expanded toolbar.
+
+## JSON → SQL
+
+Generate dialect-aware SQL from JSON sample data (Actions menu or Types → SQL):
+
+- **Dialects**: PostgreSQL, MySQL, SQLite
+- **Options**: table name, column name, schema name, quote style, nullable detection, primary-key inference
+- **Outputs**: `CREATE TABLE`, `INSERT` seed rows, `VALUES`, `IN`, `NOT IN`, `ANY(ARRAY[…])`, PostgreSQL ARRAY
+
+Type inference is communicated in the output - review inferred types before trusting them.
+
+## cURL / API
+
+Paste a cURL command to execute it locally and inspect the response:
+
+- **Response metadata**: HTTP status, size, timing, content-type
+- **Actions**: format, query, generate types/schema/OpenAPI from the response
+- **Generate code** from the parsed request: JavaScript `fetch`, Axios, Python `requests`, Go (`net/http`) - pick a target to write it to the output pane, copy, or download
+- Press `⌘/Ctrl + Enter` (or click the hint chip) to re-execute after editing the command
+
+This is a lightweight local-first API debugging flow - not a Postman clone (no environments, proxy, or collections).
 
 ---
 
@@ -93,20 +118,46 @@ Star languages in settings to pin them when using the expanded toolbar.
 ## Diff & Compare
 
 ### Document mode
-Compares two text/JSON documents full-width.
+Compares two text/JSON documents full-width (JSON, XML, YAML, TOML all supported - parsed into a normalized structure when safe, raw text otherwise).
 
 - Side-by-side / Inline layout
 - Hunk counts, +/− lines, JSON path totals
+- **Ignore array order**: treats reordered arrays as equivalent (with optional key-based element identity for arrays of objects) - not the default
 - Trim WS, swap, beautify, export report
 - Reset clears both sides (same toolbar style as Utils)
 
 ### List / Set mode
-Compare two lists for common / only-left / only-right.
+Compare two lists for common / only-left / only-right / union / symmetric difference / duplicates / changed.
 
 - Parse: auto, newline, comma, semicolon, pipe, whitespace, or JSON array
-- Export: SQL `IN` / `NOT IN`, JSON, CSV, YAML, JS/Python lists, regex
+- Result **inline view** (comma-separated) or **table view** (with alternating rows)
+- **Export**: SQL `IN` / `NOT IN` / `VALUES` / PostgreSQL ARRAY, JSON array, CSV, TSV, YAML, Markdown & HTML tables, JS/Python lists, Go slices, regex alternation, comma+quotes variants - the export dropdown updates the output and persists your choice
+- **Counts**: per-side item/unique/duplicate counts shown in each input pane header
+- Optional normalization (trim, case, quotes, numeric) via Compare settings
+
+### Single List mode
+Work with one list - dedupe, counts, sort, and export:
+
+- **Views**: Unique / Duplicates / Counts
+- **Dedupe** removes duplicates in place; sort cycles A→Z / Z→A with reset
+- Same export formats as List / Set, including SQL and Markdown/HTML tables
+- **Load sample** (e.g. `user_1001…user_1006`) demonstrates duplicates, counts, and unique values
+
+### CSV column compare
+When both inputs parse as CSV, pick the **key column** to compare rows:
+
+- Common rows · missing from A · missing from B · changed rows · duplicate IDs
+- Works with the same export formats and table view
 
 ---
+
+## File Input
+
+Drag & drop files (or use the file picker) anywhere data is accepted:
+
+- **JSON, CSV, YAML, XML, TXT** - filename, detected format, and size shown; clear/remove in one click
+- Drop into Transform input, either Compare side, or drop **two files at once** (left = file A, right = file B)
+- Everything stays local - no upload, no server
 
 ## Utils
 
@@ -137,6 +188,11 @@ Each workspace tab keeps its own Utils tool selection and I/O. Document vs Lists
 ## Share
 
 Share always asks for confirmation. With multi-tab enabled, a **Share all tabs** checkbox includes every tab’s transform input/output, Compare sides, and Utils state.
+
+Shared links preserve the exact state: active tool, input, output, view, query, compare sides/mode, list export format, CSV key column, and settings. Recipients open the exact workspace with no signup.
+
+### Embed mode
+Append `?embed=1` to any playground URL (e.g. `/playground?tool=json-diff&embed=1`) for a chrome-free embeddable frame - hides navigation, keeps the tool fully usable, and shows an **Open in Formaty** link. Works with tool presets and share links. Set `X-Frame-Options` / `frame-ancestors` on your host site to allow framing.
 
 ---
 

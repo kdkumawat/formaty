@@ -41,12 +41,12 @@ export const viewport: Viewport = {
 
 const SITE_URL = process.env.SITE_URL || "https://formaty.dev";
 const SITE_NAME = "Formaty";
-const SITE_TITLE = "Formaty - Format, Convert, Compare & Utils | JSON, XML, YAML Toolkit";
+const SITE_TITLE = "Formaty - The Developer Data Workspace | Compare, Convert & Generate from JSON";
 const CREATOR_NAME = "Kuldeep Kumawat";
 const CREATOR_X = "https://x.com/kuldeep_kumawat";
 const CREATOR_LINKEDIN = "https://www.linkedin.com/in/kdkumawat";
 const SITE_DESCRIPTION =
-  "Format, convert, compare, and developer utils for JSON, XML, YAML, TOML, CSV. UUID, Base64, JWT, hash, URL encode, and more. Import cURL, query with JSONPath, generate types. Runs in your browser - no data leaves your device.";
+  "Formaty is the Developer Data Workspace: format, convert, compare, reconcile, and query JSON, XML, YAML, TOML, CSV, and lists; generate SQL, TypeScript, Go, Python, and schemas from data; import and execute cURL. Runs 100% locally in your browser - no data leaves your device, no signup.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
