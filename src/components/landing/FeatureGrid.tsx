@@ -45,13 +45,55 @@ const FEATURES: {
     glow: "hover:shadow-sky-500/10 hover:border-sky-400/30",
   },
   {
-    route: "/json-diff",
-    title: "Compare",
-    desc: "Document diff + list/set compare with SQL IN export",
+    route: "/compare-lists",
+    title: "Compare Lists",
+    desc: "Reconcile two lists or DB exports - SQL IN / NOT IN export",
     icon: ArrowsRightLeftIcon,
     color: "text-rose-400 bg-rose-400/10 border-rose-400/25",
     glow: "hover:shadow-rose-500/10 hover:border-rose-400/30",
-    badge: "New",
+    badge: "Popular",
+  },
+  {
+    route: "/json-to-sql",
+    title: "JSON → SQL",
+    desc: "CREATE TABLE + INSERT seed rows, PostgreSQL / MySQL / SQLite",
+    icon: CubeIcon,
+    color: "text-emerald-400 bg-emerald-400/10 border-emerald-400/25",
+    glow: "hover:shadow-emerald-500/10 hover:border-emerald-400/30",
+    badge: "Popular",
+  },
+  {
+    route: "/sql-in-clause-generator",
+    title: "SQL IN Generator",
+    desc: "Paste IDs, copy a WHERE col IN (...) clause with chunking",
+    icon: CodeBracketIcon,
+    color: "text-teal-400 bg-teal-400/10 border-teal-400/25",
+    glow: "hover:shadow-teal-500/10 hover:border-teal-400/30",
+    badge: "Popular",
+  },
+  {
+    route: "/curl-to-fetch",
+    title: "cURL → Fetch",
+    desc: "Convert cURL commands into fetch, axios, Python, or Go code",
+    icon: CloudArrowDownIcon,
+    color: "text-cyan-400 bg-cyan-400/10 border-cyan-400/25",
+    glow: "hover:shadow-cyan-500/10 hover:border-cyan-400/30",
+  },
+  {
+    route: "/compare-csv",
+    title: "Compare CSV",
+    desc: "Pick a key column and see common, missing, extra, changed rows",
+    icon: TableCellsIcon,
+    color: "text-indigo-400 bg-indigo-400/10 border-indigo-400/25",
+    glow: "hover:shadow-indigo-500/10 hover:border-indigo-400/30",
+  },
+  {
+    route: "/json-to-zod",
+    title: "JSON → Zod",
+    desc: "Generate Zod validation schemas from JSON samples",
+    icon: CubeIcon,
+    color: "text-fuchsia-400 bg-fuchsia-400/10 border-fuchsia-400/25",
+    glow: "hover:shadow-fuchsia-500/10 hover:border-fuchsia-400/30",
   },
   {
     route: "/playground",
@@ -139,7 +181,7 @@ const FEATURES: {
 
 export function FeatureGrid() {
   return (
-    <section className="border-t border-[var(--workspace-border)] px-4 py-12 md:py-20">
+    <section id="tools" className="scroll-mt-16 border-t border-[var(--workspace-border)] px-4 py-12 md:py-20">
       <div className="mx-auto max-w-6xl space-y-10">
         <div className="flex flex-col items-center gap-3 text-center">
           <motion.p
@@ -149,7 +191,7 @@ export function FeatureGrid() {
             className="inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/[0.07] px-3 py-1 font-mono text-[11px] font-semibold uppercase tracking-widest text-primary"
           >
             <span className="h-1 w-1 rounded-full bg-primary" />
-            18 tools · one workspace
+            Popular tools
           </motion.p>
           <motion.h2
             initial={{ opacity: 0, y: 16 }}
@@ -158,7 +200,7 @@ export function FeatureGrid() {
             transition={{ delay: 0.06 }}
             className="text-3xl font-semibold tracking-tight text-[var(--workspace-text)] md:text-[2.6rem] md:leading-[1.1]"
           >
-            Everything in one workspace
+            Every tool opens the real thing
           </motion.h2>
           <motion.p
             initial={{ opacity: 0, y: 16 }}
@@ -167,7 +209,7 @@ export function FeatureGrid() {
             transition={{ delay: 0.1 }}
             className="max-w-md text-sm text-[var(--workspace-text-muted)] md:text-base"
           >
-            Format, convert, query, compare and transform - all local, all free, no sign-up.
+            Format, convert, query, compare and generate - all local, all free, no sign-up.
           </motion.p>
         </div>
 

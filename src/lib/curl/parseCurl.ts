@@ -152,21 +152,64 @@ export function parseCurl(input: string): CurlParsed {
   return result;
 }
 
+export interface CurlExecutionResult {
+  /** Response body text. */
+  body: string;
+  status: number;
+  statusText: string;
+  ok: boolean;
+  /** Response headers as a plain record (lowercased keys). */
+  headers: Record<string, string>;
+  /** Body size in bytes (UTF-8). */
+  size: number;
+  /** Round-trip duration in milliseconds (best effort). */
+  timingMs: number;
+  /** Effective request URL after redirects. */
+  finalUrl: string;
+}
+
 /**
- * Execute a parsed curl command via fetch.
+ * Execute a parsed curl command via fetch, capturing status, headers, size,
+ * and timing. Throws on network errors but NOT on non-2xx responses - the
+ * caller decides how to surface an HTTP error status.
  */
-export async function executeCurl(parsed: CurlParsed): Promise<string> {
+export async function executeCurlDetailed(parsed: CurlParsed): Promise<CurlExecutionResult> {
   const init: RequestInit = {
     method: parsed.method,
     headers: parsed.headers,
   };
-  if (parsed.body && parsed.method !== "GET") {
+  if (parsed.body && parsed.method !== "GET" && parsed.method !== "HEAD") {
     init.body = parsed.body;
   }
+  const started = performance.now();
   const res = await fetch(parsed.url, init);
   const text = await res.text();
-  if (!res.ok) {
-    throw new Error(`HTTP ${res.status}: ${text.slice(0, 200)}`);
+  const timingMs = Math.max(0, Math.round(performance.now() - started));
+  const headers: Record<string, string> = {};
+  res.headers.forEach((value, key) => {
+    headers[key.toLowerCase()] = value;
+  });
+  return {
+    body: text,
+    status: res.status,
+    statusText: res.statusText,
+    ok: res.ok,
+    headers,
+    size: new TextEncoder().encode(text).byteLength,
+    timingMs,
+    finalUrl: res.url || parsed.url,
+  };
+}
+
+/**
+ * Execute a parsed curl command via fetch. Returns the response body only;
+ * throws on non-2xx responses (backwards compatible). Prefer
+ * `executeCurlDetailed` for new code that needs status/headers.
+ */
+export async function executeCurl(parsed: CurlParsed): Promise<string> {
+  const result = await executeCurlDetailed(parsed);
+  if (!result.ok) {
+    throw new Error(`HTTP ${result.status}: ${result.body.slice(0, 200)}`);
   }
-  return text;
+  return result.body;
 }

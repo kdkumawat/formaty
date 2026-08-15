@@ -6,14 +6,17 @@ export type ListSortMode = "none" | "asc" | "desc" | "numeric-asc" | "numeric-de
 
 export type ListExportFormat =
   | "sql-in-single"
+  | "sql-not-in"
   | "sql-in-double"
   | "sql-in-unquoted"
   | "sql-values"
+  | "sql-array"
   | "json-array"
   | "json-array-numbers"
   | "newline"
   | "comma"
   | "comma-space"
+  | "comma-double-quotes"
   | "pipe"
   | "tsv"
   | "csv-quoted"
@@ -22,9 +25,20 @@ export type ListExportFormat =
   | "js-array-single"
   | "js-array-double"
   | "python-list"
+  | "go-slice"
+  | "markdown-table"
+  | "html-table"
   | "raw";
 
-export type ListBucket = "common" | "leftOnly" | "rightOnly" | "union" | "symmetric" | "leftDupes" | "rightDupes";
+export type ListBucket =
+  | "common"
+  | "leftOnly"
+  | "rightOnly"
+  | "union"
+  | "symmetric"
+  | "leftDupes"
+  | "rightDupes"
+  | "changed";
 
 export interface ListParseOptions {
   delimiter: ListDelimiter;
@@ -62,6 +76,8 @@ export interface ListCompareResult {
   symmetric: ListItem[];
   leftDupes: ListItem[];
   rightDupes: ListItem[];
+  /** Keys present on both sides whose full row/record differs (CSV column compare). */
+  changed: ListItem[];
   stats: {
     common: number;
     leftOnly: number;
@@ -70,28 +86,52 @@ export interface ListCompareResult {
     symmetric: number;
     leftDupes: number;
     rightDupes: number;
+    changed: number;
   };
 }
 
+export interface SingleListAnalysis {
+  /** Unique items (first-seen order), each with occurrence count. */
+  unique: ListItem[];
+  /** Items that appear more than once. */
+  duplicates: ListItem[];
+  /** All unique items sorted by count (desc) then value. */
+  counts: ListItem[];
+  /** Total raw tokens after parsing (before dedupe). */
+  rawCount: number;
+  uniqueCount: number;
+  /** Number of distinct keys with count > 1. */
+  duplicateKeys: number;
+  /** Sum of (count - 1) over duplicate keys. */
+  duplicateOccurrences: number;
+}
+
+/**
+ * Default parse options preserve exact values: nothing is trimmed or
+ * quote-stripped unless the user opts in via the Compare settings.
+ */
 export const DEFAULT_LIST_PARSE_OPTIONS: ListParseOptions = {
   delimiter: "auto",
-  trim: true,
+  trim: false,
   ignoreEmpty: true,
   caseInsensitive: false,
-  stripQuotes: true,
+  stripQuotes: false,
   numericNormalize: false,
 };
 
 const EXPORT_LABELS: Record<ListExportFormat, string> = {
   "sql-in-single": "SQL IN ('…')",
+  "sql-not-in": "SQL NOT IN ('…')",
   "sql-in-double": 'SQL IN ("…")',
   "sql-in-unquoted": "SQL IN (numbers)",
   "sql-values": "SQL VALUES rows",
+  "sql-array": "PostgreSQL ARRAY[...]",
   "json-array": "JSON array (strings)",
   "json-array-numbers": "JSON array (numbers if possible)",
   newline: "Newline separated",
   comma: "Comma separated",
   "comma-space": "Comma + space",
+  "comma-double-quotes": "Comma + double quotes",
   pipe: "Pipe separated",
   tsv: "Tab separated",
   "csv-quoted": "CSV quoted",
@@ -100,6 +140,9 @@ const EXPORT_LABELS: Record<ListExportFormat, string> = {
   "js-array-single": "JS/TS array (single quotes)",
   "js-array-double": "JS/TS array (double quotes)",
   "python-list": "Python list",
+  "go-slice": "Go slice",
+  "markdown-table": "Markdown table",
+  "html-table": "HTML table",
   raw: "Raw (one per line)",
 };
 
@@ -320,6 +363,8 @@ export function compareLists(
     symmetric,
     leftDupes,
     rightDupes,
+    // Filled by CSV column compare (row-level changes); empty for plain lists.
+    changed: [],
     stats: {
       common: common.length,
       leftOnly: leftOnly.length,
@@ -328,7 +373,76 @@ export function compareLists(
       symmetric: symmetric.length,
       leftDupes: leftDupes.length,
       rightDupes: rightDupes.length,
+      changed: 0,
     },
+  };
+}
+
+export interface CountDelta {
+  /** Display value (left's form when both sides have it). */
+  value: string;
+  key: string;
+  left: number;
+  right: number;
+  /** right - left (positive = extra on the right). */
+  delta: number;
+}
+
+/**
+ * Count-aware (multiset) comparison: like compareLists, but also reports how
+ * many extra occurrences each side has for keys present on both sides.
+ */
+export function compareListsCountAware(
+  leftText: string,
+  rightText: string,
+  options: ListParseOptions = DEFAULT_LIST_PARSE_OPTIONS,
+): ListCompareResult & {
+  /** Keys present on both sides with different occurrence counts. */
+  countDeltas: CountDelta[];
+} {
+  const base = compareLists(leftText, rightText, options);
+  const leftMap = new Map(base.left.items.map((i) => [i.key, i.count]));
+  const rightMap = new Map(base.right.items.map((i) => [i.key, i.count]));
+  const countDeltas: CountDelta[] = [];
+  for (const item of base.common) {
+    const left = leftMap.get(item.key) ?? 0;
+    const right = rightMap.get(item.key) ?? 0;
+    if (left !== right) {
+      countDeltas.push({ value: item.value, key: item.key, left, right, delta: right - left });
+    }
+  }
+  return { ...base, countDeltas };
+}
+
+/** Human-readable summary of count deltas, e.g. "A: +1 left · B: +1 right". */
+export function formatCountDeltaSummary(deltas: CountDelta[]): string {
+  const lines = deltas.map((d) => {
+    const leftExtra = d.left - d.right;
+    if (leftExtra > 0) return `${d.value}: ${leftExtra} extra on left`;
+    return `${d.value}: ${d.right - d.left} extra on right`;
+  });
+  return lines.join("\n");
+}
+
+/** Analyze a single list: unique items, duplicates with counts, raw counts. */
+export function analyzeSingleList(
+  text: string,
+  options: ListParseOptions = DEFAULT_LIST_PARSE_OPTIONS,
+): SingleListAnalysis {
+  const values = parseListText(text, options);
+  const side = buildSide(values, options);
+  const counts = side.items
+    .slice()
+    .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value));
+  const duplicates = side.items.filter((i) => i.count > 1);
+  return {
+    unique: side.items,
+    duplicates,
+    counts,
+    rawCount: side.rawCount,
+    uniqueCount: side.uniqueCount,
+    duplicateKeys: duplicates.length,
+    duplicateOccurrences: duplicates.reduce((sum, i) => sum + i.count - 1, 0),
   };
 }
 
@@ -406,6 +520,8 @@ export function getBucketItems(result: ListCompareResult, bucket: ListBucket): L
       return result.leftDupes;
     case "rightDupes":
       return result.rightDupes;
+    case "changed":
+      return result.changed;
     default:
       return [];
   }
@@ -421,6 +537,19 @@ function escapeSqlDouble(s: string): string {
 
 function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function escapeMarkdownCell(s: string): string {
+  return s.replace(/\|/g, "\\|").replace(/\n/g, "<br>");
 }
 
 function escapeJsSingle(s: string): string {
@@ -449,6 +578,7 @@ export function formatListItems(
 
   switch (format) {
     case "sql-in-single":
+    case "sql-not-in":
       return values.map((v) => `'${escapeSqlSingle(v)}'`).join(", ");
     case "sql-in-double":
       return values.map((v) => `"${escapeSqlDouble(v)}"`).join(", ");
@@ -461,6 +591,29 @@ export function formatListItems(
         .join(", ");
     case "sql-values":
       return values.map((v) => `('${escapeSqlSingle(v)}')`).join(",\n");
+    case "sql-array":
+      return `ARRAY[${values.map((v) => `'${escapeSqlSingle(v)}'`).join(", ")}]`;
+    case "go-slice":
+      return `[]string{${values.map((v) => `"${escapeJsDouble(v)}"`).join(", ")}}`;
+    case "markdown-table":
+      return [
+        "| value |",
+        "| --- |",
+        ...values.map((v) => `| ${escapeMarkdownCell(v)} |`),
+      ].join("\n");
+    case "html-table": {
+      const rows = values.map((v) => `    <tr><td>${escapeHtml(v)}</td></tr>`).join("\n");
+      return [
+        "<table>",
+        "  <thead>",
+        "    <tr><th>value</th></tr>",
+        "  </thead>",
+        "  <tbody>",
+        rows,
+        "  </tbody>",
+        "</table>",
+      ].join("\n");
+    }
     case "json-array":
       return JSON.stringify(values, null, 2);
     case "json-array-numbers":
@@ -479,6 +632,8 @@ export function formatListItems(
       return values.join(",");
     case "comma-space":
       return values.join(", ");
+    case "comma-double-quotes":
+      return values.map((v) => `"${escapeJsDouble(v)}"`).join(", ");
     case "pipe":
       return values.join("|");
     case "tsv":
@@ -513,15 +668,16 @@ export function formatSqlInClause(
     quote: "single" | "double" | "none";
     sortMode?: ListSortMode;
     notIn?: boolean;
+    chunkSize?: number;
   },
 ): string {
-  const format: ListExportFormat =
-    opts.quote === "single" ? "sql-in-single" : opts.quote === "double" ? "sql-in-double" : "sql-in-unquoted";
-  const body = formatListItems(items, format, opts.sortMode ?? "none");
-  const col = opts.column?.trim() || "id";
-  const op = opts.notIn ? "NOT IN" : "IN";
-  if (!body) return `-- empty list\n-- ${col} ${op} ()`;
-  return `${col} ${op} (${body})`;
+  return formatSqlClause(items, {
+    column: opts.column,
+    quote: opts.quote,
+    sortMode: opts.sortMode,
+    notIn: opts.notIn,
+    chunkSize: opts.chunkSize,
+  });
 }
 
 export const BUCKET_LABELS: Record<ListBucket, string> = {
@@ -532,4 +688,70 @@ export const BUCKET_LABELS: Record<ListBucket, string> = {
   symmetric: "Symmetric diff",
   leftDupes: "Left duplicates",
   rightDupes: "Right duplicates",
+  changed: "Changed",
 };
+
+export interface SqlClauseOptions {
+  column?: string;
+  table?: string;
+  quote: "single" | "double" | "none";
+  sortMode?: ListSortMode;
+  notIn?: boolean;
+  /** Emit `col = ANY(ARRAY[...])` instead of `col IN (...)` (PostgreSQL). */
+  any?: boolean;
+  /** Emit `INSERT INTO t (col) VALUES (...), (...);` instead of IN clause. */
+  insert?: boolean;
+  /** Chunk the value list into multiple clauses/statements (0 = no chunking). */
+  chunkSize?: number;
+}
+
+function chunkItems<T>(items: T[], size: number): T[][] {
+  if (size <= 0) return [items];
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
+}
+
+/**
+ * Build a full SQL snippet from list items: IN / NOT IN / ANY / VALUES / INSERT,
+ * with optional chunking for very large lists. Empty lists return a comment.
+ */
+export function formatSqlClause(items: ListItem[], opts: SqlClauseOptions): string {
+  const col = opts.column?.trim() || "id";
+  const table = opts.table?.trim() || "items";
+  const chunkSize = opts.chunkSize && opts.chunkSize > 0 ? opts.chunkSize : 0;
+  const quote = opts.quote;
+  const quoteItem = (v: string): string => {
+    if (quote === "double") return `"${escapeSqlDouble(v)}"`;
+    if (quote === "none") {
+      const n = tryAsNumber(v);
+      return n !== null ? String(n) : `'${escapeSqlSingle(v)}'`;
+    }
+    return `'${escapeSqlSingle(v)}'`;
+  };
+  const sorted = sortListItems(items, opts.sortMode ?? "none");
+  const values = sorted.map((i) => i.value);
+  if (values.length === 0) return `-- empty list\n-- ${col} ${opts.notIn ? "NOT IN" : "IN"} ()`;
+
+  const chunks = chunkItems(values, chunkSize || values.length);
+
+  if (opts.insert) {
+    return chunks
+      .map((chunk) => {
+        const rows = chunk.map((v) => `(${quoteItem(v)})`).join(",\n  ");
+        return `INSERT INTO ${table} (${col}) VALUES\n  ${rows};`;
+      })
+      .join("\n\n");
+  }
+
+  if (opts.any) {
+    const arrays = chunks.map((chunk) => `ARRAY[${chunk.map(quoteItem).join(", ")}]`);
+    return arrays.map((arr) => `${col} = ANY(${arr})`).join("\nOR ");
+  }
+
+  const op = opts.notIn ? "NOT IN" : "IN";
+  const clauses = chunks.map((chunk) => `${col} ${op} (${chunk.map(quoteItem).join(", ")})`);
+  return clauses.join("\nOR ");
+}

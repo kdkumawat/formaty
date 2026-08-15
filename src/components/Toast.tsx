@@ -139,7 +139,7 @@ export function Toaster() {
   const dismiss = useCallback((id: number) => removeToast(id), []);
   return (
     <div
-      className="pointer-events-none fixed bottom-4 right-4 z-[100] flex w-[min(19rem,calc(100vw-2rem))] flex-col items-stretch gap-2"
+      className="pointer-events-none fixed bottom-4 right-4 z-[100] flex w-[min(15rem,calc(100vw-2rem))] flex-col items-stretch gap-2"
       aria-live="polite"
       aria-label="Notifications"
     >

@@ -28,7 +28,7 @@ export default function Home() {
     name: "Formaty",
     url: SITE_URL,
     description:
-      "Free local-first developer tools: JSON, XML, YAML, TOML, CSV formatting and conversion, diff, query, type generation, and developer utils.",
+      "Formaty is the Developer Data Workspace - format, convert, compare, reconcile, query, and generate code and SQL from structured data, locally in your browser.",
     sameAs: ["https://github.com/kdkumawat/formaty"],
   };
 

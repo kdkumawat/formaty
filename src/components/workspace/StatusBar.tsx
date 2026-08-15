@@ -19,6 +19,8 @@ interface StatusBarProps {
   indentSize?: number;
   encoding?: string;
   sharedLink?: ReactNode;
+  /** Hide the bar entirely (embed mode). */
+  hide?: boolean;
 }
 
 function formatSize(bytes: number): string {
@@ -40,7 +42,9 @@ export function StatusBar({
   indentSize,
   encoding = "UTF-8",
   sharedLink,
+  hide = false,
 }: StatusBarProps) {
+  if (hide) return null;
   const validInvalidEl = errorMessage ? (
     <Tooltip content={errorMessage} className="flex min-w-0 max-w-full shrink items-center gap-1 text-red-400">
       <XCircleIcon className="h-3 w-3 shrink-0" aria-hidden />

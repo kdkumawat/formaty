@@ -15,6 +15,12 @@ interface QueryViewProps {
   monacoTheme?: string;
   /** Report the latest query result up so the global toolbar can copy it. */
   onResultChange?: (text: string) => void;
+  /** Restore a previously shared query (share links keep queryText). */
+  initialQuery?: string;
+  /** Report query edits up so share links can preserve them. */
+  onQueryChange?: (q: string) => void;
+  /** Pipe the query result into List Compare for ID extraction / SQL. */
+  onOpenInListCompare?: (text: string) => void;
 }
 
 const QUERY_LANGUAGES: Array<{ id: QueryLanguage; label: string; placeholder: string }> = [
@@ -64,9 +70,12 @@ export function QueryView({
   fontSize = 13,
   monacoTheme = "vs-dark",
   onResultChange,
+  initialQuery,
+  onQueryChange,
+  onOpenInListCompare,
 }: QueryViewProps) {
   const [queryLang, setQueryLang] = useState<QueryLanguage>("jsonpath");
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initialQuery ?? "");
   const [result, setResult] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [history, setHistory] = useState<string[]>([]);
@@ -74,6 +83,19 @@ export function QueryView({
   useEffect(() => {
     setHistory(loadHistory());
   }, []);
+
+  // Lift the query text so shared links can preserve it.
+  useEffect(() => {
+    onQueryChange?.(query);
+  }, [query, onQueryChange]);
+
+  // Apply a query restored from a share link (fires once, before user edits).
+  useEffect(() => {
+    if (initialQuery && initialQuery !== query) {
+      setQuery(initialQuery);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialQuery]);
 
   const run = useCallback(() => {
     if (!query.trim()) {
@@ -137,9 +159,21 @@ export function QueryView({
           ))}
           <span className="flex-1" />
           {result.trim() && (
-            <span className="shrink-0 text-[10px] font-medium tabular-nums text-[var(--workspace-text-muted)]">
-              Use the toolbar above to copy or use as input
-            </span>
+            <>
+              <span className="hidden shrink-0 text-[10px] font-medium tabular-nums text-[var(--workspace-text-muted)] md:inline">
+                Copy or “Use as input” from the toolbar above
+              </span>
+              {onOpenInListCompare && (
+                <button
+                  type="button"
+                  className={`${linkBtnClass} shrink-0 text-primary`}
+                  title="Open the result in List Compare to extract IDs and generate SQL"
+                  onClick={() => onOpenInListCompare(result)}
+                >
+                  Open in List Compare
+                </button>
+              )}
+            </>
           )}
         </div>
         <textarea

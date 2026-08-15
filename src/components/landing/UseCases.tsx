@@ -2,35 +2,38 @@
 
 import { motion } from "framer-motion";
 import Link from "next/link";
+import { ArrowRightIcon } from "@heroicons/react/24/outline";
 
 const CASES = [
   {
-    number: "01",
-    title: "Debug API responses",
-    desc: "Paste a raw API or webhook response, format it, explore the structure, and query specific fields - no more squinting at minified JSON.",
-    route: "/json-formatter",
-    tag: "Backend",
+    title: "Backend Engineers",
+    desc: "Debug database records, API responses, JSON, SQL, and ID lists. Reconcile production vs staging in one paste.",
+    route: "/compare-lists",
+    tag: "Reconcile",
   },
   {
-    number: "02",
-    title: "Convert config files",
-    desc: "Switch your config between JSON, YAML, TOML, and XML in one click. Perfect for Docker, Kubernetes, Terraform, and any DevOps workflow.",
-    route: "/json-to-yaml",
-    tag: "DevOps",
-  },
-  {
-    number: "03",
-    title: "Generate model types",
-    desc: "Drop in any JSON payload and export typed interfaces for TypeScript, Python, Go, Rust, Java, C# and more - 10 languages supported.",
+    title: "Frontend Engineers",
+    desc: "Generate TypeScript types, Zod schemas, and validation code straight from API response samples.",
     route: "/json-to-typescript",
-    tag: "Frontend",
+    tag: "Generate",
   },
   {
-    number: "04",
-    title: "Query & transform data",
-    desc: "Use JSONPath and JMESPath to extract, filter, and reshape nested structures without writing a single line of code.",
-    route: "/jsonpath-tester",
-    tag: "Data",
+    title: "DevOps Engineers",
+    desc: "Inspect YAML, JSON, configs, and API responses. Convert between formats for manifests and pipelines.",
+    route: "/json-to-yaml",
+    tag: "Convert",
+  },
+  {
+    title: "QA Engineers",
+    desc: "Compare payloads between environments, generate fixtures, and inspect data with tree and table views.",
+    route: "/json-diff",
+    tag: "Compare",
+  },
+  {
+    title: "Data Engineers",
+    desc: "Reconcile CSV and JSON datasets, extract records with queries, and export to SQL or spreadsheets.",
+    route: "/compare-csv",
+    tag: "Reconcile",
   },
 ];
 
@@ -45,7 +48,7 @@ export function UseCases() {
             viewport={{ once: true }}
             className="text-xs font-semibold uppercase tracking-widest text-primary"
           >
-            Built for developers
+            Who it&apos;s for
           </motion.p>
           <motion.h2
             initial={{ opacity: 0, y: 16 }}
@@ -54,12 +57,12 @@ export function UseCases() {
             transition={{ delay: 0.06 }}
             className="text-3xl font-semibold tracking-tight text-[var(--workspace-text)] md:text-[2.6rem] md:leading-[1.1]"
           >
-            Use cases
+            Built for how developers work
           </motion.h2>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          {CASES.map(({ number, title, desc, route, tag }, i) => (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {CASES.map(({ title, desc, route, tag }, i) => (
             <motion.div
               key={title}
               initial={{ opacity: 0, y: 16 }}
@@ -69,24 +72,19 @@ export function UseCases() {
             >
               <Link
                 href={route}
-                className="group flex flex-col gap-4 rounded-xl border border-[var(--workspace-border)] bg-[var(--workspace-panel)] p-6 transition-all duration-200 hover:-translate-y-1 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5"
+                className="group flex h-full flex-col gap-3 rounded-xl border border-[var(--workspace-border)] bg-[var(--workspace-panel)] p-6 transition-all duration-200 hover:-translate-y-1 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5"
               >
-                <div className="flex items-center justify-between">
-                  <span className="font-mono text-2xl font-bold text-[var(--workspace-border)] transition-colors group-hover:text-primary/25">
-                    {number}
-                  </span>
-                  <span className="rounded-full border border-[var(--workspace-border)] px-2.5 py-0.5 text-[11px] font-medium text-[var(--workspace-text-muted)]">
-                    {tag}
-                  </span>
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-[var(--workspace-text)] transition-colors group-hover:text-primary">
-                    {title}
-                  </h3>
-                  <p className="mt-2 text-sm leading-relaxed text-[var(--workspace-text-muted)]">
-                    {desc}
-                  </p>
-                </div>
+                <span className="w-max rounded-full border border-primary/25 bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold text-primary">
+                  {tag}
+                </span>
+                <h3 className="text-lg font-semibold text-[var(--workspace-text)] transition-colors group-hover:text-primary">
+                  {title}
+                </h3>
+                <p className="text-sm leading-relaxed text-[var(--workspace-text-muted)]">{desc}</p>
+                <span className="mt-auto inline-flex items-center gap-1 text-xs font-medium text-[var(--workspace-text-muted)] transition-colors group-hover:text-primary">
+                  Open workflow
+                  <ArrowRightIcon className="h-3 w-3 transition-transform group-hover:translate-x-0.5" aria-hidden />
+                </span>
               </Link>
             </motion.div>
           ))}

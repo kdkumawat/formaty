@@ -1,27 +1,30 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
   ArrowsRightLeftIcon,
   BarsArrowDownIcon,
   BarsArrowUpIcon,
   ChevronDownIcon,
+  ClipboardDocumentIcon,
+  TableCellsIcon,
 } from "@heroicons/react/24/outline";
 import { Dropdown } from "@/components/workspace/Dropdown";
 import { Tooltip } from "@/components/workspace/Tooltip";
 import {
   menuItemClass as sharedMenuItemClass,
   menuItemActiveClass as sharedMenuItemActiveClass,
+  menuCheck as sharedMenuCheck,
   menuSectionLabel as sharedMenuSectionLabel,
 } from "@/components/workspace/menuStyles";
-import { Checkbox } from "@/components/ui/checkbox";
+import { toast } from "@/components/Toast";
 import {
   BUCKET_LABELS,
   DEFAULT_LIST_PARSE_OPTIONS,
+  LIST_EXPORT_FORMATS,
   compareLists,
   formatListItems,
-  formatSqlInClause,
   getBucketItems,
   listExportFormatLabel,
   sortListText,
@@ -30,9 +33,17 @@ import {
   type ListParseOptions,
   type ListSortMode,
 } from "@/lib/json/listCompare";
+import {
+  compareCsvByColumn,
+  detectCsvColumns,
+  pickDefaultColumn,
+} from "@/lib/json/csvCompare";
 
 export type ListCompareExport = {
+  /** Formatted output text exactly as shown in the output pane. */
   text: string;
+  /** Raw item values (display form) - used by Copy-as to rebuild any format. */
+  items: string[];
   filename: string;
   bucket: ListBucket;
   count: number;
@@ -52,23 +63,31 @@ interface ListComparePanelProps {
   onExportChange?: (exportInfo: ListCompareExport | null) => void;
   fontSize?: number;
   options?: ListParseOptions;
+  /** CSV key column restored from a shared link. */
+  initialCsvColumn?: string | null;
+  /** Report the selected CSV column up so share links can preserve it. */
+  onCsvColumnChange?: (col: string | null) => void;
 }
 
-const PRIMARY_BUCKETS: ListBucket[] = ["common", "leftOnly", "rightOnly", "union", "symmetric"];
+const PRIMARY_BUCKETS: ListBucket[] = ["common", "leftOnly", "rightOnly", "union", "symmetric", "changed"];
 const DUPE_BUCKETS: ListBucket[] = ["leftDupes", "rightDupes"];
 
 const EXPORT_GROUPS: { label: string; items: ListExportFormat[] }[] = [
   {
     label: "SQL",
-    items: ["sql-in-single", "sql-in-double", "sql-in-unquoted", "sql-values"],
+    items: ["sql-in-single", "sql-not-in", "sql-values", "sql-array"],
+  },
+  {
+    label: "Tables",
+    items: ["markdown-table", "html-table"],
   },
   {
     label: "Data",
-    items: ["json-array", "json-array-numbers", "newline", "comma-space", "csv-quoted", "tsv", "yaml-list"],
+    items: ["json-array", "json-array-numbers", "newline", "comma", "comma-space", "comma-double-quotes", "pipe", "csv-quoted", "tsv", "yaml-list"],
   },
   {
     label: "Code",
-    items: ["js-array-single", "js-array-double", "python-list", "regex-alt", "raw"],
+    items: ["js-array-single", "js-array-double", "python-list", "go-slice", "regex-alt", "raw"],
   },
 ];
 
@@ -131,76 +150,117 @@ export function ListComparePanel({
   onExportChange,
   fontSize = 13,
   options,
+  initialCsvColumn,
+  onCsvColumnChange,
 }: ListComparePanelProps) {
   const effectiveOptions = options ?? DEFAULT_LIST_PARSE_OPTIONS;
   const [resultSort, setResultSort] = useState<ListSortMode>("asc");
   const [leftSort, setLeftSort] = useState<ListSortMode>("none");
   const [rightSort, setRightSort] = useState<ListSortMode>("none");
   const [activeBucket, setActiveBucket] = useState<ListBucket>("common");
-  const [exportFormat, setExportFormat] = useState<ListExportFormat>("sql-in-single");
-  const [sqlColumn, setSqlColumn] = useState("id");
-  const [sqlNotIn, setSqlNotIn] = useState(false);
-  const [flash, setFlash] = useState<string | null>(null);
+  /** Bucket shown before the last dup-link click - clicking again restores it. */
+  const prevBucketRef = useRef<ListBucket>("common");
+
+  const toggleDupBucket = (b: "leftDupes" | "rightDupes") => {
+    if (activeBucket === b) {
+      // Click again on the active dup link → restore the previous bucket.
+      setActiveBucket(prevBucketRef.current);
+      return;
+    }
+    prevBucketRef.current = activeBucket;
+    setActiveBucket(b);
+  };
+  const [display, setDisplay] = useState<"inline" | "table">("inline");
+
+  // Preserve the selected export format across sessions (localStorage).
+  const [exportFormat, setExportFormat] = useState<ListExportFormat | null>(() => {
+    try {
+      const raw = localStorage.getItem("formaty-list-export-format");
+      if (!raw || raw === "none") return null;
+      if (raw && (LIST_EXPORT_FORMATS as string[]).includes(raw)) return raw as ListExportFormat;
+    } catch {
+      /* ignore */
+    }
+    return "comma-space";
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem("formaty-list-export-format", exportFormat ?? "none");
+    } catch {
+      /* ignore */
+    }
+  }, [exportFormat]);
   const [exportOpen, setExportOpen] = useState(false);
   const [bucketOpen, setBucketOpen] = useState(false);
+  const [colOpen, setColOpen] = useState(false);
   const [leftSnapshot, setLeftSnapshot] = useState<string | null>(null);
   const [rightSnapshot, setRightSnapshot] = useState<string | null>(null);
 
-  const result = useMemo(() => compareLists(left, right, effectiveOptions), [left, right, effectiveOptions]);
+  // CSV column detection: when both sides look like header CSVs, offer column compare.
+  const csvColumns = useMemo(() => {
+    const l = detectCsvColumns(left);
+    const r = detectCsvColumns(right);
+    if (!l || !r) return null;
+    const common = l.filter((c) => r.includes(c));
+    if (common.length === 0) return null;
+    return { left: l, right: r, common };
+  }, [left, right]);
+
+  const [csvColumn, setCsvColumn] = useState<string | null>(null);
+
+  // Auto-pick the first common column when CSVs are first detected;
+  // prefer the column restored from a share link when it is still valid.
+  useEffect(() => {
+    if (!csvColumns) {
+      setCsvColumn(null);
+      return;
+    }
+    setCsvColumn((cur) => {
+      if (cur && csvColumns.common.includes(cur)) return cur;
+      if (initialCsvColumn && csvColumns.common.includes(initialCsvColumn)) return initialCsvColumn;
+      return pickDefaultColumn(csvColumns.left, csvColumns.right);
+    });
+  }, [csvColumns, initialCsvColumn]);
+
+  // Report the selected column so share links can preserve it.
+  useEffect(() => {
+    onCsvColumnChange?.(csvColumn);
+  }, [csvColumn, onCsvColumnChange]);
+
+  const result = useMemo(() => {
+    if (csvColumn && csvColumns) {
+      const csvResult = compareCsvByColumn(left, right, csvColumn, effectiveOptions);
+      if (csvResult) return csvResult.result;
+    }
+    return compareLists(left, right, effectiveOptions);
+  }, [left, right, effectiveOptions, csvColumn, csvColumns]);
+
   const bucketItems = useMemo(
     () => getBucketItems(result, activeBucket),
     [result, activeBucket],
   );
-  const formatted = useMemo(
-    () => formatListItems(bucketItems, exportFormat, resultSort),
-    [bucketItems, exportFormat, resultSort],
-  );
-  const sqlClause = useMemo(
+  const outputText = useMemo(
     () =>
-      formatSqlInClause(bucketItems, {
-        column: sqlColumn,
-        quote:
-          exportFormat === "sql-in-double"
-            ? "double"
-            : exportFormat === "sql-in-unquoted"
-              ? "none"
-              : "single",
-        sortMode: resultSort,
-        notIn: sqlNotIn,
-      }),
-    [bucketItems, sqlColumn, exportFormat, resultSort, sqlNotIn],
-  );
-
-  const flashMsg = useCallback((msg: string) => {
-    setFlash(msg);
-    window.setTimeout(() => setFlash(null), 1400);
-  }, []);
-
-  const copyText = useCallback(
-    async (text: string, label: string) => {
-      try {
-        await navigator.clipboard.writeText(text);
-        flashMsg(`${label} copied`);
-      } catch {
-        flashMsg("Copy failed");
-      }
-    },
-    [flashMsg],
+      exportFormat === null
+        ? bucketItems.map((i) => i.value).join("\n")
+        : formatListItems(bucketItems, exportFormat, resultSort),
+    [bucketItems, exportFormat, resultSort],
   );
 
   useEffect(() => {
     if (!onExportChange) return;
-    if (!formatted) {
+    if (!outputText) {
       onExportChange(null);
       return;
     }
     onExportChange({
-      text: formatted,
+      text: outputText,
+      items: bucketItems.map((i) => i.value),
       filename: `formaty-list-${activeBucket}.txt`,
       bucket: activeBucket,
       count: bucketItems.length,
     });
-  }, [formatted, activeBucket, bucketItems.length, onExportChange]);
+  }, [outputText, activeBucket, bucketItems, onExportChange]);
 
   useEffect(() => {
     return () => {
@@ -221,7 +281,7 @@ export function ListComparePanel({
       setRightSort(ls);
       return rs;
     });
-    flashMsg("Swapped");
+    toast({ message: "Swapped sides", type: "info" });
   };
 
   const applySideSort = (side: "left" | "right", next: ListSortMode) => {
@@ -233,14 +293,14 @@ export function ListComparePanel({
           setLeftSnapshot(null);
         }
         setLeftSort("none");
-        flashMsg("Left sort reset");
+        toast({ message: "Left sort reset", type: "info" });
         return;
       }
       if (leftSnapshot === null) setLeftSnapshot(left);
       const base = leftSnapshot ?? left;
       onLeftChange(sortListText(base, effectiveOptions, next));
       setLeftSort(next);
-      flashMsg(next === "asc" ? "Left A → Z" : "Left Z → A");
+      toast({ message: next === "asc" ? "Left sorted A → Z" : "Left sorted Z → A", type: "success" });
     } else {
       if (!right.trim() && next !== "none") return;
       if (next === "none") {
@@ -249,32 +309,14 @@ export function ListComparePanel({
           setRightSnapshot(null);
         }
         setRightSort("none");
-        flashMsg("Right sort reset");
+        toast({ message: "Right sort reset", type: "info" });
         return;
       }
       if (rightSnapshot === null) setRightSnapshot(right);
       const base = rightSnapshot ?? right;
       onRightChange(sortListText(base, effectiveOptions, next));
       setRightSort(next);
-      flashMsg(next === "asc" ? "Right A → Z" : "Right Z → A");
-    }
-  };
-
-  const pasteInto = async (side: "left" | "right") => {
-    try {
-      const text = await navigator.clipboard.readText();
-      if (side === "left") {
-        onLeftChange(text);
-        setLeftSnapshot(null);
-        setLeftSort("none");
-      } else {
-        onRightChange(text);
-        setRightSnapshot(null);
-        setRightSort("none");
-      }
-      flashMsg(`Pasted ${side}`);
-    } catch {
-      flashMsg("Paste failed");
+      toast({ message: next === "asc" ? "Right sorted A → Z" : "Right sorted Z → A", type: "success" });
     }
   };
 
@@ -294,6 +336,8 @@ export function ListComparePanel({
         return result.stats.leftDupes;
       case "rightDupes":
         return result.stats.rightDupes;
+      case "changed":
+        return result.stats.changed;
     }
   };
 
@@ -303,23 +347,45 @@ export function ListComparePanel({
     if (b === "rightOnly") return "text-violet-600 dark:text-violet-400 bg-violet-500/10";
     if (b === "leftDupes" || b === "rightDupes")
       return "text-amber-700 dark:text-amber-400 bg-amber-500/10";
+    if (b === "changed") return "text-orange-600 dark:text-orange-400 bg-orange-500/10";
     if (b === "symmetric") return "text-rose-600 dark:text-rose-400 bg-rose-500/10";
     return "text-[var(--workspace-text-muted)] bg-[var(--workspace-background)]";
   };
 
-  const shortBucket = (b: ListBucket) => {
-    if (b === "leftOnly") return "Only L";
-    if (b === "rightOnly") return "Only R";
-    if (b === "symmetric") return "Δ";
-    if (b === "leftDupes") return "L dup";
-    if (b === "rightDupes") return "R dup";
-    return BUCKET_LABELS[b];
+  /** Solid dot color per bucket for the compact select trigger. */
+  const bucketDot = (b: ListBucket) => {
+    if (b === "common") return "bg-emerald-500";
+    if (b === "leftOnly") return "bg-sky-500";
+    if (b === "rightOnly") return "bg-violet-500";
+    if (b === "leftDupes" || b === "rightDupes") return "bg-amber-500";
+    if (b === "changed") return "bg-orange-500";
+    if (b === "symmetric") return "bg-rose-500";
+    return "bg-[var(--workspace-border)]";
   };
 
   const menuItem = (active: boolean) =>
     `${sharedMenuItemClass} ${active ? sharedMenuItemActiveClass : ""}`;
 
+  /** Same select-trigger look as the workspace Format / View / Actions dropdowns. */
+  const selectTrigger =
+    "inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-md bg-muted px-2 text-[11px] font-medium text-[var(--workspace-text)] transition-colors hover:bg-primary/10 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40";
+
+  const loadSample = () => {
+    onLeftChange("user_1001\nuser_1002\nuser_1003\nuser_1002\nuser_1004\nuser_1005\nuser_1003\nuser_1006");
+    onRightChange("user_1002\nuser_1003\nuser_1004\nuser_1006\nuser_1007\nuser_1008");
+    setActiveBucket("common");
+    setLeftSnapshot(null);
+    setRightSnapshot(null);
+    setLeftSort("none");
+    setRightSort("none");
+    toast({ message: "Sample loaded", type: "success" });
+  };
+
   const visibleDupes = DUPE_BUCKETS.filter((b) => bucketCount(b) > 0);
+  const visibleBuckets = PRIMARY_BUCKETS.filter(
+    (b) => b !== "changed" || bucketCount(b) > 0 || csvColumn,
+  );
+  const changedCount = bucketCount("changed");
 
   // Single row - parent host owns overflow; no wrap so toolbar stays one line
   const toolbarBody = (
@@ -328,29 +394,19 @@ export function ListComparePanel({
 
       <div className="mx-0.5 h-4 w-px shrink-0 bg-[var(--workspace-border)]" />
 
-      {visibleDupes.map((b) => {
-        const n = bucketCount(b);
-        return (
-          <Tooltip key={b} content={BUCKET_LABELS[b]} className="shrink-0">
-          <button
-            type="button"
-            onClick={() => setActiveBucket(b)}
-            className={`${linkBtnClass} h-7 min-h-7 shrink-0 px-2 text-[11px] font-semibold tabular-nums ${
-              activeBucket === b ? `!ring-1 !ring-primary/40 ${bucketColor(b)}` : ""
-            }`}
-          >
-            {shortBucket(b)} {n}
-          </button>
-          </Tooltip>
-        );
-      })}
-
-      <span className="hidden shrink-0 text-[10px] tabular-nums text-[var(--workspace-text-muted)] sm:inline">
-        L {result.left.uniqueCount} · R {result.right.uniqueCount}
-      </span>
-
-      {flash && <span className="shrink-0 text-[10px] font-medium text-primary">{flash}</span>}
-      {trailingControls}
+      {csvColumn && changedCount > 0 && (
+        <Tooltip content="Rows with the same key but different values" className="shrink-0">
+        <button
+          type="button"
+          onClick={() => setActiveBucket("changed")}
+          className={`${linkBtnClass} h-7 min-h-7 shrink-0 px-2 text-[11px] font-semibold tabular-nums ${
+            activeBucket === "changed" ? `!ring-1 !ring-primary/40 ${bucketColor("changed")}` : ""
+          }`}
+        >
+          Changed {changedCount}
+        </button>
+        </Tooltip>
+      )}      {trailingControls}
     </>
   );
 
@@ -381,8 +437,24 @@ export function ListComparePanel({
             <div className={paneHeader}>
               <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-sky-400" />
               <span className="text-[11px] font-semibold text-[var(--workspace-text)]">Left</span>
-              <span className="text-[10px] tabular-nums text-[var(--workspace-text-muted)]">
-                {result.left.uniqueCount} unique
+              <span className="flex min-w-0 items-center gap-1 text-[10px] tabular-nums text-[var(--workspace-text-muted)]">
+                <span className="shrink-0">{result.left.rawCount} items</span>
+                <span aria-hidden>·</span>
+                <span className="shrink-0">{result.left.uniqueCount} unique</span>
+                <span aria-hidden>·</span>
+                <Tooltip content={activeBucket === "leftDupes" ? "Show previous bucket" : "Show duplicates in left list"}>
+                <button
+                  type="button"
+                  onClick={() => toggleDupBucket("leftDupes")}
+                  className={`shrink-0 rounded px-1 font-medium transition-colors ${
+                    activeBucket === "leftDupes"
+                      ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                      : "text-[var(--workspace-text-muted)] hover:text-primary"
+                  }`}
+                >
+                  {result.leftDupes.length} dup
+                </button>
+                </Tooltip>
               </span>
               <span className="ml-auto flex items-center gap-1">
                 <CycleSortButton
@@ -392,13 +464,6 @@ export function ListComparePanel({
                   onCycle={() => applySideSort("left", cycleSort(leftSort))}
                   titlePrefix="Left sort"
                 />
-                <button
-                  type="button"
-                  className={`${linkBtnClass} h-7 min-h-7 px-2 text-[11px]`}
-                  onClick={() => void pasteInto("left")}
-                >
-                  Paste
-                </button>
               </span>
             </div>
             <textarea
@@ -416,12 +481,12 @@ export function ListComparePanel({
           </div>
 
           {/* Middle divider - swap appears on hover */}
-          <div className="hidden lg:flex h-10 w-4 shrink-0 flex-col items-center justify-center border-x border-[var(--workspace-border)] bg-[var(--workspace-panel)] group/swap">
+          <div className="hidden lg:flex h-10 w-7 shrink-0 flex-col items-center justify-center border-x border-[var(--workspace-border)] bg-[var(--workspace-panel)] group/swap">
             <Tooltip content="Swap sides">
             <button
               type="button"
               onClick={swap}
-              className={`${linkBtnClass} h-7 min-h-7 w-7 opacity-0 transition-opacity duration-150 group-hover/swap:opacity-100`}
+              className={`${linkBtnClass} h-6 min-h-6 w-6 opacity-0 transition-opacity duration-150 group-hover/swap:opacity-100`}
             >
               <ArrowsRightLeftIcon className="h-3.5 w-3.5" />
             </button>
@@ -433,8 +498,24 @@ export function ListComparePanel({
             <div className={paneHeader}>
               <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-violet-400" />
               <span className="text-[11px] font-semibold text-[var(--workspace-text)]">Right</span>
-              <span className="text-[10px] tabular-nums text-[var(--workspace-text-muted)]">
-                {result.right.uniqueCount} unique
+              <span className="flex min-w-0 items-center gap-1 text-[10px] tabular-nums text-[var(--workspace-text-muted)]">
+                <span className="shrink-0">{result.right.rawCount} items</span>
+                <span aria-hidden>·</span>
+                <span className="shrink-0">{result.right.uniqueCount} unique</span>
+                <span aria-hidden>·</span>
+                <Tooltip content={activeBucket === "rightDupes" ? "Show previous bucket" : "Show duplicates in right list"}>
+                <button
+                  type="button"
+                  onClick={() => toggleDupBucket("rightDupes")}
+                  className={`shrink-0 rounded px-1 font-medium transition-colors ${
+                    activeBucket === "rightDupes"
+                      ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                      : "text-[var(--workspace-text-muted)] hover:text-primary"
+                  }`}
+                >
+                  {result.rightDupes.length} dup
+                </button>
+                </Tooltip>
               </span>
               <span className="ml-auto flex items-center gap-1">
                 <CycleSortButton
@@ -444,13 +525,6 @@ export function ListComparePanel({
                   onCycle={() => applySideSort("right", cycleSort(rightSort))}
                   titlePrefix="Right sort"
                 />
-                <button
-                  type="button"
-                  className={`${linkBtnClass} h-7 min-h-7 px-2 text-[11px]`}
-                  onClick={() => void pasteInto("right")}
-                >
-                  Paste
-                </button>
               </span>
             </div>
             <textarea
@@ -471,28 +545,68 @@ export function ListComparePanel({
         {/* Result */}
         <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col border-l border-[var(--workspace-border)] lg:max-w-[42%]">
           <div className={`${paneHeader} gap-1`}>
+            {csvColumns && (
+              <Dropdown
+                open={colOpen}
+                onOpenChange={setColOpen}
+                side="bottom"
+                align="start"
+                contentClassName="w-max min-w-[8rem]"
+                trigger={
+                  <Tooltip content="Compare by CSV column">
+                  <button
+                    type="button"
+                    className={`${selectTrigger} max-w-[8rem] ${colOpen ? "!bg-primary/12 !text-primary" : ""}`}
+                  >
+                    <span className="truncate">{csvColumn ? `col: ${csvColumn}` : "col"}</span>
+                    <ChevronDownIcon className="h-3 w-3 shrink-0 opacity-60" />
+                  </button>
+                  </Tooltip>
+                }
+              >
+                <div className="flex flex-col">
+                  {csvColumns.common.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      className={menuItem(csvColumn === c)}
+                      onClick={() => {
+                        setCsvColumn(c);
+                        setActiveBucket("common");
+                        setColOpen(false);
+                      }}
+                    >
+                      {sharedMenuCheck(csvColumn === c)}
+                      {c}
+                    </button>
+                  ))}
+                </div>
+              </Dropdown>
+            )}
+
             <Dropdown
               open={bucketOpen}
               onOpenChange={setBucketOpen}
               side="bottom"
               align="start"
-              contentClassName={`w-max min-w-[8rem]`}
+              contentClassName={`w-max min-w-[9rem]`}
               trigger={
                 <Tooltip content="Select bucket">
                 <button
                   type="button"
-                  className={`${linkBtnClass} h-7 min-h-7 gap-0.5 px-2 text-[11px] font-semibold ${bucketColor(activeBucket)}`}
+                  className={`${selectTrigger} ${bucketOpen ? "!bg-primary/12 !text-primary" : ""}`}
                 >
+                  <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${bucketDot(activeBucket)}`} />
                   {BUCKET_LABELS[activeBucket]} · {bucketItems.length}
-                  <ChevronDownIcon className="h-3 w-3 opacity-60" />
+                  <ChevronDownIcon className="h-3 w-3 shrink-0 opacity-60" />
                 </button>
                 </Tooltip>
               }
             >
               <div className="flex flex-col">
-                {PRIMARY_BUCKETS.map((b) => {
+                {visibleBuckets.map((b) => {
                   const n = bucketCount(b);
-                  if (n === 0 && b === "symmetric") return null;
+                  if (n === 0 && (b === "symmetric" || b === "changed")) return null;
                   return (
                     <button
                       key={b}
@@ -503,6 +617,7 @@ export function ListComparePanel({
                         setBucketOpen(false);
                       }}
                     >
+                      {sharedMenuCheck(activeBucket === b)}
                       {BUCKET_LABELS[b]} <span className="opacity-70">{n}</span>
                     </button>
                   );
@@ -519,6 +634,7 @@ export function ListComparePanel({
                         setBucketOpen(false);
                       }}
                     >
+                      {sharedMenuCheck(activeBucket === b)}
                       {BUCKET_LABELS[b]} {n}
                     </button>
                   );
@@ -533,25 +649,70 @@ export function ListComparePanel({
               titlePrefix="Result sort"
             />
 
+            <div className="flex h-7 shrink-0 overflow-hidden rounded-md bg-muted">
+              <Tooltip content="Inline view - comma-separated">
+              <button
+                type="button"
+                aria-label="Inline view"
+                className={`flex h-7 cursor-pointer items-center justify-center px-2 text-[11px] ${
+                  display === "inline" ? "bg-primary/15 text-primary" : "text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)] hover:text-[var(--workspace-text)]"
+                }`}
+                onClick={() => setDisplay("inline")}
+              >
+                <span className="flex flex-col gap-[2px] py-0.5" aria-hidden>
+                  <span className="h-px w-3 bg-current" />
+                  <span className="h-px w-3 bg-current" />
+                  <span className="h-px w-3 bg-current" />
+                </span>
+              </button>
+              </Tooltip>
+              <Tooltip content="Table view">
+              <button
+                type="button"
+                aria-label="Table view"
+                className={`flex h-7 cursor-pointer items-center justify-center px-2 text-[11px] ${
+                  display === "table" ? "bg-primary/15 text-primary" : "text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)] hover:text-[var(--workspace-text)]"
+                }`}
+                onClick={() => setDisplay("table")}
+              >
+                <TableCellsIcon className="h-3.5 w-3.5" />
+              </button>
+              </Tooltip>
+            </div>
+
             <Dropdown
               open={exportOpen}
               onOpenChange={setExportOpen}
               side="bottom"
               align="end"
-              contentClassName={`max-h-[50vh] w-52 overflow-y-auto`}
+              maxWidth="max-w-[17rem]"
+              contentClassName="max-h-[50vh] overflow-y-auto"
               trigger={
-                <Tooltip content="Result format (copy via output actions)" className="shrink-0">
+                  <Tooltip content={display === "table" ? "Copy-as is disabled in table view" : "Copy as… - updates the output (or use the Copy button)"} className="shrink-0">
                 <button
                   type="button"
-                  className={`${linkBtnClass} h-7 min-h-7 max-w-[10rem] gap-0.5 truncate px-2 text-[11px] font-medium`}
+                  disabled={display === "table"}
+                  className={`${selectTrigger} max-w-[11rem] ${exportOpen ? "!bg-primary/12 !text-primary" : ""}`}
                 >
-                  <span className="truncate">{listExportFormatLabel(exportFormat)}</span>
+                  <ClipboardDocumentIcon className="h-3.5 w-3.5 shrink-0 text-[var(--workspace-text-muted)]" />
+                  <span className="truncate">{exportFormat === null ? "None · plain list" : listExportFormatLabel(exportFormat)}</span>
                   <ChevronDownIcon className="h-3 w-3 shrink-0 opacity-60" />
                 </button>
                 </Tooltip>
               }
             >
               <div className="flex flex-col">
+                <button
+                  type="button"
+                  className={menuItem(exportFormat === null)}
+                  onClick={() => {
+                    setExportFormat(null);
+                    setExportOpen(false);
+                  }}
+                >
+                  {sharedMenuCheck(exportFormat === null)}
+                  <span className="min-w-0 flex-1 truncate text-left">None · plain list</span>
+                </button>
                 {EXPORT_GROUPS.map((group) => (
                   <div key={group.label}>
                     {sharedMenuSectionLabel(group.label)}
@@ -565,91 +726,81 @@ export function ListComparePanel({
                           setExportOpen(false);
                         }}
                       >
-                        {listExportFormatLabel(f)}
+                        {sharedMenuCheck(exportFormat === f)}
+                        <span className="min-w-0 flex-1 truncate text-left">{listExportFormatLabel(f)}</span>
                       </button>
                     ))}
                   </div>
                 ))}
               </div>
             </Dropdown>
-
-            <div className="mx-0.5 h-4 w-px shrink-0 bg-[var(--workspace-border)]" />
-
-            <Tooltip content="SQL column name">
-            <input
-              type="text"
-              value={sqlColumn}
-              onChange={(e) => setSqlColumn(e.target.value)}
-              className="h-7 w-14 shrink-0 rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-1.5 font-mono text-[11px] text-[var(--workspace-text)]"
-              aria-label="SQL column name"
-            />
-            </Tooltip>
-            <Tooltip content="NOT IN" className="shrink-0">
-            <label
-              className="flex shrink-0 cursor-pointer items-center gap-0.5 text-[11px] text-[var(--workspace-text-muted)]"
-            >
-              <Checkbox
-                checked={sqlNotIn}
-                onCheckedChange={(c) => setSqlNotIn(c === true)}
-              />
-              NOT
-            </label>
-            </Tooltip>
-            <Tooltip content="Copy SQL IN / NOT IN clause" className="shrink-0">
-            <button
-              type="button"
-              className={`${linkBtnClass} h-7 min-h-7 shrink-0 px-2 text-[11px] font-semibold text-primary`}
-              disabled={bucketItems.length === 0}
-              onClick={() => void copyText(sqlClause, "SQL clause")}
-            >
-              SQL
-            </button>
-            </Tooltip>
           </div>
 
-          <pre
-            tabIndex={0}
-            className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-all bg-[var(--workspace-panel)] px-2.5 py-2 font-mono leading-relaxed text-[var(--workspace-text)] outline-none"
-            style={{ fontSize }}
-            onKeyDown={(e) => {
-              if ((e.ctrlKey || e.metaKey) && e.key === "a") {
-                e.preventDefault();
-                const range = document.createRange();
-                range.selectNodeContents(e.currentTarget);
-                const selection = window.getSelection();
-                selection?.removeAllRanges();
-                selection?.addRange(range);
-              }
-            }}
-          >
-            {formatted || (
-              <span className="text-[var(--workspace-text-muted)]">
-                {left.trim() || right.trim() ? (
-                  "No items in this bucket."
-                ) : (
-                  <>
-                    Paste lists on the left and right.{" "}
-                    <button
-                      type="button"
-                      className="font-medium text-primary hover:underline"
-                      onClick={() => {
-                        onLeftChange("apple\nbanana\ncherry\ndate\nelderberry");
-                        onRightChange("banana\ncherry\nfig\ngrape\napple");
-                        setActiveBucket("common");
-                        setLeftSnapshot(null);
-                        setRightSnapshot(null);
-                        setLeftSort("none");
-                        setRightSort("none");
-                        flashMsg("Sample loaded");
-                      }}
-                    >
-                      Load sample
-                    </button>
-                  </>
-                )}
-              </span>
-            )}
-          </pre>
+          {display === "inline" ? (
+            <div className="min-h-0 flex-1 overflow-auto bg-[var(--workspace-panel)] px-3 py-2.5" style={{ fontSize }}>
+              {bucketItems.length === 0 ? (
+                <p className="font-mono text-[var(--workspace-text-muted)]">
+                  {left.trim() || right.trim() ? (
+                    "No items in this bucket."
+                  ) : (
+                    <>
+                      Paste lists on the left and right.{" "}
+                      <button
+                        type="button"
+                        className="font-medium text-primary hover:underline"
+                        onClick={loadSample}
+                      >
+                        Load sample
+                      </button>
+                    </>
+                  )}
+                </p>
+              ) : (
+                <p className="whitespace-pre-wrap break-words font-mono leading-relaxed text-[var(--workspace-text)]">
+                  {outputText}
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="min-h-0 flex-1 overflow-auto bg-[var(--workspace-panel)] px-2.5 py-2" style={{ fontSize }}>
+              {bucketItems.length === 0 ? (
+                <p className="font-mono text-[var(--workspace-text-muted)]">
+                  {left.trim() || right.trim() ? (
+                    "No items in this bucket."
+                  ) : (
+                    <>
+                      Paste lists on the left and right.{" "}
+                      <button
+                        type="button"
+                        className="font-medium text-primary hover:underline"
+                        onClick={loadSample}
+                      >
+                        Load sample
+                      </button>
+                    </>
+                  )}
+                </p>
+              ) : (
+                <table className="w-full border-collapse">
+                  <tbody>
+                    {bucketItems.map((item, i) => (
+                      <tr
+                        key={`${item.key}-${i}`}
+                        className={`border-b border-[var(--workspace-border)]/40 last:border-0 ${
+                          i % 2 === 1 ? "bg-[var(--workspace-background)]" : ""
+                        }`}
+                      >
+                        <td className="py-0.5 pr-3 font-mono text-[var(--workspace-text)]">{item.value}</td>
+                        <td className="py-0.5 text-right font-mono tabular-nums text-[var(--workspace-text-muted)]">
+                          ×{item.count}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -16,6 +16,7 @@ type LoadStatus = "loading" | LoadPlaygroundResult;
 function PlaygroundContent() {
   const searchParams = useSearchParams();
   const id = searchParams?.get("id");
+  const embed = searchParams?.get("embed") === "1";
   const [status, setStatus] = useState<LoadStatus | "no_id">(id ? "loading" : "no_id");
 
   useEffect(() => {
@@ -34,7 +35,7 @@ function PlaygroundContent() {
   }, [id]);
 
   if (status === "no_id") {
-    return <WorkspaceContent />;
+    return <WorkspaceContent embed={embed} />;
   }
 
   if (status === "loading") {
@@ -82,7 +83,7 @@ function PlaygroundContent() {
     );
   }
 
-  return <WorkspaceContent initialState={status.data} />;
+  return <WorkspaceContent initialState={status.data} embed={embed} />;
 }
 
 export default function PlaygroundPage() {

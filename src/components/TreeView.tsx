@@ -1,13 +1,48 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ChevronDownIcon,
   ChevronRightIcon,
   ClipboardDocumentIcon,
+  ChevronUpIcon,
+  MagnifyingGlassIcon,
+  XMarkIcon,
 } from "@heroicons/react/24/outline";
 import type { JsonValue } from "@/lib/json/core";
+import { searchJson, type SearchMatch } from "@/lib/json/core";
 import { Tooltip } from "@/components/workspace/Tooltip";
+
+type SearchMode = "key" | "value";
+
+/** Convert a searchJson path (`users[0].name`) to tree path form (`$.users[0].name`). */
+function toTreePath(p: string): string {
+  return p.startsWith("$") ? p : `$.${p}`;
+}
+
+function ancestorPaths(p: string): string[] {
+  const out: string[] = [];
+  const segs = p.split(".");
+  for (let i = 1; i < segs.length; i++) {
+    out.push(segs.slice(0, i).join("."));
+  }
+  out.push(p);
+  return out;
+}
+
+const MAX_EXPAND_MATCHES = 200;
+
+export interface TreeViewRef {
+  focusSearch: () => void;
+}
 
 interface TreeViewProps {
   data: JsonValue;
@@ -20,6 +55,8 @@ interface TreeViewProps {
   showTypeBadges?: boolean;
   /** Open every node by default (JWT tree). */
   defaultExpanded?: boolean;
+  /** Content font size (px) - kept in sync with the editor font size. */
+  fontSize?: number;
 }
 
 const MAX_INITIAL_DEPTH = 2;
@@ -56,6 +93,17 @@ function pathJoin(parent: string, key: string, isIndex: boolean): string {
   return isIndex ? `${parent}[${key}]` : `${parent}.${key}`;
 }
 
+interface SearchState {
+  /** Tree-path of the currently selected match (highlighted + scrolled to). */
+  currentPath: string | null;
+  /** Tree-paths of every match (subtle marker). */
+  matchPaths: Set<string>;
+  /** Ancestor paths that should be force-expanded. */
+  expandedPaths: Set<string>;
+}
+
+const EMPTY_SEARCH: SearchState = { currentPath: null, matchPaths: new Set(), expandedPaths: new Set() };
+
 function Node({
   nodeKey,
   value,
@@ -68,6 +116,7 @@ function Node({
   onNotify,
   showTypeBadges = true,
   defaultExpanded = false,
+  search,
 }: {
   nodeKey: string;
   value: JsonValue;
@@ -80,6 +129,7 @@ function Node({
   onNotify?: (msg: string) => void;
   showTypeBadges?: boolean;
   defaultExpanded?: boolean;
+  search: SearchState;
 }) {
   const canExpand = value !== null && typeof value === "object";
   const childCount = canExpand
@@ -97,6 +147,15 @@ function Node({
     if (expandAll === true) setOpen(true);
     else if (expandAll === false) setOpen(false);
   }, [expandAll, collapseGen]);
+
+  // Force-open ancestors of search matches
+  const isSearchExpanded = search.expandedPaths.has(path);
+  useEffect(() => {
+    if (isSearchExpanded) setOpen(true);
+  }, [isSearchExpanded, path]);
+
+  const isMatch = search.matchPaths.has(path);
+  const isCurrent = search.currentPath === path;
 
   const copy = useCallback(
     async (kind: "path" | "value") => {
@@ -143,9 +202,18 @@ function Node({
     !showAll &&
     open;
 
+  const rowHighlight = isCurrent
+    ? "rounded-md bg-amber-400/25 ring-1 ring-amber-400/40"
+    : isMatch
+      ? "rounded-md bg-amber-400/10"
+      : "";
+
   return (
     <div className={depth > 0 ? `ml-3 border-l pl-2.5 ${branchClass}` : ""}>
-      <div className="group flex items-center gap-1.5 py-0.5 text-[13px] leading-5">
+      <div
+        data-path={path}
+        className={`group flex items-center gap-1.5 py-0.5 pl-0.5 leading-5 ${rowHighlight}`}
+      >
         {canExpand ? (
           <button
             type="button"
@@ -185,7 +253,7 @@ function Node({
           <Tooltip content="Copy value">
           <button
             type="button"
-            className={`min-w-0 truncate font-mono text-[12px] ${text} hover:text-primary`}
+            className={`min-w-0 truncate font-mono ${text} hover:text-primary`}
             onClick={() => void copy("value")}
           >
             {prettyValue(value)}
@@ -232,6 +300,7 @@ function Node({
               onNotify={onNotify}
               showTypeBadges={showTypeBadges}
               defaultExpanded={defaultExpanded}
+              search={search}
             />
           ))}
           {truncated ? (
@@ -249,15 +318,19 @@ function Node({
   );
 }
 
-export function TreeView({
-  data,
-  className,
-  isDark = false,
-  largeFile = false,
-  onNotify,
-  showTypeBadges = true,
-  defaultExpanded = false,
-}: TreeViewProps) {
+export const TreeView = forwardRef<TreeViewRef, TreeViewProps>(function TreeView(
+  {
+    data,
+    className,
+    isDark = false,
+    largeFile = false,
+    onNotify,
+    showTypeBadges = true,
+    defaultExpanded = false,
+    fontSize = 13,
+  }: TreeViewProps,
+  ref,
+) {
   const rootLabel = useMemo(
     () => (Array.isArray(data) ? "$[]" : "$"),
     [data],
@@ -265,11 +338,79 @@ export function TreeView({
   const [expandAll, setExpandAll] = useState<boolean | null>(null);
   const [collapseGen, setCollapseGen] = useState(0);
 
+  const [query, setQuery] = useState("");
+  const [mode, setMode] = useState<SearchMode>("value");
+  const [caseSensitive, setCaseSensitive] = useState(false);
+  const [currentIdx, setCurrentIdx] = useState(0);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  const matches = useMemo((): SearchMatch[] => {
+    if (!query.trim()) return [];
+    try {
+      return searchJson(data, query, mode, caseSensitive);
+    } catch {
+      return [];
+    }
+  }, [data, query, mode, caseSensitive]);
+
+  const search = useMemo((): SearchState => {
+    if (matches.length === 0) return EMPTY_SEARCH;
+    const clamped = Math.min(currentIdx, matches.length - 1);
+    const current = matches[clamped];
+    const matchPaths = new Set<string>();
+    const expanded = new Set<string>();
+    const slice = matches.length <= MAX_EXPAND_MATCHES ? matches : [matches[clamped] ?? current];
+    for (const m of slice) {
+      const tp = toTreePath(m.path);
+      matchPaths.add(tp);
+      for (const a of ancestorPaths(tp)) expanded.add(a);
+    }
+    return {
+      currentPath: toTreePath(current?.path ?? ""),
+      matchPaths,
+      expandedPaths: expanded,
+    };
+  }, [matches, currentIdx]);
+
+  const goTo = useCallback(
+    (delta: number) => {
+      if (matches.length === 0) return;
+      setCurrentIdx((i) => (i + delta + matches.length) % matches.length);
+    },
+    [matches.length],
+  );
+
+  // Scroll the current match into view when navigating
+  useEffect(() => {
+    if (!search.currentPath) return;
+    const el = scrollRef.current?.querySelector<HTMLElement>(
+      `[data-path="${search.currentPath.replace(/"/g, '\\"')}"]`,
+    );
+    el?.scrollIntoView({ block: "nearest" });
+  }, [search.currentPath]);
+
+  const clearSearch = () => {
+    setQuery("");
+    setCurrentIdx(0);
+  };
+
+  useImperativeHandle(ref, () => ({
+    focusSearch: () => searchInputRef.current?.focus(),
+  }));
+
+  const chip = (active: boolean) =>
+    `inline-flex h-6 cursor-pointer items-center rounded-md px-2 text-[10px] font-semibold transition-colors ${
+      active
+        ? "bg-primary/15 text-primary"
+        : "text-[var(--workspace-text-muted)] hover:bg-primary/10 hover:text-[var(--workspace-text)]"
+    }`;
+
   return (
     <div
       className={`flex h-full min-h-0 flex-col overflow-hidden border border-[var(--workspace-border)] bg-[var(--workspace-panel)] ${className ?? ""}`}
     >
-      <div className="flex shrink-0 items-center gap-1 border-b border-[var(--workspace-border)] px-2 py-1">
+      <div className="flex shrink-0 flex-wrap items-center gap-1 border-b border-[var(--workspace-border)] px-2 py-1">
         <button
           type="button"
           className="rounded-md px-2 py-1 text-[11px] font-medium text-[var(--workspace-text-muted)] hover:bg-primary/10 hover:text-primary"
@@ -291,12 +432,82 @@ export function TreeView({
           Collapse all
         </button>
         {largeFile && (
-          <span className="ml-auto text-[10px] text-amber-600 dark:text-amber-400">
+          <span className="ml-auto hidden text-[10px] text-amber-600 dark:text-amber-400 sm:inline">
             Large file - expand carefully
           </span>
         )}
+        <div className="ml-auto flex min-w-0 flex-1 items-center gap-1 sm:max-w-[22rem] sm:ml-2">
+          <div className="flex min-w-0 flex-1 items-center gap-1 rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-1.5 py-0.5">
+            <MagnifyingGlassIcon className="h-3 w-3 shrink-0 text-[var(--workspace-text-muted)]" />
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setCurrentIdx(0);
+              }}
+              placeholder={`Search ${mode === "key" ? "keys" : "values"}…`}
+              aria-label="Search JSON tree"
+              spellCheck={false}
+              className="min-w-0 flex-1 bg-transparent text-[11px] text-[var(--workspace-text)] outline-none placeholder:text-[var(--workspace-text-muted)]/60"
+            />
+            {query && (
+              <button
+                type="button"
+                aria-label="Clear search"
+                className="shrink-0 rounded p-0.5 text-[var(--workspace-text-muted)] hover:text-[var(--workspace-text)]"
+                onClick={clearSearch}
+              >
+                <XMarkIcon className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+          <button type="button" className={chip(mode === "key")} onClick={() => { setMode("key"); setCurrentIdx(0); }} title="Search keys">
+            Keys
+          </button>
+          <button type="button" className={chip(mode === "value")} onClick={() => { setMode("value"); setCurrentIdx(0); }} title="Search values">
+            Values
+          </button>
+          <button
+            type="button"
+            className={chip(caseSensitive)}
+            onClick={() => setCaseSensitive((v) => !v)}
+            title={caseSensitive ? "Case-sensitive" : "Case-insensitive"}
+          >
+            Aa
+          </button>
+          {matches.length > 0 && (
+            <>
+              <span className="shrink-0 text-[10px] font-medium tabular-nums text-[var(--workspace-text-muted)]">
+                {Math.min(currentIdx + 1, matches.length)}/{matches.length}
+              </span>
+              <button
+                type="button"
+                aria-label="Previous match"
+                className="shrink-0 rounded p-0.5 text-[var(--workspace-text-muted)] hover:bg-primary/10 hover:text-primary"
+                onClick={() => goTo(-1)}
+              >
+                <ChevronUpIcon className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                aria-label="Next match"
+                className="shrink-0 rounded p-0.5 text-[var(--workspace-text-muted)] hover:bg-primary/10 hover:text-primary"
+                onClick={() => goTo(1)}
+              >
+                <ChevronDownIcon className="h-3.5 w-3.5" />
+              </button>
+            </>
+          )}
+        </div>
       </div>
-      <div className="min-h-0 flex-1 overflow-auto p-3">
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto p-3" style={{ fontSize }}>
+        {query.trim() && matches.length === 0 ? (
+          <p className="px-2 py-2 text-[11px] text-[var(--workspace-text-muted)]">
+            No matches for “{query}”.
+          </p>
+        ) : null}
         <Node
           nodeKey={rootLabel}
           value={data}
@@ -309,8 +520,9 @@ export function TreeView({
           onNotify={onNotify}
           showTypeBadges={showTypeBadges}
           defaultExpanded={defaultExpanded}
+          search={search}
         />
       </div>
     </div>
   );
-}
+});

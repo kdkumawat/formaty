@@ -33,6 +33,7 @@ export type OutputActionId =
   | "maximize";
 
 export type CopyAsFormat =
+  | "same-as-output"
   | "base64"
   | "escaped"
   | "uri"
@@ -45,7 +46,11 @@ export type CopyAsFormat =
   | "json-array"
   | "newline"
   | "sql-in-single"
-  | "sql-in-double";
+  | "sql-in-double"
+  | "markdown-table"
+  | "html-table"
+  | "csv"
+  | "tsv";
 
 export type GraphCopyFormat = "png" | "jpg" | "svg" | "json";
 
@@ -163,6 +168,7 @@ export const DEFAULT_COPY_AS_OPTIONS: CopyAsOption[] = [
 ];
 
 export const LIST_COPY_AS_OPTIONS: CopyAsOption[] = [
+  { id: "same-as-output", label: "Same as output", group: "Output" },
   { id: "newline", label: "Newline list", group: "List" },
   { id: "comma", label: "Comma-separated", group: "List" },
   { id: "single-quotes", label: "Single-quoted lines", group: "Quotes" },
@@ -202,6 +208,14 @@ export const GRAPH_COPY_OPTIONS: Array<{ id: GraphCopyFormat; label: string; gro
   { id: "json", label: "JSON data", group: "Data" },
 ];
 
+/** Table view: render the parsed data as a table in any common format. */
+export const TABLE_COPY_AS_OPTIONS: CopyAsOption[] = [
+  { id: "markdown-table", label: "Markdown table", group: "Table" },
+  { id: "html-table", label: "HTML table", group: "Table" },
+  { id: "csv", label: "CSV", group: "Data" },
+  { id: "tsv", label: "TSV", group: "Data" },
+];
+
 export function formatCopyAsText(raw: string, format: CopyAsFormat): string {
   const lines = raw
     .split(/\r?\n/)
@@ -238,6 +252,35 @@ export function formatCopyAsText(raw: string, format: CopyAsFormat): string {
       return `IN (${items.map((i) => `"${i.replace(/"/g, '""')}"`).join(", ")})`;
     default:
       return raw;
+  }
+}
+
+/**
+ * Format already-parsed item values (e.g. list compare buckets) without
+ * re-splitting/trimming - values are preserved exactly as shown.
+ */
+export function formatCopyItemsAsText(items: string[], format: CopyAsFormat): string {
+  switch (format) {
+    case "newline":
+      return items.join("\n");
+    case "comma":
+      return items.join(", ");
+    case "single-quotes":
+      return items.map((i) => `'${i.replace(/'/g, "\\'")}'`).join("\n");
+    case "double-quotes":
+      return items.map((i) => `"${i.replace(/"/g, '\\"')}"`).join("\n");
+    case "comma-single":
+      return items.map((i) => `'${i.replace(/'/g, "\\'")}'`).join(", ");
+    case "comma-double":
+      return items.map((i) => `"${i.replace(/"/g, '\\"')}"`).join(", ");
+    case "json-array":
+      return JSON.stringify(items, null, 2);
+    case "sql-in-single":
+      return `IN (${items.map((i) => `'${i.replace(/'/g, "''")}'`).join(", ")})`;
+    case "sql-in-double":
+      return `IN (${items.map((i) => `"${i.replace(/"/g, '""')}"`).join(", ")})`;
+    default:
+      return items.join("\n");
   }
 }
 
@@ -295,15 +338,12 @@ export function OutputActionBar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [copyAsOptions, effectiveLastCopyAsId]);
 
-  const lastCopyAs =
-    copyAsOptions.find((o) => o.id === effectiveLastCopyAsId) ?? copyAsOptions[0];
-
-  /** Compact fixed width - sized to the longest label so the menu never balloons. */
+  /** Content-sized menu capped so long labels never crop the item background. */
   const copyMenuWidth =
     copyAsOptions.length > 0 &&
     Math.max(...copyAsOptions.map((o) => o.label.length)) > 16
-      ? "w-44"
-      : "w-36";
+      ? "max-w-[17rem]"
+      : "max-w-[14rem]";
 
   const show = (id: OutputActionId) =>
     visibility[id] !== false && forceHide?.[id] !== true;
@@ -408,7 +448,7 @@ export function OutputActionBar({
                   <button
                     key={opt.id}
                     type="button"
-                    className={`${sharedMenuItemClass} !w-auto !px-1.5 !gap-1.5 ${graphCopyFormat === opt.id ? "!bg-primary/12 !text-primary" : ""}`}
+                    className={`${sharedMenuItemClass} ${graphCopyFormat === opt.id ? "!bg-primary/12 !text-primary" : ""}`}
                     onClick={() => {
                       onGraphCopyFormatChange?.(opt.id);
                       if (opt.id === "json") onCopy();
@@ -428,9 +468,9 @@ export function OutputActionBar({
     ) : null;
 
   /**
-   * Copy with dropdown - clicking the main button copies the LAST selected format,
-   * the chevron opens the menu to pick (and copy) another format. Hover shows the
-   * current format in the tooltip.
+   * Copy + dropdown. The main button always copies the raw output exactly as
+   * shown; the chevron opens the format menu - picking a format copies the
+   * transformed version and remembers it for the checkmark/tooltip.
    */
   const copyControl =
     show("copy") && onCopyAs && !isGraphView && copyAsOptions.length > 0 ? (
@@ -439,22 +479,22 @@ export function OutputActionBar({
         onOpenChange={setCopyAsOpen}
         side="bottom"
         align="end"
-        contentClassName={`min-w-0 ${copyMenuWidth}`}
+        maxWidth={copyMenuWidth}
         trigger={
-          <Tooltip content={lastCopyAs ? `Copy as ${lastCopyAs.label}` : "Copy options"}>
+          <Tooltip content={copyLabel === "Copy" ? "Copy output (as shown)" : copyLabel} shortcut="⌘C">
             <div className="flex items-center">
               <button
                 type="button"
                 className={`${iconBtn} !w-6 ${actionBounce === "copy" ? "scale-90" : ""}`}
                 disabled={!canCopy}
-                aria-label={lastCopyAs ? `Copy as ${lastCopyAs.label}` : "Copy"}
+                aria-label={copyLabel === "Copy" ? "Copy output" : copyLabel}
                 // Radix opens the trigger on pointerdown - stop it so a plain
                 // copy click never pops the menu open.
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={(e) => {
                   e.stopPropagation();
                   e.preventDefault();
-                  if (lastCopyAs) onCopyAs(lastCopyAs.id);
+                  onCopy();
                 }}
               >
                 <ClipboardDocumentIcon className="h-3.5 w-3.5" />
@@ -492,7 +532,7 @@ export function OutputActionBar({
                   <button
                     key={opt.id}
                     type="button"
-                    className={`${sharedMenuItemClass} !w-auto !px-1.5 !gap-1.5 ${effectiveLastCopyAsId === opt.id ? "!bg-primary/12 !text-primary" : ""}`}
+                    className={`${sharedMenuItemClass} ${effectiveLastCopyAsId === opt.id ? "!bg-primary/12 !text-primary" : ""}`}
                     onClick={() => {
                       setLastCopyAsId(opt.id);
                       onCopyAs(opt.id);
@@ -500,7 +540,7 @@ export function OutputActionBar({
                     }}
                   >
                     {sharedMenuCheck(effectiveLastCopyAsId === opt.id)}
-                    {opt.label}
+                    <span className="min-w-0 flex-1 truncate text-left">{opt.label}</span>
                   </button>
                 ))}
               </div>

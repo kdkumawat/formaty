@@ -3,9 +3,9 @@ import type { Metadata } from "next";
 const SITE_URL = process.env.SITE_URL || "https://formaty.dev";
 
 export const metadata: Metadata = {
-  title: "Playground - Format, Convert, Compare & Utils",
+  title: "Developer Data Workspace - Format, Convert, Compare & Generate",
   description:
-    "Free online developer playground: format and validate JSON, XML, YAML, TOML, CSV, compare documents and lists, run JSONPath queries, generate types and schemas, decode JWT, hash, and 18+ developer utils. 100% local - no upload.",
+    "Free online developer data workspace: format and validate JSON, XML, YAML, TOML, CSV, compare documents and lists, run JSONPath queries, generate SQL and types, import cURL, and more. 100% local - no upload, no signup.",
   keywords: [
     "developer playground",
     "JSON playground",
@@ -20,9 +20,9 @@ export const metadata: Metadata = {
   ],
   alternates: { canonical: `${SITE_URL}/playground` },
   openGraph: {
-    title: "Playground - Format, Convert, Compare & Utils",
+    title: "Developer Data Workspace - Format, Convert, Compare & Generate",
     description:
-      "Free online developer playground: format, convert, compare, query, and decode - all in your browser with no data leaving your device.",
+      "Free online developer data workspace: format, convert, compare, reconcile, query, and generate SQL and types - all in your browser with no data leaving your device.",
     url: `${SITE_URL}/playground`,
     siteName: "Formaty",
     type: "website",
@@ -30,9 +30,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Playground - Format, Convert, Compare & Utils",
+    title: "Developer Data Workspace - Format, Convert, Compare & Generate",
     description:
-      "Free online developer playground: format, convert, compare, query, and decode - all in your browser with no data leaving your device.",
+      "Free online developer data workspace: format, convert, compare, reconcile, query, and generate SQL and types - all in your browser with no data leaving your device.",
     images: [`${SITE_URL}/og.png`],
   },
 };

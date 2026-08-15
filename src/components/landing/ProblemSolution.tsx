@@ -2,50 +2,25 @@
 
 import { motion } from "framer-motion";
 import Link from "next/link";
-import {
-  DocumentTextIcon,
-  ArrowsRightLeftIcon,
-  MagnifyingGlassIcon,
-  ChartBarIcon,
-  CodeBracketIcon,
-} from "@heroicons/react/24/outline";
+import { ArrowRightIcon } from "@heroicons/react/24/outline";
 
-const CAPABILITIES = [
-  {
-    icon: DocumentTextIcon,
-    label: "Format & Validate",
-    desc: "JSON, XML, YAML, TOML, CSV",
-    route: "/json-formatter",
-    color: "text-amber-500 bg-amber-500/10 border-amber-500/20",
-  },
-  {
-    icon: ArrowsRightLeftIcon,
-    label: "Convert & Compare",
-    desc: "Formats, document diff, lists",
-    route: "/json-diff",
-    color: "text-sky-500 bg-sky-500/10 border-sky-500/20",
-  },
-  {
-    icon: MagnifyingGlassIcon,
-    label: "Query & Utils",
-    desc: "JSONPath, UUID, Base64, JWT…",
-    route: "/playground",
-    color: "text-violet-500 bg-violet-500/10 border-violet-500/20",
-  },
-  {
-    icon: ChartBarIcon,
-    label: "Visualize",
-    desc: "Tree, table, graph views",
-    route: "/graph-viewer",
-    color: "text-emerald-500 bg-emerald-500/10 border-emerald-500/20",
-  },
-  {
-    icon: CodeBracketIcon,
-    label: "Generate Types",
-    desc: "10 programming languages",
-    route: "/json-to-typescript",
-    color: "text-rose-500 bg-rose-500/10 border-rose-500/20",
-  },
+const DATA_TYPES = [
+  { label: "JSON", color: "text-amber-500 border-amber-500/25 bg-amber-500/5" },
+  { label: "CSV", color: "text-sky-500 border-sky-500/25 bg-sky-500/5" },
+  { label: "YAML", color: "text-lime-600 border-lime-600/25 bg-lime-600/5" },
+  { label: "XML", color: "text-red-500 border-red-500/25 bg-red-500/5" },
+  { label: "TOML", color: "text-teal-500 border-teal-500/25 bg-teal-500/5" },
+  { label: "Lists", color: "text-violet-500 border-violet-500/25 bg-violet-500/5" },
+  { label: "API responses", color: "text-cyan-500 border-cyan-500/25 bg-cyan-500/5" },
+];
+
+const WORKFLOWS = [
+  { label: "Format", route: "/json-formatter" },
+  { label: "Inspect", route: "/json-viewer" },
+  { label: "Query", route: "/jsonpath-tester" },
+  { label: "Compare", route: "/compare-lists" },
+  { label: "Convert", route: "/json-to-yaml" },
+  { label: "Generate", route: "/json-to-sql" },
 ];
 
 export function ProblemSolution() {
@@ -59,46 +34,59 @@ export function ProblemSolution() {
           className="space-y-4 text-center"
         >
           <p className="text-xs font-semibold uppercase tracking-widest text-primary">
-            All-in-one
+            One dataset. Many workflows.
           </p>
           <h2 className="text-3xl font-semibold tracking-tight text-[var(--workspace-text)] md:text-[2.6rem] md:leading-[1.1]">
-            Stop juggling multiple tools
+            Paste once. Do everything.
           </h2>
           <p className="mx-auto max-w-xl text-sm text-[var(--workspace-text-muted)] md:text-base">
-            One workspace for your entire data workflow. Paste once, do everything.
+            The same data flows through every step of your workflow - no copying between six
+            different websites.
           </p>
         </motion.div>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          {CAPABILITIES.map(({ icon: Icon, label, desc, route, color }, i) => (
-            <motion.div
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ delay: 0.06 }}
+          className="flex flex-wrap items-center justify-center gap-2"
+        >
+          {DATA_TYPES.map(({ label, color }) => (
+            <span
               key={label}
-              initial={{ opacity: 0, y: 16 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: 0.07 * i }}
+              className={`inline-flex items-center rounded-md border px-3 py-1 font-mono text-xs font-medium ${color}`}
             >
+              {label}
+            </span>
+          ))}
+        </motion.div>
+
+        <div className="flex flex-wrap items-center justify-center gap-1.5">
+          {WORKFLOWS.map(({ label, route }, i) => (
+            <span key={label} className="flex items-center gap-1.5">
+              {i > 0 && <ArrowRightIcon className="h-3 w-3 text-[var(--workspace-text-muted)]" aria-hidden />}
               <Link
                 href={route}
-                className="group flex flex-col items-center gap-3 rounded-xl border border-[var(--workspace-border)] bg-[var(--workspace-panel)] p-5 text-center transition-all duration-200 hover:-translate-y-1 hover:border-primary/30 hover:shadow-md"
+                className="rounded-lg border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-3 py-1.5 text-xs font-semibold text-[var(--workspace-text)] transition-all hover:border-primary/40 hover:text-primary"
               >
-                <div
-                  className={`flex h-10 w-10 items-center justify-center rounded-xl border ${color}`}
-                >
-                  <Icon className="h-5 w-5" aria-hidden />
-                </div>
-                <div>
-                  <div className="text-sm font-semibold text-[var(--workspace-text)]">
-                    {label}
-                  </div>
-                  <div className="mt-0.5 text-[11px] text-[var(--workspace-text-muted)]">
-                    {desc}
-                  </div>
-                </div>
+                {label}
               </Link>
-            </motion.div>
+            </span>
           ))}
         </div>
+
+        <motion.p
+          initial={{ opacity: 0 }}
+          whileInView={{ opacity: 1 }}
+          viewport={{ once: true }}
+          transition={{ delay: 0.1 }}
+          className="mx-auto max-w-lg text-center text-xs leading-relaxed text-[var(--workspace-text-muted)]"
+        >
+          Example: paste a JSON API response, extract the user IDs with a JSONPath query, send them
+          to List Compare against a database export, and copy the result as a SQL IN clause. All in
+          one workspace, all local.
+        </motion.p>
       </div>
     </section>
   );

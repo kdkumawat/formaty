@@ -14,6 +14,12 @@ interface DropdownProps {
   align?: "start" | "end";
   side?: "top" | "bottom";
   /**
+   * Cap the menu width so it never balloons past the longest label's natural
+   * width. Accepts any Tailwind width class, e.g. "w-72" or "max-w-[18rem]"
+   * (ignored when contentClassName already sets an explicit width).
+   */
+  maxWidth?: string;
+  /**
    * Pin the panel toward the right edge of the viewport (settings panels).
    * Radix keeps it within the viewport via collision detection.
    */
@@ -36,10 +42,21 @@ export function Dropdown({
   rootClassName = "",
   align = "start",
   side = "top",
+  maxWidth = "",
   preferScreenRight = false,
   edgePadding = 8,
 }: DropdownProps) {
   const menuAlign: "start" | "center" | "end" = preferScreenRight ? "end" : align;
+  // Width: content-sized (w-max) by default, capped by maxWidth when it's a
+  // max-w-* class; an explicit w-* maxWidth becomes the width outright.
+  // contentClassName callers that set an explicit width keep it.
+  const widthCls = /w-\[/.test(contentClassName)
+    ? ""
+    : maxWidth
+      ? maxWidth.startsWith("max-w-")
+        ? `w-max ${maxWidth}`
+        : maxWidth
+      : "w-max";
 
   return (
     <DropdownMenu.Root open={open} onOpenChange={onOpenChange} modal={false}>
@@ -56,7 +73,9 @@ export function Dropdown({
           alignOffset={preferScreenRight ? -6 : 0}
           className={cn(
             // Borderless by design - a soft shadow + hairline ring (Linear/Vercel-style).
+            // Width is content-sized (w-max) by default; callers can cap it via maxWidth.
             "z-[200] min-w-[9rem] rounded-lg bg-popover p-1.5 text-popover-foreground shadow-xl shadow-black/15 dark:shadow-black/50 ring-1 ring-black/5 dark:ring-white/10",
+            widthCls,
             "data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=open]:slide-in-from-top-1.5",
             contentClassName,
           )}
