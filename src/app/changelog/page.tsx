@@ -3,6 +3,18 @@ import { Logo } from "@/components/Logo";
 
 const ENTRIES = [
   {
+    version: "2.1.1",
+    date: "August 2026",
+    title: "cURL fixes, SEO architecture & tools directory",
+    items: [
+      "Ctrl/Cmd+Enter on a cURL input now shows the raw response body when the API returns plain text, HTML, or another non-JSON payload instead of failing",
+      "New /tools directory grouping every utility by category, plus a /guides section with workflow-first guides (database records, SQL IN, JSON queries, API responses)",
+      "Tool pages gained visible FAQ sections, related-tools internal linking, and richer 404 navigation",
+      "Playground tool presets now auto-select a useful result bucket, so one-sided list compare tools like the SQL IN generator always show output",
+      "Deduplicated overlapping tools (SQL NOT IN folds into SQL IN generator with a redirect) and fixed the logo mark on the tools/guides headers",
+    ],
+  },
+  {
     version: "2.1.0",
     date: "August 2026",
     title: "Developer workspace, animated icons & Next.js 16",
