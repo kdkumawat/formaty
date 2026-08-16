@@ -35,6 +35,7 @@ function CommandPaletteTrigger({ onOpen }: { onOpen: () => void }) {
       <Tooltip content="Command palette" shortcut="⌘K">
         <Button
           variant="ghost"
+          data-tour="command-palette"
           onClick={onOpen}
           className="h-auto min-h-0 w-[220px] items-center gap-2 rounded-lg border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-3 py-1.5 text-left text-[12px] text-[var(--workspace-text-muted)] transition-all hover:border-primary/30 hover:text-[var(--workspace-text)] hover:shadow-sm sm:w-[280px] [&_svg]:!size-3.5"
           {...icon.bind}
@@ -128,6 +129,7 @@ export function Header({
                 <button
                   type="button"
                   aria-label="Settings"
+                  data-tour="settings-gear"
                   className={`inline-flex h-auto min-h-0 items-center justify-center rounded-lg border border-[var(--workspace-border)] bg-[var(--workspace-panel)] p-1.5 transition-all duration-150 [&_svg]:!size-3.5 ${
                     settingsOpen
                       ? "border-primary/40 bg-primary/10 text-primary"

@@ -35,6 +35,7 @@ import {
   RectangleStackIcon,
   CheckBadgeIcon,
   EqualsIcon,
+  SparklesIcon,
 } from "@heroicons/react/24/outline";
 import { StarIcon as StarSolidIcon } from "@heroicons/react/24/solid";
 import {
@@ -120,6 +121,7 @@ import { savePlayground, updatePlayground, deletePlayground } from "@/lib/playgr
 import { PRESETS, getPreset, type PresetId } from "@/lib/presets";
 import { themeInlineCss } from "@/lib/utils/themeTokens";
 import { CommandPalette, type Command } from "@/components/CommandPalette";
+import { GuidedTour } from "@/components/GuidedTour";
 import { isEditableTarget } from "@/lib/shortcuts";
 import { Toaster, toast } from "@/components/Toast";
 import type { JsonValue, TypeTargetLanguage } from "@/lib/json/core";
@@ -840,6 +842,10 @@ export function WorkspaceContent({
   const [outputActionVisibility, setOutputActionVisibility] = useState<OutputActionVisibility>(() => loadVisibility());
   const [shareConfirmOpen, setShareConfirmOpen] = useState(false);
   const [showFirstRunHint, setShowFirstRunHint] = useState(false);
+  /** Guided product tour - auto-starts for first-time users, replayable anytime. */
+  const [tourOpen, setTourOpen] = useState(false);
+  /** Guards against the tour opening twice (auto-start + replay race). */
+  const tourOpenedRef = useRef(false);
 
   const [liveTransform, setLiveTransform] = useState(true);
   const [editorFontSize, setEditorFontSize] = useState(13);
@@ -2363,6 +2369,75 @@ export function WorkspaceContent({
     })();
   }, [input, resolvedInputFormat, run, convertJsonToOutput, setOutputData, isDesktopLayout]);
 
+  /** Open the guided tour (auto-start or explicit replay). Never double-opens. */
+  const openTour = useCallback((source: "auto" | "settings" | "palette" | "statusbar") => {
+    if (tourOpenedRef.current) return;
+    tourOpenedRef.current = true;
+    setShowFirstRunHint(false);
+    setTourOpen(true);
+    trackEvent("tour_started", { source });
+  }, []);
+
+  /** Tour finished or was skipped - mark the user onboarded and fire analytics. */
+  const closeTour = useCallback((reason: "done" | "skip" | "esc", step: number) => {
+    setTourOpen(false);
+    // Allow the tour to be replayed later (Settings / ⌘K / status bar).
+    tourOpenedRef.current = false;
+    try {
+      localStorage.setItem("formaty-onboarded", "1");
+    } catch {
+      /* ignore */
+    }
+    if (reason === "done") {
+      trackEvent("tour_completed", { steps: step + 1 });
+    } else {
+      trackEvent("tour_skipped", { step: step + 1 });
+    }
+  }, []);
+
+  // Guided tour: auto-start for first-time users once the workspace settles.
+  useEffect(() => {
+    if (embed) return;
+    let onboarded = false;
+    try {
+      onboarded = localStorage.getItem("formaty-onboarded") === "1";
+    } catch {
+      /* ignore */
+    }
+    if (onboarded) return;
+    // Mid-workflow landings (shared link, tool preset, restored session) skip the tour.
+    const hasToolPreset = !!searchParams?.get("tool");
+    const suppressed = !!initialState || isViewingSharedRef.current || hasToolPreset || !!loadedToolPreset || sessionRestoredRef.current;
+    if (suppressed) return;
+    // Suppress the quick-tip toast for this session before the tour opens.
+    setShowFirstRunHint(false);
+    const id = window.setTimeout(() => {
+      openTour("auto");
+    }, 1200);
+    return () => window.clearTimeout(id);
+  }, [embed, initialState, loadedToolPreset, searchParams, openTour]);
+
+  // Load sample data when the tour starts so the output-pane steps show real content.
+  const tourSampleLoadedRef = useRef(false);
+  useEffect(() => {
+    if (!tourOpen) return;
+    if (tourSampleLoadedRef.current) return;
+    tourSampleLoadedRef.current = true;
+    if (input.trim()) return; // user already has data - keep it
+    setInput(SAMPLE_JSON);
+    setInputFormatOverride(null);
+    setError(null);
+    setValidationError(null);
+    parseOnly(SAMPLE_JSON, "json");
+  }, [tourOpen, input, parseOnly]);
+
+  // Replay the tour from the status bar ("formaty:replay-tour" event).
+  useEffect(() => {
+    const onReplay = () => openTour("statusbar");
+    window.addEventListener("formaty:replay-tour", onReplay);
+    return () => window.removeEventListener("formaty:replay-tour", onReplay);
+  }, [openTour]);
+
   const executeOperation = useCallback((
     action: OperationAction,
     options?: {
@@ -3682,6 +3757,7 @@ export function WorkspaceContent({
     { id: "ws-clear",    label: "Reset input & output",  category: "Workspace", shortcut: "⌘⌥R", keywords: ["reset", "clear", "new", "empty"], action: handleWorkspaceReset },
     { id: "ws-clear-cache", label: "Clear cache & reload app", category: "Settings", keywords: ["clear", "cache", "wipe", "localstorage", "fresh", "reset all"], action: () => void clearAllCache() },
     { id: "ws-reload",   label: "Reload app",              category: "Settings", keywords: ["reload", "refresh", "restart"], action: () => window.location.reload() },
+    { id: "tour-replay", label: "Take the tour",           category: "Settings", keywords: ["tour", "walkthrough", "guide", "intro", "onboarding", "help", "replay"], action: () => { setCommandPaletteOpen(false); openTour("palette"); } },
     { id: "nav-changelog", label: "Open changelog",          category: "Navigation", keywords: ["changelog", "what's new", "release", "version", "updates"], action: () => router.push("/changelog") },
     // Focus
     { id: "focus-input",  label: "Focus input pane",  category: "Workspace", keywords: ["focus", "input", "left", "editor"], action: () => { setFocusedPane("input"); inputEditorApiRef.current?.focus(); } },
@@ -3752,7 +3828,7 @@ export function WorkspaceContent({
     // Auto-format on paste
     { id: "auto-fmt-paste", label: autoFormatOnPaste ? "Auto-format on paste: On (turn off)" : "Auto-format on paste: Off (turn on)", category: "Settings", keywords: ["auto", "format", "paste", "beautify", "pretty"], badge: autoFormatOnPaste ? "on" : undefined, action: () => setAutoFormatOnPaste((v) => !v) },
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  ], [inputEmpty, showBusy, convertToFormat, rightView, parsedOutput, typeLanguage, activeOperation, output, themeMode, editorFontSize, isOutputMaximized, isWindowFullscreen, toggleWindowFullscreen, formatOptions, liveTransform, viewAsMenu, canUndo, canRedo, lineWrap, diffSideBySide, diffIgnoreWhitespace, diffShowPaths, diffKind, csvDelimiter, sharedLinkUrl, pinnedItems, undoStack.length, tabs.length, activeTabId, splitInputOpen, autoFormatOnPaste, showTabs, swapDiffSides, beautifyDiffSides, copyDiffText, downloadDiffReport, isUtilsMode, utilTab, isDiffMode, handleWorkspaceReset, resetSettingsToDefault]);
+  ], [inputEmpty, showBusy, convertToFormat, rightView, parsedOutput, typeLanguage, activeOperation, output, themeMode, editorFontSize, isOutputMaximized, isWindowFullscreen, toggleWindowFullscreen, formatOptions, liveTransform, viewAsMenu, canUndo, canRedo, lineWrap, diffSideBySide, diffIgnoreWhitespace, diffShowPaths, diffKind, csvDelimiter, sharedLinkUrl, pinnedItems, undoStack.length, tabs.length, activeTabId, splitInputOpen, autoFormatOnPaste, showTabs, swapDiffSides, beautifyDiffSides, copyDiffText, downloadDiffReport, isUtilsMode, utilTab, isDiffMode, handleWorkspaceReset, resetSettingsToDefault, openTour]);
 
   const settingsPanelContent = (
                 <div className="w-[20rem] max-w-[85vw]">
@@ -4160,8 +4236,19 @@ export function WorkspaceContent({
     </div>
   </div>
 
-  {/* Footer - reset & clear cache */}
+  {/* Footer - replay tour, reset & clear cache */}
   <div className="mt-2.5 space-y-2 border-t border-[var(--workspace-border)]/60 pt-2">
+    <button
+      type="button"
+      className="flex h-7 w-full items-center justify-center gap-1.5 rounded-md border border-[var(--workspace-border)]/60 bg-muted/40 text-xs font-medium text-[var(--workspace-text-muted)] transition-all hover:border-primary/25 hover:bg-primary/10 hover:text-primary"
+      onClick={() => {
+        setTransformConfigOpen(false);
+        openTour("settings");
+      }}
+    >
+      <SparklesIcon className="h-3.5 w-3.5" />
+      Replay tour
+    </button>
     <button
       type="button"
       className="flex h-7 w-full items-center justify-center gap-1.5 rounded-md border border-[var(--workspace-border)]/60 bg-muted/40 text-xs font-medium text-[var(--workspace-text-muted)] transition-all hover:border-primary/25 hover:bg-primary/10 hover:text-primary"
@@ -4288,7 +4375,7 @@ export function WorkspaceContent({
       {/* Outer: tab rail (sidebar) + workspace. Tabs must never sit in a column stack with the editors. */}
       <div className="flex min-h-0 flex-1 flex-row overflow-hidden">
         {isDesktopLayout && showTabs && (
-          <div className="flex h-full w-8 shrink-0 flex-col overflow-y-auto border-r border-[var(--workspace-border)] bg-[var(--workspace-panel)] pb-1 pt-1">
+          <div data-tour="tab-bar" className="flex h-full w-8 shrink-0 flex-col overflow-y-auto border-r border-[var(--workspace-border)] bg-[var(--workspace-panel)] pb-1 pt-1">
             {tabs.map((tab) => {
               const isActive = activeTabId === tab.id;
               const displayName = tab.renamed ? tab.label : `${letterForTab(tab.id)}${tab.num}`;
@@ -4401,6 +4488,7 @@ export function WorkspaceContent({
               <Tooltip key={tab.id} content={tab.title}>
               <button
                 type="button"
+                data-tour={tab.id === "compare" ? "compare-tab" : tab.id === "utils" ? "utils-tab" : undefined}
                 className={`relative h-7 cursor-pointer px-3 text-xs font-semibold transition-colors duration-150 ${
                   i > 0 ? "border-l border-[var(--workspace-border)]" : ""
                 } ${
@@ -4446,7 +4534,7 @@ export function WorkspaceContent({
               }
               if (viewPins.length > 0) {
                 groups.push(
-                  <span key="view" className="flex shrink-0 items-center gap-0.5">
+                  <span key="view" data-tour="view-switcher" className="flex shrink-0 items-center gap-0.5">
                     {viewPins.map((view) => (
                       <PinnedToolbarButton key={view} icon={VIEW_ICONS[view] ?? EyeIcon} label={view[0].toUpperCase() + view.slice(1)} disabled={inputEmpty || ((view === "tree" || view === "graph" || view === "query" || view === "table") && !parsedOutput)} btnClass={pinnedBtnClass} activeClass={tbActiveClass} active={rightView === view} onClick={() => { setRightView(view); setFocusedPane("output"); }} />
                     ))}
@@ -4508,7 +4596,7 @@ export function WorkspaceContent({
               );
             })()}
             {!viewAsMenu && (
-            <Dropdown open={moreMenuOpen} onOpenChange={setMoreMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`w-max min-w-[8rem] max-h-[min(70vh,32rem)] overflow-y-auto`} trigger={<Tooltip content="More actions"><div className={`${selectBtnClass} ${moreMenuOpen ? selectBtnOpenClass : ""}`}><span className="font-medium">More</span><ChevronDownIcon className="h-3 w-3" aria-hidden /></div></Tooltip>}>
+            <Dropdown open={moreMenuOpen} onOpenChange={setMoreMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`w-max min-w-[8rem] max-h-[min(70vh,32rem)] overflow-y-auto`} trigger={<Tooltip content="More actions"><div data-tour="toolbar-menus" className={`${selectBtnClass} ${moreMenuOpen ? selectBtnOpenClass : ""}`}><span className="font-medium">More</span><ChevronDownIcon className="h-3 w-3" aria-hidden /></div></Tooltip>}>
               <div className="flex flex-col" onClick={(e) => e.stopPropagation()}>
                 {menuSectionLabel("Format")}
                 {(["json", "xml", "yaml", "toml", "csv"] as const).map((fmt) => (
@@ -4552,7 +4640,7 @@ export function WorkspaceContent({
               </div>
             </Dropdown>
             )}
-            {viewAsMenu && (<>
+            {viewAsMenu && (<span data-tour="toolbar-menus" className="flex shrink-0 items-center gap-0.5">
             <Dropdown open={formatMenuOpen} onOpenChange={setFormatMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`w-max min-w-[8rem]`} trigger={<Tooltip content={`Format: ${FORMAT_LABELS[convertToFormat]}`}><div className={`${selectBtnClass} ${formatMenuOpen ? selectBtnOpenClass : ""}`} {...formatIcon.bind}><TriggerIcon Icon={FORMAT_ICONS[convertToFormat] ?? Squares2X2Icon} iconRef={formatIcon.ref} className="h-3.5 w-3.5 shrink-0 text-primary" /><span className="font-medium">Format</span><ChevronDownIcon className="h-3 w-3 shrink-0" aria-hidden /></div></Tooltip>}>
               <div className="flex flex-col" onClick={(e) => e.stopPropagation()}>
                 {menuSectionLabel("Structured")}
@@ -4570,7 +4658,7 @@ export function WorkspaceContent({
                 </button>
               </div>
             </Dropdown>
-            <Dropdown open={viewMenuOpen} onOpenChange={setViewMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`w-max min-w-[9rem]`} trigger={<Tooltip content={`View: ${rightView[0].toUpperCase()}${rightView.slice(1)}`}><div className={`${selectBtnClass} ${viewMenuOpen ? selectBtnOpenClass : ""}`} {...viewIcon.bind}><TriggerIcon Icon={VIEW_ICONS[rightView] ?? EyeIcon} iconRef={viewIcon.ref} className="h-3.5 w-3.5 shrink-0 text-primary" /><span className="font-medium">View</span><ChevronDownIcon className="h-3 w-3 shrink-0" aria-hidden /></div></Tooltip>}>
+            <Dropdown open={viewMenuOpen} onOpenChange={setViewMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`w-max min-w-[9rem]`} trigger={<Tooltip content={`View: ${rightView[0].toUpperCase()}${rightView.slice(1)}`}><div data-tour="view-switcher" className={`${selectBtnClass} ${viewMenuOpen ? selectBtnOpenClass : ""}`} {...viewIcon.bind}><TriggerIcon Icon={VIEW_ICONS[rightView] ?? EyeIcon} iconRef={viewIcon.ref} className="h-3.5 w-3.5 shrink-0 text-primary" /><span className="font-medium">View</span><ChevronDownIcon className="h-3 w-3 shrink-0" aria-hidden /></div></Tooltip>}>
               <div className="flex flex-col" onClick={(e) => e.stopPropagation()}>
                 {menuSectionLabel("Text")}
                 <button type="button" disabled={inputEmpty} className={`${menuItemClass} ${rightView === "raw" ? menuItemActiveClass : ""}`} onClick={() => { setRightView("raw"); setFocusedPane("output"); setViewMenuOpen(false); }}>
@@ -4730,7 +4818,7 @@ export function WorkspaceContent({
                 </div>
               </Dropdown>
             )}
-            </>)}
+            </span>)}
             </>)}
 
           {isDiffMode && (
@@ -5088,6 +5176,7 @@ export function WorkspaceContent({
             </div>
           ) : (
             <div
+              data-tour="input-editor"
               className="relative min-h-0 flex-1 overflow-hidden cursor-text"
               onClick={() => setFocusedPane("input")}
               onMouseEnter={() => setFocusedPane("input")}
@@ -5198,7 +5287,7 @@ export function WorkspaceContent({
               Back to input
             </button>
           )}
-          <div className="relative flex min-h-[200px] min-h-0 flex-1 flex-col overflow-hidden">
+          <div data-tour="output-pane" className="relative flex min-h-[200px] min-h-0 flex-1 flex-col overflow-hidden">
             <div
               key={
                 isUtilsMode
@@ -5928,6 +6017,13 @@ export function WorkspaceContent({
               return next;
             });
           }}
+        />
+
+        {/* Guided product tour - first-run onboarding + explicit replay. */}
+        <GuidedTour
+          open={tourOpen}
+          onOpenChange={setTourOpen}
+          onExit={closeTour}
         />
 
         {/* History Panel */}
