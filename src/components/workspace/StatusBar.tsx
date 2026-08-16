@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { CheckCircleIcon, QuestionMarkCircleIcon, XCircleIcon } from "@heroicons/react/24/outline";
+import { CheckCircleIcon, QuestionMarkCircleIcon, SparklesIcon, XCircleIcon } from "@heroicons/react/24/outline";
 import { ArrowPathIcon, NoSymbolIcon } from "@heroicons/react/24/solid";
 import { Tooltip } from "./Tooltip";
 import { FeedbackDialog } from "@/components/FeedbackDialog";
@@ -66,6 +66,7 @@ export function StatusBar({
 
   return (
     <div
+      data-tour="status-bar"
       className="flex flex-shrink-0 items-center justify-between gap-1 overflow-x-auto overflow-y-hidden border-t border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-2 text-xs text-[var(--workspace-text-muted)]"
       style={{ minHeight: "24px", height: "24px", paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
     >
@@ -135,6 +136,16 @@ export function StatusBar({
       ) : null}
       <div className="flex shrink-0 flex-nowrap items-center pr-1">
         <FeedbackDialog trigger="icon" label="Send feedback" />
+        <Tooltip content="Take the tour">
+          <button
+            type="button"
+            aria-label="Take the tour"
+            className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-[var(--workspace-text-muted)] transition-colors hover:bg-[var(--workspace-border)]/40 hover:text-[var(--workspace-text)]"
+            onClick={() => window.dispatchEvent(new Event("formaty:replay-tour"))}
+          >
+            <SparklesIcon className="h-3.5 w-3.5 shrink-0" />
+          </button>
+        </Tooltip>
         <Tooltip content="Keyboard shortcuts" shortcut="? · ⌘/">
           <button
             type="button"
