@@ -3,11 +3,11 @@
 import Link from "next/link";
 import {
   Cog6ToothIcon,
-  MagnifyingGlassIcon,
   SunIcon,
   MoonIcon,
   ComputerDesktopIcon,
 } from "@heroicons/react/24/outline";
+import { AnimatedMagnifierIcon, useIconAnimation } from "@/components/icons";
 import type { ReactNode } from "react";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,27 @@ interface HeaderProps {
   settingsContent?: ReactNode;
   settingsOpen?: boolean;
   onSettingsOpenChange?: (open: boolean) => void;
+}
+
+/** Command palette search - the magnifier gives a subtle searching nudge on hover/focus. */
+function CommandPaletteTrigger({ onOpen }: { onOpen: () => void }) {
+  const icon = useIconAnimation();
+  return (
+    <div className="absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 md:block">
+      <Tooltip content="Command palette" shortcut="⌘K">
+        <Button
+          variant="ghost"
+          onClick={onOpen}
+          className="h-auto min-h-0 w-[220px] items-center gap-2 rounded-lg border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-3 py-1.5 text-left text-[12px] text-[var(--workspace-text-muted)] transition-all hover:border-primary/30 hover:text-[var(--workspace-text)] hover:shadow-sm sm:w-[280px] [&_svg]:!size-3.5"
+          {...icon.bind}
+        >
+          <AnimatedMagnifierIcon ref={icon.ref} className="h-3.5 w-3.5 shrink-0" />
+          <span className="flex-1 text-left">Search commands…</span>
+          <kbd className="hidden rounded border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-1.5 py-0.5 font-mono text-[10px] sm:flex">⌘K</kbd>
+        </Button>
+      </Tooltip>
+    </div>
+  );
 }
 
 const themeOptions: { mode: ThemeMode; label: string; Icon: typeof SunIcon }[] = [
@@ -59,21 +80,7 @@ export function Header({
       </div>
 
       {/* Command palette trigger - centered absolutely (hidden on narrow screens so it never overlaps the brand/actions) */}
-      {onOpenCommandPalette && (
-        <div className="absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 md:block">
-          <Tooltip content="Command palette" shortcut="⌘K">
-          <Button
-            variant="ghost"
-            onClick={onOpenCommandPalette}
-            className="h-auto min-h-0 w-[220px] items-center gap-2 rounded-lg border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-3 py-1.5 text-left text-[12px] text-[var(--workspace-text-muted)] transition-all hover:border-primary/30 hover:text-[var(--workspace-text)] hover:shadow-sm sm:w-[280px] [&_svg]:!size-3.5"
-          >
-            <MagnifyingGlassIcon className="h-3.5 w-3.5 shrink-0" />
-            <span className="flex-1 text-left">Search commands…</span>
-            <kbd className="hidden rounded border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-1.5 py-0.5 font-mono text-[10px] sm:flex">⌘K</kbd>
-          </Button>
-          </Tooltip>
-        </div>
-      )}
+      {onOpenCommandPalette && <CommandPaletteTrigger onOpen={onOpenCommandPalette} />}
 
       {/* Actions */}
       <div className="flex shrink-0 items-center gap-1">

@@ -1,17 +1,23 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { forwardRef, useEffect, useState, type ReactNode } from "react";
+import { motion } from "framer-motion";
 import {
-  ArrowDownTrayIcon,
-  ArrowPathIcon,
   ArrowUturnLeftIcon,
   ArrowUturnRightIcon,
   ArrowsPointingInIcon,
   ArrowsPointingOutIcon,
   ChevronDownIcon,
-  ClipboardDocumentIcon,
   ShareIcon,
 } from "@heroicons/react/24/outline";
+import {
+  AnimatedCheckIcon,
+  AnimatedCopyIcon,
+  AnimatedDownloadIcon,
+  AnimatedResetIcon,
+  useIconAnimation,
+  type AnimatedIconHandle,
+} from "@/components/icons";
 import { Dropdown } from "./Dropdown";
 import { Tooltip } from "./Tooltip";
 import { Button } from "@/components/ui/button";
@@ -131,6 +137,59 @@ export type OutputActionBarProps = {
 
 const iconBtn =
   "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--workspace-text-muted)] transition-all duration-150 hover:bg-primary/10 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40";
+
+/**
+ * Copy glyph with a lightweight success transition: the clipboard nudges on
+ * hover/focus, and after a successful copy it swaps (same size) to a check
+ * that draws itself in - immediate feedback without a toast. The imperative
+ * ref drives the copy icon from the parent button's hover/focus.
+ */
+const CopyActionGlyph = forwardRef<AnimatedIconHandle, { done: boolean; className?: string }>(
+  ({ done, className }, ref) => {
+    if (done) {
+      return (
+        <motion.span
+          key="check"
+          initial={{ scale: 0.5, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 0.18, ease: "easeOut" }}
+          className="inline-flex"
+          aria-hidden
+        >
+          <AnimatedCheckIcon className={`${className} text-emerald-500`} />
+        </motion.span>
+      );
+    }
+    return <AnimatedCopyIcon ref={ref} className={className} />;
+  },
+);
+CopyActionGlyph.displayName = "CopyActionGlyph";
+
+/**
+ * Download button - the arrow drops into the tray once on hover/focus
+ * (shared by text and graph-image downloads).
+ */
+function DownloadIconButton({
+  disabled = false,
+  onClick,
+}: {
+  disabled?: boolean;
+  onClick?: () => void;
+}) {
+  const icon = useIconAnimation();
+  return (
+    <button
+      type="button"
+      className={iconBtn}
+      disabled={disabled}
+      onClick={onClick}
+      aria-label="Download"
+      {...icon.bind}
+    >
+      <AnimatedDownloadIcon ref={icon.ref} className="h-3.5 w-3.5" />
+    </button>
+  );
+}
 
 /** shadcn Button wrapper for OutputActionBar icon actions (keeps existing look). */
 function IconButton({
@@ -348,6 +407,12 @@ export function OutputActionBar({
   const show = (id: OutputActionId) =>
     visibility[id] !== false && forceHide?.[id] !== true;
 
+  /** Drives the copy icon from the button's hover/focus (shared by both copy variants). */
+  const copyIcon = useIconAnimation();
+
+  /** Drives the reset icon from the button's hover/focus. */
+  const resetIcon = useIconAnimation();
+
   const downloadControl = isGraphView ? (
     <Dropdown
       open={downloadMenuOpen}
@@ -356,9 +421,7 @@ export function OutputActionBar({
       align="end"
       trigger={
         <Tooltip content="Download image">
-          <button type="button" className={iconBtn} disabled={!canCopy} aria-label="Download">
-            <ArrowDownTrayIcon className="h-3.5 w-3.5" />
-          </button>
+          <DownloadIconButton disabled={!canCopy} />
         </Tooltip>
       }
     >
@@ -373,15 +436,7 @@ export function OutputActionBar({
     </Dropdown>
   ) : (
     <Tooltip content="Download result" shortcut="⌘⇧S">
-      <button
-        type="button"
-        className={iconBtn}
-        disabled={!canCopy}
-        onClick={() => onDownload()}
-        aria-label="Download"
-      >
-        <ArrowDownTrayIcon className="h-3.5 w-3.5" />
-      </button>
+      <DownloadIconButton disabled={!canCopy} onClick={() => onDownload()} />
     </Tooltip>
   );
 
@@ -412,8 +467,9 @@ export function OutputActionBar({
                   if (graphCopyFormat === "json") onCopy();
                   else onGraphCopy(graphCopyFormat ?? "png");
                 }}
+                {...copyIcon.bind}
               >
-                <ClipboardDocumentIcon className="h-3.5 w-3.5" />
+                <CopyActionGlyph ref={copyIcon.ref} done={copyLabel === "Copied"} className="h-3.5 w-3.5" />
               </button>
               <button
                 type="button"
@@ -496,8 +552,9 @@ export function OutputActionBar({
                   e.preventDefault();
                   onCopy();
                 }}
+                {...copyIcon.bind}
               >
-                <ClipboardDocumentIcon className="h-3.5 w-3.5" />
+                <CopyActionGlyph ref={copyIcon.ref} done={copyLabel === "Copied"} className="h-3.5 w-3.5" />
               </button>
               <button
                 type="button"
@@ -555,8 +612,9 @@ export function OutputActionBar({
           disabled={!canCopy}
           onClick={onCopy}
           aria-label={copyLabel}
+          {...copyIcon.bind}
         >
-          <ClipboardDocumentIcon className="h-3.5 w-3.5" />
+          <CopyActionGlyph done={copyLabel === "Copied"} className="h-3.5 w-3.5" />
         </IconButton>
       </Tooltip>
     );
@@ -638,9 +696,9 @@ export function OutputActionBar({
       aria-label="Output actions"
     >
       {show("reset") && onReset && (
-        <Tooltip content={resetLabel}>
-          <IconButton onClick={onReset} aria-label={resetLabel}>
-            <ArrowPathIcon className="h-3.5 w-3.5" />
+        <Tooltip content={resetLabel} shortcut="⌘⇧R">
+          <IconButton onClick={onReset} aria-label={resetLabel} {...resetIcon.bind}>
+            <AnimatedResetIcon ref={resetIcon.ref} className="h-3.5 w-3.5" />
           </IconButton>
         </Tooltip>
       )}
