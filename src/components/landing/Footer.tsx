@@ -13,10 +13,11 @@ function MadeWithLove() {
       <AnimatedHeartIcon ref={icon.ref} className="h-3.5 w-3.5 text-red-500" />
       by{" "}
       <a
-        href="https://github.com/kdkumawat"
+        href="https://www.linkedin.com/in/kdkumawat"
         target="_blank"
         rel="noopener noreferrer"
         className="font-semibold text-[var(--workspace-text)] transition-colors hover:text-primary"
+        title="kdkumawat on LinkedIn"
       >
         kdkumawat
       </a>
@@ -159,6 +160,17 @@ export function Footer() {
               <path d="M12 17.27 18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
             </svg>
             Star on GitHub
+          </a>
+          <a
+            href="https://github.com/sponsors/kdkumawat"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-primary/25 bg-primary/[0.07] px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:border-primary/40 hover:bg-primary/15"
+          >
+            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+              <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+            </svg>
+            Sponsor
           </a>
           <div className="flex flex-col items-start gap-1 sm:items-end">
             <span className="text-xs text-[var(--workspace-text-muted)]">
