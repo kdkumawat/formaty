@@ -9,5 +9,6 @@ export { default as AnimatedEyeIcon } from "./EyeIcon";
 export { default as AnimatedSparklesIcon } from "./SparklesIcon";
 export { default as AnimatedArrowRightIcon } from "./ArrowRightIcon";
 export { default as AnimatedResetIcon } from "./ResetIcon";
+export { default as AnimatedHeartIcon } from "./HeartIcon";
 export { useIconAnimation, DEFAULT_STROKE_WIDTH } from "./types";
 export type { AnimatedIconHandle, AnimatedIconProps } from "./types";

@@ -2,6 +2,27 @@
 
 import Link from "next/link";
 import { FeedbackDialog } from "@/components/FeedbackDialog";
+import { AnimatedHeartIcon, useIconAnimation } from "@/components/icons";
+
+/** "Made with ❤️ by kdkumawat" - the heart beats on its own and thumps on hover. */
+function MadeWithLove() {
+  const icon = useIconAnimation();
+  return (
+    <span {...icon.bind} className="inline-flex items-center gap-1.5">
+      Made with
+      <AnimatedHeartIcon ref={icon.ref} className="h-3.5 w-3.5 text-red-500" />
+      by{" "}
+      <a
+        href="https://github.com/kdkumawat"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="font-semibold text-[var(--workspace-text)] transition-colors hover:text-primary"
+      >
+        kdkumawat
+      </a>
+    </span>
+  );
+}
 
 const TOOL_LINKS = [
   { route: "/json-formatter", label: "JSON Formatter" },
@@ -139,9 +160,12 @@ export function Footer() {
             </svg>
             Star on GitHub
           </a>
-          <span className="text-xs text-[var(--workspace-text-muted)]">
-            © {new Date().getFullYear()} Formaty · Local-first developer tools
-          </span>
+          <div className="flex flex-col items-start gap-1 sm:items-end">
+            <span className="text-xs text-[var(--workspace-text-muted)]">
+              © {new Date().getFullYear()} Formaty · Local-first developer tools
+            </span>
+            <MadeWithLove />
+          </div>
         </div>
       </div>
     </footer>
