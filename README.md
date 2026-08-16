@@ -6,6 +6,8 @@
 [![No sign-up](https://img.shields.io/badge/no%20sign--up-true-34d399)]()
 [![100% local](https://img.shields.io/badge/100%25%20local-in%20your%20browser-4f8ff7)]()
 [![Next.js](https://img.shields.io/badge/Next.js-16-black)]()
+[![GitHub repo](https://img.shields.io/badge/GitHub-kdkumawat%2Fformaty-6d6df4)](https://github.com/kdkumawat/formaty)
+[![GitHub stars](https://img.shields.io/github/stars/kdkumawat/formaty?color=6d6df4)](https://github.com/kdkumawat/formaty)
 
 Everything runs **in your browser** - no accounts, no uploads, no installs. Paste some data and Formaty can probably do what you need with it.
 
@@ -72,6 +74,14 @@ Open [http://localhost:3000](http://localhost:3000).
 - Next.js 16, React 19, Tailwind CSS v4, shadcn/ui (Radix UI)
 - Monaco Editor, ReactFlow
 - Web Workers for heavy processing - data never leaves the device
+
+## Support
+
+If Formaty saves you time, the best ways to help are:
+
+- ⭐ **Star the repo** on [GitHub](https://github.com/kdkumawat/formaty) - it helps others discover the project
+- 🐛 **Open an issue** for bugs or feature ideas
+- 🤝 **Contribute** - the codebase is MIT-licensed and pull requests are welcome
 
 ## License
 

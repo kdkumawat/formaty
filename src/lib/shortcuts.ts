@@ -32,7 +32,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     items: [
       { keys: "⌘⇧B", label: "Beautify" },
       { keys: "⌘⇧M", label: "Minify" },
-      { keys: "⌘⇧R", label: "Reset input & output" },
+      { keys: "⌘⌥R", label: "Reset input & output" },
       { keys: "⌘⇧D", label: "Compare mode" },
       { keys: "⌘⇧U", label: "Utils mode" },
       { keys: "⌘⇧L", label: "Toggle live transform" },

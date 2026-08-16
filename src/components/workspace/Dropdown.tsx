@@ -46,6 +46,26 @@ export function Dropdown({
   preferScreenRight = false,
   edgePadding = 8,
 }: DropdownProps) {
+  const contentRef = React.useRef<HTMLDivElement>(null);
+
+  // On reopen, bring the selected item into view (long menus like Types scroll
+  // back to the active row instead of showing a random slice). Prefer an explicit
+  // data-selected="true" marker; fall back to auto-detecting the active row by its
+  // selected styling (!bg-primary/12), so this works globally for every menu
+  // (compare lists/single, utils, output actions, …) without per-item opt-in.
+  React.useEffect(() => {
+    if (!open) return;
+    const frame = requestAnimationFrame(() => {
+      const content = contentRef.current;
+      if (!content) return;
+      const selected =
+        content.querySelector<HTMLElement>('[data-selected="true"]') ??
+        content.querySelector<HTMLElement>('[class*="!bg-primary/12"]');
+      selected?.scrollIntoView({ block: "nearest" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [open]);
+
   const menuAlign: "start" | "center" | "end" = preferScreenRight ? "end" : align;
   // Width: content-sized (w-max) by default, capped by maxWidth when it's a
   // max-w-* class; an explicit w-* maxWidth becomes the width outright.
@@ -67,6 +87,7 @@ export function Dropdown({
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
         <DropdownMenu.Content
+          ref={contentRef}
           side={side}
           align={menuAlign}
           collisionPadding={edgePadding}

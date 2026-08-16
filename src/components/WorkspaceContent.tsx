@@ -19,6 +19,7 @@ import {
   ArrowRightCircleIcon,
   XMarkIcon,
   XCircleIcon,
+  TrashIcon,
   LinkSlashIcon,
   Cog6ToothIcon,
   BoltIcon,
@@ -400,6 +401,53 @@ function TypeBadge({ id }: { id: string }) {
   );
 }
 
+/**
+ * Pinned toolbar button (non-compact mode): label plus an animated-capable
+ * icon. Static heroicons glyphs ignore the animation ref; the itsHover-style
+ * icons (JSON braces, sparkles, …) nudge on hover/focus. `leading` (e.g. a
+ * TypeBadge) overrides the icon slot entirely.
+ */
+function PinnedToolbarButton({
+  leading,
+  icon,
+  label,
+  active = false,
+  disabled = false,
+  btnClass,
+  activeClass,
+  onClick,
+}: {
+  leading?: React.ReactNode;
+  icon?: React.ComponentType<{ className?: string }>;
+  label: string;
+  active?: boolean;
+  disabled?: boolean;
+  btnClass: string;
+  activeClass: string;
+  onClick: () => void;
+}) {
+  const iconAnim = useIconAnimation();
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      className={`${btnClass} ${active ? activeClass : ""}`}
+      onClick={onClick}
+      {...iconAnim.bind}
+    >
+      {leading ??
+        (icon ? (
+          <TriggerIcon
+            Icon={icon}
+            iconRef={iconAnim.ref}
+            className={`h-3.5 w-3.5 shrink-0 ${active ? "text-primary" : "text-[var(--workspace-text-muted)]"}`}
+          />
+        ) : null)}
+      <span>{label}</span>
+    </button>
+  );
+}
+
 const FORMAT_KINDS: FormatKind[] = ["json", "xml", "yaml", "toml", "csv"];
 
 const TYPE_LANGUAGES: Array<{ id: TypeTargetLanguage; label: string; ext: string }> = [
@@ -751,6 +799,11 @@ export function WorkspaceContent({
   const [diffRightInput, setDiffRightInput] = useState("");
   const [modalKind, setModalKind] = useState<ModalKind>(null);
   const [modalValue, setModalValue] = useState("");
+  /** Clipboard-read permission prompt - shown when ⌘V paste is blocked by the browser. */
+  const [showPastePrompt, setShowPastePrompt] = useState(false);
+  const [pastePromptError, setPastePromptError] = useState(false);
+  /** Two-step confirm for the settings "Clear cache" button. */
+  const [confirmClearCache, setConfirmClearCache] = useState(false);
   const [rightView, setRightView] = useState<RightView>("raw");
   /** Latest query-view result - lifted so the global toolbar copies / downloads it. */
   const [queryResult, setQueryResult] = useState("");
@@ -889,6 +942,8 @@ export function WorkspaceContent({
   const diffEditorRef = useRef<JsonDiffEditorRef | null>(null);
   const outputEditorApiRef = useRef<{ find(): void; focus(): void; collapseAll(): void; expandAll(): void; goToLine(line: number, column?: number): void } | null>(null);
   const inputEditorApiRef = useRef<{ find(): void; focus(): void; collapseAll(): void; expandAll(): void; goToLine(line: number, column?: number): void } | null>(null);
+  /** Latest input-editor cursor - restored after undo/redo rewrites the value. */
+  const cursorPositionRef = useRef<{ line: number; column: number } | null>(null);
   const splitInput2ApiRef = useRef<{ find(): void; focus(): void; collapseAll(): void; expandAll(): void; goToLine(line: number, column?: number): void } | null>(null);
   type TabSnapshot = {
     input: string;
@@ -1235,9 +1290,19 @@ export function WorkspaceContent({
     const targetIdx = undoIndex + delta;
     if (targetIdx < 0 || targetIdx >= undoStack.length) return;
     const next = undoStack[targetIdx];
+    const pos = cursorPositionRef.current;
     historyLock.current = true;
     setUndoIndex(targetIdx);
     setInput(next);
+    // Monaco's setValue resets the cursor - restore it once the new value lands
+    // so undo/redo (and ⌥↑/⌥↓ history stepping) don't jump to the end of input.
+    if (pos) {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          inputEditorApiRef.current?.goToLine(pos.line, pos.column);
+        });
+      });
+    }
     setTimeout(() => {
       historyLock.current = false;
     }, 0);
@@ -1393,8 +1458,9 @@ export function WorkspaceContent({
         return;
       }
 
-      // ⌘⇧R — reset input & output (works in every mode: transform / compare / utils).
-      if (mod && event.shiftKey && event.key.toLowerCase() === "r") {
+      // ⌘⌥R — reset input & output (works in every mode: transform / compare /
+      // utils). ⌘⇧R is the browser's hard reload, so we use Alt instead.
+      if (mod && event.altKey && event.key.toLowerCase() === "r") {
         event.preventDefault();
         shortcutActionsRef.current.reset();
         return;
@@ -1783,6 +1849,8 @@ export function WorkspaceContent({
         editorFontSize?: number;
         liveTransform?: boolean;
         viewAsMenu?: boolean;
+        lineWrap?: boolean;
+        autoFormatOnPaste?: boolean;
         mobileShowOutput?: boolean;
         activeOperation?: OperationAction;
         pinnedItems?: string[];
@@ -1802,6 +1870,8 @@ export function WorkspaceContent({
     if (typeof data.editorFontSize === "number") setEditorFontSize(data.editorFontSize);
       if (typeof data.liveTransform === "boolean") setLiveTransform(data.liveTransform);
       if (typeof data.viewAsMenu === "boolean") setViewAsMenu(data.viewAsMenu);
+      if (typeof data.lineWrap === "boolean") setLineWrap(data.lineWrap);
+      if (typeof data.autoFormatOnPaste === "boolean") setAutoFormatOnPaste(data.autoFormatOnPaste);
       if (typeof data.mobileShowOutput === "boolean") setMobileShowOutput(data.mobileShowOutput);
       if (typeof data.showTabs === "boolean") setShowTabs(data.showTabs);
       if (data.activeOperation) setActiveOperation(data.activeOperation);
@@ -1902,6 +1972,8 @@ export function WorkspaceContent({
         liveTransform,
         editorFontSize,
         viewAsMenu,
+        lineWrap,
+        autoFormatOnPaste,
 
         mobileShowOutput,
         activeOperation,
@@ -1913,7 +1985,7 @@ export function WorkspaceContent({
         tabSnapshots: allSnapshots,
       }),
     );
-  }, [input, output, split, themeMode, typeLanguage, rightView, formatOptions, convertToFormat, liveTransform, editorFontSize, viewAsMenu, mobileShowOutput, activeOperation, pinnedItems, tabs, activeTabId, showTabs, inputFormatOverride, undoStack, undoIndex, outputExt, outputLanguage, diffLeftInput, diffRightInput, diffKind, isOutputMaximized, utilTab, utilsByTool, captureTabSnapshot]);
+  }, [input, output, split, themeMode, typeLanguage, rightView, formatOptions, convertToFormat, liveTransform, editorFontSize, viewAsMenu, lineWrap, autoFormatOnPaste, mobileShowOutput, activeOperation, pinnedItems, tabs, activeTabId, showTabs, inputFormatOverride, undoStack, undoIndex, outputExt, outputLanguage, diffLeftInput, diffRightInput, diffKind, isOutputMaximized, utilTab, utilsByTool, captureTabSnapshot]);
 
   // Prefer structured parse for views (table/tree/graph/query)
   useEffect(() => {
@@ -3084,9 +3156,9 @@ export function WorkspaceContent({
     executeOperation("format", { formatOptions: next });
   };
 
-  const pasteFromClipboard = useCallback(async () => {
-    try {
-      const text = await navigator.clipboard.readText();
+  /** Apply pasted text: auto-format, set input, parse. Shared by ⌘V and the Allow-paste dialog. */
+  const applyClipboardText = useCallback(
+    async (text: string) => {
       if (!text) return;
       if (activeOperation === "diff" && diffEditorRef.current) {
         diffEditorRef.current.pasteIntoFocusedEditor(text);
@@ -3110,10 +3182,33 @@ export function WorkspaceContent({
       parseOnly(finalText, fmt);
       setFocusedPane("output");
       if (!isDesktopLayout) setMobileShowOutput(true);
+    },
+    [activeOperation, autoFormatOnPaste, run, convertJsonToOutput, pushHistory, parseOnly, isDesktopLayout],
+  );
+
+  const pasteFromClipboard = useCallback(async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      await applyClipboardText(text);
     } catch {
-      setError("Could not read clipboard.");
+      // Clipboard read blocked (no clipboard-read permission yet) - offer an
+      // explicit "Allow paste" action instead of failing silently.
+      setShowPastePrompt(true);
     }
-  }, [activeOperation, autoFormatOnPaste, run, convertJsonToOutput, pushHistory, parseOnly, isDesktopLayout]);
+  }, [applyClipboardText]);
+
+  /** Retry the clipboard read inside a button click (a user gesture) - this is what
+   *  triggers the browser's permission prompt the first time. */
+  const allowPasteRetry = useCallback(async () => {
+    setPastePromptError(false);
+    try {
+      const text = await navigator.clipboard.readText();
+      setShowPastePrompt(false);
+      await applyClipboardText(text);
+    } catch {
+      setPastePromptError(true);
+    }
+  }, [applyClipboardText]);
 
   // Global workspace keyboard shortcuts (Cmd/Ctrl + K / Enter / V / Z). Re-registers
   // whenever the handlers or their state change so the closure is always fresh.
@@ -3377,6 +3472,67 @@ export function WorkspaceContent({
     }
   };
 
+  /** Restore every workspace setting to its default - across ALL tabs (each tab's
+   *  view/format/types/diff prefs are reset too; inputs, outputs, and history stay). */
+  const resetSettingsToDefault = useCallback(() => {
+    setFormatOptions(DEFAULT_FORMAT_OPTIONS);
+    setConvertToFormat("json");
+    setRightView("raw");
+    setEditorFontSize(14);
+    setViewAsMenu(true);
+    setLineWrap(true);
+    setAutoFormatOnPaste(true);
+    setSqlDialect("sqlite");
+    setPinnedItems(
+      new Set(["fmt:json", "view:raw", "view:query", "action:beautify", "action:minify", "type:typescript", "type:zod"]),
+    );
+    const perTabDefaults: Partial<TabSnapshot> = {
+      convertToFormat: "json",
+      rightView: "raw",
+      typeLanguage: "typescript",
+      diffKind: "document",
+      diffSideBySide: true,
+      diffIgnoreWhitespace: false,
+      diffShowPaths: false,
+      isOutputMaximized: false,
+      utilTab: "uuid",
+      graphCopyFormat: "png",
+    };
+    tabSnapshotsRef.current.forEach((snap, id) => {
+      tabSnapshotsRef.current.set(id, { ...snap, ...perTabDefaults });
+    });
+    // Reset the live (current-tab) mirrors too, so the persistence effect re-snapshots cleanly.
+    setTypeLanguage("typescript");
+    setDiffKind("document");
+    setDiffSideBySide(true);
+    setDiffIgnoreWhitespace(false);
+    setDiffShowPaths(false);
+    setIsOutputMaximized(false);
+    setUtilTab("uuid");
+    setGraphCopyFormat("png");
+    toast({ message: "Settings reset to default across all tabs" });
+  }, []);
+
+  /** Wipe all local app state (localStorage + service-worker caches) and load fresh. */
+  const clearAllCache = async () => {
+    try {
+      localStorage.clear();
+    } catch {
+      /* ignore */
+    }
+    // Drop every service-worker cache before reloading so the fresh build is
+    // served instead of the stale cached one.
+    try {
+      if (typeof caches !== "undefined") {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((k) => caches.delete(k)));
+      }
+    } catch {
+      /* ignore */
+    }
+    window.location.reload();
+  };
+
   const commandPaletteCommands = useMemo((): Command[] => [
     // Operations / Actions
     { id: "op-beautify",   label: "Beautify",              category: "Actions", keywords: ["format", "pretty", "indent"], disabled: inputEmpty || showBusy, action: () => runOperation("beautify") },
@@ -3498,7 +3654,10 @@ export function WorkspaceContent({
     { id: "ws-share",    label: "Share workspace link",  category: "Workspace", keywords: ["link", "url"], disabled: !output.trim(), action: requestShare },
 
     ...(sharedLinkUrl ? [{ id: "ws-embed", label: "Copy embed / iframe URL", category: "Workspace" as const, keywords: ["embed", "iframe", "share"], disabled: false, action: async () => { await navigator.clipboard.writeText(`${sharedLinkUrl}&embed=1`); toast({ message: "Embed URL copied" }); } }] : []),
-    { id: "ws-clear",    label: "Reset input & output",  category: "Workspace", shortcut: "⌘⇧R", keywords: ["reset", "clear", "new", "empty"], action: handleWorkspaceReset },
+    { id: "ws-clear",    label: "Reset input & output",  category: "Workspace", shortcut: "⌘⌥R", keywords: ["reset", "clear", "new", "empty"], action: handleWorkspaceReset },
+    { id: "ws-clear-cache", label: "Clear cache & reload app", category: "Settings", keywords: ["clear", "cache", "wipe", "localstorage", "fresh", "reset all"], action: () => void clearAllCache() },
+    { id: "ws-reload",   label: "Reload app",              category: "Settings", keywords: ["reload", "refresh", "restart"], action: () => window.location.reload() },
+    { id: "nav-changelog", label: "Open changelog",          category: "Navigation", keywords: ["changelog", "what's new", "release", "version", "updates"], action: () => router.push("/changelog") },
     // Focus
     { id: "focus-input",  label: "Focus input pane",  category: "Workspace", keywords: ["focus", "input", "left", "editor"], action: () => { setFocusedPane("input"); inputEditorApiRef.current?.focus(); } },
     { id: "focus-output", label: "Focus output pane", category: "Workspace", keywords: ["focus", "output", "right", "editor"], action: () => { setFocusedPane("output"); outputEditorApiRef.current?.focus(); } },
@@ -3551,7 +3710,7 @@ export function WorkspaceContent({
     { id: "set-indent-reset", label: "Indent: reset to 2",     category: "Settings", keywords: ["indent", "spaces", "reset"], disabled: inputEmpty || formatOptions.indentation === 2, action: () => applyFormatWithOptions({ ...formatOptions, indentation: 2 }) },
     { id: "set-live",         label: liveTransform ? "Live transform: On (turn off)" : "Live transform: Off (turn on)", category: "Settings", keywords: ["live", "auto", "realtime", "transform"], badge: liveTransform ? "on" : undefined, action: () => setLiveTransform((v) => !v) },
     { id: "set-viewasmenu",   label: viewAsMenu ? "Compact menus: On" : "Compact menus: Off (pinned toolbar)", category: "Settings", keywords: ["menu", "view", "panel", "sidebar"], badge: viewAsMenu ? "on" : undefined, action: () => setViewAsMenu((v) => !v) },
-    { id: "set-reset",        label: "Reset all settings to default", category: "Settings", keywords: ["reset", "default", "restore"], action: () => { setFormatOptions(DEFAULT_FORMAT_OPTIONS); setConvertToFormat("json"); setRightView("raw"); setEditorFontSize(13); setPinnedItems(new Set(["fmt:json", "fmt:xml", "view:raw", "view:graph", "view:query", "action:beautify", "action:minify", "action:schema", "action:diff", "type:typescript", "type:java", "type:go", "type:python", "type:sql"])); } },
+    { id: "set-reset",        label: "Reset all settings to default", category: "Settings", keywords: ["reset", "default", "restore"], action: () => resetSettingsToDefault() },
     // Theme
     { id: "theme-light",  label: "Theme: Light",  category: "Theme", badge: themeMode === "light"  ? "active" : undefined, action: () => setThemeMode("light")  },
     { id: "theme-dark",   label: "Theme: Dark",   category: "Theme", badge: themeMode === "dark"   ? "active" : undefined, action: () => setThemeMode("dark")   },
@@ -3568,7 +3727,7 @@ export function WorkspaceContent({
     // Auto-format on paste
     { id: "auto-fmt-paste", label: autoFormatOnPaste ? "Auto-format on paste: On (turn off)" : "Auto-format on paste: Off (turn on)", category: "Settings", keywords: ["auto", "format", "paste", "beautify", "pretty"], badge: autoFormatOnPaste ? "on" : undefined, action: () => setAutoFormatOnPaste((v) => !v) },
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  ], [inputEmpty, showBusy, convertToFormat, rightView, parsedOutput, typeLanguage, activeOperation, output, themeMode, editorFontSize, isOutputMaximized, isWindowFullscreen, toggleWindowFullscreen, formatOptions, liveTransform, viewAsMenu, canUndo, canRedo, lineWrap, diffSideBySide, diffIgnoreWhitespace, diffShowPaths, diffKind, csvDelimiter, sharedLinkUrl, pinnedItems, undoStack.length, tabs.length, activeTabId, splitInputOpen, autoFormatOnPaste, showTabs, swapDiffSides, beautifyDiffSides, copyDiffText, downloadDiffReport, isUtilsMode, utilTab, isDiffMode, handleWorkspaceReset]);
+  ], [inputEmpty, showBusy, convertToFormat, rightView, parsedOutput, typeLanguage, activeOperation, output, themeMode, editorFontSize, isOutputMaximized, isWindowFullscreen, toggleWindowFullscreen, formatOptions, liveTransform, viewAsMenu, canUndo, canRedo, lineWrap, diffSideBySide, diffIgnoreWhitespace, diffShowPaths, diffKind, csvDelimiter, sharedLinkUrl, pinnedItems, undoStack.length, tabs.length, activeTabId, splitInputOpen, autoFormatOnPaste, showTabs, swapDiffSides, beautifyDiffSides, copyDiffText, downloadDiffReport, isUtilsMode, utilTab, isDiffMode, handleWorkspaceReset, resetSettingsToDefault]);
 
   const settingsPanelContent = (
                 <div className="w-[20rem] max-w-[85vw]">
@@ -3976,23 +4135,38 @@ export function WorkspaceContent({
     </div>
   </div>
 
-  {/* Footer */}
-  <div className="mt-2.5 border-t border-[var(--workspace-border)]/60 pt-2">
+  {/* Footer - reset & clear cache */}
+  <div className="mt-2.5 space-y-2 border-t border-[var(--workspace-border)]/60 pt-2">
     <button
       type="button"
       className="flex h-7 w-full items-center justify-center gap-1.5 rounded-md border border-[var(--workspace-border)]/60 bg-muted/40 text-xs font-medium text-[var(--workspace-text-muted)] transition-all hover:border-primary/25 hover:bg-primary/10 hover:text-primary"
-      onClick={() => {
-        setFormatOptions(DEFAULT_FORMAT_OPTIONS);
-        setConvertToFormat("json");
-        setRightView("raw");
-        setEditorFontSize(14);
-        setViewAsMenu(true);
-        setPinnedItems(new Set(["fmt:json", "view:raw", "view:query", "action:beautify", "action:minify", "type:typescript", "type:zod"]));
-      }}
+      onClick={resetSettingsToDefault}
     >
       <ArrowPathIcon className="h-3.5 w-3.5" />
-      Reset to default
+      Reset to default (all tabs)
     </button>
+    <button
+      type="button"
+      className={`flex h-7 w-full items-center justify-center gap-1.5 rounded-md border text-xs font-medium transition-all ${
+        confirmClearCache
+          ? "border-red-500/40 bg-red-500/15 text-red-500 hover:bg-red-500/25"
+          : "border-[var(--workspace-border)]/60 bg-muted/40 text-[var(--workspace-text-muted)] hover:border-red-500/30 hover:bg-red-500/10 hover:text-red-500"
+      }`}
+      onClick={() => {
+        if (!confirmClearCache) {
+          setConfirmClearCache(true);
+          window.setTimeout(() => setConfirmClearCache(false), 3000);
+          return;
+        }
+        void clearAllCache();
+      }}
+    >
+      <TrashIcon className="h-3.5 w-3.5" />
+      {confirmClearCache ? "Confirm: wipe everything?" : "Clear cache & reload app"}
+    </button>
+    <p className="text-[10px] leading-snug text-[var(--workspace-text-muted)]">
+      Clear cache wipes all saved sessions, settings, and offline data, then loads Formaty fresh.
+    </p>
   </div>
   </>
   )}
@@ -4240,7 +4414,7 @@ export function WorkspaceContent({
                 groups.push(
                   <span key="fmt" className="flex shrink-0 items-center gap-0.5">
                     {fmtPins.map((fmt) => (
-                      <button key={fmt} type="button" disabled={inputEmpty} className={`${pinnedBtnClass} ${convertToFormat === fmt ? tbActiveClass : ""}`} onClick={() => { setFocusedPane("output"); runConvert(fmt); }}>{FORMAT_LABELS[fmt]}</button>
+                      <PinnedToolbarButton key={fmt} icon={FORMAT_ICONS[fmt] ?? Squares2X2Icon} label={FORMAT_LABELS[fmt]} disabled={inputEmpty} btnClass={pinnedBtnClass} activeClass={tbActiveClass} active={convertToFormat === fmt} onClick={() => { setFocusedPane("output"); runConvert(fmt); }} />
                     ))}
                   </span>,
                 );
@@ -4249,7 +4423,7 @@ export function WorkspaceContent({
                 groups.push(
                   <span key="view" className="flex shrink-0 items-center gap-0.5">
                     {viewPins.map((view) => (
-                      <button key={view} type="button" disabled={inputEmpty || ((view === "tree" || view === "graph" || view === "query" || view === "table") && !parsedOutput)} className={`${pinnedBtnClass} ${rightView === view ? tbActiveClass : ""}`} onClick={() => { setRightView(view); setFocusedPane("output"); }}>{view[0].toUpperCase() + view.slice(1)}</button>
+                      <PinnedToolbarButton key={view} icon={VIEW_ICONS[view] ?? EyeIcon} label={view[0].toUpperCase() + view.slice(1)} disabled={inputEmpty || ((view === "tree" || view === "graph" || view === "query" || view === "table") && !parsedOutput)} btnClass={pinnedBtnClass} activeClass={tbActiveClass} active={rightView === view} onClick={() => { setRightView(view); setFocusedPane("output"); }} />
                     ))}
                   </span>,
                 );
@@ -4258,7 +4432,7 @@ export function WorkspaceContent({
                 groups.push(
                   <span key="act" className="flex shrink-0 items-center gap-0.5">
                     {actionPins.map(([label, action]) => (
-                      <button key={action} type="button" disabled={showBusy || inputEmpty} className={`${pinnedBtnClass} ${activeOperation === action ? tbActiveClass : ""}`} onClick={() => runOperation(action)}>{label}</button>
+                      <PinnedToolbarButton key={action} icon={ACTION_ICONS[action] ?? BoltIcon} label={label} disabled={showBusy || inputEmpty} btnClass={pinnedBtnClass} activeClass={tbActiveClass} active={activeOperation === action} onClick={() => runOperation(action)} />
                     ))}
                   </span>,
                 );
@@ -4267,7 +4441,7 @@ export function WorkspaceContent({
                 groups.push(
                   <span key="type" className="flex shrink-0 items-center gap-0.5">
                     {typePins.map((item) => (
-                      <button key={item.id} type="button" disabled={inputEmpty} className={`${pinnedBtnClass} ${activeOperation === "generateTypes" && typeLanguage === item.id ? tbActiveClass : ""}`} onClick={() => { trackEvent("generate_types", { language: item.id, source: "pinned" }); setFocusedPane("output"); setActiveOperation("generateTypes"); executeOperation("generateTypes", { typeLanguage: item.id }); }}>{item.label}</button>
+                      <PinnedToolbarButton key={item.id} leading={<TypeBadge id={item.id} />} label={item.label} disabled={inputEmpty} btnClass={pinnedBtnClass} activeClass={tbActiveClass} active={activeOperation === "generateTypes" && typeLanguage === item.id} onClick={() => { trackEvent("generate_types", { language: item.id, source: "pinned" }); setFocusedPane("output"); setActiveOperation("generateTypes"); executeOperation("generateTypes", { typeLanguage: item.id }); }} />
                     ))}
                   </span>,
                 );
@@ -4313,7 +4487,7 @@ export function WorkspaceContent({
               <div className="flex flex-col" onClick={(e) => e.stopPropagation()}>
                 {menuSectionLabel("Format")}
                 {(["json", "xml", "yaml", "toml", "csv"] as const).map((fmt) => (
-                  <button key={fmt} type="button" disabled={inputEmpty} className={`${menuItemClass} ${convertToFormat === fmt ? menuItemActiveClass : ""}`} onClick={() => { setFocusedPane("output"); runConvert(fmt); setMoreMenuOpen(false); }}>
+                  <button key={fmt} type="button" disabled={inputEmpty} data-selected={convertToFormat === fmt || undefined} className={`${menuItemClass} ${convertToFormat === fmt ? menuItemActiveClass : ""}`} onClick={() => { setFocusedPane("output"); runConvert(fmt); setMoreMenuOpen(false); }}>
                     {sharedMenuCheck(convertToFormat === fmt)}
                     <span className="min-w-0 flex-1 truncate text-left">{FORMAT_LABELS[fmt]}</span>
                   </button>
@@ -4321,7 +4495,7 @@ export function WorkspaceContent({
                 <div className="my-1 h-px bg-[var(--workspace-border)]" role="separator" aria-hidden />
                 {menuSectionLabel("View")}
                 {(["raw", "tree", "graph", "query", "table"] as const).map((view) => (
-                  <button key={view} type="button" disabled={inputEmpty || ((view === "tree" || view === "graph" || view === "query" || view === "table") && !parsedOutput)} className={`${menuItemClass} ${rightView === view ? menuItemActiveClass : ""}`} onClick={() => { setRightView(view); setFocusedPane("output"); setMoreMenuOpen(false); }}>
+                  <button key={view} type="button" disabled={inputEmpty || ((view === "tree" || view === "graph" || view === "query" || view === "table") && !parsedOutput)} data-selected={rightView === view || undefined} className={`${menuItemClass} ${rightView === view ? menuItemActiveClass : ""}`} onClick={() => { setRightView(view); setFocusedPane("output"); setMoreMenuOpen(false); }}>
                     {sharedMenuCheck(rightView === view)}
                     <span className="min-w-0 flex-1 truncate text-left">{view[0].toUpperCase() + view.slice(1)}</span>
                   </button>
@@ -4331,7 +4505,7 @@ export function WorkspaceContent({
                 {(["beautify", "minify", "flatten", "unflatten", "schema", "validate"] as const).map((action) => {
                   const [label] = OPERATION_ACTIONS.find(([, a]) => a === action) ?? [action, action];
                   return (
-                    <button key={action} type="button" disabled={showBusy || inputEmpty} className={`${menuItemClass} ${activeOperation === action ? menuItemActiveClass : ""}`} onClick={() => { runOperation(action); setMoreMenuOpen(false); }}>
+                    <button key={action} type="button" disabled={showBusy || inputEmpty} data-selected={activeOperation === action || undefined} className={`${menuItemClass} ${activeOperation === action ? menuItemActiveClass : ""}`} onClick={() => { runOperation(action); setMoreMenuOpen(false); }}>
                       {sharedMenuCheck(activeOperation === action)}
                       <span className="min-w-0 flex-1 truncate text-left">{label}</span>
                     </button>
@@ -4339,12 +4513,13 @@ export function WorkspaceContent({
                 })}
                 <div className="my-1 h-px bg-[var(--workspace-border)]" role="separator" aria-hidden />
                 {menuSectionLabel("Types")}
-                <button type="button" disabled={inputEmpty} className={`${menuItemClass} ${activeOperation === "generateTypes" ? "" : "!bg-primary/12 !text-primary"}`} onClick={() => { setFocusedPane("output"); runOperation("beautify"); setMoreMenuOpen(false); }}>
+                <button type="button" disabled={inputEmpty} data-selected={activeOperation !== "generateTypes" || undefined} className={`${menuItemClass} ${activeOperation === "generateTypes" ? "" : "!bg-primary/12 !text-primary"}`} onClick={() => { setFocusedPane("output"); runOperation("beautify"); setMoreMenuOpen(false); }}>
                   {sharedMenuCheck(activeOperation !== "generateTypes")}
-                  <span className="min-w-0 flex-1 truncate text-left">None - format output</span>
+                  <span className="min-w-0 flex-1 truncate text-left">None</span>
+                  <span className="text-[10px] opacity-60">format output</span>
                 </button>
                 {TYPE_LANGUAGES.map((item) => (
-                  <button key={item.id} type="button" disabled={inputEmpty} className={`${menuItemClass} ${activeOperation === "generateTypes" && typeLanguage === item.id ? menuItemActiveClass : ""}`} onClick={() => { trackEvent("generate_types", { language: item.id, source: "menu" }); setFocusedPane("output"); setActiveOperation("generateTypes"); executeOperation("generateTypes", { typeLanguage: item.id }); setMoreMenuOpen(false); }}>
+                  <button key={item.id} type="button" disabled={inputEmpty} data-selected={(activeOperation === "generateTypes" && typeLanguage === item.id) || undefined} className={`${menuItemClass} ${activeOperation === "generateTypes" && typeLanguage === item.id ? menuItemActiveClass : ""}`} onClick={() => { trackEvent("generate_types", { language: item.id, source: "menu" }); setFocusedPane("output"); setActiveOperation("generateTypes"); executeOperation("generateTypes", { typeLanguage: item.id }); setMoreMenuOpen(false); }}>
                     {sharedMenuCheck(activeOperation === "generateTypes" && typeLanguage === item.id)}
                     <span className="min-w-0 flex-1 truncate text-left">{item.label}</span>
                   </button>
@@ -4440,9 +4615,10 @@ export function WorkspaceContent({
             </Dropdown>
             <Dropdown open={typesMenuOpen} onOpenChange={setTypesMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`w-max min-w-[8rem] max-h-[60vh] overflow-y-auto`} trigger={<Tooltip content={activeOperation === "generateTypes" ? `Types: ${TYPE_LANGUAGES.find((t) => t.id === typeLanguage)?.label ?? ""}` : "Generate Types"}><div className={`${selectBtnClass} ${typesMenuOpen || activeOperation === "generateTypes" ? selectBtnOpenClass : ""}`}>{activeOperation === "generateTypes" ? <TypeBadge id={typeLanguage} /> : <CodeBracketIcon className="h-3.5 w-3.5 shrink-0 text-[var(--workspace-text-muted)]" />}<span className="font-medium">Types</span><ChevronDownIcon className="h-3 w-3 shrink-0" aria-hidden /></div></Tooltip>}>
               <div className="flex flex-col" onClick={(e) => e.stopPropagation()}>
-                <button type="button" disabled={inputEmpty} className={`${menuItemClass} ${activeOperation === "generateTypes" ? "" : "!bg-primary/12 !text-primary"}`} onClick={() => { setFocusedPane("output"); runOperation("beautify"); setTypesMenuOpen(false); }}>
+                <button type="button" disabled={inputEmpty} data-selected={activeOperation !== "generateTypes" || undefined} className={`${menuItemClass} ${activeOperation === "generateTypes" ? "" : "!bg-primary/12 !text-primary"}`} onClick={() => { setFocusedPane("output"); runOperation("beautify"); setTypesMenuOpen(false); }}>
                   {sharedMenuCheck(activeOperation !== "generateTypes")}
-                  <span className="min-w-0 flex-1 truncate text-left">None - format output</span>
+                  <span className="min-w-0 flex-1 truncate text-left">None</span>
+                  <span className="text-[10px] opacity-60">format output</span>
                 </button>
                 <div className="my-1 h-px bg-[var(--workspace-border)]" role="separator" aria-hidden />
                 {(
@@ -4457,7 +4633,7 @@ export function WorkspaceContent({
                     {gi > 0 && <div className="my-1 h-px bg-[var(--workspace-border)]" role="separator" aria-hidden />}
                     {menuSectionLabel(group.label)}
                     {TYPE_LANGUAGES.filter((t) => (group.ids as readonly string[]).includes(t.id)).map((item) => (
-                      <button key={item.id} type="button" disabled={inputEmpty} className={`${menuItemClass} ${activeOperation === "generateTypes" && typeLanguage === item.id ? menuItemActiveClass : ""}`} onClick={() => { trackEvent("generate_types", { language: item.id, source: "types_menu" }); setFocusedPane("output"); setActiveOperation("generateTypes"); executeOperation("generateTypes", { typeLanguage: item.id }); setTypesMenuOpen(false); }}>
+                      <button key={item.id} type="button" disabled={inputEmpty} data-selected={(activeOperation === "generateTypes" && typeLanguage === item.id) || undefined} className={`${menuItemClass} ${activeOperation === "generateTypes" && typeLanguage === item.id ? menuItemActiveClass : ""}`} onClick={() => { trackEvent("generate_types", { language: item.id, source: "types_menu" }); setFocusedPane("output"); setActiveOperation("generateTypes"); executeOperation("generateTypes", { typeLanguage: item.id }); setTypesMenuOpen(false); }}>
                         {sharedMenuCheck(activeOperation === "generateTypes" && typeLanguage === item.id)}
                         <span className="min-w-0 flex-1 truncate text-left">{item.label}</span>
                       </button>
@@ -4856,7 +5032,7 @@ export function WorkspaceContent({
                   wordWrap={lineWrap ? "on" : "off"}
                   onEditorMount={(api) => { inputEditorApiRef.current = api; }}
                   onCtrlEnter={parseOnly}
-                  onCursorChange={(line, column) => setCursorPosition({ line, column })}
+                  onCursorChange={(line, column) => { setCursorPosition({ line, column }); cursorPositionRef.current = { line, column }; }}
                   placeholder="Left input…"
                 />
               </div>
@@ -4905,7 +5081,7 @@ export function WorkspaceContent({
                 wordWrap={lineWrap ? "on" : "off"}
                 onEditorMount={(api) => { inputEditorApiRef.current = api; }}
                 onCtrlEnter={parseOnly}
-                onCursorChange={(line, column) => setCursorPosition({ line, column })}
+                onCursorChange={(line, column) => { setCursorPosition({ line, column }); cursorPositionRef.current = { line, column }; }}
               />
               {resolvedInputFormat === "curl" && input.trim() && input !== lastExecutedCurlInput && !curlFetching && (
                 <div className="pointer-events-none absolute inset-x-0 bottom-2 z-10 flex justify-center">
@@ -5817,6 +5993,35 @@ export function WorkspaceContent({
               >
                 Validate
               </UiButton>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={showPastePrompt} onOpenChange={setShowPastePrompt}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-sm">Allow paste</DialogTitle>
+              <DialogDescription className="text-xs leading-relaxed">
+                Formaty reads your clipboard when you use{" "}
+                <kbd className="rounded border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-1 py-px font-mono text-[10px]">
+                  ⌘V
+                </kbd>{" "}
+                on an empty workspace. Your browser blocked that read - click{" "}
+                <strong className="text-[var(--workspace-text)]">Allow paste</strong> to grant
+                clipboard access. Everything stays on your device; nothing is uploaded.
+              </DialogDescription>
+            </DialogHeader>
+            {pastePromptError && (
+              <p className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-[11px] leading-snug text-red-500">
+                Paste is still blocked. Use the editor&apos;s own Ctrl/⌘+V instead, or allow
+                clipboard access in this site&apos;s permission settings.
+              </p>
+            )}
+            <DialogFooter>
+              <UiButton variant="outline" onClick={() => setShowPastePrompt(false)}>
+                Cancel
+              </UiButton>
+              <UiButton onClick={() => void allowPasteRetry()}>Allow paste</UiButton>
             </DialogFooter>
           </DialogContent>
         </Dialog>

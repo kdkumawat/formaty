@@ -3,6 +3,20 @@ import { Logo } from "@/components/Logo";
 
 const ENTRIES = [
   {
+    version: "2.1.0",
+    date: "August 2026",
+    title: "Developer workspace, animated icons & Next.js 16",
+    items: [
+      "itsHover-inspired animated icons across the toolbar, pinned buttons, and landing hero",
+      "cURL code generation (fetch / axios / Python / Go) and the developer-focused landing pages",
+      "Feedback system with an admin triage inbox and copy-all for AI review",
+      "CSV output preserved on the Raw view and compact workspace UI polish",
+      "Toast notifications, multi-tab polish, and utility UI improvements",
+      "Migrated to shadcn/ui and Next.js 16 with all lint warnings resolved",
+      "Consent-gated Google Analytics and a refreshed launch landing page with SEO",
+    ],
+  },
+  {
     version: "2.0.1",
     date: "August 2026",
     title: "Keyboard-first workspace & marketing refresh",

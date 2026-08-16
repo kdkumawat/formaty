@@ -10,8 +10,10 @@ import {
   BoltIcon,
   ChevronDownIcon,
   ClipboardDocumentIcon,
+  CodeBracketIcon,
   QueueListIcon,
   ShareIcon,
+  SparklesIcon,
   SwatchIcon,
   TableCellsIcon,
 } from "@heroicons/react/24/outline";
@@ -40,7 +42,7 @@ type Slide = {
 /* ─── Input Panes ───────────────────────────────────── */
 function JsonInput() {
   return (
-    <pre className="font-mono text-[11px] leading-[1.8]">
+    <pre className="font-mono text-[10px] leading-[1.8]">
       <span className="text-[var(--workspace-text)]">{"{"}</span>{"\n"}
       {"  "}<span className="text-sky-500">&quot;id&quot;</span><span className="text-[var(--workspace-text)]">: </span><span className="text-amber-500">42</span><span className="text-[var(--workspace-text)]">,</span>{"\n"}
       {"  "}<span className="text-sky-500">&quot;name&quot;</span><span className="text-[var(--workspace-text)]">: </span><span className="text-emerald-500">&quot;Alice&quot;</span><span className="text-[var(--workspace-text)]">,</span>{"\n"}
@@ -55,7 +57,7 @@ function JsonInput() {
 
 function XmlInput() {
   return (
-    <pre className="font-mono text-[11px] leading-[1.8]">
+    <pre className="font-mono text-[10px] leading-[1.8]">
       <span className="text-[var(--workspace-text-muted)]">{"<?"}xml version=&quot;1.0&quot;{"?>"}</span>{"\n"}
       <span className="text-[var(--workspace-text)]">{"<"}</span><span className="text-sky-500">product</span><span className="text-[var(--workspace-text)]">{">"}</span>{"\n"}
       {"  "}<span className="text-[var(--workspace-text)]">{"<"}</span><span className="text-sky-500">sku</span><span className="text-[var(--workspace-text)]">{">"}</span><span className="text-amber-500">X-42</span><span className="text-[var(--workspace-text)]">{"</"}</span><span className="text-sky-500">sku</span><span className="text-[var(--workspace-text)]">{">"}</span>{"\n"}
@@ -68,7 +70,7 @@ function XmlInput() {
 
 function YamlInput() {
   return (
-    <pre className="font-mono text-[11px] leading-[1.8]">
+    <pre className="font-mono text-[10px] leading-[1.8]">
       <span className="text-sky-500">server</span><span className="text-[var(--workspace-text)]">:</span>{"\n"}
       {"  "}<span className="text-sky-500">host</span><span className="text-[var(--workspace-text)]">: </span><span className="text-emerald-500">api.example.com</span>{"\n"}
       {"  "}<span className="text-sky-500">port</span><span className="text-[var(--workspace-text)]">: </span><span className="text-amber-500">8080</span>{"\n"}
@@ -80,7 +82,7 @@ function YamlInput() {
 
 function CurlInput() {
   return (
-    <pre className="font-mono text-[10px] leading-[1.85] break-all">
+    <pre className="font-mono text-[9px] leading-[1.85] break-all">
       <span className="text-[var(--workspace-text-muted)]">$</span>{" "}
       <span className="text-violet-400">curl</span>{" "}
       <span className="text-sky-400">-X GET</span>{" "}
@@ -94,7 +96,7 @@ function CurlInput() {
 
 function CsvInput() {
   return (
-    <pre className="font-mono text-[11px] leading-[1.9]">
+    <pre className="font-mono text-[10px] leading-[1.9]">
       <span className="text-sky-500 font-semibold">name</span><span className="text-[var(--workspace-text-muted)]">,</span><span className="text-sky-500 font-semibold">score</span><span className="text-[var(--workspace-text-muted)]">,</span><span className="text-sky-500 font-semibold">level</span>{"\n"}
       <span className="text-emerald-500">Alice</span><span className="text-[var(--workspace-text-muted)]">,</span><span className="text-amber-500">98</span><span className="text-[var(--workspace-text-muted)]">,</span><span className="text-violet-400">gold</span>{"\n"}
       <span className="text-emerald-500">Bob</span><span className="text-[var(--workspace-text-muted)]">,</span><span className="text-amber-500">72</span><span className="text-[var(--workspace-text-muted)]">,</span><span className="text-violet-400">silver</span>{"\n"}
@@ -106,7 +108,7 @@ function CsvInput() {
 /* ─── Output Panes ───────────────────────────────────── */
 function TypeScriptOut() {
   return (
-    <pre className="font-mono text-[11px] leading-[1.8]">
+    <pre className="font-mono text-[10px] leading-[1.8]">
       <span className="text-violet-400">interface </span><span className="text-sky-400">Root </span><span className="text-[var(--workspace-text)]">{"{"}</span>{"\n"}
       {"  "}<span className="text-[var(--workspace-text)]">id: </span><span className="text-amber-400">number</span><span className="text-[var(--workspace-text)]">;</span>{"\n"}
       {"  "}<span className="text-[var(--workspace-text)]">name: </span><span className="text-amber-400">string</span><span className="text-[var(--workspace-text)]">;</span>{"\n"}
@@ -118,7 +120,7 @@ function TypeScriptOut() {
 
 function XmlToYamlOut() {
   return (
-    <pre className="font-mono text-[11px] leading-[1.8]">
+    <pre className="font-mono text-[10px] leading-[1.8]">
       <span className="text-sky-500">product</span><span className="text-[var(--workspace-text)]">:</span>{"\n"}
       {"  "}<span className="text-sky-500">sku</span><span className="text-[var(--workspace-text)]">: </span><span className="text-emerald-500">X-42</span>{"\n"}
       {"  "}<span className="text-sky-500">price</span><span className="text-[var(--workspace-text)]">: </span><span className="text-amber-500">29.99</span>{"\n"}
@@ -129,7 +131,7 @@ function XmlToYamlOut() {
 
 function YamlToTomlOut() {
   return (
-    <pre className="font-mono text-[11px] leading-[1.8]">
+    <pre className="font-mono text-[10px] leading-[1.8]">
       <span className="text-[var(--workspace-text-muted)]">[server]</span>{"\n"}
       <span className="text-sky-400">host</span><span className="text-[var(--workspace-text)]"> = </span><span className="text-emerald-500">&quot;api.example.com&quot;</span>{"\n"}
       <span className="text-sky-400">port</span><span className="text-[var(--workspace-text)]"> = </span><span className="text-amber-500">8080</span>{"\n"}
@@ -141,7 +143,7 @@ function YamlToTomlOut() {
 
 function CurlToJsonOut() {
   return (
-    <pre className="font-mono text-[11px] leading-[1.8]">
+    <pre className="font-mono text-[10px] leading-[1.8]">
       <span className="text-[var(--workspace-text)]">{"{"}</span>{"\n"}
       {"  "}<span className="text-sky-500">&quot;login&quot;</span><span className="text-[var(--workspace-text)]">: </span><span className="text-emerald-500">&quot;octocat&quot;</span><span className="text-[var(--workspace-text)]">,</span>{"\n"}
       {"  "}<span className="text-sky-500">&quot;id&quot;</span><span className="text-[var(--workspace-text)]">: </span><span className="text-amber-500">583231</span><span className="text-[var(--workspace-text)]">,</span>{"\n"}
@@ -153,7 +155,7 @@ function CurlToJsonOut() {
 
 function CsvTableOut() {
   return (
-    <div className="overflow-hidden rounded-md border border-[var(--workspace-border)] text-[10.5px]">
+    <div className="overflow-hidden rounded-md border border-[var(--workspace-border)] text-[9.5px]">
       <table className="w-full border-collapse font-mono">
         <thead>
           <tr className="border-b border-[var(--workspace-border)] bg-[var(--workspace-background)]">
@@ -178,7 +180,7 @@ function CsvTableOut() {
 
 function CompareIn() {
   return (
-    <pre className="font-mono text-[10px] leading-[1.75]">
+    <pre className="font-mono text-[9px] leading-[1.75]">
       <span className="text-[var(--workspace-text-muted)]">{"// Production vs Staging"}</span>{"\n"}
       <span className="text-sky-500">prod:</span>{" "}
       <span className="text-[var(--workspace-text)]">1001, 1002, 1003, 1004</span>{"\n"}
@@ -191,7 +193,7 @@ function CompareIn() {
 
 function CompareOut() {
   return (
-    <pre className="font-mono text-[10px] leading-[1.75]">
+    <pre className="font-mono text-[9px] leading-[1.75]">
       <span className="text-emerald-500">Common</span>
       <span className="text-[var(--workspace-text-muted)]">: 1002, 1003</span>{"\n"}
       <span className="text-sky-500">Only prod</span>
@@ -205,7 +207,7 @@ function CompareOut() {
 
 function UtilsIn() {
   return (
-    <pre className="font-mono text-[10px] leading-[1.75] break-all">
+    <pre className="font-mono text-[9px] leading-[1.75] break-all">
       <span className="text-[var(--workspace-text-muted)]">{"// JWT · Base64 · UUID"}</span>{"\n"}
       <span className="text-violet-400">eyJhbGciOi…</span>
       <span className="text-[var(--workspace-text-muted)]">.payload.</span>
@@ -218,7 +220,7 @@ function UtilsIn() {
 
 function UtilsOut() {
   return (
-    <pre className="font-mono text-[10px] leading-[1.75]">
+    <pre className="font-mono text-[9px] leading-[1.75]">
       <span className="text-sky-500">&quot;sub&quot;</span><span className="text-[var(--workspace-text)]">: </span><span className="text-emerald-500">&quot;123&quot;</span>{"\n"}
       <span className="text-violet-400">SGVsbG8sIEZvcm1hdHkh</span>{"\n"}
       <span className="text-emerald-500">a1b2c3d4-…-7890</span>{"\n"}
@@ -458,7 +460,7 @@ export function Hero() {
             ].map(({ label, id, color, activeColor }) => (
               <span
                 key={label}
-                className={`inline-flex items-center rounded-md border px-2.5 py-0.5 font-mono text-[11px] font-medium transition-all duration-300 ${slide.id === id ? activeColor : color}`}
+                className={`inline-flex items-center rounded-md border px-2.5 py-0.5 font-mono text-[10px] font-medium transition-all duration-300 ${slide.id === id ? activeColor : color}`}
               >
                 {label}
               </span>
@@ -508,48 +510,90 @@ export function Hero() {
                 </span>
               </div>
 
-              {/* Workspace toolbar - mirrors the real Formaty UI */}
+              {/* Workspace toolbar - mirrors the real Formaty UI (chips adapt to the active tool) */}
               <div className="flex items-center gap-1 border-b border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-3 py-1.5">
-                <HeroToolbarChip
-                  label="Format"
-                  title={slide.inputLabel}
-                  Icon={
-                    slide.id === "json-ts"
-                      ? AnimatedBracesIcon
-                      : slide.id === "compare"
-                        ? ArrowsRightLeftIcon
-                        : slide.id === "utils"
-                          ? SwatchIcon
+                {slide.id === "compare" ? (
+                  <>
+                    <HeroToolbarChip
+                      label="Compare"
+                      title="Document / list compare"
+                      Icon={ArrowsRightLeftIcon}
+                      iconClassName="h-3 w-3 text-rose-500"
+                    />
+                    <HeroToolbarChip
+                      label="Lists"
+                      title="Reconcile DB exports"
+                      Icon={QueueListIcon}
+                      iconClassName="h-3 w-3 text-primary"
+                    />
+                    <HeroToolbarChip
+                      label="SQL IN"
+                      title="Copy as SQL IN"
+                      Icon={CodeBracketIcon}
+                      iconClassName="h-3 w-3 text-emerald-500"
+                    />
+                  </>
+                ) : slide.id === "utils" ? (
+                  <>
+                    <HeroToolbarChip
+                      label="Utils"
+                      title="JWT · Base64 · UUID"
+                      Icon={SwatchIcon}
+                      iconClassName="h-3 w-3 text-violet-500"
+                    />
+                    <HeroToolbarChip
+                      label="JWT"
+                      title="Decode JWT payloads"
+                      Icon={CodeBracketIcon}
+                      iconClassName="h-3 w-3 text-sky-500"
+                    />
+                    <HeroToolbarChip
+                      label="UUID"
+                      title="Generate UUIDs"
+                      Icon={SparklesIcon}
+                      iconClassName="h-3 w-3 text-emerald-500"
+                    />
+                  </>
+                ) : (
+                  <>
+                    <HeroToolbarChip
+                      label="Format"
+                      title={slide.inputLabel}
+                      Icon={
+                        slide.id === "json-ts"
+                          ? AnimatedBracesIcon
                           : slide.id === "yaml-toml"
                             ? QueueListIcon
                             : slide.id === "csv-table"
                               ? TableCellsIcon
                               : AnimatedCodeIcon
-                  }
-                  iconClassName={`h-3 w-3 ${slide.inputColor}`}
-                />
-                <HeroToolbarChip
-                  label="View"
-                  title="Tree"
-                  Icon={AnimatedEyeIcon}
-                  iconClassName="h-3 w-3 text-primary"
-                />
-                <HeroToolbarChip
-                  label="Actions"
-                  title="Beautify"
-                  Icon={AnimatedSparklesIcon}
-                  iconClassName="h-3 w-3 text-primary"
-                />
-                <span
-                  title="TypeScript"
-                  className="inline-flex items-center gap-1 rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-2 py-1 text-[10px] font-medium text-[var(--workspace-text-muted)]"
-                >
-                  <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-[3px] bg-[#3178c6] text-[6.5px] font-bold text-white">
-                    TS
-                  </span>
-                  <span className="font-semibold text-[var(--workspace-text)]">Types</span>
-                  <ChevronDownIcon className="h-2.5 w-2.5 opacity-50" aria-hidden />
-                </span>
+                      }
+                      iconClassName={`h-3 w-3 ${slide.inputColor}`}
+                    />
+                    <HeroToolbarChip
+                      label="View"
+                      title="Tree"
+                      Icon={AnimatedEyeIcon}
+                      iconClassName="h-3 w-3 text-primary"
+                    />
+                    <HeroToolbarChip
+                      label="Actions"
+                      title="Beautify"
+                      Icon={AnimatedSparklesIcon}
+                      iconClassName="h-3 w-3 text-primary"
+                    />
+                    <span
+                      title="TypeScript"
+                      className="inline-flex items-center gap-1 rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-2 py-1 text-[10px] font-medium text-[var(--workspace-text-muted)]"
+                    >
+                      <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-[3px] bg-[#3178c6] text-[6.5px] font-bold text-white">
+                        TS
+                      </span>
+                      <span className="font-semibold text-[var(--workspace-text)]">Types</span>
+                      <ChevronDownIcon className="h-2.5 w-2.5 opacity-50" aria-hidden />
+                    </span>
+                  </>
+                )}
                 <span className="ml-auto hidden items-center gap-0.5 sm:inline-flex">
                   {[ClipboardDocumentIcon, ArrowDownTrayIcon, ShareIcon].map((Icon, i) => (
                     <span
