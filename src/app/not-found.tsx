@@ -51,6 +51,29 @@ export default function NotFound() {
           Go to formaty
         </Link>
       </div>
+
+      <div className="flex w-full max-w-md flex-col gap-5 rounded-xl border border-[var(--workspace-border)] bg-[var(--workspace-panel)] p-6">
+        <p className="text-sm font-medium text-[var(--workspace-text)]">Popular tools</p>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs text-[var(--workspace-text-muted)]">
+          {[
+            ["Compare Lists", "/compare-lists"],
+            ["JSON Formatter", "/json-formatter"],
+            ["JSON Diff", "/json-diff"],
+            ["JSONPath Tester", "/jsonpath-tester"],
+            ["SQL IN Generator", "/sql-in-clause-generator"],
+            ["JSON to TypeScript", "/json-to-typescript"],
+            ["JSON to SQL", "/json-to-sql"],
+            ["UUID Generator", "/utils/uuid-generator"],
+          ].map(([label, href]) => (
+            <Link key={href} href={href} className="transition-colors hover:text-primary">
+              {label}
+            </Link>
+          ))}
+        </div>
+        <Link href="/tools" className={`${linkBtnClass} w-full justify-center py-2`}>
+          Browse all tools
+        </Link>
+      </div>
     </div>
   );
 }

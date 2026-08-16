@@ -2318,10 +2318,26 @@ export function WorkspaceContent({
           }
           parseFmt = detectFormat(toParse) === "curl" ? "json" : (detectFormat(toParse) as FormatKind);
         }
-        const json = await run<JsonValue>("parseFormat", {
-          input: toParse,
-          format: parseFmt,
-        });
+        let json: JsonValue;
+        try {
+          json = await run<JsonValue>("parseFormat", {
+            input: toParse,
+            format: parseFmt,
+          });
+        } catch (e) {
+          if (fmt !== "curl") throw e;
+          // The cURL ran fine but the response isn't structured data (plain
+          // text, HTML, an error page, a binary download, ...). Show the raw
+          // body instead of failing with a JSON parse error, so Ctrl+Enter on
+          // any cURL always lands somewhere useful.
+          setOutput(toParse);
+          setOutputLanguage("plaintext");
+          setOutputExt("txt");
+          setParsedOutput(null);
+          setActiveOperation(null);
+          if (!isDesktopLayout) setMobileShowOutput(true);
+          return;
+        }
         const result = await convertJsonToOutput(json);
         setOutputData(result, "parse");
         setParsedOutput(json);

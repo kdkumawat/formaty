@@ -363,6 +363,19 @@ export function ListComparePanel({
     return "bg-[var(--workspace-border)]";
   };
 
+  // Never leave the user staring at an empty bucket: when the active bucket has
+  // no items (e.g. a one-sided list preset lands on "Common"), jump to the first
+  // bucket that actually has results - common, then left/right-only, dupes, etc.
+  useEffect(() => {
+    setActiveBucket((cur) => {
+      if (bucketCount(cur) > 0) return cur;
+      const first = [...PRIMARY_BUCKETS, ...DUPE_BUCKETS].find((b) => bucketCount(b) > 0);
+      return first ?? cur;
+    });
+    // bucketCount is a fresh closure over `result` each render; run on every result change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [result]);
+
   const menuItem = (active: boolean) =>
     `${sharedMenuItemClass} ${active ? sharedMenuItemActiveClass : ""}`;
 
