@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   analyzeSingleList,
+  buildListSummary,
   compareLists,
   compareListsCountAware,
+  computeCountDeltas,
   DEFAULT_LIST_PARSE_OPTIONS,
   formatCountDeltaSummary,
   formatListItems,
@@ -148,6 +150,99 @@ describe("compareListsCountAware", () => {
     const r = compareListsCountAware("A\nA\nA", "B\nB", base);
     expect(r.leftDupes.map((i) => i.value)).toEqual(["A"]);
     expect(r.rightDupes.map((i) => i.value)).toEqual(["B"]);
+  });
+});
+
+describe("buildListSummary", () => {
+  it("groups left / right / common with counts and items", () => {
+    const r = compareLists("a\nb\nc", "b\nc\nd", base);
+    const s = buildListSummary(r);
+    expect(s.sections.map((x) => x.bucket)).toEqual(["common", "leftOnly", "rightOnly"]);
+    expect(s.sections.map((x) => x.count)).toEqual([2, 1, 1]);
+    expect(s.sections[0]!.items.map((i) => i.value)).toEqual(["b", "c"]);
+    expect(s.text).toContain("Common (2)");
+    expect(s.text).toContain("  b");
+    expect(s.text).toContain("Only left (1)");
+    expect(s.text).toContain("Only right (1)");
+  });
+
+  it("includes duplicates sections only when duplicates exist", () => {
+    const r = compareLists("a\na\nb", "b\nb\nc", base);
+    const s = buildListSummary(r);
+    expect(s.sections.map((x) => x.bucket)).toEqual(["common", "leftOnly", "rightOnly", "leftDupes", "rightDupes"]);
+    const leftDupes = s.sections.find((x) => x.bucket === "leftDupes")!;
+    expect(leftDupes.items.map((i) => i.value)).toEqual(["a"]);
+    expect(s.text).toContain("Left duplicates (1)");
+    expect(s.text).toContain("Right duplicates (1)");
+  });
+
+  it("omits zero-count sections", () => {
+    const r = compareLists("a\nb", "a\nb", base);
+    const s = buildListSummary(r);
+    expect(s.sections.map((x) => x.bucket)).toEqual(["common"]);
+    expect(s.text).not.toContain("Only left");
+    expect(s.text).not.toContain("Only right");
+  });
+
+  it("annotates count mismatches inline in the Common section", () => {
+    const r = compareLists("A\nA\nB", "A\nB\nB", base);
+    const s = buildListSummary(r);
+    expect(s.text).toContain("A ×2 left, ×1 right");
+    expect(s.text).toContain("B ×1 left, ×2 right");
+    expect(s.countDeltas).toHaveLength(2);
+  });
+
+  it("adds no delta notes when counts match", () => {
+    const r = compareLists("A\nA\nB", "A\nA\nB", base);
+    const s = buildListSummary(r);
+    expect(s.countDeltas).toEqual([]);
+    expect(s.text).not.toContain("left");
+  });
+
+  it("hides delta notes when showCountDeltas is false", () => {
+    const r = compareLists("A\nA\nB", "A\nB\nB", base);
+    const s = buildListSummary(r, { showCountDeltas: false });
+    expect(s.countDeltas).toEqual([]);
+    expect(s.text).not.toContain("×2 left");
+  });
+
+  it("includes the Changed section only when requested", () => {
+    const r = compareLists("a\nb", "a\nb", base);
+    r.changed = [{ value: "a", key: "a", count: 1 }];
+    r.stats.changed = 1;
+    const without = buildListSummary(r, { includeChanged: false });
+    expect(without.sections.find((x) => x.bucket === "changed")).toBeUndefined();
+    const withChanged = buildListSummary(r, { includeChanged: true });
+    expect(withChanged.sections.map((x) => x.bucket)).toEqual(["common", "changed"]);
+    expect(withChanged.text).toContain("Changed (1)");
+  });
+
+  it("omits the Changed section when it has no items", () => {
+    const r = compareLists("a\nb", "a\nb", base);
+    const s = buildListSummary(r, { includeChanged: true });
+    expect(s.sections.find((x) => x.bucket === "changed")).toBeUndefined();
+  });
+
+  it("returns an empty report for empty inputs", () => {
+    const r = compareLists("", "", base);
+    const s = buildListSummary(r);
+    expect(s.sections).toEqual([]);
+    expect(s.text).toBe("");
+  });
+
+  it("reflects parse options (case-insensitive matching)", () => {
+    const r = compareLists("Alpha", "alpha", { ...base, caseInsensitive: true });
+    const s = buildListSummary(r);
+    expect(s.sections.map((x) => x.bucket)).toEqual(["common"]);
+    expect(s.sections[0]!.items[0]!.value).toBe("Alpha");
+  });
+});
+
+describe("computeCountDeltas", () => {
+  it("reports deltas only for keys on both sides with different counts", () => {
+    const r = compareListsCountAware("A\nA\nB", "A\nB\nB", base);
+    expect(r.countDeltas).toEqual(computeCountDeltas(r));
+    expect(r.countDeltas.map((d) => d.key).sort()).toEqual(["A", "B"]);
   });
 });
 

@@ -173,6 +173,7 @@ Multi-tab (new/close/rename, per-tab full snapshots, T/C/U letter badges) ✅ ·
 | Symmetric difference | ✅ | `symmetric` bucket |
 | Duplicate detection | ✅ | `leftDupes`/`rightDupes` buckets (shown when >0) |
 | Duplicate counts | ✅ | `count` per item, frequency sort |
+| Summary report | ✅ | `summary` view: grouped counts + items for Common / Only left / Only right / dupes / Changed, with inline count-delta notes (`A ×2 left, ×1 right`); clickable section headers drill into buckets; exempt from empty-bucket auto-jump; persisted in localStorage |
 | Sorting | ✅ | none/asc/desc/numeric-asc/numeric-desc/frequency on **result**, left, and right panes (snapshot-restore on unsort) |
 | Deduplication | 🟡 | implicit via set keys (dupes only reported, not removed from a *single* list; a standalone "dedupe one list" action is not exposed) |
 | Case sensitivity | ✅ | toggle (`caseInsensitive`) |
