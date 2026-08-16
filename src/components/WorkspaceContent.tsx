@@ -2287,8 +2287,20 @@ export function WorkspaceContent({
     return run<string>("convert", { json, toFormat, formatOptions: formatOpts, csvDelimiter });
   }, [convertToFormat, formatOptions, run, csvDelimiter]);
 
+  // Ctrl/Cmd+Enter can reach parseOnly twice for a single keypress - once via the
+  // global window keydown handler and once via Monaco's own keybinding (JsonEditor
+  // onCtrlEnter), which Monaco dispatches a beat later (~400ms). Both paths must
+  // stay live so the shortcut works on every platform (e.g. plain Ctrl on macOS)
+  // and focus state, so the duplicate is deduped here instead of dropping either
+  // path: a duplicate call always carries the same input text within a short
+  // window, while a deliberate re-run after editing changes the text.
+  const lastParseRunRef = useRef<{ at: number; text: string } | null>(null);
   const parseOnly = useCallback((inputOverride?: string, formatOverride?: InputFormatKind) => {
     const text = inputOverride ?? input;
+    const now = Date.now();
+    const last = lastParseRunRef.current;
+    if (last && now - last.at < 1000 && last.text === text) return;
+    lastParseRunRef.current = { at: now, text };
     const fmt = formatOverride ?? resolvedInputFormat;
     if (!text.trim()) return;
     setBusy(true);
@@ -3261,14 +3273,11 @@ export function WorkspaceContent({
         return;
       }
       if (event.key === "Enter") {
-        // Inside a Monaco editor, Ctrl+Enter is handled by the editor's own
-        // keybinding (JsonEditor onCtrlEnter) which consumes it without
-        // inserting a newline - skip here to avoid running parse twice.
-        const target = event.target as HTMLElement | null;
-        if (target && target.closest?.(".monaco-editor")) {
-          event.preventDefault();
-          return;
-        }
+        // Run parse for every Ctrl/Cmd+Enter. Inside a Monaco editor the editor's
+        // own keybinding (JsonEditor onCtrlEnter) also fires and swallows the chord
+        // so no newline is inserted; parseOnly dedupes the duplicate call (Monaco
+        // dispatches it a beat later), so the shortcut works regardless of platform
+        // modifier (e.g. plain Ctrl on macOS) or which pane has focus.
         event.preventDefault();
         parseOnly();
       }
