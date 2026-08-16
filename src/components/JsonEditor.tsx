@@ -53,6 +53,12 @@ export function JsonEditor({
    *  Cmd/Ctrl+Enter would run against stale state from mount time). */
   const onCtrlEnterRef = React.useRef(onCtrlEnter);
   onCtrlEnterRef.current = onCtrlEnter;
+  /** On macOS KeyMod.CtrlCmd only matches Cmd, so plain Ctrl+Enter would fall
+   *  through to Monaco's default newline insert. Bind bare Ctrl there too. */
+  const isMac = React.useMemo(
+    () => typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform),
+    [],
+  );
 
   return (
     <div
@@ -103,9 +109,15 @@ export function JsonEditor({
         onChange={(next) => onChange(next ?? "")}
         onMount={(editor, monaco) => {
           editorRef.current = editor;
-          editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
+          const onCtrlEnter = () => {
             onCtrlEnterRef.current?.();
-          });
+          };
+          editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, onCtrlEnter);
+          // macOS: also consume plain Ctrl+Enter so it executes instead of
+          // inserting a newline (CtrlCmd only matches Cmd there).
+          if (isMac) {
+            editor.addCommand(monaco.KeyMod.Ctrl | monaco.KeyCode.Enter, onCtrlEnter);
+          }
           if (onEditorMount) {
             onEditorMount({
               find: () => editor.trigger("keyboard", "actions.find", null),

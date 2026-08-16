@@ -3,6 +3,16 @@ import { Logo } from "@/components/Logo";
 
 const ENTRIES = [
   {
+    version: "2.1.2",
+    date: "August 2026",
+    title: "Reliable Ctrl/Cmd+Enter execution",
+    items: [
+      "Ctrl/Cmd+Enter now executes the input from any focused pane on every platform - including plain Ctrl+Enter on macOS, where the shortcut previously fell through",
+      "A single keypress fires exactly one request: the global handler and Monaco's keybinding both stay live and the duplicate dispatch is deduped",
+      "Works for cURL execution and JSON parsing alike, with the raw body fallback for non-JSON responses",
+    ],
+  },
+  {
     version: "2.1.1",
     date: "August 2026",
     title: "cURL fixes, SEO architecture & tools directory",
