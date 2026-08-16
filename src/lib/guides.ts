@@ -69,7 +69,7 @@ export const GUIDES: GuideConfig[] = [
     ],
     toolRoute: "compare-lists",
     toolCta: "Try it - compare two ID lists online",
-    relatedTools: ["compare-ids", "sql-not-in-generator", "sql-in-clause-generator", "find-duplicates-in-list"],
+    relatedTools: ["compare-ids", "sql-in-clause-generator", "find-duplicates-in-list"],
     relatedGuides: ["find-missing-ids-between-lists", "generate-sql-in-clause"],
     faq: [
       {
@@ -122,7 +122,7 @@ export const GUIDES: GuideConfig[] = [
     ],
     toolRoute: "compare-lists",
     toolCta: "Find missing IDs now",
-    relatedTools: ["compare-ids", "sql-not-in-generator", "compare-csv", "find-duplicates-in-list"],
+    relatedTools: ["compare-ids", "compare-csv", "find-duplicates-in-list"],
     relatedGuides: ["compare-database-records", "generate-sql-in-clause"],
     faq: [
       {
@@ -167,7 +167,7 @@ export const GUIDES: GuideConfig[] = [
     ],
     toolRoute: "sql-in-clause-generator",
     toolCta: "Generate a SQL IN clause",
-    relatedTools: ["sql-not-in-generator", "sql-values-generator", "compare-lists", "json-to-sql"],
+    relatedTools: ["sql-values-generator", "compare-lists", "json-to-sql"],
     relatedGuides: ["find-missing-ids-between-lists", "compare-database-records"],
     faq: [
       {

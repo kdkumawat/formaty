@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { ArrowRightIcon } from "@heroicons/react/24/outline";
+import { Logo } from "@/components/Logo";
 import { GUIDE_ROUTES, getGuideConfig } from "@/lib/guides";
 import { getCanonicalUrl, getPlayUrl, SITE_URL } from "@/lib/seo";
 import { getPageConfigByRoute } from "@/lib/seoUtils";
@@ -83,6 +84,7 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
             href="/"
             className="flex items-center gap-0.5 text-[var(--workspace-text)] transition-opacity hover:opacity-85"
           >
+            <Logo size={22} />
             <span className="text-lg font-bold tracking-tight text-primary">ormaty</span>
           </Link>
           <nav className="flex items-center gap-2">

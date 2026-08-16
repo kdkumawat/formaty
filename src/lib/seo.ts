@@ -24,7 +24,6 @@ export const SEO_KEYWORDS: Record<string, string[]> = {
   "csv-formatter": ["csv formatter", "format csv online"],
   "compare-lists": ["compare two lists", "list comparison tool", "find missing items", "compare lists online", "find common items", "compare two csv columns"],
   "sql-in-clause-generator": ["sql in clause generator", "generate sql in", "sql in list", "where id in generator"],
-  "sql-not-in-generator": ["sql not in generator", "generate sql not in", "excluded ids sql"],
   "json-to-sql": ["json to sql", "convert json to sql", "json to sql insert", "generate sql from json", "json to ddl"],
   "json-to-go": ["json to go", "json to golang", "convert json to go struct", "go struct generator"],
   "json-to-python": ["json to python", "convert json to python", "json to dataclass", "python type generator"],
@@ -69,7 +68,6 @@ export type ToolRoute =
   | "csv-formatter"
   | "compare-lists"
   | "sql-in-clause-generator"
-  | "sql-not-in-generator"
   | "json-to-sql"
   | "json-to-go"
   | "json-to-python"
@@ -492,7 +490,7 @@ Every result bucket can be exported - copy as SQL IN, SQL NOT IN, PostgreSQL ARR
       "Compare API response ID lists",
       "Generate SQL IN / NOT IN clauses",
     ],
-    relatedTools: ["sql-in-clause-generator", "sql-not-in-generator", "json-diff", "json-to-sql"],
+    relatedTools: ["sql-in-clause-generator", "json-diff", "json-to-sql"],
   },
   "sql-in-clause-generator": {
     route: "sql-in-clause-generator",
@@ -513,28 +511,7 @@ Use cases: running ad-hoc queries on a list of IDs, feeding a filtered ID set in
       "Generate chunks for very large lists",
       "Create NOT IN exclusion clauses",
     ],
-    relatedTools: ["sql-not-in-generator", "compare-lists", "json-to-sql", "jsonpath-tester"],
-  },
-  "sql-not-in-generator": {
-    route: "sql-not-in-generator",
-    title: "SQL NOT IN Generator | Formaty",
-    description:
-      "Generate a SQL NOT IN clause from a list of excluded values. Paste IDs and copy WHERE col NOT IN (...). Free, runs locally in your browser.",
-    h1: "SQL NOT IN Generator",
-    content: `Excluding a known set of records - deleted IDs, banned users, already-processed items - requires a NOT IN clause. Building it by hand from a pasted list wastes time and invites quoting mistakes.
-
-Paste the values to exclude and get a copy-ready WHERE col NOT IN (...) clause with correct quoting. Works for strings, UUIDs, and numbers, and pairs perfectly with the list comparison tool to exclude everything found in another dataset.
-
-Use cases: excluding already-synced records, filtering out known-bad IDs, and debugging missing-data reports. Everything is processed locally.`,
-    inputExample: "id-2001\nid-2002\nid-2003",
-    outputExample: "id NOT IN ('id-2001', 'id-2002', 'id-2003')",
-    useCases: [
-      "Exclude already-processed records",
-      "Filter out known-bad IDs",
-      "Debug missing-data reports",
-      "Complement a SQL IN comparison",
-    ],
-    relatedTools: ["sql-in-clause-generator", "compare-lists", "json-to-sql", "json-diff"],
+    relatedTools: ["compare-lists", "json-to-sql", "jsonpath-tester"],
   },
   "json-to-sql": {
     route: "json-to-sql",
@@ -618,7 +595,7 @@ Use cases: reconciling production vs staging, finding records missing from a syn
       "Verify data migrations",
       "Compare API response IDs",
     ],
-    relatedTools: ["compare-lists", "sql-in-clause-generator", "sql-not-in-generator", "find-duplicates-in-list"],
+    relatedTools: ["compare-lists", "sql-in-clause-generator", "find-duplicates-in-list"],
   },
   "find-duplicates-in-list": {
     route: "find-duplicates-in-list",
@@ -660,7 +637,7 @@ Use cases: seeding tables from ID lists, inserting excluded records back, and bu
       "Re-insert missing records",
       "Chunk large value sets",
     ],
-    relatedTools: ["sql-in-clause-generator", "sql-not-in-generator", "compare-lists", "json-to-sql"],
+    relatedTools: ["sql-in-clause-generator", "compare-lists", "json-to-sql"],
   },
   "json-to-zod": {
     route: "json-to-zod",
@@ -1001,12 +978,6 @@ export const TOOL_PRESETS: Record<
     diffLeftInput: "1001\n1002\n1003\n1004\n1005\n1006",
     diffRightInput: "",
   },
-  "sql-not-in-generator": {
-    activeOperation: "diff",
-    diffKind: "list",
-    diffLeftInput: "id-2001\nid-2002\nid-2003\nid-2004",
-    diffRightInput: "",
-  },
   "json-to-sql": {
     activeOperation: "generateTypes",
     typeLanguage: "sql",
@@ -1118,4 +1089,15 @@ export const TOOL_PRESETS: Record<
     inputFormatOverride: "curl",
     input: 'curl -X GET "https://api.example.com/users" -H "Authorization: Bearer TOKEN"',
   },
+};
+
+/**
+ * Routes removed during tool deduplication. Each maps the old URL to the tool
+ * page that now covers that workflow, so the removed URL still resolves (with a
+ * canonical + redirect to the replacement) instead of 404ing.
+ */
+export const TOOL_REDIRECTS: Record<string, ToolRoute> = {
+  // SQL NOT IN is the same list-to-SQL workflow as SQL IN - the generator covers
+  // NOT IN (and ANY / VALUES) from one input.
+  "sql-not-in-generator": "sql-in-clause-generator",
 };

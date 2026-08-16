@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { ArrowRightIcon } from "@heroicons/react/24/outline";
+import { Logo } from "@/components/Logo";
 import { getCanonicalUrl, SITE_URL, TOOL_PAGES, type ToolRoute } from "@/lib/seo";
 import { UTIL_PAGES, UTIL_ROUTES } from "@/lib/seoUtils";
 
@@ -30,7 +31,7 @@ export const metadata: Metadata = {
 const TOOL_GROUPS: { label: string; routes: ToolRoute[] }[] = [
   {
     label: "Compare & Lists",
-    routes: ["compare-lists", "compare-ids", "compare-csv", "csv-column-compare", "find-duplicates-in-list", "sql-in-clause-generator", "sql-not-in-generator", "sql-values-generator"],
+    routes: ["compare-lists", "compare-ids", "compare-csv", "csv-column-compare", "find-duplicates-in-list", "sql-in-clause-generator", "sql-values-generator"],
   },
   {
     label: "JSON",
@@ -56,7 +57,13 @@ export default function ToolsPage() {
     <div className="min-h-screen bg-[var(--workspace-background)]">
       <header className="sticky top-0 z-50 border-b border-[var(--workspace-border)] bg-[var(--workspace-background)]/80 backdrop-blur-xl">
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
-          <Link href="/" className="text-lg font-bold tracking-tight text-primary">ormaty</Link>
+          <Link
+            href="/"
+            className="flex items-center gap-0.5 text-[var(--workspace-text)] transition-opacity hover:opacity-85"
+          >
+            <Logo size={22} />
+            <span className="text-lg font-bold tracking-tight text-primary">ormaty</span>
+          </Link>
           <nav className="flex items-center gap-2">
             <Link href="/docs" className="hidden rounded-lg px-3 py-1.5 text-sm text-[var(--workspace-text-muted)] transition-colors hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] sm:inline-flex">
               Docs

@@ -1,8 +1,10 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { ToolPage } from "@/components/ToolPage";
+import { ToolRedirect } from "@/components/ToolRedirect";
 import {
   ALL_TOOL_ROUTES,
+  TOOL_REDIRECTS,
   getToolConfig,
   getCanonicalUrl,
   SEO_KEYWORDS,
@@ -11,7 +13,9 @@ import {
 } from "@/lib/seo";
 
 export async function generateStaticParams() {
-  return ALL_TOOL_ROUTES.map((route) => ({ tool: route }));
+  return [...ALL_TOOL_ROUTES, ...Object.keys(TOOL_REDIRECTS)].map((route) => ({
+    tool: route,
+  }));
 }
 
 /** With `output: "export"`, unknown paths must 404 - not try to render on demand. */
@@ -23,6 +27,22 @@ export async function generateMetadata({
   params: Promise<{ tool: string }>;
 }): Promise<Metadata> {
   const { tool } = await params;
+  const redirectTarget = TOOL_REDIRECTS[tool];
+  if (redirectTarget) {
+    const target = getToolConfig(redirectTarget);
+    return {
+      title: target.h1,
+      description: target.description,
+      alternates: { canonical: getCanonicalUrl(`/${redirectTarget}`) },
+      robots: { index: false, follow: true },
+      openGraph: {
+        title: target.h1,
+        url: getCanonicalUrl(`/${redirectTarget}`),
+        siteName: "Formaty",
+        type: "website",
+      },
+    };
+  }
   if (!ALL_TOOL_ROUTES.includes(tool as ToolRoute)) return {};
   const config = getToolConfig(tool as ToolRoute);
   const canonical = getCanonicalUrl(`/${tool}`);
@@ -57,6 +77,17 @@ export default async function ToolRoutePage({
   params: Promise<{ tool: string }>;
 }) {
   const { tool } = await params;
+  const redirectTarget = TOOL_REDIRECTS[tool];
+  if (redirectTarget) {
+    const target = getToolConfig(redirectTarget);
+    return (
+      <>
+        {/* Hoisted to <head> by React 19 - instant redirect without JS. */}
+        <meta httpEquiv="refresh" content={`0; url=/${redirectTarget}`} />
+        <ToolRedirect to={redirectTarget} label={target.h1} />
+      </>
+    );
+  }
   if (!ALL_TOOL_ROUTES.includes(tool as ToolRoute)) notFound();
   const config = getToolConfig(tool as ToolRoute);
   const canonical = getCanonicalUrl(`/${tool}`);
