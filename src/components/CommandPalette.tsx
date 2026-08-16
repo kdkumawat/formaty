@@ -8,11 +8,8 @@ import React, {
   useState,
 } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  MagnifyingGlassIcon,
-  XMarkIcon,
-  CommandLineIcon,
-} from "@heroicons/react/24/outline";
+import { XMarkIcon, CommandLineIcon } from "@heroicons/react/24/outline";
+import { AnimatedMagnifierIcon, useIconAnimation } from "@/components/icons";
 
 export interface Command {
   id: string;
@@ -109,6 +106,9 @@ export function CommandPalette({
   const [activeIdx, setActiveIdx] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+
+  // Search icon gives a subtle one-beat nudge when the palette opens (input auto-focuses).
+  const searchIcon = useIconAnimation();
 
   const groups = useMemo(() => groupCommands(commands, query, recentIds), [commands, query, recentIds]);
   const flat = useMemo(() => groups.flatMap((g) => g.items), [groups]);
@@ -213,8 +213,11 @@ export function CommandPalette({
             onKeyDown={onKeyDown}
           >
             {/* Search bar */}
-            <div className={`flex items-center gap-2.5 border-b px-4 py-3 ${borderColor} ${inputBg}`}>
-              <MagnifyingGlassIcon className={`h-4 w-4 shrink-0 ${textMuted}`} />
+            <div
+              className={`flex items-center gap-2.5 border-b px-4 py-3 ${borderColor} ${inputBg}`}
+              {...searchIcon.bind}
+            >
+              <AnimatedMagnifierIcon ref={searchIcon.ref} className={`h-4 w-4 shrink-0 ${textMuted}`} />
               <input
                 ref={inputRef}
                 type="text"

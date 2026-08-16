@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useState, useEffect, useRef, useCallback } from "react";
-import { MagnifyingGlassIcon, XMarkIcon } from "@heroicons/react/24/outline";
+import { XMarkIcon } from "@heroicons/react/24/outline";
+import { AnimatedMagnifierIcon, useIconAnimation } from "@/components/icons";
 
 /* ─── Nav sections ──────────────────────────────── */
 const NAV_SECTIONS = [
@@ -116,6 +117,8 @@ function Section({
 /* ─── Main page ─────────────────────────────────── */
 export default function DocsPage() {
   const [query, setQuery] = useState("");
+  /** Search magnifier nudges when a docs search box is hovered or focused. */
+  const docsSearchIcon = useIconAnimation();
   const [activeId, setActiveId] = useState<string>("");
   const mainRef = useRef<HTMLElement>(null);
 
@@ -157,12 +160,14 @@ export default function DocsPage() {
           </div>
 
           {/* Search */}
-          <div className="relative hidden max-w-xs flex-1 sm:flex">
-            <MagnifyingGlassIcon className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--workspace-text-muted)]" />
+          <div className="relative hidden max-w-xs flex-1 sm:flex" {...docsSearchIcon.bind}>
+            <AnimatedMagnifierIcon ref={docsSearchIcon.ref} className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--workspace-text-muted)]" />
             <input
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
+              onFocus={docsSearchIcon.bind.onFocus}
+              onBlur={docsSearchIcon.bind.onBlur}
               placeholder="Search docs..."
               className="w-full rounded-lg border border-[var(--workspace-border)] bg-[var(--workspace-background)] py-1.5 pl-8 pr-7 text-xs text-[var(--workspace-text)] placeholder:text-[var(--workspace-text-muted)] outline-none transition-colors focus:border-primary/50"
             />
@@ -223,12 +228,14 @@ export default function DocsPage() {
         {/* ── Main content ── */}
         <main ref={mainRef} className="min-w-0 flex-1 px-5 py-10 md:px-10">
           {/* Mobile search */}
-          <div className="relative mb-6 sm:hidden">
-            <MagnifyingGlassIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--workspace-text-muted)]" />
+          <div className="relative mb-6 sm:hidden" {...docsSearchIcon.bind}>
+            <AnimatedMagnifierIcon ref={docsSearchIcon.ref} className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--workspace-text-muted)]" />
             <input
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
+              onFocus={docsSearchIcon.bind.onFocus}
+              onBlur={docsSearchIcon.bind.onBlur}
               placeholder="Search docs..."
               className="w-full rounded-xl border border-[var(--workspace-border)] bg-[var(--workspace-panel)] py-2.5 pl-10 pr-4 text-sm text-[var(--workspace-text)] placeholder:text-[var(--workspace-text-muted)] outline-none focus:border-primary/50"
             />

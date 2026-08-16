@@ -5,10 +5,10 @@ import {
   BarsArrowDownIcon,
   BarsArrowUpIcon,
   ChevronRightIcon,
-  MagnifyingGlassIcon,
   TableCellsIcon,
   ViewColumnsIcon,
 } from "@heroicons/react/24/outline";
+import { AnimatedMagnifierIcon, useIconAnimation } from "@/components/icons";
 import type { JsonValue } from "@/lib/json/core";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tooltip } from "@/components/workspace/Tooltip";
@@ -104,6 +104,8 @@ export function TableView({ data, className = "", fontSize = 13 }: TableViewProp
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [query, setQuery] = useState("");
   const [colsOpen, setColsOpen] = useState(false);
+  /** Search magnifier nudges when the box is hovered or focused. */
+  const searchIcon = useIconAnimation();
 
   // Reset filters when drilling
   useEffect(() => {
@@ -235,12 +237,14 @@ export function TableView({ data, className = "", fontSize = 13 }: TableViewProp
       )}
 
       <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-[var(--workspace-border)] px-2 py-1.5">
-        <div className="relative flex min-w-[10rem] flex-1 items-center">
-          <MagnifyingGlassIcon className="pointer-events-none absolute left-2 h-3.5 w-3.5 text-[var(--workspace-text-muted)]" />
+        <div className="relative flex min-w-[10rem] flex-1 items-center" {...searchIcon.bind}>
+          <AnimatedMagnifierIcon ref={searchIcon.ref} className="pointer-events-none absolute left-2 h-3.5 w-3.5 text-[var(--workspace-text-muted)]" />
           <input
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            onFocus={searchIcon.bind.onFocus}
+            onBlur={searchIcon.bind.onBlur}
             placeholder="Search rows…"
             className="h-7 w-full rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-background)] py-1 pl-7 pr-2 text-[11px] text-[var(--workspace-text)] outline-none focus:ring-1 focus:ring-primary"
           />

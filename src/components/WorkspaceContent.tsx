@@ -28,9 +28,7 @@ import {
   DocumentTextIcon,
   QueueListIcon,
   ShareIcon,
-  MagnifyingGlassIcon,
   TableCellsIcon,
-  SparklesIcon,
   ArrowsPointingInIcon,
   ArrowsPointingOutIcon,
   RectangleStackIcon,
@@ -38,6 +36,16 @@ import {
   EqualsIcon,
 } from "@heroicons/react/24/outline";
 import { StarIcon as StarSolidIcon } from "@heroicons/react/24/solid";
+import {
+  AnimatedBracesIcon,
+  AnimatedCodeIcon,
+  AnimatedCopyIcon,
+  AnimatedMagnifierIcon,
+  AnimatedSparklesIcon,
+  AnimatedUploadIcon,
+  useIconAnimation,
+  type AnimatedIconHandle,
+} from "@/components/icons";
 import { JsonDiffEditor, type DiffNavState, type JsonDiffEditorRef } from "@/components/JsonDiffEditor";
 import { ListComparePanel, type ListCompareExport } from "@/components/ListComparePanel";
 import { SingleListPanel } from "@/components/SingleListPanel";
@@ -312,16 +320,18 @@ const OPERATION_ACTION_LABELS = Object.fromEntries(
 ) as Record<string, string>;
 
 /** Icons shown next to the selected value in the View / Actions triggers. */
-const VIEW_ICONS: Record<string, typeof EyeIcon> = {
+const VIEW_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   raw: DocumentTextIcon,
   tree: QueueListIcon,
   graph: ShareIcon,
-  query: MagnifyingGlassIcon,
+  /** High-value interactive icon - animates on hover/focus. */
+  query: AnimatedMagnifierIcon,
   table: TableCellsIcon,
 };
 
-const ACTION_ICONS: Record<string, typeof BoltIcon> = {
-  beautify: SparklesIcon,
+const ACTION_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  /** Main action - sparkles twinkle once on hover/focus. */
+  beautify: AnimatedSparklesIcon,
   minify: MinusIcon,
   flatten: ArrowsPointingInIcon,
   unflatten: ArrowsPointingOutIcon,
@@ -331,32 +341,33 @@ const ACTION_ICONS: Record<string, typeof BoltIcon> = {
 };
 
 /** Per-format icons shown in the Format trigger: JSON {}, XML <>, CSV table… */
-/** Inline `{}` glyph - heroicons has no braces icon in this version. */
-function BracesGlyph({ className = "" }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.8}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden
-    >
-      <path d="M8 4c-2 0-3 1-3 3v3c0 1.5-.5 2.5-2 3 1.5.5 2 1.5 2 3v3c0 2 1 3 3 3" />
-      <path d="M16 4c2 0 3 1 3 3v3c0 1.5.5 2.5 2 3-1.5.5-2 1.5-2 3v3c0 2-1 3-3 3" />
-    </svg>
-  );
-}
-
 const FORMAT_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
-  json: BracesGlyph,
-  xml: CodeBracketIcon,
+  /** JSON braces spread on hover/focus (Formaty's own glyph, itsHover motion). */
+  json: AnimatedBracesIcon,
+  /** XML angle brackets spread on hover/focus. */
+  xml: AnimatedCodeIcon,
   yaml: QueueListIcon,
   toml: EqualsIcon,
   csv: TableCellsIcon,
 };
+
+/**
+ * Renders a toolbar trigger icon and forwards the imperative animation ref.
+ * Static heroicons glyphs ignore the ref (their own ref is an SVG element);
+ * animated icons (from @/components/icons) use it for hover/focus control.
+ */
+function TriggerIcon({
+  Icon,
+  iconRef,
+  className,
+}: {
+  Icon: React.ComponentType<{ className?: string }>;
+  iconRef: React.Ref<AnimatedIconHandle>;
+  className?: string;
+}) {
+  const Animated = Icon as React.ComponentType<{ className?: string; ref?: React.Ref<AnimatedIconHandle> }>;
+  return <Animated ref={iconRef} className={className} />;
+}
 
 /** Brand-tinted 2-letter badges for the Types trigger (no icon dependency). */
 const TYPE_BADGES: Record<string, { text: string; bg: string; fg: string }> = {
@@ -1147,6 +1158,12 @@ export function WorkspaceContent({
   const selectBtnClass =
     "inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-md bg-muted px-2 text-xs font-medium text-[var(--workspace-text)] transition-colors hover:bg-primary/10 hover:text-primary";
   const selectBtnOpenClass = "!bg-primary/12 !text-primary";
+  /** Hover/focus drivers for the animated toolbar trigger icons (Format / View / Actions). */
+  const formatIcon = useIconAnimation();
+  const viewIcon = useIconAnimation();
+  const actionsIcon = useIconAnimation();
+  const uploadIcon = useIconAnimation();
+  const copyLinkIcon = useIconAnimation();
   /* Pinned toolbar shortcut (non-compact mode) - same greyed squarish language as select triggers */
   const pinnedBtnClass =
     "inline-flex h-7 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-md bg-muted px-2 text-xs font-medium text-[var(--workspace-text)] transition-colors hover:bg-primary/10 hover:text-primary disabled:opacity-40";
@@ -1251,8 +1268,9 @@ export function WorkspaceContent({
     moveHistory: (delta: number) => void;
     newTab: () => void;
     closeTab: () => void;
+    reset: () => void;
     busy: boolean;
-  }>({ runOperation: () => {}, downloadOutput: () => {}, copyOutput: () => {}, moveHistory: () => {}, newTab: () => {}, closeTab: () => {}, busy: false });
+  }>({ runOperation: () => {}, downloadOutput: () => {}, copyOutput: () => {}, moveHistory: () => {}, newTab: () => {}, closeTab: () => {}, reset: () => {}, busy: false });
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -1375,6 +1393,13 @@ export function WorkspaceContent({
         return;
       }
 
+      // ⌘⇧R — reset input & output (works in every mode: transform / compare / utils).
+      if (mod && event.shiftKey && event.key.toLowerCase() === "r") {
+        event.preventDefault();
+        shortcutActionsRef.current.reset();
+        return;
+      }
+
       // Compare mode routes ⌘Z / ⌘Y / ⌘⇧Z to the diff panes in the handler below — don't double-handle.
       if (activeOperation === "diff") return;
 
@@ -1464,6 +1489,7 @@ export function WorkspaceContent({
       moveHistory,
       newTab: addTab,
       closeTab: () => closeTab(activeTabId),
+      reset: handleWorkspaceReset,
       busy: showBusy,
     };
   });
@@ -3472,13 +3498,7 @@ export function WorkspaceContent({
     { id: "ws-share",    label: "Share workspace link",  category: "Workspace", keywords: ["link", "url"], disabled: !output.trim(), action: requestShare },
 
     ...(sharedLinkUrl ? [{ id: "ws-embed", label: "Copy embed / iframe URL", category: "Workspace" as const, keywords: ["embed", "iframe", "share"], disabled: false, action: async () => { await navigator.clipboard.writeText(`${sharedLinkUrl}&embed=1`); toast({ message: "Embed URL copied" }); } }] : []),
-    { id: "ws-clear",    label: "Clear workspace",       category: "Workspace", keywords: ["reset", "new", "empty"], disabled: inputEmpty && !output.trim(), action: () => {
-      setInput(""); setOutput(""); setParsedOutput(null); setError(null);
-      setValidationError(null); setActiveOperation(null); setCopyState("idle");
-      setSharedLinkId(null); setSharedLinkUrl(null); isViewingSharedRef.current = false;
-      if (pathname === "/playground" && searchParams?.get("id")) router.replace("/playground");
-      if (!isDesktopLayout) setMobileShowOutput(true);
-    } },
+    { id: "ws-clear",    label: "Reset input & output",  category: "Workspace", shortcut: "⌘⇧R", keywords: ["reset", "clear", "new", "empty"], action: handleWorkspaceReset },
     // Focus
     { id: "focus-input",  label: "Focus input pane",  category: "Workspace", keywords: ["focus", "input", "left", "editor"], action: () => { setFocusedPane("input"); inputEditorApiRef.current?.focus(); } },
     { id: "focus-output", label: "Focus output pane", category: "Workspace", keywords: ["focus", "output", "right", "editor"], action: () => { setFocusedPane("output"); outputEditorApiRef.current?.focus(); } },
@@ -3548,7 +3568,7 @@ export function WorkspaceContent({
     // Auto-format on paste
     { id: "auto-fmt-paste", label: autoFormatOnPaste ? "Auto-format on paste: On (turn off)" : "Auto-format on paste: Off (turn on)", category: "Settings", keywords: ["auto", "format", "paste", "beautify", "pretty"], badge: autoFormatOnPaste ? "on" : undefined, action: () => setAutoFormatOnPaste((v) => !v) },
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  ], [inputEmpty, showBusy, convertToFormat, rightView, parsedOutput, typeLanguage, activeOperation, output, themeMode, editorFontSize, isOutputMaximized, isWindowFullscreen, toggleWindowFullscreen, formatOptions, liveTransform, viewAsMenu, canUndo, canRedo, lineWrap, diffSideBySide, diffIgnoreWhitespace, diffShowPaths, diffKind, csvDelimiter, sharedLinkUrl, pinnedItems, undoStack.length, tabs.length, activeTabId, splitInputOpen, autoFormatOnPaste, showTabs, swapDiffSides, beautifyDiffSides, copyDiffText, downloadDiffReport, isUtilsMode, utilTab, isDiffMode]);
+  ], [inputEmpty, showBusy, convertToFormat, rightView, parsedOutput, typeLanguage, activeOperation, output, themeMode, editorFontSize, isOutputMaximized, isWindowFullscreen, toggleWindowFullscreen, formatOptions, liveTransform, viewAsMenu, canUndo, canRedo, lineWrap, diffSideBySide, diffIgnoreWhitespace, diffShowPaths, diffKind, csvDelimiter, sharedLinkUrl, pinnedItems, undoStack.length, tabs.length, activeTabId, splitInputOpen, autoFormatOnPaste, showTabs, swapDiffSides, beautifyDiffSides, copyDiffText, downloadDiffReport, isUtilsMode, utilTab, isDiffMode, handleWorkspaceReset]);
 
   const settingsPanelContent = (
                 <div className="w-[20rem] max-w-[85vw]">
@@ -4333,7 +4353,7 @@ export function WorkspaceContent({
             </Dropdown>
             )}
             {viewAsMenu && (<>
-            <Dropdown open={formatMenuOpen} onOpenChange={setFormatMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`w-max min-w-[8rem]`} trigger={<Tooltip content={`Format: ${FORMAT_LABELS[convertToFormat]}`}><div className={`${selectBtnClass} ${formatMenuOpen ? selectBtnOpenClass : ""}`}>{(() => { const FI = FORMAT_ICONS[convertToFormat] ?? Squares2X2Icon; return <FI className="h-3.5 w-3.5 shrink-0 text-primary" />; })()}<span className="font-medium">Format</span><ChevronDownIcon className="h-3 w-3 shrink-0" aria-hidden /></div></Tooltip>}>
+            <Dropdown open={formatMenuOpen} onOpenChange={setFormatMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`w-max min-w-[8rem]`} trigger={<Tooltip content={`Format: ${FORMAT_LABELS[convertToFormat]}`}><div className={`${selectBtnClass} ${formatMenuOpen ? selectBtnOpenClass : ""}`} {...formatIcon.bind}><TriggerIcon Icon={FORMAT_ICONS[convertToFormat] ?? Squares2X2Icon} iconRef={formatIcon.ref} className="h-3.5 w-3.5 shrink-0 text-primary" /><span className="font-medium">Format</span><ChevronDownIcon className="h-3 w-3 shrink-0" aria-hidden /></div></Tooltip>}>
               <div className="flex flex-col" onClick={(e) => e.stopPropagation()}>
                 {menuSectionLabel("Structured")}
                 {(["json", "xml", "yaml", "toml"] as const).map((fmt) => (
@@ -4350,7 +4370,7 @@ export function WorkspaceContent({
                 </button>
               </div>
             </Dropdown>
-            <Dropdown open={viewMenuOpen} onOpenChange={setViewMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`w-max min-w-[9rem]`} trigger={<Tooltip content={`View: ${rightView[0].toUpperCase()}${rightView.slice(1)}`}><div className={`${selectBtnClass} ${viewMenuOpen ? selectBtnOpenClass : ""}`}>{(() => { const VI = VIEW_ICONS[rightView] ?? EyeIcon; return <VI className="h-3.5 w-3.5 shrink-0 text-primary" />; })()}<span className="font-medium">View</span><ChevronDownIcon className="h-3 w-3 shrink-0" aria-hidden /></div></Tooltip>}>
+            <Dropdown open={viewMenuOpen} onOpenChange={setViewMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`w-max min-w-[9rem]`} trigger={<Tooltip content={`View: ${rightView[0].toUpperCase()}${rightView.slice(1)}`}><div className={`${selectBtnClass} ${viewMenuOpen ? selectBtnOpenClass : ""}`} {...viewIcon.bind}><TriggerIcon Icon={VIEW_ICONS[rightView] ?? EyeIcon} iconRef={viewIcon.ref} className="h-3.5 w-3.5 shrink-0 text-primary" /><span className="font-medium">View</span><ChevronDownIcon className="h-3 w-3 shrink-0" aria-hidden /></div></Tooltip>}>
               <div className="flex flex-col" onClick={(e) => e.stopPropagation()}>
                 {menuSectionLabel("Text")}
                 <button type="button" disabled={inputEmpty} className={`${menuItemClass} ${rightView === "raw" ? menuItemActiveClass : ""}`} onClick={() => { setRightView("raw"); setFocusedPane("output"); setViewMenuOpen(false); }}>
@@ -4375,7 +4395,7 @@ export function WorkspaceContent({
                 </button>
               </div>
             </Dropdown>
-            <Dropdown open={actionsMenuOpen} onOpenChange={setActionsMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`w-max min-w-[9rem]`} trigger={<Tooltip content={activeOperation && OPERATION_ACTION_LABELS[activeOperation] ? `Actions: ${OPERATION_ACTION_LABELS[activeOperation]}` : "Transform actions"}><div className={`${selectBtnClass} ${actionsMenuOpen ? selectBtnOpenClass : ""}`}>{(() => { const AI = activeOperation ? (ACTION_ICONS[activeOperation] ?? BoltIcon) : BoltIcon; return <AI className={`h-3.5 w-3.5 shrink-0 ${activeOperation && ACTION_ICONS[activeOperation] ? "text-primary" : "text-[var(--workspace-text-muted)]"}`} />; })()}<span className="font-medium">Actions</span><ChevronDownIcon className="h-3 w-3 shrink-0" aria-hidden /></div></Tooltip>}>
+            <Dropdown open={actionsMenuOpen} onOpenChange={setActionsMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`w-max min-w-[9rem]`} trigger={<Tooltip content={activeOperation && OPERATION_ACTION_LABELS[activeOperation] ? `Actions: ${OPERATION_ACTION_LABELS[activeOperation]}` : "Transform actions"}><div className={`${selectBtnClass} ${actionsMenuOpen ? selectBtnOpenClass : ""}`} {...actionsIcon.bind}><TriggerIcon Icon={activeOperation ? (ACTION_ICONS[activeOperation] ?? BoltIcon) : BoltIcon} iconRef={actionsIcon.ref} className={`h-3.5 w-3.5 shrink-0 ${activeOperation && ACTION_ICONS[activeOperation] ? "text-primary" : "text-[var(--workspace-text-muted)]"}`} /><span className="font-medium">Actions</span><ChevronDownIcon className="h-3 w-3 shrink-0" aria-hidden /></div></Tooltip>}>
               <div className="flex flex-col" onClick={(e) => e.stopPropagation()}>
                 <button type="button" disabled={inputEmpty} className={`${menuItemClass} ${!OPERATION_ACTION_LABELS[activeOperation ?? ""] ? menuItemActiveClass : ""}`} onClick={() => { restorePreviousActionOutput(); setActionsMenuOpen(false); }}>
                   {sharedMenuCheck(!OPERATION_ACTION_LABELS[activeOperation ?? ""])}
@@ -5335,8 +5355,8 @@ export function WorkspaceContent({
                       <ClipboardDocumentIcon className="h-3.5 w-3.5" />
                       Paste
                     </button>
-                    <button type="button" className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-3 py-1.5 text-xs font-medium text-[var(--workspace-text-muted)] transition-all hover:border-primary/30 hover:text-primary hover:shadow-sm" onClick={() => document.getElementById("import-json-file")?.click()}>
-                      <DocumentArrowDownIcon className="h-3.5 w-3.5" />
+                    <button type="button" className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-3 py-1.5 text-xs font-medium text-[var(--workspace-text-muted)] transition-all hover:border-primary/30 hover:text-primary hover:shadow-sm" onClick={() => document.getElementById("import-json-file")?.click()} {...uploadIcon.bind}>
+                      <AnimatedUploadIcon ref={uploadIcon.ref} className="h-3.5 w-3.5" />
                       Import file
                     </button>
                     <button type="button" className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-3 py-1.5 text-xs font-medium text-[var(--workspace-text-muted)] transition-all hover:border-primary/30 hover:text-primary hover:shadow-sm" onClick={() => runOperation("diff")}>
@@ -5666,8 +5686,9 @@ export function WorkspaceContent({
                     /* ignore */
                   }
                 }}
+                {...copyLinkIcon.bind}
               >
-                <ClipboardDocumentIcon className="h-3.5 w-3.5" />
+                <AnimatedCopyIcon ref={copyLinkIcon.ref} className="h-3.5 w-3.5" />
               </UiButton>
               </Tooltip>
               <Tooltip content="Disable sharing">

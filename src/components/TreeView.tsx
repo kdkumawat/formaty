@@ -14,9 +14,9 @@ import {
   ChevronRightIcon,
   ClipboardDocumentIcon,
   ChevronUpIcon,
-  MagnifyingGlassIcon,
   XMarkIcon,
 } from "@heroicons/react/24/outline";
+import { AnimatedMagnifierIcon, useIconAnimation } from "@/components/icons";
 import type { JsonValue } from "@/lib/json/core";
 import { searchJson, type SearchMatch } from "@/lib/json/core";
 import { Tooltip } from "@/components/workspace/Tooltip";
@@ -344,6 +344,8 @@ export const TreeView = forwardRef<TreeViewRef, TreeViewProps>(function TreeView
   const [currentIdx, setCurrentIdx] = useState(0);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  /** Search magnifier nudges when the box is hovered or focused. */
+  const searchIcon = useIconAnimation();
 
   const matches = useMemo((): SearchMatch[] => {
     if (!query.trim()) return [];
@@ -437,8 +439,8 @@ export const TreeView = forwardRef<TreeViewRef, TreeViewProps>(function TreeView
           </span>
         )}
         <div className="ml-auto flex min-w-0 flex-1 items-center gap-1 sm:max-w-[22rem] sm:ml-2">
-          <div className="flex min-w-0 flex-1 items-center gap-1 rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-1.5 py-0.5">
-            <MagnifyingGlassIcon className="h-3 w-3 shrink-0 text-[var(--workspace-text-muted)]" />
+          <div className="flex min-w-0 flex-1 items-center gap-1 rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-1.5 py-0.5" {...searchIcon.bind}>
+            <AnimatedMagnifierIcon ref={searchIcon.ref} className="h-3 w-3 shrink-0 text-[var(--workspace-text-muted)]" />
             <input
               ref={searchInputRef}
               type="text"
@@ -447,6 +449,8 @@ export const TreeView = forwardRef<TreeViewRef, TreeViewProps>(function TreeView
                 setQuery(e.target.value);
                 setCurrentIdx(0);
               }}
+              onFocus={searchIcon.bind.onFocus}
+              onBlur={searchIcon.bind.onBlur}
               placeholder={`Search ${mode === "key" ? "keys" : "values"}…`}
               aria-label="Search JSON tree"
               spellCheck={false}

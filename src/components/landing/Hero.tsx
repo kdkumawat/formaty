@@ -6,18 +6,24 @@ import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowDownTrayIcon,
-  ArrowRightIcon,
   ArrowsRightLeftIcon,
   BoltIcon,
   ChevronDownIcon,
   ClipboardDocumentIcon,
-  CodeBracketIcon,
   QueueListIcon,
   ShareIcon,
-  SparklesIcon,
   SwatchIcon,
   TableCellsIcon,
 } from "@heroicons/react/24/outline";
+import {
+  AnimatedArrowRightIcon,
+  AnimatedBracesIcon,
+  AnimatedCodeIcon,
+  AnimatedEyeIcon,
+  AnimatedSparklesIcon,
+  useIconAnimation,
+  type AnimatedIconHandle,
+} from "@/components/icons";
 
 // Each slide: {inputLabel, inputColor, outputLabel, outputColor, statusText, InputPane, OutputPane}
 type Slide = {
@@ -221,22 +227,48 @@ function UtilsOut() {
   );
 }
 
-/** Inline `{}` glyph - heroicons has no braces icon in this version. */
-function BracesGlyph({ className = "" }: { className?: string }) {
+/** Primary CTA - the arrow nudges forward on hover/focus. */
+function HeroCtaLink() {
+  const icon = useIconAnimation();
   return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.8}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden
+    <Link
+      href="/playground"
+      {...icon.bind}
+      className="group inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/25 transition-all duration-200 hover:scale-[1.03] hover:shadow-xl hover:shadow-primary/35"
     >
-      <path d="M8 4c-2 0-3 1-3 3v3c0 1.5-.5 2.5-2 3 1.5.5 2 1.5 2 3v3c0 2 1 3 3 3" />
-      <path d="M16 4c2 0 3 1 3 3v3c0 1.5.5 2.5 2 3-1.5.5-2 1.5-2 3v3c0 2-1 3-3 3" />
-    </svg>
+      Open Playground
+      <AnimatedArrowRightIcon ref={icon.ref} className="h-4 w-4" />
+    </Link>
+  );
+}
+
+/**
+ * Toolbar-mock chip in the hero widget. Hover/focus nudges the chip's animated
+ * icon (static heroicons glyphs simply ignore the ref).
+ */
+function HeroToolbarChip({
+  label,
+  title,
+  Icon,
+  iconClassName,
+}: {
+  label: string;
+  title: string;
+  Icon: React.ComponentType<{ className?: string }>;
+  iconClassName?: string;
+}) {
+  const icon = useIconAnimation();
+  const Animated = Icon as React.ComponentType<{ className?: string; ref?: React.Ref<AnimatedIconHandle> }>;
+  return (
+    <span
+      title={title}
+      {...icon.bind}
+      className="inline-flex items-center gap-1 rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-2 py-1 text-[10px] font-medium text-[var(--workspace-text-muted)]"
+    >
+      <Animated ref={icon.ref} className={iconClassName} />
+      <span className="font-semibold text-[var(--workspace-text)]">{label}</span>
+      <ChevronDownIcon className="h-2.5 w-2.5 opacity-50" aria-hidden />
+    </span>
   );
 }
 
@@ -376,16 +408,7 @@ export function Hero() {
             transition={{ duration: 0.5, delay: 0.22 }}
             className="flex flex-wrap items-center justify-center gap-3 lg:justify-start"
           >
-            <Link
-              href="/playground"
-              className="group inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/25 transition-all duration-200 hover:scale-[1.03] hover:shadow-xl hover:shadow-primary/35"
-            >
-              Open Playground
-              <ArrowRightIcon
-                className="h-4 w-4 transition-transform group-hover:translate-x-0.5"
-                aria-hidden
-              />
-            </Link>
+            <HeroCtaLink />
             <Link
               href="/#tools"
               className="inline-flex items-center gap-2 rounded-xl border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-6 py-3 text-sm font-medium text-[var(--workspace-text)] shadow-sm transition-all duration-200 hover:border-primary/40 hover:scale-[1.03] hover:shadow-md"
@@ -487,47 +510,46 @@ export function Hero() {
 
               {/* Workspace toolbar - mirrors the real Formaty UI */}
               <div className="flex items-center gap-1 border-b border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-3 py-1.5">
-                {[
-                  {
-                    label: "Format",
-                    title: slide.inputLabel,
-                    icon:
-                      slide.id === "json-ts" ? (
-                        <BracesGlyph className={`h-3 w-3 ${slide.inputColor}`} />
-                      ) : slide.id === "compare" ? (
-                        <ArrowsRightLeftIcon className={`h-3 w-3 ${slide.inputColor}`} />
-                      ) : slide.id === "utils" ? (
-                        <SwatchIcon className={`h-3 w-3 ${slide.inputColor}`} />
-                      ) : slide.id === "yaml-toml" ? (
-                        <QueueListIcon className={`h-3 w-3 ${slide.inputColor}`} />
-                      ) : slide.id === "csv-table" ? (
-                        <TableCellsIcon className={`h-3 w-3 ${slide.inputColor}`} />
-                      ) : (
-                        <CodeBracketIcon className={`h-3 w-3 ${slide.inputColor}`} />
-                      ),
-                  },
-                  { label: "View", title: "Tree", icon: <QueueListIcon className="h-3 w-3 text-primary" /> },
-                  { label: "Actions", title: "Beautify", icon: <SparklesIcon className="h-3 w-3 text-primary" /> },
-                  {
-                    label: "Types",
-                    title: "TypeScript",
-                    icon: (
-                      <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-[3px] bg-[#3178c6] text-[6.5px] font-bold text-white">
-                        TS
-                      </span>
-                    ),
-                  },
-                ].map((chip) => (
-                  <span
-                    key={chip.label}
-                    title={chip.title}
-                    className="inline-flex items-center gap-1 rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-2 py-1 text-[10px] font-medium text-[var(--workspace-text-muted)]"
-                  >
-                    {chip.icon}
-                    <span className="font-semibold text-[var(--workspace-text)]">{chip.label}</span>
-                    <ChevronDownIcon className="h-2.5 w-2.5 opacity-50" aria-hidden />
+                <HeroToolbarChip
+                  label="Format"
+                  title={slide.inputLabel}
+                  Icon={
+                    slide.id === "json-ts"
+                      ? AnimatedBracesIcon
+                      : slide.id === "compare"
+                        ? ArrowsRightLeftIcon
+                        : slide.id === "utils"
+                          ? SwatchIcon
+                          : slide.id === "yaml-toml"
+                            ? QueueListIcon
+                            : slide.id === "csv-table"
+                              ? TableCellsIcon
+                              : AnimatedCodeIcon
+                  }
+                  iconClassName={`h-3 w-3 ${slide.inputColor}`}
+                />
+                <HeroToolbarChip
+                  label="View"
+                  title="Tree"
+                  Icon={AnimatedEyeIcon}
+                  iconClassName="h-3 w-3 text-primary"
+                />
+                <HeroToolbarChip
+                  label="Actions"
+                  title="Beautify"
+                  Icon={AnimatedSparklesIcon}
+                  iconClassName="h-3 w-3 text-primary"
+                />
+                <span
+                  title="TypeScript"
+                  className="inline-flex items-center gap-1 rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-2 py-1 text-[10px] font-medium text-[var(--workspace-text-muted)]"
+                >
+                  <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-[3px] bg-[#3178c6] text-[6.5px] font-bold text-white">
+                    TS
                   </span>
-                ))}
+                  <span className="font-semibold text-[var(--workspace-text)]">Types</span>
+                  <ChevronDownIcon className="h-2.5 w-2.5 opacity-50" aria-hidden />
+                </span>
                 <span className="ml-auto hidden items-center gap-0.5 sm:inline-flex">
                   {[ClipboardDocumentIcon, ArrowDownTrayIcon, ShareIcon].map((Icon, i) => (
                     <span
