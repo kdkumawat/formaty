@@ -48,6 +48,11 @@ export function JsonEditor({
 }: JsonEditorProps) {
   const editorRef = React.useRef<editor.IStandaloneCodeEditor | null>(null);
   const resolvedTheme = resolveFormatyTheme(monacoTheme);
+  /** Keep the latest handler without re-registering the Monaco keybinding: the
+   *  editor mounts once, but the onCtrlEnter closure must stay fresh (otherwise
+   *  Cmd/Ctrl+Enter would run against stale state from mount time). */
+  const onCtrlEnterRef = React.useRef(onCtrlEnter);
+  onCtrlEnterRef.current = onCtrlEnter;
 
   return (
     <div
@@ -98,11 +103,9 @@ export function JsonEditor({
         onChange={(next) => onChange(next ?? "")}
         onMount={(editor, monaco) => {
           editorRef.current = editor;
-          if (onCtrlEnter) {
-            editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
-              onCtrlEnter();
-            });
-          }
+          editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
+            onCtrlEnterRef.current?.();
+          });
           if (onEditorMount) {
             onEditorMount({
               find: () => editor.trigger("keyboard", "actions.find", null),

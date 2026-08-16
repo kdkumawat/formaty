@@ -21,6 +21,7 @@ export function LandingHeader() {
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
         <Link
           href="/"
+          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
           className="flex items-center gap-0.5 text-[var(--workspace-text)] transition-opacity hover:opacity-85"
         >
           <Logo size={22} />

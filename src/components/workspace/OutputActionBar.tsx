@@ -696,7 +696,7 @@ export function OutputActionBar({
       aria-label="Output actions"
     >
       {show("reset") && onReset && (
-        <Tooltip content={resetLabel} shortcut="⌘⇧R">
+        <Tooltip content={resetLabel} shortcut="⌘⌥R">
           <IconButton onClick={onReset} aria-label={resetLabel} {...resetIcon.bind}>
             <AnimatedResetIcon ref={resetIcon.ref} className="h-3.5 w-3.5" />
           </IconButton>
