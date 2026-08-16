@@ -131,6 +131,18 @@ export function Footer() {
               Playground
             </Link>
             <Link
+              href="/tools"
+              className="text-xs text-[var(--workspace-text-muted)] transition-colors hover:text-primary"
+            >
+              Tools
+            </Link>
+            <Link
+              href="/guides"
+              className="text-xs text-[var(--workspace-text-muted)] transition-colors hover:text-primary"
+            >
+              Guides
+            </Link>
+            <Link
               href="/docs"
               className="text-xs text-[var(--workspace-text-muted)] transition-colors hover:text-primary"
             >

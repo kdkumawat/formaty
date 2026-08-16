@@ -64,7 +64,7 @@ export function ToolPage({ config }: ToolPageProps) {
               Docs
             </Link>
             <Link
-              href="/"
+              href="/tools"
               className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-3 py-1.5 text-sm text-[var(--workspace-text-muted)] transition-colors hover:border-primary/30 hover:text-primary"
             >
               <ArrowLeftIcon className="h-3.5 w-3.5" />
@@ -172,6 +172,40 @@ export function ToolPage({ config }: ToolPageProps) {
 
             {/* Relations */}
             <RelatedTools related={config.relatedTools} />
+
+            {/* FAQ - mirrors the FAQPage JSON-LD emitted on this route */}
+            <section>
+              <h2 className="mb-4 text-lg font-semibold text-[var(--workspace-text)]">FAQ</h2>
+              <div className="space-y-3">
+                <details className="group rounded-xl border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-4 py-3">
+                  <summary className="cursor-pointer list-none text-sm font-medium text-[var(--workspace-text)]">
+                    How do I use the {config.h1} tool?
+                  </summary>
+                  <p className="mt-2 text-sm leading-relaxed text-[var(--workspace-text-muted)]">
+                    Open the {config.h1} page, paste or type your data, and the tool processes it
+                    instantly - all in your browser with no upload.
+                  </p>
+                </details>
+                <details className="group rounded-xl border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-4 py-3">
+                  <summary className="cursor-pointer list-none text-sm font-medium text-[var(--workspace-text)]">
+                    Is the {config.h1} tool free?
+                  </summary>
+                  <p className="mt-2 text-sm leading-relaxed text-[var(--workspace-text-muted)]">
+                    Yes. Every Formaty tool is free, requires no sign-up, and runs 100% locally in
+                    your browser.
+                  </p>
+                </details>
+                <details className="group rounded-xl border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-4 py-3">
+                  <summary className="cursor-pointer list-none text-sm font-medium text-[var(--workspace-text)]">
+                    Does the {config.h1} tool upload my data?
+                  </summary>
+                  <p className="mt-2 text-sm leading-relaxed text-[var(--workspace-text-muted)]">
+                    No. The {config.h1} tool processes everything locally in your browser using
+                    WebWorkers - your data never leaves your device.
+                  </p>
+                </details>
+              </div>
+            </section>
           </div>
 
           {/* Right column: use-cases + CTA */}
