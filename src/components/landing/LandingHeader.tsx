@@ -30,6 +30,12 @@ export function LandingHeader() {
 
         <nav className="flex items-center gap-1.5 sm:gap-2">
           <Link
+            href="/tools"
+            className="hidden rounded-lg px-3 py-1.5 text-sm text-[var(--workspace-text-muted)] transition-colors hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] sm:inline-flex"
+          >
+            Tools
+          </Link>
+          <Link
             href="/docs"
             className="hidden rounded-lg px-3 py-1.5 text-sm text-[var(--workspace-text-muted)] transition-colors hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] sm:inline-flex"
           >

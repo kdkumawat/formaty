@@ -41,7 +41,7 @@ export const viewport: Viewport = {
 
 const SITE_URL = process.env.SITE_URL || "https://formaty.dev";
 const SITE_NAME = "Formaty";
-const SITE_TITLE = "Formaty - The Developer Data Workspace | Compare, Convert & Generate from JSON";
+const SITE_TITLE = "Formaty — The Developer Data Workspace";
 const CREATOR_NAME = "Kuldeep Kumawat";
 const CREATOR_X = "https://x.com/kuldeep_kumawat";
 const CREATOR_LINKEDIN = "https://www.linkedin.com/in/kdkumawat";
