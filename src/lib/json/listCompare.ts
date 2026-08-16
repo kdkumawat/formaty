@@ -38,7 +38,8 @@ export type ListBucket =
   | "symmetric"
   | "leftDupes"
   | "rightDupes"
-  | "changed";
+  | "changed"
+  | "summary";
 
 export interface ListParseOptions {
   delimiter: ListDelimiter;
@@ -389,6 +390,24 @@ export interface CountDelta {
 }
 
 /**
+ * Keys present on both sides with different occurrence counts. Used by the
+ * count-aware comparison and by the Summary report's inline delta notes.
+ */
+export function computeCountDeltas(result: ListCompareResult): CountDelta[] {
+  const leftMap = new Map(result.left.items.map((i) => [i.key, i.count]));
+  const rightMap = new Map(result.right.items.map((i) => [i.key, i.count]));
+  const countDeltas: CountDelta[] = [];
+  for (const item of result.common) {
+    const left = leftMap.get(item.key) ?? 0;
+    const right = rightMap.get(item.key) ?? 0;
+    if (left !== right) {
+      countDeltas.push({ value: item.value, key: item.key, left, right, delta: right - left });
+    }
+  }
+  return countDeltas;
+}
+
+/**
  * Count-aware (multiset) comparison: like compareLists, but also reports how
  * many extra occurrences each side has for keys present on both sides.
  */
@@ -401,17 +420,7 @@ export function compareListsCountAware(
   countDeltas: CountDelta[];
 } {
   const base = compareLists(leftText, rightText, options);
-  const leftMap = new Map(base.left.items.map((i) => [i.key, i.count]));
-  const rightMap = new Map(base.right.items.map((i) => [i.key, i.count]));
-  const countDeltas: CountDelta[] = [];
-  for (const item of base.common) {
-    const left = leftMap.get(item.key) ?? 0;
-    const right = rightMap.get(item.key) ?? 0;
-    if (left !== right) {
-      countDeltas.push({ value: item.value, key: item.key, left, right, delta: right - left });
-    }
-  }
-  return { ...base, countDeltas };
+  return { ...base, countDeltas: computeCountDeltas(base) };
 }
 
 /** Human-readable summary of count deltas, e.g. "A: +1 left · B: +1 right". */
@@ -522,7 +531,8 @@ export function getBucketItems(result: ListCompareResult, bucket: ListBucket): L
       return result.rightDupes;
     case "changed":
       return result.changed;
-    default:
+    case "summary":
+      // Summary is a report view, not an item bucket.
       return [];
   }
 }
@@ -689,7 +699,77 @@ export const BUCKET_LABELS: Record<ListBucket, string> = {
   leftDupes: "Left duplicates",
   rightDupes: "Right duplicates",
   changed: "Changed",
+  summary: "Summary",
 };
+
+export interface ListSummaryOptions {
+  /** Include the Changed section (CSV column-compare mode). Default true. */
+  includeChanged?: boolean;
+  /** Show inline count-delta notes in the Common section. Default true. */
+  showCountDeltas?: boolean;
+}
+
+export interface ListSummarySection {
+  bucket: "common" | "leftOnly" | "rightOnly" | "leftDupes" | "rightDupes" | "changed";
+  label: string;
+  count: number;
+  items: ListItem[];
+}
+
+export interface ListSummary {
+  /** Non-empty sections in render order (Common, Only left, Only right, dupes, Changed). */
+  sections: ListSummarySection[];
+  /** Plain-text report - exactly what Copy / Download produce. */
+  text: string;
+  /** Keys present on both sides with unequal occurrence counts. */
+  countDeltas: CountDelta[];
+}
+
+/**
+ * Build the Summary report for a list compare result: grouped counts + items
+ * for what is in the left list, the right list, and what they share. Sections
+ * with no items are omitted; the Common section annotates keys whose
+ * occurrence count differs between the sides (e.g. "A ×2 left, ×1 right").
+ */
+export function buildListSummary(
+  result: ListCompareResult,
+  options: ListSummaryOptions = {},
+): ListSummary {
+  const includeChanged = options.includeChanged ?? true;
+  const showCountDeltas = options.showCountDeltas ?? true;
+  const countDeltas = showCountDeltas ? computeCountDeltas(result) : [];
+  const deltaByKey = new Map(countDeltas.map((d) => [d.key, d]));
+
+  const all: ListSummarySection[] = [
+    { bucket: "common", label: BUCKET_LABELS.common, count: result.common.length, items: result.common },
+    { bucket: "leftOnly", label: BUCKET_LABELS.leftOnly, count: result.leftOnly.length, items: result.leftOnly },
+    { bucket: "rightOnly", label: BUCKET_LABELS.rightOnly, count: result.rightOnly.length, items: result.rightOnly },
+    ...(result.leftDupes.length > 0
+      ? [{ bucket: "leftDupes" as const, label: BUCKET_LABELS.leftDupes, count: result.leftDupes.length, items: result.leftDupes }]
+      : []),
+    ...(result.rightDupes.length > 0
+      ? [{ bucket: "rightDupes" as const, label: BUCKET_LABELS.rightDupes, count: result.rightDupes.length, items: result.rightDupes }]
+      : []),
+    ...(includeChanged && result.changed.length > 0
+      ? [{ bucket: "changed" as const, label: BUCKET_LABELS.changed, count: result.changed.length, items: result.changed }]
+      : []),
+  ];
+  const sections = all.filter((s) => s.count > 0);
+
+  const text = sections
+    .map((s) => {
+      const lines = s.items.map((item) => {
+        const d = deltaByKey.get(item.key);
+        const note =
+          s.bucket === "common" && d ? ` ×${d.left} left, ×${d.right} right` : "";
+        return `  ${item.value}${note}`;
+      });
+      return `${s.label} (${s.count})\n${lines.join("\n")}`;
+    })
+    .join("\n\n");
+
+  return { sections, text, countDeltas };
+}
 
 export interface SqlClauseOptions {
   column?: string;

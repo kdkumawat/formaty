@@ -6,6 +6,7 @@ import {
   ArrowsRightLeftIcon,
   BarsArrowDownIcon,
   BarsArrowUpIcon,
+  ChartPieIcon,
   ChevronDownIcon,
   ClipboardDocumentIcon,
   TableCellsIcon,
@@ -23,6 +24,7 @@ import {
   BUCKET_LABELS,
   DEFAULT_LIST_PARSE_OPTIONS,
   LIST_EXPORT_FORMATS,
+  buildListSummary,
   compareLists,
   formatListItems,
   getBucketItems,
@@ -71,6 +73,20 @@ interface ListComparePanelProps {
 
 const PRIMARY_BUCKETS: ListBucket[] = ["common", "leftOnly", "rightOnly", "union", "symmetric", "changed"];
 const DUPE_BUCKETS: ListBucket[] = ["leftDupes", "rightDupes"];
+const ALL_BUCKETS: ListBucket[] = ["summary", ...PRIMARY_BUCKETS, ...DUPE_BUCKETS];
+
+/** Persist the selected bucket/view across sessions (mirrors the export format key). */
+const BUCKET_STORAGE_KEY = "formaty-list-bucket";
+
+function loadStoredBucket(): ListBucket {
+  try {
+    const raw = localStorage.getItem(BUCKET_STORAGE_KEY);
+    if (raw && (ALL_BUCKETS as string[]).includes(raw)) return raw as ListBucket;
+  } catch {
+    /* ignore */
+  }
+  return "common";
+}
 
 const EXPORT_GROUPS: { label: string; items: ListExportFormat[] }[] = [
   {
@@ -157,7 +173,7 @@ export function ListComparePanel({
   const [resultSort, setResultSort] = useState<ListSortMode>("asc");
   const [leftSort, setLeftSort] = useState<ListSortMode>("none");
   const [rightSort, setRightSort] = useState<ListSortMode>("none");
-  const [activeBucket, setActiveBucket] = useState<ListBucket>("common");
+  const [activeBucket, setActiveBucket] = useState<ListBucket>(loadStoredBucket);
   /** Bucket shown before the last dup-link click - clicking again restores it. */
   const prevBucketRef = useRef<ListBucket>("common");
 
@@ -171,6 +187,17 @@ export function ListComparePanel({
     setActiveBucket(b);
   };
   const [display, setDisplay] = useState<"inline" | "table">("inline");
+
+  const isSummary = activeBucket === "summary";
+
+  // Preserve the selected bucket/view across sessions (localStorage).
+  useEffect(() => {
+    try {
+      localStorage.setItem(BUCKET_STORAGE_KEY, activeBucket);
+    } catch {
+      /* ignore */
+    }
+  }, [activeBucket]);
 
   // Preserve the selected export format across sessions (localStorage).
   const [exportFormat, setExportFormat] = useState<ListExportFormat | null>(() => {
@@ -239,13 +266,24 @@ export function ListComparePanel({
     () => getBucketItems(result, activeBucket),
     [result, activeBucket],
   );
-  const outputText = useMemo(
+  /** Summary report - built only while the Summary view is active. */
+  const summary = useMemo(
     () =>
-      exportFormat === null
-        ? bucketItems.map((i) => i.value).join("\n")
-        : formatListItems(bucketItems, exportFormat, resultSort),
-    [bucketItems, exportFormat, resultSort],
+      isSummary
+        ? buildListSummary(result, { includeChanged: !!csvColumn, showCountDeltas: true })
+        : null,
+    [isSummary, result, csvColumn],
   );
+  const deltaByKey = useMemo(
+    () => new Map(summary?.countDeltas.map((d) => [d.key, d]) ?? []),
+    [summary],
+  );
+  const outputText = useMemo(() => {
+    if (isSummary) return summary?.text ?? "";
+    return exportFormat === null
+      ? bucketItems.map((i) => i.value).join("\n")
+      : formatListItems(bucketItems, exportFormat, resultSort);
+  }, [bucketItems, exportFormat, resultSort, isSummary, summary]);
 
   useEffect(() => {
     if (!onExportChange) return;
@@ -255,12 +293,14 @@ export function ListComparePanel({
     }
     onExportChange({
       text: outputText,
-      items: bucketItems.map((i) => i.value),
-      filename: `formaty-list-${activeBucket}.txt`,
+      items: isSummary ? [] : bucketItems.map((i) => i.value),
+      filename: isSummary ? "formaty-list-summary.txt" : `formaty-list-${activeBucket}.txt`,
       bucket: activeBucket,
-      count: bucketItems.length,
+      count: isSummary
+        ? summary?.sections.reduce((n, s) => n + s.count, 0) ?? 0
+        : bucketItems.length,
     });
-  }, [outputText, activeBucket, bucketItems, onExportChange]);
+  }, [outputText, activeBucket, bucketItems, onExportChange, isSummary, summary]);
 
   useEffect(() => {
     return () => {
@@ -321,6 +361,8 @@ export function ListComparePanel({
   };
 
   const bucketCount = (b: ListBucket) => {
+    // Summary is a report view, never empty - exempts it from the auto-jump.
+    if (b === "summary") return 1;
     switch (b) {
       case "common":
         return result.stats.common;
@@ -604,19 +646,32 @@ export function ListComparePanel({
               align="start"
               contentClassName={`w-max min-w-[9rem]`}
               trigger={
-                <Tooltip content="Select bucket">
+                <Tooltip content="Select view or bucket">
                 <button
                   type="button"
                   className={`${selectTrigger} ${bucketOpen ? "!bg-primary/12 !text-primary" : ""}`}
                 >
                   <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${bucketDot(activeBucket)}`} />
-                  {BUCKET_LABELS[activeBucket]} · {bucketItems.length}
+                  {isSummary ? "Summary" : `${BUCKET_LABELS[activeBucket]} · ${bucketItems.length}`}
                   <ChevronDownIcon className="h-3 w-3 shrink-0 opacity-60" />
                 </button>
                 </Tooltip>
               }
             >
               <div className="flex flex-col">
+                <button
+                  type="button"
+                  className={menuItem(isSummary)}
+                  onClick={() => {
+                    setActiveBucket("summary");
+                    setBucketOpen(false);
+                  }}
+                >
+                  {sharedMenuCheck(isSummary)}
+                  <ChartPieIcon className="h-3.5 w-3.5 shrink-0 opacity-70" />
+                  <span className="min-w-0 flex-1 truncate text-left">Summary</span>
+                </button>
+                {sharedMenuSectionLabel("Buckets")}
                 {visibleBuckets.map((b) => {
                   const n = bucketCount(b);
                   if (n === 0 && (b === "symmetric" || b === "changed")) return null;
@@ -658,16 +713,18 @@ export function ListComparePanel({
             <CycleSortButton
               linkBtnClass={linkBtnClass}
               mode={resultSort}
+              disabled={isSummary}
               onCycle={() => setResultSort((m) => cycleSort(m))}
               titlePrefix="Result sort"
             />
 
             <div className="flex h-7 shrink-0 overflow-hidden rounded-md bg-muted">
-              <Tooltip content="Inline view - comma-separated">
+              <Tooltip content={isSummary ? "Inline view is disabled in Summary" : "Inline view - comma-separated"}>
               <button
                 type="button"
                 aria-label="Inline view"
-                className={`flex h-7 cursor-pointer items-center justify-center px-2 text-[11px] ${
+                disabled={isSummary}
+                className={`flex h-7 items-center justify-center px-2 text-[11px] disabled:cursor-not-allowed disabled:opacity-40 ${
                   display === "inline" ? "bg-primary/15 text-primary" : "text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)] hover:text-[var(--workspace-text)]"
                 }`}
                 onClick={() => setDisplay("inline")}
@@ -679,11 +736,12 @@ export function ListComparePanel({
                 </span>
               </button>
               </Tooltip>
-              <Tooltip content="Table view">
+              <Tooltip content={isSummary ? "Table view is disabled in Summary" : "Table view"}>
               <button
                 type="button"
                 aria-label="Table view"
-                className={`flex h-7 cursor-pointer items-center justify-center px-2 text-[11px] ${
+                disabled={isSummary}
+                className={`flex h-7 items-center justify-center px-2 text-[11px] disabled:cursor-not-allowed disabled:opacity-40 ${
                   display === "table" ? "bg-primary/15 text-primary" : "text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)] hover:text-[var(--workspace-text)]"
                 }`}
                 onClick={() => setDisplay("table")}
@@ -701,10 +759,10 @@ export function ListComparePanel({
               maxWidth="max-w-[17rem]"
               contentClassName="max-h-[50vh] overflow-y-auto"
               trigger={
-                  <Tooltip content={display === "table" ? "Copy-as is disabled in table view" : "Copy as… - updates the output (or use the Copy button)"} className="shrink-0">
+                  <Tooltip content={display === "table" ? "Copy-as is disabled in table view" : isSummary ? "Copy-as is disabled in Summary view" : "Copy as… - updates the output (or use the Copy button)"} className="shrink-0">
                 <button
                   type="button"
-                  disabled={display === "table"}
+                  disabled={display === "table" || isSummary}
                   className={`${selectTrigger} max-w-[11rem] ${exportOpen ? "!bg-primary/12 !text-primary" : ""}`}
                 >
                   <ClipboardDocumentIcon className="h-3.5 w-3.5 shrink-0 text-[var(--workspace-text-muted)]" />
@@ -749,7 +807,62 @@ export function ListComparePanel({
             </Dropdown>
           </div>
 
-          {display === "inline" ? (
+          {isSummary ? (
+            <div className="min-h-0 flex-1 overflow-auto bg-[var(--workspace-panel)] px-3 py-2.5" style={{ fontSize }}>
+              {left.trim() || right.trim() ? (
+                <div className="flex flex-col gap-3.5">
+                  {summary?.sections.map((section) => (
+                    <section key={section.bucket}>
+                      <button
+                        type="button"
+                        onClick={() => setActiveBucket(section.bucket)}
+                        title={`Show ${section.label} items`}
+                        className="group flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--workspace-text)] transition-colors hover:text-primary"
+                      >
+                        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${bucketDot(section.bucket)}`} />
+                        {section.label}
+                        <span className="font-mono tabular-nums text-[var(--workspace-text-muted)]">
+                          {section.count}
+                        </span>
+                        <span className="opacity-0 transition-opacity group-hover:opacity-100 text-[var(--workspace-text-muted)]">
+                          →
+                        </span>
+                      </button>
+                      <div className="mt-1 flex flex-col gap-px border-l border-[var(--workspace-border)] pl-2.5">
+                        {section.items.map((item) => {
+                          const d = deltaByKey.get(item.key);
+                          return (
+                            <span
+                              key={item.key}
+                              className="whitespace-pre-wrap break-words font-mono leading-relaxed text-[var(--workspace-text)]"
+                            >
+                              {item.value}
+                              {section.bucket === "common" && d ? (
+                                <span className="text-[var(--workspace-text-muted)]">
+                                  {" "}×{d.left} left, ×{d.right} right
+                                </span>
+                              ) : null}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  ))}
+                </div>
+              ) : (
+                <p className="font-mono text-[var(--workspace-text-muted)]">
+                  Paste lists on the left and right.{" "}
+                  <button
+                    type="button"
+                    className="font-medium text-primary hover:underline"
+                    onClick={loadSample}
+                  >
+                    Load sample
+                  </button>
+                </p>
+              )}
+            </div>
+          ) : display === "inline" ? (
             <div className="min-h-0 flex-1 overflow-auto bg-[var(--workspace-panel)] px-3 py-2.5" style={{ fontSize }}>
               {bucketItems.length === 0 ? (
                 <p className="font-mono text-[var(--workspace-text-muted)]">

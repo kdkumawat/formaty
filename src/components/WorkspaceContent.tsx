@@ -93,6 +93,7 @@ import {
   formatCopyItemsAsText,
   DEFAULT_COPY_AS_OPTIONS,
   LIST_COPY_AS_OPTIONS,
+  SUMMARY_COPY_AS_OPTIONS,
   UUID_COPY_AS_OPTIONS,
   BATCH_COPY_AS_OPTIONS,
   TABLE_COPY_AS_OPTIONS,
@@ -3084,8 +3085,9 @@ export function WorkspaceContent({
     trackEvent("copy", { format, mode: isUtilsMode ? "utils" : isDiffMode ? "compare" : "transform" });
     try {
       let text: string;
-      // "Same as output" copies the pane exactly as shown.
-      if (format === "same-as-output") {
+      // "Same as output" copies the pane exactly as shown. The Summary
+      // report is not an item list - formats don't apply, always copy as shown.
+      if (format === "same-as-output" || listCompareExport?.bucket === "summary") {
         text = raw;
       }
       // Compare list/single: build list formats from the raw items so a format
@@ -3224,10 +3226,14 @@ export function WorkspaceContent({
     if (isUtilsMode && utilTab === "uuid") return UUID_COPY_AS_OPTIONS;
     if (isUtilsMode && utilTab === "password") return BATCH_COPY_AS_OPTIONS;
     if (isUtilsMode) return [];
-    if (isDiffMode && (diffKind === "list" || diffKind === "single")) return LIST_COPY_AS_OPTIONS;
+    if (isDiffMode && (diffKind === "list" || diffKind === "single")) {
+      // Summary report: only "same as output" makes sense - no item formats.
+      if (listCompareExport?.bucket === "summary") return SUMMARY_COPY_AS_OPTIONS;
+      return LIST_COPY_AS_OPTIONS;
+    }
     if (!isDiffMode && rightView === "table") return TABLE_COPY_AS_OPTIONS;
     return DEFAULT_COPY_AS_OPTIONS;
-  }, [isUtilsMode, utilTab, isDiffMode, diffKind, rightView]);
+  }, [isUtilsMode, utilTab, isDiffMode, diffKind, rightView, listCompareExport]);
 
   /** Stable per-tool key used for the per-tab 'last copy as' memory. */
   const copyMemoryKey = isUtilsMode

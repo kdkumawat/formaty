@@ -56,7 +56,7 @@ export const GUIDES: GuideConfig[] = [
       },
       {
         heading: "Read the buckets",
-        body: "Formaty computes Common, Only in left (missing from staging), Only in right (extra in staging), and duplicates. That's your reconciliation report in one glance.",
+        body: "Formaty computes Common, Only in left (missing from staging), Only in right (extra in staging), and duplicates. That's your reconciliation report in one glance. For the whole picture at once, pick Summary from the view dropdown: it lists every section with its count and items - and flags keys whose occurrence count differs between the sides.",
       },
       {
         heading: "Copy the result as SQL",
@@ -83,6 +83,10 @@ export const GUIDES: GuideConfig[] = [
       {
         q: "What if my exports are comma-separated?",
         a: "Compare Lists auto-detects commas, semicolons, pipes, whitespace, and JSON arrays, so you can paste raw query output as-is.",
+      },
+      {
+        q: "Can I see a full summary of what's in each side?",
+        a: "Yes. The Summary view shows Common, Only in left, Only in right, duplicates, and changed rows (CSV column compare) - each with its count and the actual items, plus inline notes when a key appears a different number of times on each side. Click any section header to drill into that bucket.",
       },
     ],
   },

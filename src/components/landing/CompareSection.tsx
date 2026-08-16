@@ -49,6 +49,7 @@ export function CompareSection() {
                 "Optional order-free array comparison keyed by an ID field",
                 "List & set compare with count-aware mode for repeated values",
                 "CSV column compare: pick a key column, see changed rows",
+                "One-click Summary: counts + items for common, only-left, only-right, and duplicates",
               ].map((item) => (
                 <li key={item} className="flex items-start gap-2">
                   <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary/70" />

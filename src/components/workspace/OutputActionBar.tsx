@@ -226,6 +226,11 @@ export const DEFAULT_COPY_AS_OPTIONS: CopyAsOption[] = [
   { id: "datauri", label: "Data URI", group: "Encode" },
 ];
 
+/** Summary report: formats don't apply - only "copy as shown" is offered. */
+export const SUMMARY_COPY_AS_OPTIONS: CopyAsOption[] = [
+  { id: "same-as-output", label: "Same as output", group: "Output" },
+];
+
 export const LIST_COPY_AS_OPTIONS: CopyAsOption[] = [
   { id: "same-as-output", label: "Same as output", group: "Output" },
   { id: "newline", label: "Newline list", group: "List" },
