@@ -31,7 +31,7 @@ export interface JsonDiffEditorRef {
   setBoth: (original: string, modified: string) => void;
 }
 
-interface JsonDiffEditorProps {
+export interface JsonDiffEditorProps {
   original: string;
   modified: string;
   language?: string;

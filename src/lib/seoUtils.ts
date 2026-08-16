@@ -1,5 +1,5 @@
 import type { UtilTab } from "@/lib/utils/devtools";
-import { TOOL_PAGES } from "@/lib/seo";
+import { TOOL_PAGES, type ToolPageConfig } from "@/lib/seo";
 
 export interface UtilPageConfig {
   /** URL slug, e.g. "base64-encoder". */
@@ -418,12 +418,20 @@ Use cases: checking API rate and size limits, estimating log volume, meeting con
 
 export const UTIL_ROUTES: string[] = Object.keys(UTIL_PAGES);
 
-export function getUtilConfig(route: string): UtilPageConfig | undefined {
-  return UTIL_PAGES[route];
+export function isToolPageConfig(config: ToolPageConfig | UtilPageConfig | undefined): config is ToolPageConfig {
+  return !!config && !("util" in config);
 }
 
-/** Resolve any page route (tool or util) to a display config, for related links. */
-export function getPageConfigByRoute(route: string): { h1: string } | undefined {
+export function isUtilPageConfig(config: ToolPageConfig | UtilPageConfig | undefined): config is UtilPageConfig {
+  return !!config && "util" in config;
+}
+
+/**
+ * Single access API for page configs: routes any route (tool or util) to its
+ * config. Data stays split by page type (TOOL_PAGES / UTIL_PAGES) but every
+ * lookup goes through here, so the two tables cannot drift apart.
+ */
+export function getPageConfig(route: string): ToolPageConfig | UtilPageConfig | undefined {
   if (route in TOOL_PAGES) return TOOL_PAGES[route as keyof typeof TOOL_PAGES];
   if (route in UTIL_PAGES) return UTIL_PAGES[route];
   return undefined;

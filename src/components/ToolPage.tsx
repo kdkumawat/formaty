@@ -3,7 +3,7 @@ import { ArrowRightIcon, ArrowLeftIcon, CheckCircleIcon } from "@heroicons/react
 import { Logo } from "@/components/Logo";
 import type { ToolPageConfig } from "@/lib/seo";
 import type { UtilPageConfig } from "@/lib/seoUtils";
-import { UTIL_PAGES, getPageConfigByRoute } from "@/lib/seoUtils";
+import { UTIL_PAGES, getPageConfig } from "@/lib/seoUtils";
 
 type PageConfig = ToolPageConfig | UtilPageConfig;
 
@@ -19,7 +19,7 @@ function RelatedTools({ related }: { related: string[] }) {
       </h2>
       <ul className="grid gap-2 sm:grid-cols-2">
         {related.map((route) => {
-          const c = getPageConfigByRoute(route);
+          const c = getPageConfig(route);
           if (!c) return null;
           const href = route in UTIL_PAGES ? `/utils/${route}` : `/${route}`;
           return (

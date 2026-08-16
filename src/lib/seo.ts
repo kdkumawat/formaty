@@ -916,9 +916,6 @@ Use cases: building Go API clients, porting examples into services, and scaffold
 
 export const ALL_TOOL_ROUTES: ToolRoute[] = Object.keys(TOOL_PAGES) as ToolRoute[];
 
-export function getToolConfig(route: ToolRoute): ToolPageConfig {
-  return TOOL_PAGES[route];
-}
 
 export function getCanonicalUrl(path: string): string {
   return `${SITE_URL}${path.startsWith("/") ? path : `/${path}`}`;

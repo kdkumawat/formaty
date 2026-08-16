@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { ToolPage } from "@/components/ToolPage";
 import { getCanonicalUrl, SITE_URL } from "@/lib/seo";
-import { getUtilConfig, UTIL_ROUTES } from "@/lib/seoUtils";
+import { getPageConfig, isUtilPageConfig, UTIL_ROUTES } from "@/lib/seoUtils";
 
 export async function generateStaticParams() {
   return UTIL_ROUTES.map((slug) => ({ slug }));
@@ -17,8 +17,8 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const config = getUtilConfig(slug);
-  if (!config) return {};
+  const config = getPageConfig(slug);
+  if (!config || !isUtilPageConfig(config)) return {};
   const canonical = getCanonicalUrl(`/utils/${slug}`);
   const pageTitle = config.title.replace(/\s*\|\s*Formaty\s*$/i, "");
   return {
@@ -49,8 +49,8 @@ export default async function UtilRoutePage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const config = getUtilConfig(slug);
-  if (!config) notFound();
+  const config = getPageConfig(slug);
+  if (!config || !isUtilPageConfig(config)) notFound();
   const canonical = getCanonicalUrl(`/utils/${slug}`);
 
   const jsonLd = {

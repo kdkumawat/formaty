@@ -5,12 +5,12 @@ import { ToolRedirect } from "@/components/ToolRedirect";
 import {
   ALL_TOOL_ROUTES,
   TOOL_REDIRECTS,
-  getToolConfig,
   getCanonicalUrl,
   SEO_KEYWORDS,
   SITE_URL,
   type ToolRoute,
 } from "@/lib/seo";
+import { getPageConfig, isToolPageConfig } from "@/lib/seoUtils";
 
 export async function generateStaticParams() {
   return [...ALL_TOOL_ROUTES, ...Object.keys(TOOL_REDIRECTS)].map((route) => ({
@@ -29,7 +29,8 @@ export async function generateMetadata({
   const { tool } = await params;
   const redirectTarget = TOOL_REDIRECTS[tool];
   if (redirectTarget) {
-    const target = getToolConfig(redirectTarget);
+    const target = getPageConfig(redirectTarget);
+    if (!target || !isToolPageConfig(target)) return {};
     return {
       title: target.h1,
       description: target.description,
@@ -44,7 +45,8 @@ export async function generateMetadata({
     };
   }
   if (!ALL_TOOL_ROUTES.includes(tool as ToolRoute)) return {};
-  const config = getToolConfig(tool as ToolRoute);
+  const config = getPageConfig(tool as ToolRoute);
+  if (!config || !isToolPageConfig(config)) return {};
   const canonical = getCanonicalUrl(`/${tool}`);
   const toolKeywords = SEO_KEYWORDS[tool as ToolRoute] ?? [];
   // Titles already include the brand; strip it so the root template `%s | Formaty` doesn't double it.
@@ -79,7 +81,8 @@ export default async function ToolRoutePage({
   const { tool } = await params;
   const redirectTarget = TOOL_REDIRECTS[tool];
   if (redirectTarget) {
-    const target = getToolConfig(redirectTarget);
+    const target = getPageConfig(redirectTarget);
+    if (!target || !isToolPageConfig(target)) notFound();
     return (
       <>
         {/* Hoisted to <head> by React 19 - instant redirect without JS. */}
@@ -89,7 +92,8 @@ export default async function ToolRoutePage({
     );
   }
   if (!ALL_TOOL_ROUTES.includes(tool as ToolRoute)) notFound();
-  const config = getToolConfig(tool as ToolRoute);
+  const config = getPageConfig(tool as ToolRoute);
+  if (!config || !isToolPageConfig(config)) notFound();
   const canonical = getCanonicalUrl(`/${tool}`);
 
   const jsonLd = {
