@@ -7,7 +7,7 @@ import { ArrowRightIcon } from "@heroicons/react/24/outline";
 const CASES = [
   {
     title: "Backend Engineers",
-    desc: "Debug database records, API responses, JSON, SQL, and ID lists. Reconcile production vs staging in one paste.",
+    desc: "Debug database records, API responses, JSON, SQL, and ID lists. Reconcile expected vs actual IDs in one paste.",
     route: "/compare-lists",
     tag: "Reconcile",
   },

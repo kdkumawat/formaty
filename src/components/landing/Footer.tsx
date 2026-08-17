@@ -11,15 +11,24 @@ function MadeWithLove() {
     <span {...icon.bind} className="inline-flex items-center gap-1.5">
       Made with
       <AnimatedHeartIcon ref={icon.ref} className="h-3.5 w-3.5 text-red-500" />
-      by{" "}
+      by Kuldeep - {" "}
       <a
         href="https://www.linkedin.com/in/kdkumawat"
         target="_blank"
         rel="noopener noreferrer"
         className="font-semibold text-[var(--workspace-text)] transition-colors hover:text-primary"
-        title="kdkumawat on LinkedIn"
+        title="Kuldeep Kumawat on LinkedIn"
       >
-        kdkumawat
+        Linkedin
+      </a>
+      <a
+        href="https://x.com/kuldeep_kumawat"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="font-semibold text-[var(--workspace-text)] transition-colors hover:text-primary"
+        title="Kuldeep Kumawat on LinkedIn"
+      >
+       / X
       </a>
     </span>
   );

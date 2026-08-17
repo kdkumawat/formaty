@@ -181,7 +181,7 @@ function CsvTableOut() {
 function CompareIn() {
   return (
     <pre className="font-mono text-[9px] leading-[1.75]">
-      <span className="text-[var(--workspace-text-muted)]">{"// Production vs Staging"}</span>{"\n"}
+      <span className="text-[var(--workspace-text-muted)]">{"// Expected vs Actual"}</span>{"\n"}
       <span className="text-sky-500">expected:</span>{" "}
       <span className="text-[var(--workspace-text)]">1001, 1002, 1003, 1004</span>{"\n"}
       <span className="text-violet-500">actual:</span>{" "}

@@ -487,6 +487,7 @@ Every result bucket can be exported - copy as SQL IN, SQL NOT IN, PostgreSQL ARR
     useCases: [
       "Find missing records between two databases",
       "Reconcile production vs staging exports",
+      "Reconcile expected vs actual IDs exports",
       "Compare API response ID lists",
       "Generate SQL IN / NOT IN clauses",
     ],
@@ -586,11 +587,11 @@ Use cases: typing API clients, building data pipelines, and documenting response
 
 Paste the result of SELECT id FROM table_a on the left and SELECT id FROM table_b on the right. Formaty computes common IDs, IDs only in the first list, IDs only in the second list, and duplicates - then lets you copy the result as SQL IN, SQL NOT IN, or a PostgreSQL ARRAY.
 
-Use cases: reconciling production vs staging, finding records missing from a sync, verifying data migrations, and comparing API response IDs. Everything runs in your browser; your IDs never leave your device.`,
+Use cases: reconciling expected vs actual, finding records missing from a sync, verifying data migrations, and comparing API response IDs. Everything runs in your browser; your IDs never leave your device.`,
     inputExample: "Left:\n1001\n1002\n1003\n1004\n\nRight:\n1002\n1003\n1005",
     outputExample: "Common: 1002, 1003\nOnly left: 1001, 1004\nOnly right: 1005",
     useCases: [
-      "Reconcile production vs staging records",
+      "Reconcile expected vs actual records",
       "Find records missing from a sync",
       "Verify data migrations",
       "Compare API response IDs",
