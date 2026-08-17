@@ -1022,24 +1022,25 @@ export function WorkspaceContent({
 
   const detectedInputFormat = useMemo(() => detectFormat(input), [input]);
   const resolvedInputFormat: InputFormatKind = inputFormatOverride ?? detectedInputFormat;
-  const resolvedParseFormat: FormatKind = resolvedInputFormat === "curl" ? "json" : resolvedInputFormat;
 
-  const getParsedInput = useCallback(async (): Promise<JsonValue> => {
-    if (resolvedInputFormat === "curl") {
+  const getParsedInput = useCallback(async (textOverride?: string): Promise<JsonValue> => {
+    const source = textOverride ?? input;
+    const inputFmt = textOverride ? detectFormat(source) : resolvedInputFormat;
+    if (inputFmt === "curl") {
       const cache = curlCacheRef.current;
       let responseText: string;
-      if (cache && cache.input === input) {
+      if (cache && cache.input === source) {
         responseText = cache.result;
         if (cache.meta) setCurlMeta(cache.meta);
       } else {
         setCurlFetching(true);
         try {
-          const parsed = parseCurl(input);
+          const parsed = parseCurl(source);
           const executed = await executeCurlDetailed(parsed);
           responseText = executed.body;
           setCurlMeta(executed);
-          setLastExecutedCurlInput(input);
-          curlCacheRef.current = { input, result: responseText, meta: executed };
+          setLastExecutedCurlInput(source);
+          curlCacheRef.current = { input: source, result: responseText, meta: executed };
         } finally {
           setCurlFetching(false);
         }
@@ -1047,8 +1048,8 @@ export function WorkspaceContent({
       const fmt = detectFormat(responseText) === "curl" ? "json" : (detectFormat(responseText) as FormatKind);
       return run<JsonValue>("parseFormat", { input: responseText, format: fmt });
     }
-    return run<JsonValue>("parseFormat", { input, format: resolvedParseFormat });
-  }, [input, resolvedInputFormat, resolvedParseFormat, run]);
+    return run<JsonValue>("parseFormat", { input: source, format: inputFmt });
+  }, [input, resolvedInputFormat, run]);
 
   const pushHistory = useCallback((next: string) => {
     if (historyLock.current) return;
@@ -1827,6 +1828,7 @@ export function WorkspaceContent({
     if (isDiffMode || isUtilsMode || !parsedOutput) return;
     if (rightView !== "raw") return; // respect explicit view choices
     if (outputLanguage === "csv") return; // keep CSV output on Raw by default
+    if (activeOperation === "generateTypes") return; // generated text (types/SQL) stays on Raw
     if (
       Array.isArray(parsedOutput) &&
       parsedOutput.length > 0 &&
@@ -1837,7 +1839,7 @@ export function WorkspaceContent({
       lastAutoTableKeyRef.current = key;
       setRightView("table");
     }
-  }, [parsedOutput, rightView, isDiffMode, isUtilsMode, outputLanguage]);
+  }, [parsedOutput, rightView, isDiffMode, isUtilsMode, outputLanguage, activeOperation]);
 
   useEffect(() => {
     if (!sessionRestoredRef.current || !input.trim() || !activeOperation) return;
@@ -1872,6 +1874,9 @@ export function WorkspaceContent({
 
   const validationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const liveTransformTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // One-shot lock: recipes load sample input via setInput, which would trigger the
+  // debounced live-transform and clobber the recipe's own output. Skip one cycle.
+  const recipeInputLockRef = useRef(false);
   const inputRef = useRef(input);
   inputRef.current = input;
 
@@ -1919,6 +1924,12 @@ export function WorkspaceContent({
   }, [input, resolvedInputFormat, run]);
 
   useEffect(() => {
+    // One-shot recipe lock: consume (and skip) the live-transform cycle that a
+    // recipe's setInput(sample) would otherwise trigger, clobbering its output.
+    if (recipeInputLockRef.current) {
+      recipeInputLockRef.current = false;
+      return;
+    }
     if (!liveTransform || !input.trim()) return;
     const fmt = detectFormat(input);
     if (fmt === "curl") return; // cURL: execute only on explicit run (Cmd+Enter)
@@ -2213,6 +2224,7 @@ export function WorkspaceContent({
       schemaText?: string;
       leftText?: string;
       rightText?: string;
+      inputText?: string;
       typeLanguage?: TypeTargetLanguage;
       formatOptions?: FormatOptions;
     },
@@ -2230,7 +2242,7 @@ export function WorkspaceContent({
           return;
         }
 
-        const left = await getParsedInput();
+        const left = await getParsedInput(options?.inputText);
 
         if (action === "validate") {
           const schemaText = options?.schemaText ?? schemaInput;
@@ -2320,7 +2332,7 @@ export function WorkspaceContent({
     })();
   }, [getParsedInput, parseSchemaToObject, run, convertJsonToOutput, setOutputData, schemaInput, typeLanguage, formatOptions, convertToFormat, sqlDialect, output, parsedOutput]);
 
-  const runConvert = useCallback((toFormat: FormatKind) => {
+  const runConvert = useCallback((toFormat: FormatKind, inputText?: string) => {
     trackEvent("convert", { to_format: toFormat, mode: "transform" });
     setConvertToFormat(toFormat);
     setFocusedPane("output");
@@ -2329,7 +2341,7 @@ export function WorkspaceContent({
     setError(null);
     void (async () => {
       try {
-        const json = await getParsedInput();
+        const json = await getParsedInput(inputText);
         const result = await convertJsonToOutput(json, { toFormat });
         setOutput(result);
         setOutputExt(EXT_BY_FORMAT[toFormat]);
@@ -2497,7 +2509,7 @@ export function WorkspaceContent({
     }
   }, []);
 
-  const runOperation = (action: OperationAction) => {
+  const runOperation = (action: OperationAction, inputText?: string) => {
     trackEvent("operation", { action, mode: isUtilsMode ? "utils" : isDiffMode ? "compare" : "transform" });
     setFocusedPane("output");
     if (!isDesktopLayout) setMobileShowOutput(true);
@@ -2640,7 +2652,7 @@ export function WorkspaceContent({
     if (activeOperation === "utils") {
       setIsOutputMaximized(false);
     }
-    executeOperation(action);
+    executeOperation(action, { inputText });
   };
 
   const downloadOutput = (format?: "png" | "jpg") => {
@@ -3233,30 +3245,60 @@ export function WorkspaceContent({
 
     switch (id) {
       case "json-to-typescript":
-        setActiveOperation("generateTypes");
-        setTypeLanguage("typescript");
-        executeOperation("generateTypes", { typeLanguage: "typescript" });
-        break;
       case "json-to-sql":
-        setActiveOperation("generateTypes");
-        setTypeLanguage("sql");
-        setOutputLanguage("sql");
-        setOutputExt("sql");
-        executeOperation("generateTypes", { typeLanguage: "sql" });
-        break;
       case "json-to-yaml":
-        setConvertToFormat("yaml");
-        runConvert("yaml");
-        break;
       case "flatten-json":
-        runOperation("flatten");
+      case "api-response-types": {
+        // Recipes need parseable input. When the editor is empty, load a sample;
+        // pass the source text through explicitly because setInput is async and
+        // the operation would otherwise read the stale empty input from the closure.
+        const sample =
+          id === "json-to-sql"
+            ? SAMPLE_JSON_TABLE
+            : id === "api-response-types"
+              ? '{"status":200,"data":{"id":1,"email":"a@b.com","roles":["admin"]}}'
+              : SAMPLE_JSON;
+        const src = input.trim() || sample;
+        const loadedSample = !input.trim();
+        if (loadedSample) {
+          // Skip the live-transform cycle this setInput would trigger so it
+          // can't clobber the recipe's output below.
+          recipeInputLockRef.current = true;
+          setInput(sample);
+          pushHistory(sample);
+          setInputFormatOverride(null);
+          setError(null);
+          setValidationError(null);
+        }
+        const inputText = loadedSample ? src : undefined;
+        if (id === "json-to-sql") {
+          setActiveOperation("generateTypes");
+          setTypeLanguage("sql");
+          setOutputLanguage("sql");
+          setOutputExt("sql");
+          executeOperation("generateTypes", { typeLanguage: "sql", inputText });
+        } else if (id === "json-to-yaml") {
+          setConvertToFormat("yaml");
+          runConvert("yaml", inputText);
+        } else if (id === "flatten-json") {
+          runOperation("flatten", inputText);
+        } else {
+          // json-to-typescript and api-response-types
+          setActiveOperation("generateTypes");
+          setTypeLanguage("typescript");
+          executeOperation("generateTypes", { typeLanguage: "typescript", inputText });
+        }
         break;
+      }
       case "flatten-to-csv": {
         const src = input.trim() || SAMPLE_JSON_TABLE;
         try {
           const json = parseJsonInput(src);
           const flat = flattenJson(json);
           const csv = toCsv(flat);
+          // Skip the live-transform cycle this setInput would trigger so it
+          // can't clobber the recipe's CSV output set below.
+          recipeInputLockRef.current = true;
           setInput(src);
           pushHistory(src);
           setOutput(csv);
@@ -3273,17 +3315,6 @@ export function WorkspaceContent({
         }
         break;
       }
-      case "api-response-types":
-        if (!input.trim()) {
-          const sample = '{"status":200,"data":{"id":1,"email":"a@b.com","roles":["admin"]}}';
-          setInput(sample);
-          pushHistory(sample);
-          setInputFormatOverride(null);
-        }
-        setActiveOperation("generateTypes");
-        setTypeLanguage("typescript");
-        executeOperation("generateTypes", { typeLanguage: "typescript" });
-        break;
       case "compare-db-exports":
         setDiffKind("list");
         if (!diffLeftInput.trim() && !diffRightInput.trim()) {
