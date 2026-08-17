@@ -182,9 +182,9 @@ function CompareIn() {
   return (
     <pre className="font-mono text-[9px] leading-[1.75]">
       <span className="text-[var(--workspace-text-muted)]">{"// Production vs Staging"}</span>{"\n"}
-      <span className="text-sky-500">prod:</span>{" "}
+      <span className="text-sky-500">expected:</span>{" "}
       <span className="text-[var(--workspace-text)]">1001, 1002, 1003, 1004</span>{"\n"}
-      <span className="text-violet-500">stage:</span>{" "}
+      <span className="text-violet-500">actual:</span>{" "}
       <span className="text-[var(--workspace-text)]">1002, 1003, 1005</span>{"\n"}
       <span className="mt-1 block text-[var(--workspace-text-muted)]">also: a,b,c vs b,c,d · JSON · CSV</span>
     </pre>
@@ -196,9 +196,9 @@ function CompareOut() {
     <pre className="font-mono text-[9px] leading-[1.75]">
       <span className="text-emerald-500">Common</span>
       <span className="text-[var(--workspace-text-muted)]">: 1002, 1003</span>{"\n"}
-      <span className="text-sky-500">Only prod</span>
+      <span className="text-sky-500">Only expected</span>
       <span className="text-[var(--workspace-text-muted)]">: 1001, 1004</span>{"\n"}
-      <span className="text-violet-500">Only stage</span>
+      <span className="text-violet-500">Only actual</span>
       <span className="text-[var(--workspace-text-muted)]">: 1005</span>{"\n"}
       <span className="rounded bg-primary/15 px-1 text-primary">Copy as SQL IN (…)</span>
     </pre>
