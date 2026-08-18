@@ -5,7 +5,7 @@ import { ArrowRightIcon } from "@heroicons/react/24/outline";
 import { Logo } from "@/components/Logo";
 import { GUIDE_ROUTES, getGuideConfig } from "@/lib/guides";
 import { getCanonicalUrl, getPlayUrl, SITE_URL } from "@/lib/seo";
-import { getPageConfigByRoute } from "@/lib/seoUtils";
+import { getPageConfig } from "@/lib/seoUtils";
 
 export async function generateStaticParams() {
   return GUIDE_ROUTES.map((slug) => ({ slug }));
@@ -49,7 +49,7 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
   const config = getGuideConfig(slug);
   if (!config) notFound();
   const canonical = getCanonicalUrl(`/guides/${slug}`);
-  const tool = getPageConfigByRoute(config.toolRoute);
+  const tool = getPageConfig(config.toolRoute);
   const playUrl = getPlayUrl(config.toolRoute);
 
   const breadcrumbLd = {
@@ -194,7 +194,7 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
             <h2 className="mb-4 text-lg font-semibold text-[var(--workspace-text)]">Related tools</h2>
             <div className="grid gap-2 sm:grid-cols-2">
               {config.relatedTools.map((route) => {
-                const c = getPageConfigByRoute(route);
+                const c = getPageConfig(route);
                 if (!c) return null;
                 return (
                   <Link

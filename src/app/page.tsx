@@ -1,5 +1,6 @@
 import { HomePage } from "@/components/HomePage";
-import { ALL_TOOL_ROUTES, getToolConfig, SITE_URL } from "@/lib/seo";
+import { ALL_TOOL_ROUTES, SITE_URL } from "@/lib/seo";
+import { getPageConfig } from "@/lib/seoUtils";
 
 export default function Home() {
   const itemList = {
@@ -9,7 +10,7 @@ export default function Home() {
     itemListElement: ALL_TOOL_ROUTES.map((route, i) => ({
       "@type": "ListItem",
       position: i + 1,
-      name: getToolConfig(route).h1,
+      name: getPageConfig(route)?.h1 ?? route,
       url: `${SITE_URL}/${route}`,
     })),
   };

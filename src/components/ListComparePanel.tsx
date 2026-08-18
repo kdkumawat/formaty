@@ -9,10 +9,12 @@ import {
   ChartPieIcon,
   ChevronDownIcon,
   ClipboardDocumentIcon,
+  SparklesIcon,
   TableCellsIcon,
 } from "@heroicons/react/24/outline";
 import { Dropdown } from "@/components/workspace/Dropdown";
 import { Tooltip } from "@/components/workspace/Tooltip";
+import { CycleSortButton, cycleSort } from "@/components/workspace/CycleSortButton";
 import {
   menuItemClass as sharedMenuItemClass,
   menuItemActiveClass as sharedMenuItemActiveClass,
@@ -25,6 +27,7 @@ import {
   DEFAULT_LIST_PARSE_OPTIONS,
   LIST_EXPORT_FORMATS,
   buildListSummary,
+  cleanListInput,
   compareLists,
   formatListItems,
   getBucketItems,
@@ -107,52 +110,6 @@ const EXPORT_GROUPS: { label: string; items: ListExportFormat[] }[] = [
   },
 ];
 
-/** Single icon cycles none → asc → desc → none (table-style). */
-function CycleSortButton({
-  linkBtnClass,
-  mode,
-  disabled,
-  onCycle,
-  titlePrefix = "Sort",
-}: {
-  linkBtnClass: string;
-  mode: ListSortMode;
-  disabled?: boolean;
-  onCycle: () => void;
-  titlePrefix?: string;
-}) {
-  const title =
-    mode === "none"
-      ? `${titlePrefix}: click for A → Z`
-      : mode === "asc"
-        ? `${titlePrefix}: A → Z - click for Z → A`
-        : `${titlePrefix}: Z → A - click to reset`;
-  return (
-    <Tooltip content={title}>
-    <button
-      type="button"
-      className={`${linkBtnClass} h-7 min-h-7 w-7 disabled:opacity-40 ${
-        mode !== "none" ? "!bg-primary/12 !text-primary" : ""
-      }`}
-      disabled={disabled}
-      onClick={onCycle}
-    >
-      {mode === "desc" ? (
-        <BarsArrowDownIcon className="h-3.5 w-3.5" />
-      ) : (
-        <BarsArrowUpIcon className={`h-3.5 w-3.5 ${mode === "none" ? "opacity-50" : ""}`} />
-      )}
-    </button>
-    </Tooltip>
-  );
-}
-
-function cycleSort(mode: ListSortMode): ListSortMode {
-  if (mode === "none") return "asc";
-  if (mode === "asc") return "desc";
-  return "none";
-}
-
 export function ListComparePanel({
   left,
   right,
@@ -222,6 +179,20 @@ export function ListComparePanel({
   const [colOpen, setColOpen] = useState(false);
   const [leftSnapshot, setLeftSnapshot] = useState<string | null>(null);
   const [rightSnapshot, setRightSnapshot] = useState<string | null>(null);
+  const cleanLeft = () => {
+    const cleaned = cleanListInput(left);
+    onLeftChange(cleaned);
+    setLeftSnapshot(null);
+    setLeftSort("none");
+    toast({ message: "Left cleaned", type: "success" });
+  };
+  const cleanRight = () => {
+    const cleaned = cleanListInput(right);
+    onRightChange(cleaned);
+    setRightSnapshot(null);
+    setRightSort("none");
+    toast({ message: "Right cleaned", type: "success" });
+  };
 
   // CSV column detection: when both sides look like header CSVs, offer column compare.
   const csvColumns = useMemo(() => {
@@ -512,6 +483,17 @@ export function ListComparePanel({
                 </Tooltip>
               </span>
               <span className="ml-auto flex items-center gap-1">
+                <Tooltip content="Clean: strip quotes, collapse whitespace, one per line" className="shrink-0">
+                <button
+                  type="button"
+                  onClick={cleanLeft}
+                  disabled={!left.trim()}
+                  className={`${linkBtnClass} h-6 min-h-6 px-1.5 text-[10px] font-semibold`}
+                >
+                  <SparklesIcon className="h-3 w-3" />
+                  <span className="hidden sm:inline">Clean</span>
+                </button>
+                </Tooltip>
                 <CycleSortButton
                   linkBtnClass={linkBtnClass}
                   mode={leftSort}
@@ -573,6 +555,17 @@ export function ListComparePanel({
                 </Tooltip>
               </span>
               <span className="ml-auto flex items-center gap-1">
+                <Tooltip content="Clean: strip quotes, collapse whitespace, one per line" className="shrink-0">
+                <button
+                  type="button"
+                  onClick={cleanRight}
+                  disabled={!right.trim()}
+                  className={`${linkBtnClass} h-6 min-h-6 px-1.5 text-[10px] font-semibold`}
+                >
+                  <SparklesIcon className="h-3 w-3" />
+                  <span className="hidden sm:inline">Clean</span>
+                </button>
+                </Tooltip>
                 <CycleSortButton
                   linkBtnClass={linkBtnClass}
                   mode={rightSort}

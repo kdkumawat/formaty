@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   analyzeSingleList,
   buildListSummary,
+  cleanListInput,
   compareLists,
   compareListsCountAware,
   computeCountDeltas,
@@ -441,5 +442,54 @@ describe("formatSqlClause", () => {
   it("escapes single quotes in values", () => {
     const xs: ListItem[] = [{ value: "O'Brien", key: "x", count: 1 }];
     expect(formatSqlClause(xs, { quote: "single" })).toBe("id IN ('O''Brien')");
+  });
+});
+
+describe("cleanListInput", () => {
+  it("strips surrounding double quotes", () => {
+    expect(cleanListInput('"foo"\n"bar"')).toBe("foo\nbar");
+  });
+
+  it("strips surrounding single quotes", () => {
+    expect(cleanListInput("'foo'\n'bar'")).toBe("foo\nbar");
+  });
+
+  it("collapses multiple spaces", () => {
+    expect(cleanListInput("hello   world")).toBe("hello world");
+  });
+
+  it("removes blank lines", () => {
+    expect(cleanListInput("a\n\n\nb")).toBe("a\nb");
+  });
+
+  it("trims whitespace per line", () => {
+    expect(cleanListInput("  foo  \n  bar  ")).toBe("foo\nbar");
+  });
+
+  it("handles empty input", () => {
+    expect(cleanListInput("")).toBe("");
+  });
+
+  it("normalizes mixed mess", () => {
+    const input = '  \"  Alice  \"  \n\n  \'Bob\'  \n  \"Charlie\"  ';
+    expect(cleanListInput(input)).toBe("Alice\nBob\nCharlie");
+  });
+
+  it("strips orphan/incomplete quotes (trailing only)", () => {
+    expect(cleanListInput('user_1001\nuser_1006"')).toBe("user_1001\nuser_1006");
+  });
+
+  it("strips orphan/incomplete quotes (leading only)", () => {
+    expect(cleanListInput("'user_a\nuser_b")).toBe("user_a\nuser_b");
+  });
+
+  it("strips trailing commas", () => {
+    expect(cleanListInput("user_1001,\nuser_1002,")).toBe("user_1001\nuser_1002");
+  });
+
+  it("handles the user_1001..user_1006 quote scenario", () => {
+    const input = 'user_1001\nuser_1002\nuser_1003\nuser_1002\nuser_1004\nuser_1005\nuser_1003\n"user_1006"';
+    const expected = 'user_1001\nuser_1002\nuser_1003\nuser_1002\nuser_1004\nuser_1005\nuser_1003\nuser_1006';
+    expect(cleanListInput(input)).toBe(expected);
   });
 });

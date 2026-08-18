@@ -48,7 +48,9 @@ import {
   useIconAnimation,
   type AnimatedIconHandle,
 } from "@/components/icons";
-import { JsonDiffEditor, type DiffNavState, type JsonDiffEditorRef } from "@/components/JsonDiffEditor";
+import dynamic from "next/dynamic";
+import type { ComponentType, RefAttributes } from "react";
+import type { DiffNavState, JsonDiffEditorProps, JsonDiffEditorRef } from "@/components/JsonDiffEditor";
 import { ListComparePanel, type ListCompareExport } from "@/components/ListComparePanel";
 import { SingleListPanel } from "@/components/SingleListPanel";
 import { DEFAULT_LIST_PARSE_OPTIONS, type ListParseOptions } from "@/lib/json/listCompare";
@@ -73,7 +75,16 @@ import {
   toHtmlTable,
   toMarkdownTable,
 } from "@/lib/json/core";
-import { JsonEditor } from "@/components/JsonEditor";
+// Monaco is the single biggest client dependency (~5MB) and is only needed on
+// views that render a code editor. Load it lazily so list-compare / SQL / utils
+// pages never pull it in (mirrors how GraphView code-splits jsoncrack).
+const JsonEditor = dynamic(() => import("@/components/JsonEditor").then((m) => m.JsonEditor), {
+  ssr: false,
+});
+const JsonDiffEditor = dynamic(
+  () => import("@/components/JsonDiffEditor").then((m) => m.JsonDiffEditor),
+  { ssr: false },
+) as ComponentType<JsonDiffEditorProps & RefAttributes<JsonDiffEditorRef>>;
 import { GraphView, type GraphViewRef } from "@/components/GraphView";
 import { TreeView, type TreeViewRef } from "@/components/TreeView";
 import { QueryView } from "@/components/QueryView";
@@ -355,102 +366,6 @@ const FORMAT_ICONS: Record<string, React.ComponentType<{ className?: string }>> 
   csv: TableCellsIcon,
 };
 
-/**
- * Renders a toolbar trigger icon and forwards the imperative animation ref.
- * Static heroicons glyphs ignore the ref (their own ref is an SVG element);
- * animated icons (from @/components/icons) use it for hover/focus control.
- */
-function TriggerIcon({
-  Icon,
-  iconRef,
-  className,
-}: {
-  Icon: React.ComponentType<{ className?: string }>;
-  iconRef: React.Ref<AnimatedIconHandle>;
-  className?: string;
-}) {
-  const Animated = Icon as React.ComponentType<{ className?: string; ref?: React.Ref<AnimatedIconHandle> }>;
-  return <Animated ref={iconRef} className={className} />;
-}
-
-/** Brand-tinted 2-letter badges for the Types trigger (no icon dependency). */
-const TYPE_BADGES: Record<string, { text: string; bg: string; fg: string }> = {
-  typescript: { text: "TS", bg: "#3178c6", fg: "#fff" },
-  zod: { text: "Z", bg: "#1e3a8a", fg: "#fff" },
-  java: { text: "Jv", bg: "#e76f00", fg: "#fff" },
-  csharp: { text: "C#", bg: "#68217a", fg: "#fff" },
-  python: { text: "Py", bg: "#3776ab", fg: "#ffd43b" },
-  pydantic: { text: "Pd", bg: "#3d7ea6", fg: "#fff" },
-  go: { text: "Go", bg: "#00add8", fg: "#00273b" },
-  protobuf: { text: "Pb", bg: "#4f5b93", fg: "#fff" },
-  kotlin: { text: "Kt", bg: "#7f52ff", fg: "#fff" },
-  swift: { text: "Sw", bg: "#f05138", fg: "#fff" },
-  rust: { text: "Rs", bg: "#ce422b", fg: "#fff" },
-  sql: { text: "SQL", bg: "#336791", fg: "#fff" },
-  fetch: { text: "JS", bg: "#f7df1e", fg: "#000" },
-  axios: { text: "JS", bg: "#5a29e4", fg: "#fff" },
-};
-
-function TypeBadge({ id }: { id: string }) {
-  const b = TYPE_BADGES[id] ?? { text: id.slice(0, 2).toUpperCase(), bg: "var(--workspace-border)", fg: "var(--workspace-text-muted)" };
-  return (
-    <span
-      className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] text-[7px] font-bold"
-      style={{ backgroundColor: b.bg, color: b.fg }}
-      aria-hidden
-    >
-      {b.text}
-    </span>
-  );
-}
-
-/**
- * Pinned toolbar button (non-compact mode): label plus an animated-capable
- * icon. Static heroicons glyphs ignore the animation ref; the itsHover-style
- * icons (JSON braces, sparkles, …) nudge on hover/focus. `leading` (e.g. a
- * TypeBadge) overrides the icon slot entirely.
- */
-function PinnedToolbarButton({
-  leading,
-  icon,
-  label,
-  active = false,
-  disabled = false,
-  btnClass,
-  activeClass,
-  onClick,
-}: {
-  leading?: React.ReactNode;
-  icon?: React.ComponentType<{ className?: string }>;
-  label: string;
-  active?: boolean;
-  disabled?: boolean;
-  btnClass: string;
-  activeClass: string;
-  onClick: () => void;
-}) {
-  const iconAnim = useIconAnimation();
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      className={`${btnClass} ${active ? activeClass : ""}`}
-      onClick={onClick}
-      {...iconAnim.bind}
-    >
-      {leading ??
-        (icon ? (
-          <TriggerIcon
-            Icon={icon}
-            iconRef={iconAnim.ref}
-            className={`h-3.5 w-3.5 shrink-0 ${active ? "text-primary" : "text-[var(--workspace-text-muted)]"}`}
-          />
-        ) : null)}
-      <span>{label}</span>
-    </button>
-  );
-}
-
 const FORMAT_KINDS: FormatKind[] = ["json", "xml", "yaml", "toml", "csv"];
 
 const TYPE_LANGUAGES: Array<{ id: TypeTargetLanguage; label: string; ext: string }> = [
@@ -600,162 +515,15 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-
-/** shadcn-backed square icon button (preserves current sizing + icon size). */
-function SquareBtn({ className = "", ...props }: ButtonHTMLAttributes<HTMLButtonElement>) {
-  return (
-    <UiButton
-      type="button"
-      variant="ghost"
-      className={`h-auto min-h-0 w-auto min-w-0 !p-0 [&_svg]:!size-3.5 ${className}`}
-      {...props}
-    />
-  );
-}
-
-/** Settings panel (redesigned) helpers. */
-
-/** Section rule header: uppercase label + hairline rule. */
-function SettingsRule({ title }: { title: string }) {
-  return (
-    <div className="mt-3 flex items-center gap-2.5">
-      <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--workspace-text-muted)]">
-        {title}
-      </span>
-      <span className="h-px flex-1 bg-[var(--workspace-border)]/60" aria-hidden />
-    </div>
-  );
-}
-
-/** Settings row - label left, control right, hover pill. */
-function SettingsRow({
-  label,
-  children,
-}: {
-  label: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex min-h-8 items-center justify-between gap-3 rounded-md px-1.5 py-1 transition-colors hover:bg-primary/5">
-      <span className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-[var(--workspace-text)]">
-        {label}
-      </span>
-      <div className="flex shrink-0 items-center">{children}</div>
-    </div>
-  );
-}
-
-/** Star pin toggle for settings rows. */
-function PinButton({
-  pinned,
-  label,
-  onClick,
-}: {
-  pinned: boolean;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <Tooltip content={pinned ? `Unpin ${label} from toolbar` : `Pin ${label} to toolbar`}>
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={pinned ? `Unpin ${label}` : `Pin ${label}`}
-      className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md transition-all ${
-        pinned
-          ? "text-amber-500 hover:bg-amber-500/10"
-          : "text-[var(--workspace-text-muted)]/55 hover:bg-primary/10 hover:text-primary"
-      }`}
-    >
-      {pinned ? <StarSolidIcon className="h-3 w-3" /> : <StarIcon className="h-3 w-3" />}
-    </button>
-    </Tooltip>
-  );
-}
-
-/** Compact -/+ stepper pill used in settings rows. */
-function SettingsStepper({
-  value,
-  onDec,
-  onInc,
-  onReset,
-  decLabel,
-  incLabel,
-  resetLabel,
-  minWidth = "min-w-[1.75rem]",
-}: {
-  value: number;
-  onDec: () => void;
-  onInc: () => void;
-  onReset: () => void;
-  decLabel: string;
-  incLabel: string;
-  resetLabel: string;
-  minWidth?: string;
-}) {
-  const stepBtn =
-    "flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] transition-colors duration-100 hover:bg-primary/10 hover:text-primary active:bg-primary/15";
-  return (
-    <div className="inline-flex items-center overflow-hidden rounded-lg border border-[var(--workspace-border)]/50 bg-muted/50">
-      <button type="button" aria-label={decLabel} className={stepBtn} onClick={onDec}>
-        <MinusIcon className="h-3.5 w-3.5" aria-hidden />
-      </button>
-      <span
-        className={`flex h-7 ${minWidth} items-center justify-center border-x border-[var(--workspace-border)]/40 px-1.5 text-xs font-medium tabular-nums text-[var(--workspace-text)]`}
-      >
-        {value}
-      </span>
-      <button type="button" aria-label={incLabel} className={stepBtn} onClick={onInc}>
-        <PlusIcon className="h-3.5 w-3.5" aria-hidden />
-      </button>
-      <button type="button" aria-label={resetLabel} className={stepBtn} onClick={onReset}>
-        <ArrowPathIcon className="h-3 w-3" aria-hidden />
-      </button>
-    </div>
-  );
-}
-
-/** One labelled row of pin-to-toolbar chips. */
-function PinChipRow({
-  label,
-  items,
-  pinned,
-  onToggle,
-}: {
-  label: string;
-  items: Array<{ id: string; label: string }>;
-  pinned: (id: string) => boolean;
-  onToggle: (id: string) => void;
-}) {
-  return (
-    <div className="flex items-start gap-2">
-      <span className="mt-1 w-12 shrink-0 text-[9px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]">
-        {label}
-      </span>
-      <div className="flex flex-wrap gap-1">
-        {items.map((item) => {
-          const on = pinned(item.id);
-          return (
-            <Tooltip key={item.id} content={on ? `Unpin ${item.label}` : `Pin ${item.label}`}>
-            <button
-              type="button"
-              onClick={() => onToggle(item.id)}
-              className={`inline-flex h-6 items-center gap-1 rounded-md border px-1.5 text-[10px] font-medium transition-colors ${
-                on
-                  ? "border-primary/30 bg-primary/10 text-primary"
-                  : "border-[var(--workspace-border)]/70 text-[var(--workspace-text-muted)] hover:border-primary/25 hover:text-[var(--workspace-text)]"
-              }`}
-            >
-              {on ? <StarSolidIcon className="h-3 w-3 text-amber-500" /> : <StarIcon className="h-3 w-3 opacity-50" />}
-              {item.label}
-            </button>
-            </Tooltip>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
+import {
+  PinButton,
+  PinChipRow,
+  SettingsRow,
+  SettingsRule,
+  SettingsStepper,
+  SquareBtn,
+} from "@/components/workspace/settings";
+import { PinnedToolbarButton, TriggerIcon, TypeBadge } from "@/components/workspace/toolbar";
 
 export function WorkspaceContent({
   initialState,
@@ -1254,24 +1022,25 @@ export function WorkspaceContent({
 
   const detectedInputFormat = useMemo(() => detectFormat(input), [input]);
   const resolvedInputFormat: InputFormatKind = inputFormatOverride ?? detectedInputFormat;
-  const resolvedParseFormat: FormatKind = resolvedInputFormat === "curl" ? "json" : resolvedInputFormat;
 
-  const getParsedInput = useCallback(async (): Promise<JsonValue> => {
-    if (resolvedInputFormat === "curl") {
+  const getParsedInput = useCallback(async (textOverride?: string): Promise<JsonValue> => {
+    const source = textOverride ?? input;
+    const inputFmt = textOverride ? detectFormat(source) : resolvedInputFormat;
+    if (inputFmt === "curl") {
       const cache = curlCacheRef.current;
       let responseText: string;
-      if (cache && cache.input === input) {
+      if (cache && cache.input === source) {
         responseText = cache.result;
         if (cache.meta) setCurlMeta(cache.meta);
       } else {
         setCurlFetching(true);
         try {
-          const parsed = parseCurl(input);
+          const parsed = parseCurl(source);
           const executed = await executeCurlDetailed(parsed);
           responseText = executed.body;
           setCurlMeta(executed);
-          setLastExecutedCurlInput(input);
-          curlCacheRef.current = { input, result: responseText, meta: executed };
+          setLastExecutedCurlInput(source);
+          curlCacheRef.current = { input: source, result: responseText, meta: executed };
         } finally {
           setCurlFetching(false);
         }
@@ -1279,8 +1048,8 @@ export function WorkspaceContent({
       const fmt = detectFormat(responseText) === "curl" ? "json" : (detectFormat(responseText) as FormatKind);
       return run<JsonValue>("parseFormat", { input: responseText, format: fmt });
     }
-    return run<JsonValue>("parseFormat", { input, format: resolvedParseFormat });
-  }, [input, resolvedInputFormat, resolvedParseFormat, run]);
+    return run<JsonValue>("parseFormat", { input: source, format: inputFmt });
+  }, [input, resolvedInputFormat, run]);
 
   const pushHistory = useCallback((next: string) => {
     if (historyLock.current) return;
@@ -2059,6 +1828,7 @@ export function WorkspaceContent({
     if (isDiffMode || isUtilsMode || !parsedOutput) return;
     if (rightView !== "raw") return; // respect explicit view choices
     if (outputLanguage === "csv") return; // keep CSV output on Raw by default
+    if (activeOperation === "generateTypes") return; // generated text (types/SQL) stays on Raw
     if (
       Array.isArray(parsedOutput) &&
       parsedOutput.length > 0 &&
@@ -2069,7 +1839,7 @@ export function WorkspaceContent({
       lastAutoTableKeyRef.current = key;
       setRightView("table");
     }
-  }, [parsedOutput, rightView, isDiffMode, isUtilsMode, outputLanguage]);
+  }, [parsedOutput, rightView, isDiffMode, isUtilsMode, outputLanguage, activeOperation]);
 
   useEffect(() => {
     if (!sessionRestoredRef.current || !input.trim() || !activeOperation) return;
@@ -2104,6 +1874,9 @@ export function WorkspaceContent({
 
   const validationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const liveTransformTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // One-shot lock: recipes load sample input via setInput, which would trigger the
+  // debounced live-transform and clobber the recipe's own output. Skip one cycle.
+  const recipeInputLockRef = useRef(false);
   const inputRef = useRef(input);
   inputRef.current = input;
 
@@ -2151,6 +1924,12 @@ export function WorkspaceContent({
   }, [input, resolvedInputFormat, run]);
 
   useEffect(() => {
+    // One-shot recipe lock: consume (and skip) the live-transform cycle that a
+    // recipe's setInput(sample) would otherwise trigger, clobbering its output.
+    if (recipeInputLockRef.current) {
+      recipeInputLockRef.current = false;
+      return;
+    }
     if (!liveTransform || !input.trim()) return;
     const fmt = detectFormat(input);
     if (fmt === "curl") return; // cURL: execute only on explicit run (Cmd+Enter)
@@ -2445,6 +2224,7 @@ export function WorkspaceContent({
       schemaText?: string;
       leftText?: string;
       rightText?: string;
+      inputText?: string;
       typeLanguage?: TypeTargetLanguage;
       formatOptions?: FormatOptions;
     },
@@ -2462,7 +2242,7 @@ export function WorkspaceContent({
           return;
         }
 
-        const left = await getParsedInput();
+        const left = await getParsedInput(options?.inputText);
 
         if (action === "validate") {
           const schemaText = options?.schemaText ?? schemaInput;
@@ -2552,7 +2332,7 @@ export function WorkspaceContent({
     })();
   }, [getParsedInput, parseSchemaToObject, run, convertJsonToOutput, setOutputData, schemaInput, typeLanguage, formatOptions, convertToFormat, sqlDialect, output, parsedOutput]);
 
-  const runConvert = useCallback((toFormat: FormatKind) => {
+  const runConvert = useCallback((toFormat: FormatKind, inputText?: string) => {
     trackEvent("convert", { to_format: toFormat, mode: "transform" });
     setConvertToFormat(toFormat);
     setFocusedPane("output");
@@ -2561,7 +2341,7 @@ export function WorkspaceContent({
     setError(null);
     void (async () => {
       try {
-        const json = await getParsedInput();
+        const json = await getParsedInput(inputText);
         const result = await convertJsonToOutput(json, { toFormat });
         setOutput(result);
         setOutputExt(EXT_BY_FORMAT[toFormat]);
@@ -2722,14 +2502,11 @@ export function WorkspaceContent({
       setParsedOutput(prev.parsedOutput);
       if (prev.outputLanguage) setOutputLanguage(prev.outputLanguage);
       if (prev.outputExt) setOutputExt(prev.outputExt);
-      setActiveOperation(null);
-      toast({ message: "Restored previous output" });
-    } else {
-      setActiveOperation(null);
     }
+    setActiveOperation(null);
   }, []);
 
-  const runOperation = (action: OperationAction) => {
+  const runOperation = (action: OperationAction, inputText?: string) => {
     trackEvent("operation", { action, mode: isUtilsMode ? "utils" : isDiffMode ? "compare" : "transform" });
     setFocusedPane("output");
     if (!isDesktopLayout) setMobileShowOutput(true);
@@ -2872,7 +2649,7 @@ export function WorkspaceContent({
     if (activeOperation === "utils") {
       setIsOutputMaximized(false);
     }
-    executeOperation(action);
+    executeOperation(action, { inputText });
   };
 
   const downloadOutput = (format?: "png" | "jpg") => {
@@ -3465,30 +3242,60 @@ export function WorkspaceContent({
 
     switch (id) {
       case "json-to-typescript":
-        setActiveOperation("generateTypes");
-        setTypeLanguage("typescript");
-        executeOperation("generateTypes", { typeLanguage: "typescript" });
-        break;
       case "json-to-sql":
-        setActiveOperation("generateTypes");
-        setTypeLanguage("sql");
-        setOutputLanguage("sql");
-        setOutputExt("sql");
-        executeOperation("generateTypes", { typeLanguage: "sql" });
-        break;
       case "json-to-yaml":
-        setConvertToFormat("yaml");
-        runConvert("yaml");
-        break;
       case "flatten-json":
-        runOperation("flatten");
+      case "api-response-types": {
+        // Recipes need parseable input. When the editor is empty, load a sample;
+        // pass the source text through explicitly because setInput is async and
+        // the operation would otherwise read the stale empty input from the closure.
+        const sample =
+          id === "json-to-sql"
+            ? SAMPLE_JSON_TABLE
+            : id === "api-response-types"
+              ? '{"status":200,"data":{"id":1,"email":"a@b.com","roles":["admin"]}}'
+              : SAMPLE_JSON;
+        const src = input.trim() || sample;
+        const loadedSample = !input.trim();
+        if (loadedSample) {
+          // Skip the live-transform cycle this setInput would trigger so it
+          // can't clobber the recipe's output below.
+          recipeInputLockRef.current = true;
+          setInput(sample);
+          pushHistory(sample);
+          setInputFormatOverride(null);
+          setError(null);
+          setValidationError(null);
+        }
+        const inputText = loadedSample ? src : undefined;
+        if (id === "json-to-sql") {
+          setActiveOperation("generateTypes");
+          setTypeLanguage("sql");
+          setOutputLanguage("sql");
+          setOutputExt("sql");
+          executeOperation("generateTypes", { typeLanguage: "sql", inputText });
+        } else if (id === "json-to-yaml") {
+          setConvertToFormat("yaml");
+          runConvert("yaml", inputText);
+        } else if (id === "flatten-json") {
+          runOperation("flatten", inputText);
+        } else {
+          // json-to-typescript and api-response-types
+          setActiveOperation("generateTypes");
+          setTypeLanguage("typescript");
+          executeOperation("generateTypes", { typeLanguage: "typescript", inputText });
+        }
         break;
+      }
       case "flatten-to-csv": {
         const src = input.trim() || SAMPLE_JSON_TABLE;
         try {
           const json = parseJsonInput(src);
           const flat = flattenJson(json);
           const csv = toCsv(flat);
+          // Skip the live-transform cycle this setInput would trigger so it
+          // can't clobber the recipe's CSV output set below.
+          recipeInputLockRef.current = true;
           setInput(src);
           pushHistory(src);
           setOutput(csv);
@@ -3505,17 +3312,6 @@ export function WorkspaceContent({
         }
         break;
       }
-      case "api-response-types":
-        if (!input.trim()) {
-          const sample = '{"status":200,"data":{"id":1,"email":"a@b.com","roles":["admin"]}}';
-          setInput(sample);
-          pushHistory(sample);
-          setInputFormatOverride(null);
-        }
-        setActiveOperation("generateTypes");
-        setTypeLanguage("typescript");
-        executeOperation("generateTypes", { typeLanguage: "typescript" });
-        break;
       case "compare-db-exports":
         setDiffKind("list");
         if (!diffLeftInput.trim() && !diffRightInput.trim()) {
@@ -4425,7 +4221,7 @@ export function WorkspaceContent({
             <Tooltip content="New tab">
             <button
               type="button"
-              className="mt-0.5 flex h-7 items-center justify-center text-[var(--workspace-text-muted)] transition-all duration-100 hover:bg-primary/5 hover:text-primary"
+              className="mt-0.5 flex h-7 w-full items-center justify-center text-[var(--workspace-text-muted)] transition-all duration-100 hover:bg-primary/5 hover:text-primary"
               onClick={addTab}
             >
               <PlusIcon className="h-3.5 w-3.5" />
@@ -4635,7 +4431,6 @@ export function WorkspaceContent({
                 <button type="button" disabled={inputEmpty} data-selected={activeOperation !== "generateTypes" || undefined} className={`${menuItemClass} ${activeOperation === "generateTypes" ? "" : "!bg-primary/12 !text-primary"}`} onClick={() => { setFocusedPane("output"); runOperation("beautify"); setMoreMenuOpen(false); }}>
                   {sharedMenuCheck(activeOperation !== "generateTypes")}
                   <span className="min-w-0 flex-1 truncate text-left">None</span>
-                  <span className="text-[10px] opacity-60">format output</span>
                 </button>
                 {TYPE_LANGUAGES.map((item) => (
                   <button key={item.id} type="button" disabled={inputEmpty} data-selected={(activeOperation === "generateTypes" && typeLanguage === item.id) || undefined} className={`${menuItemClass} ${activeOperation === "generateTypes" && typeLanguage === item.id ? menuItemActiveClass : ""}`} onClick={() => { trackEvent("generate_types", { language: item.id, source: "menu" }); setFocusedPane("output"); setActiveOperation("generateTypes"); executeOperation("generateTypes", { typeLanguage: item.id }); setMoreMenuOpen(false); }}>
@@ -4694,7 +4489,6 @@ export function WorkspaceContent({
                 <button type="button" disabled={inputEmpty} className={`${menuItemClass} ${!OPERATION_ACTION_LABELS[activeOperation ?? ""] ? menuItemActiveClass : ""}`} onClick={() => { restorePreviousActionOutput(); setActionsMenuOpen(false); }}>
                   {sharedMenuCheck(!OPERATION_ACTION_LABELS[activeOperation ?? ""])}
                   <span className="min-w-0 flex-1 truncate text-left">None</span>
-                  <span className="text-[10px] opacity-60">restore output</span>
                 </button>
                 <div className="my-1 h-px bg-[var(--workspace-border)]" role="separator" aria-hidden />
                 {menuSectionLabel("Format")}
@@ -4737,7 +4531,6 @@ export function WorkspaceContent({
                 <button type="button" disabled={inputEmpty} data-selected={activeOperation !== "generateTypes" || undefined} className={`${menuItemClass} ${activeOperation === "generateTypes" ? "" : "!bg-primary/12 !text-primary"}`} onClick={() => { setFocusedPane("output"); runOperation("beautify"); setTypesMenuOpen(false); }}>
                   {sharedMenuCheck(activeOperation !== "generateTypes")}
                   <span className="min-w-0 flex-1 truncate text-left">None</span>
-                  <span className="text-[10px] opacity-60">format output</span>
                 </button>
                 <div className="my-1 h-px bg-[var(--workspace-border)]" role="separator" aria-hidden />
                 {(
@@ -4780,6 +4573,19 @@ export function WorkspaceContent({
                 }
               >
                 <div className="flex flex-col" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    type="button"
+                    className={`${sharedMenuItemClass} ${!curlTarget ? sharedMenuItemActiveClass : ""}`}
+                    onClick={() => {
+                      restorePreviousActionOutput();
+                      setCurlTarget(null);
+                      setCurlCodeOpen(false);
+                    }}
+                  >
+                    {sharedMenuCheck(!curlTarget)}
+                    <span className="min-w-0 flex-1 text-left">None</span>
+                  </button>
+                  <div className="my-1 h-px bg-[var(--workspace-border)]" role="separator" aria-hidden />
                   {CURL_TARGETS.map((target) => (
                     <button
                       key={target.id}
@@ -4807,20 +4613,6 @@ export function WorkspaceContent({
                       <span className="min-w-0 flex-1 text-left">{target.label}</span>
                     </button>
                   ))}
-                  <div className="my-1 h-px bg-[var(--workspace-border)]" role="separator" aria-hidden />
-                  <button
-                    type="button"
-                    className={`${sharedMenuItemClass} ${!curlTarget ? sharedMenuItemActiveClass : ""}`}
-                    onClick={() => {
-                      restorePreviousActionOutput();
-                      setCurlTarget(null);
-                      setCurlCodeOpen(false);
-                    }}
-                  >
-                    {sharedMenuCheck(!curlTarget)}
-                    <span className="min-w-0 flex-1 text-left">None</span>
-                    <span className="text-[10px] opacity-60">restore output</span>
-                  </button>
                 </div>
               </Dropdown>
             )}
