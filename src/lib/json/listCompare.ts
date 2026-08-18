@@ -835,3 +835,21 @@ export function formatSqlClause(items: ListItem[], opts: SqlClauseOptions): stri
   const clauses = chunks.map((chunk) => `${col} ${op} (${chunk.map(quoteItem).join(", ")})`);
   return clauses.join("\nOR ");
 }
+
+/**
+ * Clean up pasted list text: strip surrounding quotes, collapse whitespace,
+ * and normalize to one item per line.
+ */
+export function cleanListInput(text: string): string {
+  return text
+    .split(/\r?\n/)
+    .map((line) => {
+      let s = line.trim();
+      // Strip any leading/trailing quote or comma characters
+      s = s.replace(/^["',]+|["',]+$/g, "");
+      // Collapse internal whitespace runs to a single space
+      return s.replace(/\s+/g, " ").trim();
+    })
+    .filter((line) => line.length > 0)
+    .join("\n");
+}

@@ -9,6 +9,7 @@ import {
   ChartPieIcon,
   ChevronDownIcon,
   ClipboardDocumentIcon,
+  SparklesIcon,
   TableCellsIcon,
 } from "@heroicons/react/24/outline";
 import { Dropdown } from "@/components/workspace/Dropdown";
@@ -26,6 +27,7 @@ import {
   DEFAULT_LIST_PARSE_OPTIONS,
   LIST_EXPORT_FORMATS,
   buildListSummary,
+  cleanListInput,
   compareLists,
   formatListItems,
   getBucketItems,
@@ -177,6 +179,20 @@ export function ListComparePanel({
   const [colOpen, setColOpen] = useState(false);
   const [leftSnapshot, setLeftSnapshot] = useState<string | null>(null);
   const [rightSnapshot, setRightSnapshot] = useState<string | null>(null);
+  const cleanLeft = () => {
+    const cleaned = cleanListInput(left);
+    onLeftChange(cleaned);
+    setLeftSnapshot(null);
+    setLeftSort("none");
+    toast({ message: "Left cleaned", type: "success" });
+  };
+  const cleanRight = () => {
+    const cleaned = cleanListInput(right);
+    onRightChange(cleaned);
+    setRightSnapshot(null);
+    setRightSort("none");
+    toast({ message: "Right cleaned", type: "success" });
+  };
 
   // CSV column detection: when both sides look like header CSVs, offer column compare.
   const csvColumns = useMemo(() => {
@@ -467,6 +483,17 @@ export function ListComparePanel({
                 </Tooltip>
               </span>
               <span className="ml-auto flex items-center gap-1">
+                <Tooltip content="Clean: strip quotes, collapse whitespace, one per line" className="shrink-0">
+                <button
+                  type="button"
+                  onClick={cleanLeft}
+                  disabled={!left.trim()}
+                  className={`${linkBtnClass} h-6 min-h-6 px-1.5 text-[10px] font-semibold`}
+                >
+                  <SparklesIcon className="h-3 w-3" />
+                  <span className="hidden sm:inline">Clean</span>
+                </button>
+                </Tooltip>
                 <CycleSortButton
                   linkBtnClass={linkBtnClass}
                   mode={leftSort}
@@ -528,6 +555,17 @@ export function ListComparePanel({
                 </Tooltip>
               </span>
               <span className="ml-auto flex items-center gap-1">
+                <Tooltip content="Clean: strip quotes, collapse whitespace, one per line" className="shrink-0">
+                <button
+                  type="button"
+                  onClick={cleanRight}
+                  disabled={!right.trim()}
+                  className={`${linkBtnClass} h-6 min-h-6 px-1.5 text-[10px] font-semibold`}
+                >
+                  <SparklesIcon className="h-3 w-3" />
+                  <span className="hidden sm:inline">Clean</span>
+                </button>
+                </Tooltip>
                 <CycleSortButton
                   linkBtnClass={linkBtnClass}
                   mode={rightSort}
