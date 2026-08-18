@@ -2502,11 +2502,8 @@ export function WorkspaceContent({
       setParsedOutput(prev.parsedOutput);
       if (prev.outputLanguage) setOutputLanguage(prev.outputLanguage);
       if (prev.outputExt) setOutputExt(prev.outputExt);
-      setActiveOperation(null);
-      toast({ message: "Restored previous output" });
-    } else {
-      setActiveOperation(null);
     }
+    setActiveOperation(null);
   }, []);
 
   const runOperation = (action: OperationAction, inputText?: string) => {
@@ -4224,7 +4221,7 @@ export function WorkspaceContent({
             <Tooltip content="New tab">
             <button
               type="button"
-              className="mt-0.5 flex h-7 items-center justify-center text-[var(--workspace-text-muted)] transition-all duration-100 hover:bg-primary/5 hover:text-primary"
+              className="mt-0.5 flex h-7 w-full items-center justify-center text-[var(--workspace-text-muted)] transition-all duration-100 hover:bg-primary/5 hover:text-primary"
               onClick={addTab}
             >
               <PlusIcon className="h-3.5 w-3.5" />
@@ -4434,7 +4431,6 @@ export function WorkspaceContent({
                 <button type="button" disabled={inputEmpty} data-selected={activeOperation !== "generateTypes" || undefined} className={`${menuItemClass} ${activeOperation === "generateTypes" ? "" : "!bg-primary/12 !text-primary"}`} onClick={() => { setFocusedPane("output"); runOperation("beautify"); setMoreMenuOpen(false); }}>
                   {sharedMenuCheck(activeOperation !== "generateTypes")}
                   <span className="min-w-0 flex-1 truncate text-left">None</span>
-                  <span className="text-[10px] opacity-60">format output</span>
                 </button>
                 {TYPE_LANGUAGES.map((item) => (
                   <button key={item.id} type="button" disabled={inputEmpty} data-selected={(activeOperation === "generateTypes" && typeLanguage === item.id) || undefined} className={`${menuItemClass} ${activeOperation === "generateTypes" && typeLanguage === item.id ? menuItemActiveClass : ""}`} onClick={() => { trackEvent("generate_types", { language: item.id, source: "menu" }); setFocusedPane("output"); setActiveOperation("generateTypes"); executeOperation("generateTypes", { typeLanguage: item.id }); setMoreMenuOpen(false); }}>
@@ -4493,7 +4489,6 @@ export function WorkspaceContent({
                 <button type="button" disabled={inputEmpty} className={`${menuItemClass} ${!OPERATION_ACTION_LABELS[activeOperation ?? ""] ? menuItemActiveClass : ""}`} onClick={() => { restorePreviousActionOutput(); setActionsMenuOpen(false); }}>
                   {sharedMenuCheck(!OPERATION_ACTION_LABELS[activeOperation ?? ""])}
                   <span className="min-w-0 flex-1 truncate text-left">None</span>
-                  <span className="text-[10px] opacity-60">restore output</span>
                 </button>
                 <div className="my-1 h-px bg-[var(--workspace-border)]" role="separator" aria-hidden />
                 {menuSectionLabel("Format")}
@@ -4536,7 +4531,6 @@ export function WorkspaceContent({
                 <button type="button" disabled={inputEmpty} data-selected={activeOperation !== "generateTypes" || undefined} className={`${menuItemClass} ${activeOperation === "generateTypes" ? "" : "!bg-primary/12 !text-primary"}`} onClick={() => { setFocusedPane("output"); runOperation("beautify"); setTypesMenuOpen(false); }}>
                   {sharedMenuCheck(activeOperation !== "generateTypes")}
                   <span className="min-w-0 flex-1 truncate text-left">None</span>
-                  <span className="text-[10px] opacity-60">format output</span>
                 </button>
                 <div className="my-1 h-px bg-[var(--workspace-border)]" role="separator" aria-hidden />
                 {(
@@ -4579,6 +4573,19 @@ export function WorkspaceContent({
                 }
               >
                 <div className="flex flex-col" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    type="button"
+                    className={`${sharedMenuItemClass} ${!curlTarget ? sharedMenuItemActiveClass : ""}`}
+                    onClick={() => {
+                      restorePreviousActionOutput();
+                      setCurlTarget(null);
+                      setCurlCodeOpen(false);
+                    }}
+                  >
+                    {sharedMenuCheck(!curlTarget)}
+                    <span className="min-w-0 flex-1 text-left">None</span>
+                  </button>
+                  <div className="my-1 h-px bg-[var(--workspace-border)]" role="separator" aria-hidden />
                   {CURL_TARGETS.map((target) => (
                     <button
                       key={target.id}
@@ -4606,20 +4613,6 @@ export function WorkspaceContent({
                       <span className="min-w-0 flex-1 text-left">{target.label}</span>
                     </button>
                   ))}
-                  <div className="my-1 h-px bg-[var(--workspace-border)]" role="separator" aria-hidden />
-                  <button
-                    type="button"
-                    className={`${sharedMenuItemClass} ${!curlTarget ? sharedMenuItemActiveClass : ""}`}
-                    onClick={() => {
-                      restorePreviousActionOutput();
-                      setCurlTarget(null);
-                      setCurlCodeOpen(false);
-                    }}
-                  >
-                    {sharedMenuCheck(!curlTarget)}
-                    <span className="min-w-0 flex-1 text-left">None</span>
-                    <span className="text-[10px] opacity-60">restore output</span>
-                  </button>
                 </div>
               </Dropdown>
             )}
