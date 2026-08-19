@@ -38,6 +38,10 @@ export type OutputActionId =
   | "useAsInput"
   | "maximize";
 
+/**
+ * Legacy CopyAsFormat — kept for encode formats only.
+ * List modes use the new FormatPopover instead.
+ */
 export type CopyAsFormat =
   | "same-as-output"
   | "base64"
@@ -113,7 +117,9 @@ export type OutputActionBarProps = {
   onCopy: () => void;
   onDownload: (format?: "png" | "jpg") => void;
   onToggleMaximize?: () => void;
+  /** Legacy encode-format copy-as (used for transform/JSON modes). */
   onCopyAs?: (format: CopyAsFormat) => void;
+  /** Legacy encode-format options (used for transform/JSON modes). */
   copyAsOptions?: CopyAsOption[];
   /** Last selected copy-as format (per-tool, per-tab) - controlled from the parent. */
   lastCopyAsId?: CopyAsFormat;
@@ -130,6 +136,10 @@ export type OutputActionBarProps = {
   canRedo?: boolean;
   className?: string;
   extra?: ReactNode;
+  /** Tooltip text for the copy button (e.g. "Copy as: One per line"). */
+  copyTooltip?: string;
+  /** Content for the format dropdown. Rendered inside a Dropdown with the original copy icon. */
+  formatPopover?: (closeDropdown: () => void) => ReactNode;
   forceHide?: Partial<Record<OutputActionId, boolean>>;
   /** Visibility is fully controlled by the parent (settings panel lives in the header gear). */
   visibility: OutputActionVisibility;
@@ -226,7 +236,6 @@ export const DEFAULT_COPY_AS_OPTIONS: CopyAsOption[] = [
   { id: "datauri", label: "Data URI", group: "Encode" },
 ];
 
-/** Summary report: formats don't apply - only "copy as shown" is offered. */
 export const SUMMARY_COPY_AS_OPTIONS: CopyAsOption[] = [
   { id: "same-as-output", label: "Same as output", group: "Output" },
 ];
@@ -241,7 +250,7 @@ export const LIST_COPY_AS_OPTIONS: CopyAsOption[] = [
   { id: "comma-double", label: "Comma + double quotes", group: "Quotes" },
   { id: "json-array", label: "JSON array", group: "Data" },
   { id: "sql-in-single", label: "SQL IN ('…')", group: "SQL" },
-  { id: "sql-in-double", label: "SQL IN (\"…\")", group: "SQL" },
+  { id: "sql-in-double", label: 'SQL IN ("…")', group: "SQL" },
 ];
 
 export const UUID_COPY_AS_OPTIONS: CopyAsOption[] = [
@@ -314,6 +323,8 @@ export function OutputActionBar({
   canRedo,
   className = "",
   extra,
+  copyTooltip,
+  formatPopover,
   forceHide,
   visibility,
 }: OutputActionBarProps) {
@@ -463,28 +474,26 @@ export function OutputActionBar({
     ) : null;
 
   /**
-   * Copy + dropdown. The main button always copies the raw output exactly as
-   * shown; the chevron opens the format menu - picking a format copies the
-   * transformed version and remembers it for the checkmark/tooltip.
+   * Copy control: either the FormatPopover content inside a dropdown with the
+   * original copy icon, the legacy encode dropdown, or a plain copy button.
    */
-  const copyControl =
-    show("copy") && onCopyAs && !isGraphView && copyAsOptions.length > 0 ? (
+  const copyControl = show("copy") ? (
+    formatPopover ? (
+      // New format popover: original copy icon + chevron, dropdown shows FormatPopoverContent
       <Dropdown
         open={copyAsOpen}
         onOpenChange={setCopyAsOpen}
         side="bottom"
         align="end"
-        maxWidth={copyMenuWidth}
+        maxWidth="max-w-[14rem]"
         trigger={
-          <Tooltip content={copyLabel === "Copy" ? "Copy output (as shown)" : copyLabel} shortcut="⌘C">
+          <Tooltip content={copyTooltip ?? (copyLabel === "Copy" ? "Copy output" : copyLabel)} shortcut="⌘C">
             <div className="flex items-center">
               <button
                 type="button"
                 className={`${iconBtn} !w-6 ${actionBounce === "copy" ? "scale-90" : ""}`}
                 disabled={!canCopy}
                 aria-label={copyLabel === "Copy" ? "Copy output" : copyLabel}
-                // Radix opens the trigger on pointerdown - stop it so a plain
-                // copy click never pops the menu open.
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -513,50 +522,100 @@ export function OutputActionBar({
           </Tooltip>
         }
       >
-        <div className="flex flex-col" onClick={(e) => e.stopPropagation()}>
-          {(() => {
-            const groups = new Map<string, CopyAsOption[]>();
-            for (const opt of copyAsOptions) {
-              const g = opt.group ?? "Copy as";
-              if (!groups.has(g)) groups.set(g, []);
-              groups.get(g)!.push(opt);
-            }
-            return Array.from(groups.entries()).map(([group, opts]) => (
-              <div key={group}>
-                {groups.size > 1 && sharedMenuSectionLabel(group)}
-                {opts.map((opt) => (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    className={`${sharedMenuItemClass} ${effectiveLastCopyAsId === opt.id ? "!bg-primary/12 !text-primary" : ""}`}
-                    onClick={() => {
-                      setLastCopyAsId(opt.id);
-                      onCopyAs(opt.id);
-                      setCopyAsOpen(false);
-                    }}
-                  >
-                    {sharedMenuCheck(effectiveLastCopyAsId === opt.id)}
-                    <span className="min-w-0 flex-1 truncate text-left">{opt.label}</span>
-                  </button>
-                ))}
-              </div>
-            ));
-          })()}
-        </div>
+        {formatPopover(() => setCopyAsOpen(false))}
       </Dropdown>
     ) : (
-      <Tooltip content={copyLabel} shortcut={copyLabel === "Copy" ? "⌘C" : undefined}>
-        <IconButton
-          className={actionBounce === "copy" ? "scale-90" : ""}
-          disabled={!canCopy}
-          onClick={onCopy}
-          aria-label={copyLabel}
-          {...copyIcon.bind}
+      // Legacy encode-only dropdown for transform/JSON modes
+      onCopyAs && !isGraphView && copyAsOptions.length > 0 ? (
+        <Dropdown
+          open={copyAsOpen}
+          onOpenChange={setCopyAsOpen}
+          side="bottom"
+          align="end"
+          maxWidth={copyMenuWidth}
+          trigger={
+            <Tooltip content={copyTooltip ?? (copyLabel === "Copy" ? "Copy output" : copyLabel)} shortcut="⌘C">
+              <div className="flex items-center">
+                <button
+                  type="button"
+                  className={`${iconBtn} !w-6 ${actionBounce === "copy" ? "scale-90" : ""}`}
+                  disabled={!canCopy}
+                  aria-label={copyLabel === "Copy" ? "Copy output" : copyLabel}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    onCopy();
+                  }}
+                  {...copyIcon.bind}
+                >
+                  <CopyActionGlyph ref={copyIcon.ref} done={copyLabel === "Copied"} className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  className={`${iconBtn} !w-4 rounded-l-none`}
+                  disabled={!canCopy}
+                  aria-label="Copy options"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    setCopyAsOpen((v) => !v);
+                  }}
+                >
+                  <ChevronDownIcon className="h-2 w-2 opacity-70" />
+                </button>
+              </div>
+            </Tooltip>
+          }
         >
-          <CopyActionGlyph done={copyLabel === "Copied"} className="h-3.5 w-3.5" />
-        </IconButton>
-      </Tooltip>
-    );
+          <div className="flex flex-col" onClick={(e) => e.stopPropagation()}>
+            {(() => {
+              const groups = new Map<string, CopyAsOption[]>();
+              for (const opt of copyAsOptions) {
+                const g = opt.group ?? "Copy as";
+                if (!groups.has(g)) groups.set(g, []);
+                groups.get(g)!.push(opt);
+              }
+              return Array.from(groups.entries()).map(([group, opts]) => (
+                <div key={group}>
+                  {groups.size > 1 && sharedMenuSectionLabel(group)}
+                  {opts.map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      className={`${sharedMenuItemClass} ${effectiveLastCopyAsId === opt.id ? "!bg-primary/12 !text-primary" : ""}`}
+                      onClick={() => {
+                        setLastCopyAsId(opt.id);
+                        onCopyAs(opt.id);
+                        setCopyAsOpen(false);
+                      }}
+                    >
+                      {sharedMenuCheck(effectiveLastCopyAsId === opt.id)}
+                      <span className="min-w-0 flex-1 truncate text-left">{opt.label}</span>
+                    </button>
+                  ))}
+                </div>
+              ));
+            })()}
+          </div>
+        </Dropdown>
+      ) : (
+        // Plain copy button (no format options)
+        <Tooltip content={copyLabel} shortcut={copyLabel === "Copy" ? "⌘C" : undefined}>
+          <IconButton
+            className={actionBounce === "copy" ? "scale-90" : ""}
+            disabled={!canCopy}
+            onClick={onCopy}
+            aria-label={copyLabel}
+            {...copyIcon.bind}
+          >
+            <CopyActionGlyph done={copyLabel === "Copied"} className="h-3.5 w-3.5" />
+          </IconButton>
+        </Tooltip>
+      )
+    )
+  ) : null;
 
   const shareControl =
     show("share") && canShare ? (
@@ -573,8 +632,6 @@ export function OutputActionBar({
                 type="button"
                 className={`${iconBtn} !w-6 ${actionBounce === "share" ? "scale-90" : ""}`}
                 aria-label="Share"
-                // Radix opens the trigger on pointerdown - stop it so a plain
-                // share click never pops the menu open.
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={(e) => {
                   e.stopPropagation();
