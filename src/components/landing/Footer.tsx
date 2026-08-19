@@ -183,15 +183,15 @@ export function Footer() {
             Star on GitHub
           </a>
           <a
-            href="https://github.com/sponsors/kdkumawat"
+            href="https://www.buymeacoffee.com/kdkumawat"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-primary/25 bg-primary/[0.07] px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:border-primary/40 hover:bg-primary/15"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-amber-500/25 bg-amber-500/[0.07] px-3 py-1.5 text-xs font-medium text-amber-600 transition-colors hover:border-amber-500/40 hover:bg-amber-500/15"
           >
             <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-              <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+              <path d="M20 3H4v10a4 4 0 004 4h6a4 4 0 004-4V5h2a2 2 0 012 2v9a2 2 0 01-2 2H4a2 2 0 01-2-2V5c0-1.1.9-2 2-2h2v1zm-2 4V5H4v8h4a2 2 0 002-2V7h6zM8 19h8v2H8v-2z" />
             </svg>
-            Sponsor
+            Buy me a coffee
           </a>
           <div className="flex flex-col items-start gap-1 sm:items-end">
             <span className="text-xs text-[var(--workspace-text-muted)]">

@@ -10,6 +10,7 @@ Marketing and distribution playbook for getting Formaty in front of developers.
 - [ ] **Repo polish**: confirm topics on GitHub (json, formatter, developer-tools, json-tools, devtools), add the GitHub repo link from the app footer, and make the README screenshot/GIF
 - [ ] **Demo GIF**: record a 20-30s screen capture of the playground (beautify → convert → diff → types) and add it to the README
 - [ ] **Enable GitHub Sponsors** on the repo (Settings → Sponsors) if you want the support link
+- [ ] **Set up Buy Me a Coffee** at buymeacoffee.com (footer link is already wired to kdkumawat)
 
 ## Launch day
 
