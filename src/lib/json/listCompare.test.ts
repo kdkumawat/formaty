@@ -492,4 +492,44 @@ describe("cleanListInput", () => {
     const expected = 'user_1001\nuser_1002\nuser_1003\nuser_1002\nuser_1004\nuser_1005\nuser_1003\nuser_1006';
     expect(cleanListInput(input)).toBe(expected);
   });
+
+  it("splits double-quoted comma-separated single line", () => {
+    expect(cleanListInput('"foo","bar","baz"')).toBe("foo\nbar\nbaz");
+  });
+
+  it("splits single-quoted comma-separated single line", () => {
+    expect(cleanListInput("'foo','bar','baz'")).toBe("foo\nbar\nbaz");
+  });
+
+  it("splits double-quoted comma list with spaces", () => {
+    expect(cleanListInput('"foo", "bar", "baz"')).toBe("foo\nbar\nbaz");
+  });
+
+  it("splits JSON array wrapper", () => {
+    expect(cleanListInput('["foo","bar","baz"]')).toBe("foo\nbar\nbaz");
+  });
+
+  it("splits parenthesized quoted comma list", () => {
+    expect(cleanListInput('("foo","bar","baz")')).toBe("foo\nbar\nbaz");
+  });
+
+  it("splits bare comma-separated list without quotes", () => {
+    expect(cleanListInput("foo, bar, baz")).toBe("foo\nbar\nbaz");
+  });
+
+  it("splits bare comma list with no spaces", () => {
+    expect(cleanListInput("foo,bar,baz")).toBe("foo\nbar\nbaz");
+  });
+
+  it("splits JSON array of bare values", () => {
+    expect(cleanListInput("[foo, bar, baz]")).toBe("foo\nbar\nbaz");
+  });
+
+  it("splits mixed quoted/unquoted comma list", () => {
+    expect(cleanListInput('"foo", bar, "baz"')).toBe("foo\nbar\nbaz");
+  });
+
+  it("splits multi-line comma-separated input", () => {
+    expect(cleanListInput("foo, bar\nbaz, qux")).toBe("foo\nbar\nbaz\nqux");
+  });
 });

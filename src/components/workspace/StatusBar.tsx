@@ -131,11 +131,8 @@ export function StatusBar({
         ) : null}
         <span className="flex-1" />
       </div>
-      {rightActions ? (
-        <div className="flex shrink-0 flex-nowrap items-center gap-1 overflow-x-auto pr-1">{rightActions}</div>
-      ) : null}
-      <div className="flex shrink-0 flex-nowrap items-center pr-1">
-        <FeedbackDialog trigger="icon" label="Send feedback" />
+      <div className="flex shrink-0 flex-nowrap items-center gap-0.5 pr-1">
+        <FeedbackDialog trigger="link" label="Feedback" />
         <Tooltip content="Take the tour">
           <button
             type="button"
@@ -157,6 +154,12 @@ export function StatusBar({
           </button>
         </Tooltip>
       </div>
+      {rightActions ? (
+        <>
+          <span className="shrink-0 select-none text-[var(--workspace-border)]">·</span>
+        <div className="flex shrink-0 flex-nowrap items-center gap-1 overflow-x-auto pr-1">{rightActions}</div>
+        </>
+      ) : null}
     </div>
   );
 }

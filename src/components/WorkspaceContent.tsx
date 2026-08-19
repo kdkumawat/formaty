@@ -616,13 +616,7 @@ export function WorkspaceContent({
   const [settingsTab, setSettingsTab] = useState<"general" | "compare" | "utils">("general");
   /** Menu-first chrome by default - cleaner for new users; uncheck in settings for pinned toolbar. */
   const [viewAsMenu, setViewAsMenu] = useState(true);
-  const [utilsUndoEnabled, setUtilsUndoEnabled] = useState(() => {
-    try {
-      return localStorage.getItem("formaty-utils-undo") === "1";
-    } catch {
-      return false;
-    }
-  });
+
   const [formatMenuOpen, setFormatMenuOpen] = useState(false);
   const [viewMenuOpen, setViewMenuOpen] = useState(false);
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
@@ -1366,7 +1360,7 @@ export function WorkspaceContent({
       // ⌘Y — redo input history (⌘⇧Z is handled in the core handler below).
       if (mod && !event.shiftKey && event.key.toLowerCase() === "y") {
         event.preventDefault();
-        if (isUtilsMode && utilsUndoEnabled) moveUtilsHistory(1);
+        if (isUtilsMode) moveUtilsHistory(1);
         else shortcutActionsRef.current.moveHistory(1);
         return;
       }
@@ -3268,18 +3262,18 @@ export function WorkspaceContent({
       }
       if (event.key.toLowerCase() === "z" && !event.shiftKey) {
         event.preventDefault();
-        if (isUtilsMode && utilsUndoEnabled) moveUtilsHistory(-1);
+        if (isUtilsMode) moveUtilsHistory(-1);
         else moveHistory(-1);
       }
       if (event.key.toLowerCase() === "z" && event.shiftKey) {
         event.preventDefault();
-        if (isUtilsMode && utilsUndoEnabled) moveUtilsHistory(1);
+        if (isUtilsMode) moveUtilsHistory(1);
         else moveHistory(1);
       }
     };
     window.addEventListener("keydown", onKeyDown, { capture: true });
     return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
-  }, [modalKind, inputEmpty, focusedPane, activeOperation, diffKind, moveHistory, moveUtilsHistory, utilsUndoEnabled, isUtilsMode, parseOnly, pasteFromClipboard]);
+  }, [modalKind, inputEmpty, focusedPane, activeOperation, diffKind, moveHistory, moveUtilsHistory, isUtilsMode, parseOnly, pasteFromClipboard]);
 
   const readFileAsText = (file: File): Promise<string> =>
     new Promise((resolve, reject) => {
@@ -3822,22 +3816,7 @@ export function WorkspaceContent({
         <Switch checked={on} onCheckedChange={setOn} />
       </label>
     ))}
-    <label
-      className="flex min-h-7 cursor-pointer items-center justify-between gap-2 rounded-md px-1.5 py-1 text-xs text-[var(--workspace-text)] transition-colors hover:bg-primary/5"
-    >
-      <span className="min-w-0">Undo/Redo in Utils</span>
-      <Switch
-        checked={utilsUndoEnabled}
-        onCheckedChange={(v) => {
-          setUtilsUndoEnabled(v);
-          try {
-            localStorage.setItem("formaty-utils-undo", v ? "1" : "0");
-          } catch {
-            /* ignore */
-          }
-        }}
-      />
-    </label>
+
   </div>
   </>)}
 
@@ -4911,16 +4890,16 @@ export function WorkspaceContent({
               visibility={outputActionVisibility}
               onUndo={() => {
                 if (isDiffMode) diffEditorRef.current?.undo();
-                else if (isUtilsMode && utilsUndoEnabled) moveUtilsHistory(-1);
-                else if (!isUtilsMode) moveHistory(-1);
+                else        if (isUtilsMode) moveUtilsHistory(-1);
+        else if (!isUtilsMode) moveHistory(-1);
               }}
               onRedo={() => {
                 if (isDiffMode) diffEditorRef.current?.redo();
-                else if (isUtilsMode && utilsUndoEnabled) moveUtilsHistory(1);
-                else if (!isUtilsMode) moveHistory(1);
+                else        if (isUtilsMode) moveUtilsHistory(1);
+        else if (!isUtilsMode) moveHistory(1);
               }}
-              canUndo={!isDiffMode && !isUtilsMode ? canUndo : isUtilsMode && utilsUndoEnabled ? canUtilsUndo : undefined}
-              canRedo={!isDiffMode && !isUtilsMode ? canRedo : isUtilsMode && utilsUndoEnabled ? canUtilsRedo : undefined}
+              canUndo={!isDiffMode && !isUtilsMode ? canUndo : isUtilsMode ? canUtilsUndo : undefined}
+              canRedo={!isDiffMode && !isUtilsMode ? canRedo : isUtilsMode ? canUtilsRedo : undefined}
               onShare={() => {
                 setShareAllTabs(false);
                 requestShare();
@@ -5045,8 +5024,8 @@ export function WorkspaceContent({
               forceHide={{
                 useAsInput: isDiffMode || isUtilsMode,
                 maximize: isDiffMode || isUtilsMode,
-                undo: isUtilsMode && !utilsUndoEnabled,
-                redo: isUtilsMode && !utilsUndoEnabled,
+                undo: false,
+                redo: false,
               }}
             />
         </div>
