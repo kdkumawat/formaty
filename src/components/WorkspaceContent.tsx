@@ -1188,8 +1188,12 @@ export function WorkspaceContent({
 
       if (modalKind) return;
 
-      // ⌘C — copy output (browser copy still wins inside editors/inputs).
+      // ⌘C — copy output (browser copy still wins inside editors/inputs
+      //       OR when the user has selected text in compare/utils output).
       if (mod && !event.shiftKey && event.key.toLowerCase() === "c") {
+        // If user has text selected anywhere, let the browser handle native copy.
+        const sel = window.getSelection();
+        if (sel && sel.toString().length > 0) return;
         if (!isEditableTarget(event.target) && output.trim()) {
           event.preventDefault();
           shortcutActionsRef.current.copyOutput();
@@ -2843,7 +2847,7 @@ export function WorkspaceContent({
         }
         await graphViewRef.current.copyPngToClipboard();
         setCopyState("done");
-        toast({ message: "Copied" });
+        toast({ message: "Copied graph as PNG" });
       } catch {
         setCopyState("error");
         toast({ message: "Copy failed", type: "error" });
@@ -2855,7 +2859,8 @@ export function WorkspaceContent({
     try {
       await navigator.clipboard.writeText(output);
       setCopyState("done");
-      toast({ message: "Copied" });
+      const modeLabel = isUtilsMode ? "utils output" : isDiffMode ? "compare output" : "transform output";
+      toast({ message: `Copied ${modeLabel}` });
     } catch {
       setCopyState("error");
       toast({ message: "Copy failed", type: "error" });
