@@ -81,7 +81,7 @@ Open [http://localhost:3000](http://localhost:3000).
 If Formaty saves you time, the best ways to help are:
 
 - ⭐ **Star the repo** on [GitHub](https://github.com/kdkumawat/formaty) - it helps others discover the project
-- 💖 **Sponsor** the project on [GitHub Sponsors](https://github.com/sponsors/kdkumawat) (or [Open Collective](https://opencollective.com/formaty))
+- 💖 **Sponsor** the project on [GitHub Sponsors](https://github.com/sponsors/kdkumawat) or [Buy Me a Coffee](https://www.buymeacoffee.com/kdkumawat)
 - 🐛 **Open an issue** for bugs or feature ideas
 - 🤝 **Contribute** - the codebase is MIT-licensed and pull requests are welcome
 
