@@ -94,9 +94,11 @@ import {
   Dropdown,
   getSizeFormatted,
   Header as WorkspaceHeader,
-  OutputActionBar,
   StatusBar,
   Tooltip,
+} from "@/components/workspace";
+import {
+  OutputActionBar,
   ACTION_LABELS,
   loadVisibility,
   saveVisibility,
@@ -112,7 +114,18 @@ import {
   type GraphCopyFormat,
   type OutputActionId,
   type OutputActionVisibility,
-} from "@/components/workspace";
+} from "@/components/workspace/OutputActionBar";
+import {
+  formatListCopyAsText,
+  loadListCopyPref,
+  saveListCopyPref,
+  type CopyPref,
+} from "@/lib/copyAs";
+import {
+  FormatPopoverContent,
+  getFormatShortLabel,
+  type EncodeOption,
+} from "@/components/workspace/FormatPopover";
 import { Logo } from "@/components/Logo";
 import {
   emptyDiffSummary,
@@ -545,6 +558,11 @@ export function WorkspaceContent({
   const [activeOperation, setActiveOperation] = useState<OperationAction | null>(null);
   const [utilTab, setUtilTab] = useState<UtilTab>("uuid");
   const [utilsByTool, setUtilsByTool] = useState<UtilsStateMap>({});
+  /** Utils undo/redo — snapshot-based, same approach as workspace input undo. */
+  const [utilsUndoStack, setUtilsUndoStack] = useState<UtilsStateMap[]>([{}]);
+  const [utilsUndoIdx, setUtilsUndoIdx] = useState(0);
+  const utilsHistoryLock = useRef(false);
+  const utilsUndoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [shareAllTabs, setShareAllTabs] = useState(false);
   const [listToolbarHost, setListToolbarHost] = useState<HTMLElement | null>(null);
   /** Active list-compare result for shared OutputActionBar copy/download */
@@ -598,6 +616,13 @@ export function WorkspaceContent({
   const [settingsTab, setSettingsTab] = useState<"general" | "compare" | "utils">("general");
   /** Menu-first chrome by default - cleaner for new users; uncheck in settings for pinned toolbar. */
   const [viewAsMenu, setViewAsMenu] = useState(true);
+  const [utilsUndoEnabled, setUtilsUndoEnabled] = useState(() => {
+    try {
+      return localStorage.getItem("formaty-utils-undo") === "1";
+    } catch {
+      return false;
+    }
+  });
   const [formatMenuOpen, setFormatMenuOpen] = useState(false);
   const [viewMenuOpen, setViewMenuOpen] = useState(false);
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
@@ -1084,6 +1109,34 @@ export function WorkspaceContent({
     }, 0);
   }, [undoIndex, undoStack]);
 
+  /** Push utilsByTool snapshot onto undo stack (debounced). */
+  const pushUtilsHistory = useCallback((next: UtilsStateMap) => {
+    if (utilsHistoryLock.current) return;
+    if (utilsUndoTimerRef.current) clearTimeout(utilsUndoTimerRef.current);
+    utilsUndoTimerRef.current = setTimeout(() => {
+      setUtilsUndoStack((prev) => {
+        if (JSON.stringify(prev[utilsUndoIdx]) === JSON.stringify(next)) return prev;
+        const sliced = prev.slice(0, utilsUndoIdx + 1);
+        const result = [...sliced, next].slice(-100);
+        setUtilsUndoIdx(result.length - 1);
+        return result;
+      });
+    }, 300);
+  }, [utilsUndoIdx]);
+
+  /** Move utils undo/redo by delta steps. */
+  const moveUtilsHistory = useCallback((delta: number) => {
+    const targetIdx = utilsUndoIdx + delta;
+    if (targetIdx < 0 || targetIdx >= utilsUndoStack.length) return;
+    utilsHistoryLock.current = true;
+    setUtilsUndoIdx(targetIdx);
+    setUtilsByTool(utilsUndoStack[targetIdx]);
+    setTimeout(() => { utilsHistoryLock.current = false; }, 0);
+  }, [utilsUndoIdx, utilsUndoStack]);
+
+  const canUtilsUndo = utilsUndoIdx > 0;
+  const canUtilsRedo = utilsUndoIdx < utilsUndoStack.length - 1;
+
   // Utils deep-link: /playground?util=base64 opens the Utils workspace on that tool.
   const utilDeepLink = searchParams?.get("util");
   useEffect(() => {
@@ -1313,7 +1366,8 @@ export function WorkspaceContent({
       // ⌘Y — redo input history (⌘⇧Z is handled in the core handler below).
       if (mod && !event.shiftKey && event.key.toLowerCase() === "y") {
         event.preventDefault();
-        shortcutActionsRef.current.moveHistory(1);
+        if (isUtilsMode && utilsUndoEnabled) moveUtilsHistory(1);
+        else shortcutActionsRef.current.moveHistory(1);
         return;
       }
     };
@@ -2862,9 +2916,25 @@ export function WorkspaceContent({
     trackEvent("copy", { format, mode: isUtilsMode ? "utils" : isDiffMode ? "compare" : "transform" });
     try {
       let text: string;
+      // Regex tab: extract match values from JSON for text-based formats.
+      if (isUtilsMode && utilTab === "regex") {
+        try {
+          const parsed = JSON.parse(raw) as { matches?: Array<{ match: string }> };
+          const matchTexts = (parsed.matches ?? []).map((m) => m.match);
+          if (format === "same-as-output") {
+            text = matchTexts.join("\n");
+          } else if (format === "json-array") {
+            text = JSON.stringify(matchTexts, null, 2);
+          } else {
+            text = formatCopyAsText(matchTexts.join("\n"), format);
+          }
+        } catch {
+          text = raw;
+        }
+      }
       // "Same as output" copies the pane exactly as shown. The Summary
       // report is not an item list - formats don't apply, always copy as shown.
-      if (format === "same-as-output" || listCompareExport?.bucket === "summary") {
+      else if (format === "same-as-output" || listCompareExport?.bucket === "summary") {
         text = raw;
       }
       // Compare list/single: build list formats from the raw items so a format
@@ -2994,30 +3064,78 @@ export function WorkspaceContent({
     router,
   ]);
 
-  /**
-   * Copy-as variants must relate to the active tool's output. Batch tools (UUID /
-   * password) offer list formats; everything else in Utils copies its plain output
-   * (its own copy-as variants would re-encode the result - meaningless).
-   */
-  const activeCopyAsOptions = useMemo(() => {
-    if (isUtilsMode && utilTab === "uuid") return UUID_COPY_AS_OPTIONS;
-    if (isUtilsMode && utilTab === "password") return BATCH_COPY_AS_OPTIONS;
-    if (isUtilsMode) return [];
-    if (isDiffMode && (diffKind === "list" || diffKind === "single")) {
-      // Summary report: only "same as output" makes sense - no item formats.
-      if (listCompareExport?.bucket === "summary") return SUMMARY_COPY_AS_OPTIONS;
-      return LIST_COPY_AS_OPTIONS;
-    }
-    if (!isDiffMode && rightView === "table") return TABLE_COPY_AS_OPTIONS;
-    return DEFAULT_COPY_AS_OPTIONS;
-  }, [isUtilsMode, utilTab, isDiffMode, diffKind, rightView, listCompareExport]);
-
   /** Stable per-tool key used for the per-tab 'last copy as' memory. */
   const copyMemoryKey = isUtilsMode
     ? `utils:${utilTab}`
     : isDiffMode
       ? `diff:${diffKind}`
       : `transform:${rightView}`;
+
+  /** Determine the copy mode for the FormatPopover. */
+  const copyMode = useMemo(() => {
+    if (isDiffMode && diffKind === "list") return "compare-list";
+    if (isDiffMode && diffKind === "single") return "compare-single";
+    if (isUtilsMode && utilTab === "uuid") return "uuid";
+    if (isUtilsMode && utilTab === "password") return "password";
+    if (isUtilsMode && utilTab === "regex") return "regex";
+    if (isUtilsMode) return `utils-${utilTab}`;    return "transform";
+  }, [isDiffMode, diffKind, isUtilsMode, utilTab]);
+
+  /** Copy format preference for list modes (quote + layout). */
+  const [copyPref, setCopyPref] = useState<CopyPref>(() => loadListCopyPref(copyMode));
+
+  // Re-sync pref when mode changes (different tab/mode may have different prefs).
+  useEffect(() => {
+    setCopyPref(loadListCopyPref(copyMode));
+  }, [copyMode]);
+
+  const handleCopyPrefChange = useCallback((next: CopyPref) => {
+    setCopyPref(next);
+    saveListCopyPref(copyMode, next);
+  }, [copyMode]);
+
+  /** Whether this mode uses the FormatPopover (list of items). */
+  const isListCopyMode = useMemo(() => {
+    if (isDiffMode && (diffKind === "list" || diffKind === "single")) return true;
+    if (isUtilsMode && (utilTab === "uuid" || utilTab === "password" || utilTab === "regex")) return true;
+    return false;
+  }, [isDiffMode, diffKind, isUtilsMode, utilTab]);
+
+  /** Items for the FormatPopover in list modes. */
+  const copyItems = useMemo(() => {
+    if (isDiffMode && (diffKind === "list" || diffKind === "single") && listCompareExport) {
+      return listCompareExport.items;
+    }
+    if (isUtilsMode && utilTab === "uuid") {
+      const state = utilsByTool["uuid"];
+      return state?.uuidList ?? [];
+    }
+    if (isUtilsMode && utilTab === "password") {
+      const state = utilsByTool["password"];
+      return state?.pwList ?? [];
+    }
+    if (isUtilsMode && utilTab === "regex") {
+      try {
+        const raw = getActiveOutputText();
+        const parsed = JSON.parse(raw) as { matches?: Array<{ match: string }> };
+        return (parsed.matches ?? []).map((m) => m.match);
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  }, [isDiffMode, diffKind, isUtilsMode, utilTab, listCompareExport, utilsByTool]);
+
+  /**
+   * Copy-as options: encode-only for transform/JSON modes.
+   * List modes use the new FormatPopover instead.
+   */
+  const activeCopyAsOptions = useMemo(() => {
+    // List modes use FormatPopover — return empty to hide legacy dropdown.
+    if (isListCopyMode) return [];
+    if (!isDiffMode && rightView === "table") return TABLE_COPY_AS_OPTIONS;
+    return DEFAULT_COPY_AS_OPTIONS;
+  }, [isListCopyMode, isDiffMode, rightView]);
 
   const exportHistory = () => {
     const entries = undoStack.slice(0, undoIndex + 1).map((content, i) => ({ index: i, content }));
@@ -3150,16 +3268,18 @@ export function WorkspaceContent({
       }
       if (event.key.toLowerCase() === "z" && !event.shiftKey) {
         event.preventDefault();
-        moveHistory(-1);
+        if (isUtilsMode && utilsUndoEnabled) moveUtilsHistory(-1);
+        else moveHistory(-1);
       }
       if (event.key.toLowerCase() === "z" && event.shiftKey) {
         event.preventDefault();
-        moveHistory(1);
+        if (isUtilsMode && utilsUndoEnabled) moveUtilsHistory(1);
+        else moveHistory(1);
       }
     };
     window.addEventListener("keydown", onKeyDown, { capture: true });
     return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
-  }, [modalKind, inputEmpty, focusedPane, activeOperation, diffKind, moveHistory, parseOnly, pasteFromClipboard]);
+  }, [modalKind, inputEmpty, focusedPane, activeOperation, diffKind, moveHistory, moveUtilsHistory, utilsUndoEnabled, isUtilsMode, parseOnly, pasteFromClipboard]);
 
   const readFileAsText = (file: File): Promise<string> =>
     new Promise((resolve, reject) => {
@@ -3702,6 +3822,22 @@ export function WorkspaceContent({
         <Switch checked={on} onCheckedChange={setOn} />
       </label>
     ))}
+    <label
+      className="flex min-h-7 cursor-pointer items-center justify-between gap-2 rounded-md px-1.5 py-1 text-xs text-[var(--workspace-text)] transition-colors hover:bg-primary/5"
+    >
+      <span className="min-w-0">Undo/Redo in Utils</span>
+      <Switch
+        checked={utilsUndoEnabled}
+        onCheckedChange={(v) => {
+          setUtilsUndoEnabled(v);
+          try {
+            localStorage.setItem("formaty-utils-undo", v ? "1" : "0");
+          } catch {
+            /* ignore */
+          }
+        }}
+      />
+    </label>
   </div>
   </>)}
 
@@ -4763,6 +4899,11 @@ export function WorkspaceContent({
               isGraphView={!isDiffMode && !isUtilsMode && isGraphView}
               isMaximized={isOutputMaximized}
               copyLabel={copyLabel}
+              copyTooltip={
+                isListCopyMode
+                  ? `Copy as: ${getFormatShortLabel(copyPref)}`
+                  : undefined
+              }
               shareLabel={shareLabel}
               actionBounce={actionBounce}
               downloadMenuOpen={downloadMenuOpen && !isDiffMode}
@@ -4770,14 +4911,16 @@ export function WorkspaceContent({
               visibility={outputActionVisibility}
               onUndo={() => {
                 if (isDiffMode) diffEditorRef.current?.undo();
+                else if (isUtilsMode && utilsUndoEnabled) moveUtilsHistory(-1);
                 else if (!isUtilsMode) moveHistory(-1);
               }}
               onRedo={() => {
                 if (isDiffMode) diffEditorRef.current?.redo();
+                else if (isUtilsMode && utilsUndoEnabled) moveUtilsHistory(1);
                 else if (!isUtilsMode) moveHistory(1);
               }}
-              canUndo={!isDiffMode && !isUtilsMode ? canUndo : undefined}
-              canRedo={!isDiffMode && !isUtilsMode ? canRedo : undefined}
+              canUndo={!isDiffMode && !isUtilsMode ? canUndo : isUtilsMode && utilsUndoEnabled ? canUtilsUndo : undefined}
+              canRedo={!isDiffMode && !isUtilsMode ? canRedo : isUtilsMode && utilsUndoEnabled ? canUtilsRedo : undefined}
               onShare={() => {
                 setShareAllTabs(false);
                 requestShare();
@@ -4787,6 +4930,21 @@ export function WorkspaceContent({
                 requestShare();
               }}
               onCopy={() => {
+                // List modes: use stored quote+layout preference.
+                if (isListCopyMode && copyItems.length > 0) {
+                  const pref = loadListCopyPref(copyMode);
+                  const text = pref === "as-seen"
+                    ? getActiveOutputText()
+                    : formatListCopyAsText(copyItems, pref.quote, pref.layout, pref.suffix);
+                  void navigator.clipboard.writeText(text).then(
+                    () => {
+                      setCopyState("done");
+                      window.setTimeout(() => setCopyState("idle"), 1400);
+                    },
+                    () => setCopyState("error"),
+                  );
+                  return;
+                }
                 const text = getActiveOutputText();
                 if (!text.trim() && !isDiffMode) {
                   if (!isUtilsMode) void copyOutput();
@@ -4855,11 +5013,40 @@ export function WorkspaceContent({
                     ? "Reset both sides"
                     : "Reset input & output"
               }
+              formatPopover={
+                isListCopyMode
+                  ? (closeDropdown) => (
+                      <FormatPopoverContent
+                        items={copyItems}
+                        rawOutput={getActiveOutputText()}
+                        mode={copyMode}
+                        pref={copyPref}
+                        onPrefChange={handleCopyPrefChange}
+                        onFormatCopy={(text) => {
+                          void navigator.clipboard.writeText(text).then(
+                            () => {
+                              setCopyState("done");
+                              window.setTimeout(() => setCopyState("idle"), 1400);
+                            },
+                            () => setCopyState("error"),
+                          );
+                        }}
+                        encodeFormats={
+                          !isDiffMode && rightView !== "table"
+                            ? DEFAULT_COPY_AS_OPTIONS.map((o) => ({ id: o.id, label: o.label } as EncodeOption))
+                            : undefined
+                        }
+                        onEncodeCopy={!isDiffMode && rightView !== "table" ? copyOutputAs : undefined}
+                        onClose={closeDropdown}
+                      />
+                    )
+                  : undefined
+              }
               forceHide={{
                 useAsInput: isDiffMode || isUtilsMode,
                 maximize: isDiffMode || isUtilsMode,
-                undo: isUtilsMode,
-                redo: isUtilsMode,
+                undo: isUtilsMode && !utilsUndoEnabled,
+                redo: isUtilsMode && !utilsUndoEnabled,
               }}
             />
         </div>
@@ -5107,7 +5294,10 @@ export function WorkspaceContent({
                   setUtilTab(t);
                 }}
                 stateByTool={utilsByTool}
-                onStateByToolChange={setUtilsByTool}
+                onStateByToolChange={(next) => {
+                  setUtilsByTool(next);
+                  if (!utilsHistoryLock.current) pushUtilsHistory(next);
+                }}
                 fontSize={editorFontSize}
               />
             ) : isDiffMode ? (

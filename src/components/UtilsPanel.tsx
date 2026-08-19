@@ -8,6 +8,23 @@ import {
   ClipboardDocumentIcon,
   DocumentDuplicateIcon,
 } from "@heroicons/react/24/outline";
+
+/** Quick regex presets — common patterns users reach for often. */
+const REGEX_PRESETS: Array<{ label: string; pattern: string; flags?: string; hint: string }> = [
+  { label: "Between…", pattern: "(?<=START)(.*?)(?=END)", flags: "gs", hint: "Anything between two strings — replace START/END" },
+  { label: "Email", pattern: "\\b[\\w.-]+@[\\w.-]+\\.\\w+\\b", hint: "Email addresses" },
+  { label: "URL", pattern: "https?:\\/\\/[^\\s]+", hint: "HTTP / HTTPS URLs" },
+  { label: "IPv4", pattern: "\\b\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\b", hint: "IP v4 addresses" },
+  { label: "Phone (US)", pattern: "\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}", hint: "US phone numbers" },
+  { label: "Date", pattern: "\\d{4}-\\d{2}-\\d{2}", hint: "YYYY-MM-DD dates" },
+  { label: "Quoted", pattern: '"([^"]*)"', hint: "Double-quoted strings (capture group)" },
+  { label: "HTML tag", pattern: "<[^>]+>", flags: "g", hint: "HTML tags" },
+  { label: "Numbers", pattern: "\\b\\d+\\.\\d*\\b", flags: "g", hint: "Decimal numbers" },
+  { label: "Words", pattern: "\\b\\w+\\b", flags: "g", hint: "Whole words" },
+  { label: "Lines", pattern: "^.+$", flags: "gm", hint: "Non-empty lines" },
+  { label: "Whitespace", pattern: "\\s+", flags: "g", hint: "Whitespace runs" },
+];
+
 import { NumberStepper } from "@/components/workspace/NumberStepper";
 import { Dropdown } from "@/components/workspace/Dropdown";
 import { Tooltip } from "@/components/workspace/Tooltip";
@@ -388,7 +405,7 @@ export function UtilsPanel({
     return { score: 1, label: "Weak", color: "bg-red-500" };
   }, [state.passwordLen, state.pwLower, state.pwUpper, state.pwDigits, state.pwSymbols]);
 
-  // Same visual language as Monaco panes: panel surface, not muted “disabled” gray
+  // Same visual language as Monaco panes: panel surface, not muted "disabled" gray
   const fieldClass =
     "min-h-0 w-full flex-1 resize-none border-0 bg-[var(--workspace-panel)] px-3 py-2 font-mono leading-relaxed text-[var(--workspace-text)] outline-none focus:ring-0";
   const toolBtn = (active: boolean) =>
@@ -888,6 +905,22 @@ export function UtilsPanel({
               className={`${smallInput} w-16`}
             />
             {state.error && <span className="shrink-0 text-[10px] text-red-500">{state.error}</span>}
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center gap-1 border-b border-[var(--workspace-border)] bg-[var(--workspace-background)]/50 px-2 py-1.5">
+            <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-[var(--workspace-text-muted)]">
+              Quick
+            </span>
+            {REGEX_PRESETS.map((p) => (
+              <Tooltip key={p.label} content={p.hint}>
+              <button
+                type="button"
+                onClick={() => patch({ regexPattern: p.pattern, regexFlags: p.flags ?? "g" })}
+                className="h-6 shrink-0 cursor-pointer rounded-md border border-[var(--workspace-border)] px-2 text-[10px] font-medium text-[var(--workspace-text-muted)] transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
+              >
+                {p.label}
+              </button>
+              </Tooltip>
+            ))}
           </div>
           <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 md:grid-cols-2">
             <div className="flex min-h-0 flex-col border-b border-[var(--workspace-border)] md:border-b-0 md:border-r">
