@@ -4,6 +4,15 @@ import type { TypeTargetLanguage } from "./json/core";
 
 const API_URL = process.env.FORMATY_API_URL ?? "";
 
+/** Pick only defined keys from a record, returning a flat spreadable object. */
+function pickDefined(src: Record<string, unknown>, keys: string[]): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const k of keys) {
+    if (src[k] != null) out[k] = src[k];
+  }
+  return out;
+}
+
 export interface PlaygroundApiPayload {
   input: string;
   format: string;
@@ -22,6 +31,15 @@ export function mapStateToPayload(state: WorkspaceState): PlaygroundApiPayload {
       viewMode: state.viewMode,
       activeOperation: state.activeOperation,
       split: state.split,
+      queryText: state.queryText,
+      listCompareOptions: state.listCompareOptions,
+      csvColumn: state.csvColumn,
+      diffKind: state.diffKind,
+      // Multi-tab fields — spread only present keys so the API receives them
+      ...pickDefined(state as unknown as Record<string, unknown>, [
+        "tabs", "activeTabId", "showTabs", "tabSnapshots",
+        "diffLeftInput", "diffRightInput", "utilTab",
+      ]),
     },
   };
 }
@@ -51,7 +69,20 @@ export function mapPayloadToState(payload: PlaygroundApiPayload): WorkspaceState
     })(),
     activeOperation: opts.activeOperation as WorkspaceState["activeOperation"] | undefined,
     split: typeof opts.split === "number" ? opts.split : undefined,
-  };
+    queryText: typeof opts.queryText === "string" ? opts.queryText : undefined,
+    listCompareOptions: opts.listCompareOptions as WorkspaceState["listCompareOptions"],
+    csvColumn: typeof opts.csvColumn === "string" ? opts.csvColumn : undefined,
+    diffKind: (typeof opts.diffKind === "string" && (opts.diffKind === "document" || opts.diffKind === "list" || opts.diffKind === "single"))
+      ? opts.diffKind : undefined,
+    // Multi-tab fields — pass through verbatim so restore code can read them
+    ...(opts.tabs != null ? { tabs: opts.tabs } : {}),
+    ...(opts.activeTabId != null ? { activeTabId: opts.activeTabId } : {}),
+    ...(opts.showTabs != null ? { showTabs: opts.showTabs } : {}),
+    ...(opts.tabSnapshots != null ? { tabSnapshots: opts.tabSnapshots } : {}),
+    ...(opts.diffLeftInput != null ? { diffLeftInput: opts.diffLeftInput } : {}),
+    ...(opts.diffRightInput != null ? { diffRightInput: opts.diffRightInput } : {}),
+    ...(opts.utilTab != null ? { utilTab: opts.utilTab } : {}),
+  } as WorkspaceState;
 }
 
 export async function savePlayground(state: WorkspaceState): Promise<{ id: string } | null> {
