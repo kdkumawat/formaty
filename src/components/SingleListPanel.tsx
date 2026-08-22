@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   BarsArrowDownIcon,
@@ -74,6 +74,42 @@ const VIEW_LABELS: Record<SingleView, string> = {
   counts: "Counts",
 };
 
+const VIEW_STORAGE_KEY = "formaty-single-view";
+const DISPLAY_STORAGE_KEY = "formaty-single-display";
+const SORT_STORAGE_KEY = "formaty-single-sort";
+
+function loadStoredView(): SingleView {
+  try {
+    const raw = localStorage.getItem(VIEW_STORAGE_KEY);
+    if (raw === "unique" || raw === "duplicates" || raw === "counts") return raw;
+  } catch {
+    /* ignore */
+  }
+  return "unique";
+}
+
+function loadStoredDisplay(): "inline" | "table" {
+  try {
+    const raw = localStorage.getItem(DISPLAY_STORAGE_KEY);
+    if (raw === "inline" || raw === "table") return raw;
+  } catch {
+    /* ignore */
+  }
+  return "inline";
+}
+
+const SINGLE_SORT_VALUES: ("none" | "asc" | "desc")[] = ["none", "asc", "desc"];
+
+function loadStoredSort(): "none" | "asc" | "desc" {
+  try {
+    const raw = localStorage.getItem(SORT_STORAGE_KEY);
+    if ((SINGLE_SORT_VALUES as string[]).includes(raw ?? "")) return raw as "none" | "asc" | "desc";
+  } catch {
+    /* ignore */
+  }
+  return "none";
+}
+
 export function SingleListPanel({
   value,
   onChange,
@@ -85,11 +121,11 @@ export function SingleListPanel({
   options,
 }: SingleListPanelProps) {
   const effectiveOptions = options ?? DEFAULT_LIST_PARSE_OPTIONS;
-  const [view, setView] = useState<SingleView>("unique");
-  const [sortMode, setSortMode] = useState<"none" | "asc" | "desc">("none");
+  const [view, setView] = useState<SingleView>(loadStoredView);
+  const [sortMode, setSortMode] = useState<"none" | "asc" | "desc">(loadStoredSort);
   const [exportOpen, setExportOpen] = useState(false);
   const [inputSnapshot, setInputSnapshot] = useState<string | null>(null);
-  const [display, setDisplay] = useState<"inline" | "table">("inline");
+  const [display, setDisplay] = useState<"inline" | "table">(loadStoredDisplay);
   const doClean = () => {
     onChange(cleanListInput(value));
     setInputSnapshot(null);
@@ -116,6 +152,43 @@ export function SingleListPanel({
     }
   }, [exportFormat]);
 
+  // Persist output options across sessions.
+  useEffect(() => {
+    try {
+      localStorage.setItem(VIEW_STORAGE_KEY, view);
+    } catch {
+      /* ignore */
+    }
+  }, [view]);
+  useEffect(() => {
+    try {
+      localStorage.setItem(DISPLAY_STORAGE_KEY, display);
+    } catch {
+      /* ignore */
+    }
+  }, [display]);
+  useEffect(() => {
+    try {
+      localStorage.setItem(SORT_STORAGE_KEY, sortMode);
+    } catch {
+      /* ignore */
+    }
+  }, [sortMode]);
+
+  // Re-apply a persisted sort to the editor text once on mount so the rendered
+  // output matches the restored sort state.
+  const didRestoreSort = useRef(false);
+  useEffect(() => {
+    if (didRestoreSort.current) return;
+    didRestoreSort.current = true;
+    if (sortMode !== "none" && value.trim()) {
+      setInputSnapshot(value);
+      onChange(sortListText(value, effectiveOptions, sortMode));
+    }
+    // Intended to run once on mount only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const analysis = useMemo(() => analyzeSingleList(value, effectiveOptions), [value, effectiveOptions]);
 
   const items = useMemo(() => {
@@ -135,6 +208,38 @@ export function SingleListPanel({
         : formatListItems(sorted, exportFormat, resolvedSort),
     [sorted, exportFormat, resolvedSort],
   );
+
+  type TableSortKey = "name" | "count";
+  const [tableSort, setTableSort] = useState<{ key: TableSortKey; dir: "asc" | "desc" } | null>(null);
+  const toggleTableSort = (key: TableSortKey) => {
+    setTableSort((cur) =>
+      cur?.key === key
+        ? cur.dir === "asc"
+          ? { key, dir: "desc" }
+          : null
+        : { key, dir: "asc" },
+    );
+  };
+  /** Table view sorts items in-memory only - the inline view and exports are untouched. */
+  const tableItems = useMemo(() => {
+    if (!tableSort) return sorted;
+    const copy = [...sorted];
+    const dir = tableSort.dir === "asc" ? 1 : -1;
+    copy.sort((a, b) =>
+      tableSort.key === "count"
+        ? dir * (a.count - b.count)
+        : dir * a.value.localeCompare(b.value, undefined, { sensitivity: "base", numeric: true }),
+    );
+    return copy;
+  }, [sorted, tableSort]);
+
+  // Reset the table column sort when the view or source data changes.
+  useEffect(() => {
+    setTableSort(null);
+  }, [view, value]);
+
+  const sortIndicator = (key: TableSortKey) =>
+    tableSort?.key === key ? (tableSort.dir === "asc" ? "▲" : "▼") : null;
 
   useEffect(() => {
     if (!onExportChange) return;
@@ -424,31 +529,48 @@ export function SingleListPanel({
               </p>
             ) : (
               <table className="w-full border-collapse">
+                <thead>
+                  <tr className="border-b border-[var(--workspace-border)] text-[10px] uppercase tracking-wide text-[var(--workspace-text-muted)]">
+                    <th
+                      aria-sort={tableSort?.key === "name" ? (tableSort.dir === "asc" ? "ascending" : "descending") : "none"}
+                      className="py-1 pr-3 text-left font-semibold"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => toggleTableSort("name")}
+                        className={`inline-flex items-center gap-1 transition-colors hover:text-primary ${tableSort?.key === "name" ? "!text-primary" : ""}`}
+                      >
+                        Value
+                        <span className="w-2 tabular-nums">{sortIndicator("name") ?? ""}</span>
+                      </button>
+                    </th>
+                    <th
+                      aria-sort={tableSort?.key === "count" ? (tableSort.dir === "asc" ? "ascending" : "descending") : "none"}
+                      className="py-1 text-right font-semibold"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => toggleTableSort("count")}
+                        className={`inline-flex items-center gap-1 transition-colors hover:text-primary ${tableSort?.key === "count" ? "!text-primary" : ""}`}
+                      >
+                        Count
+                        <span className="w-2 tabular-nums">{sortIndicator("count") ?? ""}</span>
+                      </button>
+                    </th>
+                  </tr>
+                </thead>
                 <tbody>
-                  {sorted.map((item, i) => (
+                  {tableItems.map((item, i) => (
                     <tr
                       key={`${item.key}-${i}`}
                       className={`border-b border-[var(--workspace-border)]/40 last:border-0 ${
                         i % 2 === 1 ? "bg-[var(--workspace-background)]" : ""
                       }`}
                     >
-                      {view === "counts" ? (
-                        <>
-                          <td className={`py-0.5 pr-3 font-mono ${rowClass(item)}`}>{item.value}</td>
-                          <td className="py-0.5 text-right font-mono tabular-nums text-[var(--workspace-text-muted)]">
-                            ×{item.count}
-                          </td>
-                        </>
-                      ) : (
-                        <td className={`py-0.5 font-mono ${rowClass(item)}`}>
-                          {item.value}
-                          {view === "duplicates" ? (
-                            <span className="ml-2 text-[10px] tabular-nums text-[var(--workspace-text-muted)]">
-                              ×{item.count}
-                            </span>
-                          ) : null}
-                        </td>
-                      )}
+                      <td className={`py-0.5 pr-3 font-mono ${rowClass(item)}`}>{item.value}</td>
+                      <td className="py-0.5 text-right font-mono tabular-nums text-[var(--workspace-text-muted)]">
+                        ×{item.count}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

@@ -4,8 +4,6 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
   ArrowsRightLeftIcon,
-  BarsArrowDownIcon,
-  BarsArrowUpIcon,
   ChartPieIcon,
   ChevronDownIcon,
   ClipboardDocumentIcon,
@@ -80,6 +78,10 @@ const ALL_BUCKETS: ListBucket[] = ["summary", ...PRIMARY_BUCKETS, ...DUPE_BUCKET
 
 /** Persist the selected bucket/view across sessions (mirrors the export format key). */
 const BUCKET_STORAGE_KEY = "formaty-list-bucket";
+const DISPLAY_STORAGE_KEY = "formaty-list-display";
+const RESULT_SORT_STORAGE_KEY = "formaty-list-result-sort";
+const LEFT_SORT_STORAGE_KEY = "formaty-list-left-sort";
+const RIGHT_SORT_STORAGE_KEY = "formaty-list-right-sort";
 
 function loadStoredBucket(): ListBucket {
   try {
@@ -89,6 +91,30 @@ function loadStoredBucket(): ListBucket {
     /* ignore */
   }
   return "common";
+}
+
+const LIST_SORT_VALUES: ListSortMode[] = ["none", "asc", "desc", "numeric-asc", "numeric-desc", "frequency"];
+
+/** Load a persisted sort mode; falls back to `fallback` for missing/invalid values. */
+function loadStoredSort(key: string, fallback: ListSortMode): ListSortMode {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw && (LIST_SORT_VALUES as string[]).includes(raw)) return raw as ListSortMode;
+  } catch {
+    /* ignore */
+  }
+  return fallback;
+}
+
+/** Load the persisted inline/table display choice. */
+function loadStoredDisplay(): "inline" | "table" {
+  try {
+    const raw = localStorage.getItem(DISPLAY_STORAGE_KEY);
+    if (raw === "inline" || raw === "table") return raw;
+  } catch {
+    /* ignore */
+  }
+  return "inline";
 }
 
 const EXPORT_GROUPS: { label: string; items: ListExportFormat[] }[] = [
@@ -127,9 +153,15 @@ export function ListComparePanel({
   onCsvColumnChange,
 }: ListComparePanelProps) {
   const effectiveOptions = options ?? DEFAULT_LIST_PARSE_OPTIONS;
-  const [resultSort, setResultSort] = useState<ListSortMode>("asc");
-  const [leftSort, setLeftSort] = useState<ListSortMode>("none");
-  const [rightSort, setRightSort] = useState<ListSortMode>("none");
+  const [resultSort, setResultSort] = useState<ListSortMode>(() =>
+    loadStoredSort(RESULT_SORT_STORAGE_KEY, "asc"),
+  );
+  const [leftSort, setLeftSort] = useState<ListSortMode>(() =>
+    loadStoredSort(LEFT_SORT_STORAGE_KEY, "none"),
+  );
+  const [rightSort, setRightSort] = useState<ListSortMode>(() =>
+    loadStoredSort(RIGHT_SORT_STORAGE_KEY, "none"),
+  );
   const [activeBucket, setActiveBucket] = useState<ListBucket>(loadStoredBucket);
   /** Bucket shown before the last dup-link click - clicking again restores it. */
   const prevBucketRef = useRef<ListBucket>("common");
@@ -143,7 +175,7 @@ export function ListComparePanel({
     prevBucketRef.current = activeBucket;
     setActiveBucket(b);
   };
-  const [display, setDisplay] = useState<"inline" | "table">("inline");
+  const [display, setDisplay] = useState<"inline" | "table">(loadStoredDisplay);
 
   const isSummary = activeBucket === "summary";
 
@@ -155,6 +187,54 @@ export function ListComparePanel({
       /* ignore */
     }
   }, [activeBucket]);
+
+  // Persist output options across sessions.
+  useEffect(() => {
+    try {
+      localStorage.setItem(DISPLAY_STORAGE_KEY, display);
+    } catch {
+      /* ignore */
+    }
+  }, [display]);
+  useEffect(() => {
+    try {
+      localStorage.setItem(RESULT_SORT_STORAGE_KEY, resultSort);
+    } catch {
+      /* ignore */
+    }
+  }, [resultSort]);
+  useEffect(() => {
+    try {
+      localStorage.setItem(LEFT_SORT_STORAGE_KEY, leftSort);
+    } catch {
+      /* ignore */
+    }
+  }, [leftSort]);
+  useEffect(() => {
+    try {
+      localStorage.setItem(RIGHT_SORT_STORAGE_KEY, rightSort);
+    } catch {
+      /* ignore */
+    }
+  }, [rightSort]);
+
+  // Re-apply a persisted side-sort to the editor text once on mount so the
+  // rendered output matches the restored sort state.
+  const didRestoreSideSorts = useRef(false);
+  useEffect(() => {
+    if (didRestoreSideSorts.current) return;
+    didRestoreSideSorts.current = true;
+    if (leftSort !== "none" && left.trim()) {
+      setLeftSnapshot(left);
+      onLeftChange(sortListText(left, effectiveOptions, leftSort));
+    }
+    if (rightSort !== "none" && right.trim()) {
+      setRightSnapshot(right);
+      onRightChange(sortListText(right, effectiveOptions, rightSort));
+    }
+    // Intended to run once on mount only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Preserve the selected export format across sessions (localStorage).
   const [exportFormat, setExportFormat] = useState<ListExportFormat | null>(() => {
@@ -255,6 +335,38 @@ export function ListComparePanel({
       ? bucketItems.map((i) => i.value).join("\n")
       : formatListItems(bucketItems, exportFormat, resultSort);
   }, [bucketItems, exportFormat, resultSort, isSummary, summary]);
+
+  type TableSortKey = "name" | "count";
+  const [tableSort, setTableSort] = useState<{ key: TableSortKey; dir: "asc" | "desc" } | null>(null);
+  const toggleTableSort = (key: TableSortKey) => {
+    setTableSort((cur) =>
+      cur?.key === key
+        ? cur.dir === "asc"
+          ? { key, dir: "desc" }
+          : null
+        : { key, dir: "asc" },
+    );
+  };
+  /** Table view sorts items in-memory only - the inline view and exports are untouched. */
+  const tableItems = useMemo(() => {
+    if (!tableSort) return bucketItems;
+    const copy = [...bucketItems];
+    const dir = tableSort.dir === "asc" ? 1 : -1;
+    copy.sort((a, b) =>
+      tableSort.key === "count"
+        ? dir * (a.count - b.count)
+        : dir * a.value.localeCompare(b.value, undefined, { sensitivity: "base", numeric: true }),
+    );
+    return copy;
+  }, [bucketItems, tableSort]);
+
+  // Reset the table column sort when the bucket or source data changes.
+  useEffect(() => {
+    setTableSort(null);
+  }, [activeBucket, left, right]);
+
+  const sortIndicator = (key: TableSortKey) =>
+    tableSort?.key === key ? (tableSort.dir === "asc" ? "▲" : "▼") : null;
 
   useEffect(() => {
     if (!onExportChange) return;
@@ -901,8 +1013,38 @@ export function ListComparePanel({
                 </p>
               ) : (
                 <table className="w-full border-collapse">
+                  <thead>
+                    <tr className="border-b border-[var(--workspace-border)] text-[10px] uppercase tracking-wide text-[var(--workspace-text-muted)]">
+                      <th
+                        aria-sort={tableSort?.key === "name" ? (tableSort.dir === "asc" ? "ascending" : "descending") : "none"}
+                        className="py-1 pr-3 text-left font-semibold"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => toggleTableSort("name")}
+                          className={`inline-flex items-center gap-1 transition-colors hover:text-primary ${tableSort?.key === "name" ? "!text-primary" : ""}`}
+                        >
+                          Value
+                          <span className="w-2 tabular-nums">{sortIndicator("name") ?? ""}</span>
+                        </button>
+                      </th>
+                      <th
+                        aria-sort={tableSort?.key === "count" ? (tableSort.dir === "asc" ? "ascending" : "descending") : "none"}
+                        className="py-1 text-right font-semibold"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => toggleTableSort("count")}
+                          className={`inline-flex items-center gap-1 transition-colors hover:text-primary ${tableSort?.key === "count" ? "!text-primary" : ""}`}
+                        >
+                          Count
+                          <span className="w-2 tabular-nums">{sortIndicator("count") ?? ""}</span>
+                        </button>
+                      </th>
+                    </tr>
+                  </thead>
                   <tbody>
-                    {bucketItems.map((item, i) => (
+                    {tableItems.map((item, i) => (
                       <tr
                         key={`${item.key}-${i}`}
                         className={`border-b border-[var(--workspace-border)]/40 last:border-0 ${
