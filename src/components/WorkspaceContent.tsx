@@ -558,6 +558,8 @@ export function WorkspaceContent({
   const [activeOperation, setActiveOperation] = useState<OperationAction | null>(null);
   const [utilTab, setUtilTab] = useState<UtilTab>("uuid");
   const [utilsByTool, setUtilsByTool] = useState<UtilsStateMap>({});
+  /** Bumped on workspace-tab add so generator utils seed fresh values in the new tab. */
+  const [utilsRegenKey, setUtilsRegenKey] = useState(0);
   /** Utils undo/redo — snapshot-based, same approach as workspace input undo. */
   const [utilsUndoStack, setUtilsUndoStack] = useState<UtilsStateMap[]>([{}]);
   const [utilsUndoIdx, setUtilsUndoIdx] = useState(0);
@@ -1408,7 +1410,22 @@ export function WorkspaceContent({
     setTabs((prev) => [...prev, { id: newId, label: `T${tabCounterRef.current}`, num: tabCounterRef.current }]);
     setActiveTabId(newId);
     historyLock.current = true;
-    applyTabSnapshot(emptyTabSnapshot());
+    const inherited = captureTabSnapshot();
+    applyTabSnapshot({
+      ...inherited,
+      input: "",
+      undoStack: [""],
+      undoIndex: 0,
+      output: "",
+      parsedOutput: null,
+      error: null,
+      diffLeftInput: "",
+      diffRightInput: "",
+      utilsByTool: {},
+      copyAsMemory: {},
+      isOutputMaximized: false,
+    });
+    setUtilsRegenKey((k) => k + 1);
     prevBeforeDiffRef.current = null;
     setTimeout(() => { historyLock.current = false; }, 0);
   };
@@ -5278,6 +5295,7 @@ export function WorkspaceContent({
                   setUtilTab(t);
                 }}
                 stateByTool={utilsByTool}
+                regenKey={utilsRegenKey}
                 onStateByToolChange={(next) => {
                   setUtilsByTool(next);
                   if (!utilsHistoryLock.current) pushUtilsHistory(next);
