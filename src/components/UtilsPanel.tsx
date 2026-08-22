@@ -74,6 +74,8 @@ interface UtilsPanelProps {
   onActiveTabChange: (tab: UtilTab) => void;
   stateByTool: UtilsStateMap;
   onStateByToolChange: (next: UtilsStateMap) => void;
+  /** Bumped when a new workspace tab is created so generators seed fresh values. */
+  regenKey?: number;
   /** Match Monaco / playground editor font size */
   fontSize?: number;
 }
@@ -86,6 +88,7 @@ export function UtilsPanel({
   onActiveTabChange,
   stateByTool,
   onStateByToolChange,
+  regenKey = 0,
   fontSize = 13,
 }: UtilsPanelProps) {
   // Merge restored state over defaults so partial snapshots (older sessions /
@@ -214,7 +217,7 @@ export function UtilsPanel({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, state.uuidVariant, state.uuidName, batchSeed]);
+  }, [activeTab, state.uuidVariant, state.uuidName, batchSeed, regenKey]);
 
   /** Count changes: append or trim only - never regenerate existing IDs. */
   const prevUuidCount = useRef(state.uuidCount);
@@ -275,6 +278,7 @@ export function UtilsPanel({
     state.pwDigits,
     state.pwSymbols,
     batchSeed,
+    regenKey,
   ]);
 
   /** Password count: append or trim only. */
@@ -319,7 +323,7 @@ export function UtilsPanel({
     const text = generateLorem(state.loremCount, state.loremUnit);
     patch({ output: text, error: null });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, state.loremCount, state.loremUnit, batchSeed]);
+  }, [activeTab, state.loremCount, state.loremUnit, batchSeed, regenKey]);
 
   const runGen = useRef(0);
   useEffect(() => {
@@ -370,6 +374,7 @@ export function UtilsPanel({
     state.regexPattern,
     state.regexFlags,
     onStateByToolChange,
+    regenKey,
   ]);
 
   // Bidirectional codec: editing the encoded (right) side auto-decodes back to the left.
