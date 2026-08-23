@@ -83,7 +83,8 @@ function PlaygroundContent() {
     );
   }
 
-  return <WorkspaceContent initialState={status.data} embed={embed} />;
+  const sharedLinkUrl = typeof window !== "undefined" && id ? `${window.location.origin}/playground?id=${id}` : undefined;
+  return <WorkspaceContent initialState={status.data} sharedLinkId={id ?? undefined} sharedLinkUrl={sharedLinkUrl} embed={embed} />;
 }
 
 export default function PlaygroundPage() {

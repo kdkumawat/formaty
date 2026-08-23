@@ -96,11 +96,14 @@ export interface UtilToolState {
   /** Which side is being edited for codec tools (left = plain, right = encoded). */
   editSide: "left" | "right";
   touched: boolean;
+  // World Clock (per-tab)
+
 }
 
 export type UtilsStateMap = Partial<Record<UtilTab, UtilToolState>>;
 
 export function defaultUtilToolState(tab: UtilTab): UtilToolState {
+  const now = Date.now();
   return {
     input: UTIL_SAMPLES[tab] ?? "",
     output: "",
@@ -124,6 +127,7 @@ export function defaultUtilToolState(tab: UtilTab): UtilToolState {
     loremCount: 3,
     editSide: "left",
     touched: false,
+
   };
 }
 

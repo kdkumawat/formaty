@@ -9,8 +9,8 @@ import type { ListParseOptions } from "./json/listCompare";
 export type OutputDisplayKind = FormatKind | TypeTargetLanguage | "plaintext";
 
 export type OperationAction =
-  | "format" | "beautify" | "minify" | "sort" | "removeEmpty" | "flatten" | "unflatten"
-  | "diff" | "schema" | "validate" | "generateTypes";
+  | "format" | "beautify" | "minify" | "sort" | "sortArrays" | "dedup" | "removeEmpty" | "flatten" | "unflatten"
+  | "diff" | "utils" | "schema" | "validate" | "generateTypes";
 
 export interface WorkspaceState {
   input: string;
@@ -31,6 +31,17 @@ export interface WorkspaceState {
   listCompareOptions?: Partial<ListParseOptions>;
   /** Compare: CSV column selected for column compare. */
   csvColumn?: string;
+  /** Compare: literal left/right inputs (single-tab share). */
+  diffLeftInput?: string;
+  diffRightInput?: string;
+  /** Utils: active util tab. */
+  utilTab?: string;
+  /** Multi-tab share: list of tabs. */
+  tabs?: Array<{ id: string; label: string; num: number; renamed?: boolean }>;
+  activeTabId?: string;
+  showTabs?: boolean;
+  /** Multi-tab snapshots keyed by tab id. */
+  tabSnapshots?: Record<string, unknown>;
   /** Preset/recipe state marker (informational - recipes re-run on open). */
   preset?: string;
 }
