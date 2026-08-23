@@ -774,6 +774,10 @@ export function WorkspaceContent({
     /** Per-tool, per-tab 'last copy as' memory. */
     copyAsMemory: Record<string, CopyAsFormat>;
     graphCopyFormat: GraphCopyFormat;
+    /** Per-tab format options (indentation, quote style, sort, removeEmpty). */
+    formatOptions: FormatOptions;
+    /** Per-tab output action visibility (which copy/download actions show). */
+    outputActionVisibility: OutputActionVisibility;
   };
   const emptyTabSnapshot = (): TabSnapshot => ({
     input: "",
@@ -803,6 +807,8 @@ export function WorkspaceContent({
     utilsByTool: {},
     copyAsMemory: {},
     graphCopyFormat: "png",
+    formatOptions: { indentation: 2, quoteStyle: "double", sortKeys: false, removeEmpty: false },
+    outputActionVisibility: loadVisibility(),
   });
   const captureTabSnapshot = useCallback((): TabSnapshot => ({
     input,
@@ -832,7 +838,9 @@ export function WorkspaceContent({
     utilsByTool,
     copyAsMemory,
     graphCopyFormat,
-  }), [input, inputFormatOverride, undoStack, undoIndex, output, parsedOutput, outputExt, outputLanguage, activeOperation, error, convertToFormat, typeLanguage, rightView, diffLeftInput, diffRightInput, diffKind, listCompareOptions, csvColumn, queryText, diffSideBySide, diffIgnoreWhitespace, diffShowPaths, isOutputMaximized, utilTab, utilsByTool, copyAsMemory, graphCopyFormat]);
+    formatOptions,
+    outputActionVisibility,
+  }), [input, inputFormatOverride, undoStack, undoIndex, output, parsedOutput, outputExt, outputLanguage, activeOperation, error, convertToFormat, typeLanguage, rightView, diffLeftInput, diffRightInput, diffKind, listCompareOptions, csvColumn, queryText, diffSideBySide, diffIgnoreWhitespace, diffShowPaths, isOutputMaximized, utilTab, utilsByTool, copyAsMemory, graphCopyFormat, formatOptions, outputActionVisibility]);
   const applyTabSnapshot = (snap: TabSnapshot) => {
     setInput(snap.input);
     setInputFormatOverride(snap.inputFormatOverride);
@@ -868,6 +876,8 @@ export function WorkspaceContent({
     setUtilsByTool(snap.utilsByTool ?? {});
     setCopyAsMemory(snap.copyAsMemory ?? {});
     setGraphCopyFormat(snap.graphCopyFormat ?? "png");
+    if (snap.formatOptions) setFormatOptions(snap.formatOptions);
+    if (snap.outputActionVisibility) setOutputActionVisibility(snap.outputActionVisibility);
     setQueryResult("");
     setDiffLineStats(null);
     setDiffNav({ current: 0, total: 0 });
@@ -1861,6 +1871,7 @@ export function WorkspaceContent({
         tabCounter?: number;
         tabSnapshots?: Record<string, unknown>;
         showTabs?: boolean;
+        outputActionVisibility?: OutputActionVisibility;
       };
     if (data.input) setInput(data.input);
     if (data.output) setOutput(cleanSessionOutput(data.output));
@@ -1935,6 +1946,9 @@ export function WorkspaceContent({
         const removeEmpty = Boolean(data.formatOptions.removeEmpty);
         setFormatOptions({ indentation, quoteStyle, sortKeys, removeEmpty });
       }
+      if (data.outputActionVisibility && typeof data.outputActionVisibility === "object") {
+        setOutputActionVisibility((prev) => ({ ...prev, ...(data.outputActionVisibility as OutputActionVisibility) }));
+      }
     } catch {
       // Ignore malformed persisted sessions.
     }
@@ -1983,6 +1997,7 @@ export function WorkspaceContent({
         mobileShowOutput,
         activeOperation,
         pinnedItems: Array.from(pinnedItems),
+        outputActionVisibility,
         tabs,
         activeTabId,
         showTabs,
@@ -1990,7 +2005,7 @@ export function WorkspaceContent({
         tabSnapshots: allSnapshots,
       }),
     );
-  }, [input, output, split, themeMode, typeLanguage, rightView, formatOptions, convertToFormat, liveTransform, editorFontSize, viewAsMenu, lineWrap, autoFormatOnPaste, mobileShowOutput, activeOperation, pinnedItems, tabs, activeTabId, showTabs, inputFormatOverride, undoStack, undoIndex, outputExt, outputLanguage, diffLeftInput, diffRightInput, diffKind, isOutputMaximized, utilTab, utilsByTool, captureTabSnapshot]);
+  }, [input, output, split, themeMode, typeLanguage, rightView, formatOptions, convertToFormat, liveTransform, editorFontSize, viewAsMenu, lineWrap, autoFormatOnPaste, mobileShowOutput, activeOperation, pinnedItems, outputActionVisibility, tabs, activeTabId, showTabs, inputFormatOverride, undoStack, undoIndex, outputExt, outputLanguage, diffLeftInput, diffRightInput, diffKind, isOutputMaximized, utilTab, utilsByTool, captureTabSnapshot]);
 
   // Prefer structured parse for views (table/tree/graph/query)
   useEffect(() => {
@@ -2566,6 +2581,8 @@ export function WorkspaceContent({
     setConvertToFormat(toFormat);
     setFocusedPane("output");
     if (!isDesktopLayout) setMobileShowOutput(true);
+    // Auto-switch to raw when converting format from a visual view
+    if (!isDiffMode && !isUtilsMode && rightView !== "raw") setRightView("raw");
     setBusy(true);
     setError(null);
     void (async () => {
@@ -2877,6 +2894,11 @@ export function WorkspaceContent({
     // Transform ops leave Utils
     if (activeOperation === "utils") {
       setIsOutputMaximized(false);
+    }
+    // Auto-switch to raw when running a transform action from a visual view
+    // (tree / graph / query / table) so the user sees the text output.
+    if (!isDiffMode && !isUtilsMode && rightView !== "raw") {
+      setRightView("raw");
     }
     executeOperation(action, { inputText });
   };
@@ -4687,7 +4709,7 @@ export function WorkspaceContent({
                 groups.push(
                   <span key="act" className="flex shrink-0 items-center gap-0.5">
                     {actionPins.map(([label, action]) => (
-                      <PinnedToolbarButton key={action} icon={ACTION_ICONS[action] ?? BoltIcon} label={label} disabled={showBusy || inputEmpty} btnClass={pinnedBtnClass} activeClass={tbActiveClass} active={activeOperation === action} onClick={() => runOperation(action)} />
+                      <PinnedToolbarButton key={action} icon={ACTION_ICONS[action] ?? BoltIcon} label={label} disabled={showBusy || inputEmpty} btnClass={pinnedBtnClass} activeClass={tbActiveClass} active={activeOperation === action} onClick={() => { if (!isDiffMode && !isUtilsMode && rightView !== "raw") setRightView("raw"); runOperation(action); }} />
                     ))}
                   </span>,
                 );
@@ -4696,7 +4718,7 @@ export function WorkspaceContent({
                 groups.push(
                   <span key="type" className="flex shrink-0 items-center gap-0.5">
                     {typePins.map((item) => (
-                      <PinnedToolbarButton key={item.id} leading={<TypeBadge id={item.id} />} label={item.label} disabled={inputEmpty} btnClass={pinnedBtnClass} activeClass={tbActiveClass} active={activeOperation === "generateTypes" && typeLanguage === item.id} onClick={() => { trackEvent("generate_types", { language: item.id, source: "pinned" }); setFocusedPane("output"); setActiveOperation("generateTypes"); executeOperation("generateTypes", { typeLanguage: item.id }); }} />
+                      <PinnedToolbarButton key={item.id} leading={<TypeBadge id={item.id} />} label={item.label} disabled={inputEmpty} btnClass={pinnedBtnClass} activeClass={tbActiveClass} active={activeOperation === "generateTypes" && typeLanguage === item.id} onClick={() => { trackEvent("generate_types", { language: item.id, source: "pinned" }); setFocusedPane("output"); if (!isDiffMode && !isUtilsMode && rightView !== "raw") setRightView("raw"); setActiveOperation("generateTypes"); executeOperation("generateTypes", { typeLanguage: item.id }); }} />
                     ))}
                   </span>,
                 );
@@ -4773,7 +4795,7 @@ export function WorkspaceContent({
                   <span className="min-w-0 flex-1 truncate text-left">None</span>
                 </button>
                 {TYPE_LANGUAGES.map((item) => (
-                  <button key={item.id} type="button" disabled={inputEmpty} data-selected={(activeOperation === "generateTypes" && typeLanguage === item.id) || undefined} className={`${menuItemClass} ${activeOperation === "generateTypes" && typeLanguage === item.id ? menuItemActiveClass : ""}`} onClick={() => { trackEvent("generate_types", { language: item.id, source: "menu" }); setFocusedPane("output"); setActiveOperation("generateTypes"); executeOperation("generateTypes", { typeLanguage: item.id }); setMoreMenuOpen(false); }}>
+                  <button key={item.id} type="button" disabled={inputEmpty} data-selected={(activeOperation === "generateTypes" && typeLanguage === item.id) || undefined} className={`${menuItemClass} ${activeOperation === "generateTypes" && typeLanguage === item.id ? menuItemActiveClass : ""}`} onClick={() => { trackEvent("generate_types", { language: item.id, source: "menu" }); setFocusedPane("output"); if (!isDiffMode && !isUtilsMode && rightView !== "raw") setRightView("raw"); setActiveOperation("generateTypes"); executeOperation("generateTypes", { typeLanguage: item.id }); setMoreMenuOpen(false); }}>
                     {sharedMenuCheck(activeOperation === "generateTypes" && typeLanguage === item.id)}
                     <span className="min-w-0 flex-1 truncate text-left">{item.label}</span>
                   </button>
@@ -4885,7 +4907,7 @@ export function WorkspaceContent({
                     {gi > 0 && <div className="my-1 h-px bg-[var(--workspace-border)]" role="separator" aria-hidden />}
                     {menuSectionLabel(group.label)}
                     {TYPE_LANGUAGES.filter((t) => (group.ids as readonly string[]).includes(t.id)).map((item) => (
-                      <button key={item.id} type="button" disabled={inputEmpty} data-selected={(activeOperation === "generateTypes" && typeLanguage === item.id) || undefined} className={`${menuItemClass} ${activeOperation === "generateTypes" && typeLanguage === item.id ? menuItemActiveClass : ""}`} onClick={() => { trackEvent("generate_types", { language: item.id, source: "types_menu" }); setFocusedPane("output"); setActiveOperation("generateTypes"); executeOperation("generateTypes", { typeLanguage: item.id }); setTypesMenuOpen(false); }}>
+                      <button key={item.id} type="button" disabled={inputEmpty} data-selected={(activeOperation === "generateTypes" && typeLanguage === item.id) || undefined} className={`${menuItemClass} ${activeOperation === "generateTypes" && typeLanguage === item.id ? menuItemActiveClass : ""}`} onClick={() => { trackEvent("generate_types", { language: item.id, source: "types_menu" }); setFocusedPane("output"); if (!isDiffMode && !isUtilsMode && rightView !== "raw") setRightView("raw"); setActiveOperation("generateTypes"); executeOperation("generateTypes", { typeLanguage: item.id }); setTypesMenuOpen(false); }}>
                         {sharedMenuCheck(activeOperation === "generateTypes" && typeLanguage === item.id)}
                         <span className="min-w-0 flex-1 truncate text-left">{item.label}</span>
                       </button>
