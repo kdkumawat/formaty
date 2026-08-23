@@ -259,8 +259,69 @@ export function ListComparePanel({
   const [colOpen, setColOpen] = useState(false);
   const [leftSnapshot, setLeftSnapshot] = useState<string | null>(null);
   const [rightSnapshot, setRightSnapshot] = useState<string | null>(null);
+  const [leftCleanSnapshot, setLeftCleanSnapshot] = useState<string | null>(null);
+  const [rightCleanSnapshot, setRightCleanSnapshot] = useState<string | null>(null);
+  const autoCleanEnabled = effectiveOptions.autoClean ?? true;
+  const leftAutoCleanRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rightAutoCleanRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!autoCleanEnabled || !left.trim()) {
+      if (!left.trim() && leftCleanSnapshot) setLeftCleanSnapshot(null);
+      return;
+    }
+    const cleaned = cleanListInput(left);
+    if (cleaned === left || !cleaned) return;
+    const needsClean = /[,[\]()]/.test(left) || /["'`]/.test(left) || /\s{2,}/.test(left);
+    if (!needsClean) return;
+    if (leftAutoCleanRef.current) clearTimeout(leftAutoCleanRef.current);
+    leftAutoCleanRef.current = setTimeout(() => {
+      setLeftCleanSnapshot(left);
+      onLeftChange(cleaned);
+      setLeftSnapshot(null);
+      setLeftSort("none");
+      toast({ message: "Left auto-cleaned", type: "info" });
+    }, 450);
+    return () => { if (leftAutoCleanRef.current) clearTimeout(leftAutoCleanRef.current); };
+  }, [left, autoCleanEnabled, onLeftChange]);
+  useEffect(() => {
+    if (!autoCleanEnabled || !right.trim()) {
+      if (!right.trim() && rightCleanSnapshot) setRightCleanSnapshot(null);
+      return;
+    }
+    const cleaned = cleanListInput(right);
+    if (cleaned === right || !cleaned) return;
+    const needsClean = /[,[\]()]/.test(right) || /["'`]/.test(right) || /\s{2,}/.test(right);
+    if (!needsClean) return;
+    if (rightAutoCleanRef.current) clearTimeout(rightAutoCleanRef.current);
+    rightAutoCleanRef.current = setTimeout(() => {
+      setRightCleanSnapshot(right);
+      onRightChange(cleaned);
+      setRightSnapshot(null);
+      setRightSort("none");
+      toast({ message: "Right auto-cleaned", type: "info" });
+    }, 450);
+    return () => { if (rightAutoCleanRef.current) clearTimeout(rightAutoCleanRef.current); };
+  }, [right, autoCleanEnabled, onRightChange]);
+  const undoLeftClean = () => {
+    if (leftCleanSnapshot !== null) {
+      const prev = leftCleanSnapshot;
+      setLeftCleanSnapshot(null);
+      onLeftChange(prev);
+      toast({ message: "Left reverted", type: "info" });
+    }
+  };
+  const undoRightClean = () => {
+    if (rightCleanSnapshot !== null) {
+      const prev = rightCleanSnapshot;
+      setRightCleanSnapshot(null);
+      onRightChange(prev);
+      toast({ message: "Right reverted", type: "info" });
+    }
+  };
   const cleanLeft = () => {
     const cleaned = cleanListInput(left);
+    if (cleaned !== left) setLeftCleanSnapshot(left);
+    else setLeftCleanSnapshot(null);
     onLeftChange(cleaned);
     setLeftSnapshot(null);
     setLeftSort("none");
@@ -268,6 +329,8 @@ export function ListComparePanel({
   };
   const cleanRight = () => {
     const cleaned = cleanListInput(right);
+    if (cleaned !== right) setRightCleanSnapshot(right);
+    else setRightCleanSnapshot(null);
     onRightChange(cleaned);
     setRightSnapshot(null);
     setRightSort("none");
@@ -595,6 +658,17 @@ export function ListComparePanel({
                 </Tooltip>
               </span>
               <span className="ml-auto flex items-center gap-1">
+                {leftCleanSnapshot !== null && (
+                  <Tooltip content="Undo clean - revert left" className="shrink-0">
+                    <button
+                      type="button"
+                      onClick={undoLeftClean}
+                      className={`${linkBtnClass} h-6 min-h-6 px-1.5 text-[10px] font-semibold !bg-amber-500/10 !text-amber-700 dark:!text-amber-400`}
+                    >
+                      Undo
+                    </button>
+                  </Tooltip>
+                )}
                 <Tooltip content="Clean: strip quotes, collapse whitespace, one per line" className="shrink-0">
                 <button
                   type="button"
@@ -621,6 +695,10 @@ export function ListComparePanel({
                 onLeftChange(e.target.value);
                 setLeftSnapshot(null);
                 setLeftSort("none");
+                if (leftCleanSnapshot !== null) {
+                  const cleanedNext = cleanListInput(e.target.value);
+                  if (cleanedNext === e.target.value) setLeftCleanSnapshot(null);
+                }
               }}
               placeholder={"Paste list…\none per line, CSV, or JSON array"}
               spellCheck={false}
@@ -667,6 +745,17 @@ export function ListComparePanel({
                 </Tooltip>
               </span>
               <span className="ml-auto flex items-center gap-1">
+                {rightCleanSnapshot !== null && (
+                  <Tooltip content="Undo clean - revert right" className="shrink-0">
+                    <button
+                      type="button"
+                      onClick={undoRightClean}
+                      className={`${linkBtnClass} h-6 min-h-6 px-1.5 text-[10px] font-semibold !bg-amber-500/10 !text-amber-700 dark:!text-amber-400`}
+                    >
+                      Undo
+                    </button>
+                  </Tooltip>
+                )}
                 <Tooltip content="Clean: strip quotes, collapse whitespace, one per line" className="shrink-0">
                 <button
                   type="button"
@@ -693,6 +782,10 @@ export function ListComparePanel({
                 onRightChange(e.target.value);
                 setRightSnapshot(null);
                 setRightSort("none");
+                if (rightCleanSnapshot !== null) {
+                  const cleanedNext = cleanListInput(e.target.value);
+                  if (cleanedNext === e.target.value) setRightCleanSnapshot(null);
+                }
               }}
               placeholder={"Second list…"}
               spellCheck={false}

@@ -35,7 +35,7 @@ import {
 } from "@/lib/json/listCompare";
 import type { ListCompareExport } from "@/components/ListComparePanel";
 
-type SingleView = "unique" | "duplicates" | "counts";
+type SingleView = "unique" | "duplicates";
 
 interface SingleListPanelProps {
   value: string;
@@ -71,7 +71,6 @@ const EXPORT_GROUPS: { label: string; items: ListExportFormat[] }[] = [
 const VIEW_LABELS: Record<SingleView, string> = {
   unique: "Unique",
   duplicates: "Duplicates",
-  counts: "Counts",
 };
 
 const VIEW_STORAGE_KEY = "formaty-single-view";
@@ -81,7 +80,9 @@ const SORT_STORAGE_KEY = "formaty-single-sort";
 function loadStoredView(): SingleView {
   try {
     const raw = localStorage.getItem(VIEW_STORAGE_KEY);
-    if (raw === "unique" || raw === "duplicates" || raw === "counts") return raw;
+    if (raw === "unique" || raw === "duplicates") return raw;
+    // Migrate legacy "counts" view to "unique"
+    if (raw === "counts") return "unique";
   } catch {
     /* ignore */
   }
@@ -126,8 +127,46 @@ export function SingleListPanel({
   const [exportOpen, setExportOpen] = useState(false);
   const [inputSnapshot, setInputSnapshot] = useState<string | null>(null);
   const [display, setDisplay] = useState<"inline" | "table">(loadStoredDisplay);
+  const [cleanSnapshot, setCleanSnapshot] = useState<string | null>(null);
+  const autoCleanEnabled = effectiveOptions.autoClean ?? true;
+  const autoCleanTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Auto-clean on input: normalize messy pasted lists after a short debounce, keep
+  // snapshot so the user can Undo and get the exact pre-clean text back.
+  useEffect(() => {
+    if (!autoCleanEnabled) return;
+    if (!value.trim()) {
+      if (cleanSnapshot) setCleanSnapshot(null);
+      return;
+    }
+    const cleaned = cleanListInput(value);
+    if (cleaned === value || !cleaned) return;
+    const needsClean = /[,[\]()]/.test(value) || /["'`]/.test(value) || /\s{2,}/.test(value);
+    if (!needsClean) return;
+    if (autoCleanTimerRef.current) clearTimeout(autoCleanTimerRef.current);
+    autoCleanTimerRef.current = setTimeout(() => {
+      setCleanSnapshot(value);
+      onChange(cleaned);
+      setInputSnapshot(null);
+      setSortMode("none");
+      toast({ message: "Auto-cleaned", type: "info" });
+    }, 450);
+    return () => {
+      if (autoCleanTimerRef.current) clearTimeout(autoCleanTimerRef.current);
+    };
+  }, [value, autoCleanEnabled, onChange]);
+  const undoClean = () => {
+    if (cleanSnapshot !== null) {
+      const prev = cleanSnapshot;
+      setCleanSnapshot(null);
+      onChange(prev);
+      toast({ message: "Reverted", type: "info" });
+    }
+  };
   const doClean = () => {
-    onChange(cleanListInput(value));
+    const cleaned = cleanListInput(value);
+    if (cleaned !== value) setCleanSnapshot(value);
+    else setCleanSnapshot(null);
+    onChange(cleaned);
     setInputSnapshot(null);
     setSortMode("none");
     toast({ message: "Cleaned", type: "success" });
@@ -193,11 +232,10 @@ export function SingleListPanel({
 
   const items = useMemo(() => {
     if (view === "duplicates") return analysis.duplicates;
-    if (view === "counts") return analysis.counts;
     return analysis.unique;
   }, [view, analysis]);
 
-  const resolvedSort: ListSortMode = view === "counts" ? "frequency" : sortMode;
+  const resolvedSort: ListSortMode = sortMode;
 
   const sorted = useMemo(() => sortListItems(items, resolvedSort), [items, resolvedSort]);
 
@@ -338,6 +376,17 @@ export function SingleListPanel({
               {analysis.duplicateKeys > 0 ? ` · ${analysis.duplicateKeys} dup` : ""}
             </span>
             <span className="ml-auto flex items-center gap-1">
+              {cleanSnapshot !== null && (
+                <Tooltip content="Undo clean - revert to previous input" className="shrink-0">
+                  <button
+                    type="button"
+                    onClick={undoClean}
+                    className={`${linkBtnClass} h-6 min-h-6 px-1.5 text-[10px] font-semibold !bg-amber-500/10 !text-amber-700 dark:!text-amber-400`}
+                  >
+                    Undo
+                  </button>
+                </Tooltip>
+              )}
               <Tooltip content="Clean: strip quotes, collapse whitespace, one per line" className="shrink-0">
               <button
                 type="button"
@@ -375,6 +424,11 @@ export function SingleListPanel({
               onChange(e.target.value);
               setInputSnapshot(null);
               setSortMode("none");
+              // New edits invalidate the auto-clean snapshot
+              if (cleanSnapshot !== null && e.target.value !== cleanSnapshot) {
+                const cleanedNext = cleanListInput(e.target.value);
+                if (cleanedNext === e.target.value) setCleanSnapshot(null);
+              }
             }}
             placeholder={"Paste a list…\none per line, CSV, or JSON array"}
             spellCheck={false}
@@ -398,11 +452,7 @@ export function SingleListPanel({
                 >
                   {VIEW_LABELS[v]}
                   <span className="tabular-nums opacity-75">
-                    {v === "unique"
-                      ? analysis.uniqueCount
-                      : v === "duplicates"
-                        ? analysis.duplicateKeys
-                        : analysis.rawCount}
+                    {v === "unique" ? analysis.uniqueCount : analysis.duplicateKeys}
                   </span>
                 </button>
                 </Tooltip>

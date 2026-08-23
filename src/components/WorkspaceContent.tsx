@@ -141,7 +141,7 @@ import { executeCurlDetailed, parseCurl, type CurlExecutionResult } from "@/lib/
 import { CURL_TARGETS, generateCurlCode, getCurlTarget, type CurlTargetId } from "@/lib/curl/codegen";
 import type { SqlDialect } from "@/lib/json/core";
 import { formatJson } from "@/lib/json/core";
-import { decodeState, encodeState } from "@/lib/shareState";
+import { decodeState, encodeState, type WorkspaceState } from "@/lib/shareState";
 import { savePlayground, updatePlayground, deletePlayground } from "@/lib/playgroundApi";
 import { PRESETS, getPreset, type PresetId } from "@/lib/presets";
 import { themeInlineCss } from "@/lib/utils/themeTokens";
@@ -792,6 +792,9 @@ export function WorkspaceContent({
     diffLeftInput: "",
     diffRightInput: "",
     diffKind: "document",
+    listCompareOptions: {},
+    csvColumn: null,
+    queryText: "",
     diffSideBySide: true,
     diffIgnoreWhitespace: false,
     diffShowPaths: false,
@@ -818,6 +821,9 @@ export function WorkspaceContent({
     diffLeftInput,
     diffRightInput,
     diffKind,
+    listCompareOptions,
+    csvColumn,
+    queryText,
     diffSideBySide,
     diffIgnoreWhitespace,
     diffShowPaths,
@@ -826,7 +832,7 @@ export function WorkspaceContent({
     utilsByTool,
     copyAsMemory,
     graphCopyFormat,
-  }), [input, inputFormatOverride, undoStack, undoIndex, output, parsedOutput, outputExt, outputLanguage, activeOperation, error, convertToFormat, typeLanguage, rightView, diffLeftInput, diffRightInput, diffKind, diffSideBySide, diffIgnoreWhitespace, diffShowPaths, isOutputMaximized, utilTab, utilsByTool, copyAsMemory, graphCopyFormat]);
+  }), [input, inputFormatOverride, undoStack, undoIndex, output, parsedOutput, outputExt, outputLanguage, activeOperation, error, convertToFormat, typeLanguage, rightView, diffLeftInput, diffRightInput, diffKind, listCompareOptions, csvColumn, queryText, diffSideBySide, diffIgnoreWhitespace, diffShowPaths, isOutputMaximized, utilTab, utilsByTool, copyAsMemory, graphCopyFormat]);
   const applyTabSnapshot = (snap: TabSnapshot) => {
     setInput(snap.input);
     setInputFormatOverride(snap.inputFormatOverride);
@@ -1450,6 +1456,36 @@ export function WorkspaceContent({
     }
   };
 
+  const closeAllTabs = useCallback(() => {
+    if (tabs.length <= 1) return;
+    trackEvent("tab_close_all");
+    tabSnapshotsRef.current.clear();
+    tabSnapshotsRef.current.set("t1", emptyTabSnapshot());
+    tabCounterRef.current = 1;
+    setTabs([{ id: "t1", label: "T1", num: 1 }]);
+    setActiveTabId("t1");
+    historyLock.current = true;
+    applyTabSnapshot(emptyTabSnapshot());
+    prevBeforeDiffRef.current = null;
+    setTimeout(() => { historyLock.current = false; }, 0);
+    toast({ message: "Closed all tabs" });
+  }, [tabs.length]);
+
+  const closeOtherTabs = useCallback(() => {
+    if (tabs.length <= 1) return;
+    trackEvent("tab_close_others");
+    const currentSnap = captureTabSnapshot();
+    tabSnapshotsRef.current.forEach((_, id) => {
+      if (id !== activeTabId) tabSnapshotsRef.current.delete(id);
+    });
+    const kept = tabs.find((t) => t.id === activeTabId);
+    if (kept) {
+      tabSnapshotsRef.current.set(activeTabId, currentSnap);
+      setTabs([kept]);
+    }
+    toast({ message: "Closed other tabs" });
+  }, [tabs, activeTabId, captureTabSnapshot]);
+
   /** Short context label letter: T (Transform), C (Compare), U (Utils). */
   const letterForTab = useCallback(
     (tabId: string): string => {
@@ -1537,6 +1573,62 @@ export function WorkspaceContent({
   useEffect(() => {
     if (initialState) {
       isViewingSharedRef.current = true;
+      const s = initialState as WorkspaceState & {
+        tabs?: Tab[];
+        activeTabId?: string;
+        showTabs?: boolean;
+        tabSnapshots?: Record<string, TabSnapshot>;
+      };
+      // Multi-tab share: restore full tab rail + snapshots
+      if (Array.isArray(s.tabs) && s.tabs.length > 0 && s.tabSnapshots && typeof s.tabSnapshots === "object") {
+        const migrated: Tab[] = s.tabs.map((t: Tab, i: number) => ({
+          ...t,
+          num: (t as Partial<Tab>).num ?? (Number(String((t as Partial<Tab>).label ?? "").replace(/\D/g, "")) || i + 1),
+          renamed: Boolean((t as Partial<Tab>).renamed),
+        }));
+        setTabs(migrated);
+        tabCounterRef.current = Math.max(0, ...migrated.map((t: Tab) => t.num));
+        const activeId = s.activeTabId && migrated.some((t: Tab) => t.id === s.activeTabId) ? s.activeTabId : migrated[0].id;
+        setActiveTabId(activeId);
+        if (typeof s.showTabs === "boolean") setShowTabs(s.showTabs);
+        const map = new Map<string, TabSnapshot>();
+        for (const [k, v] of Object.entries(s.tabSnapshots)) {
+          if (v && typeof v === "object") {
+            const snap = { ...(v as object) } as { output?: string };
+            if (isStaleDiffOutput(snap.output)) snap.output = "";
+            map.set(k, snap as TabSnapshot);
+          }
+        }
+        tabSnapshotsRef.current = map;
+        const activeSnap = map.get(activeId) as TabSnapshot | undefined;
+        if (activeSnap) {
+          historyLock.current = true;
+          applyTabSnapshot(activeSnap);
+          // Per-tab extras that live outside the snapshot in share payload
+          if (activeSnap.listCompareOptions) setListCompareOptions((prev) => ({ ...prev, ...activeSnap.listCompareOptions }));
+          if (activeSnap.csvColumn) setCsvColumn(activeSnap.csvColumn);
+          if (activeSnap.queryText) setQueryText(activeSnap.queryText);
+          if (activeSnap.utilTab) setUtilTab(activeSnap.utilTab as UtilTab);
+          setTimeout(() => { historyLock.current = false; }, 0);
+        }
+        // Also restore top-level single-tab fields that may still be present (e.g. diffKind)
+        if (s.diffKind) setDiffKind(s.diffKind as "document" | "list" | "single");
+        if (s.listCompareOptions) setListCompareOptions((prev) => ({ ...prev, ...s.listCompareOptions }));
+        if (s.csvColumn) setCsvColumn(s.csvColumn);
+        if (s.queryText) setQueryText(s.queryText);
+        if (s.utilTab) setUtilTab(s.utilTab as UtilTab);
+        if (typeof s.split === "number") setSplit(Math.max(20, Math.min(80, s.split)));
+        const urlId = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("id") : null;
+        if (urlId) {
+          setSharedLinkId(urlId);
+          setSharedLinkUrl(`${window.location.origin}/playground?id=${urlId}`);
+        } else if (initialSharedLinkId) {
+          setSharedLinkId(initialSharedLinkId);
+          if (initialSharedLinkUrl) setSharedLinkUrl(initialSharedLinkUrl);
+        }
+        sessionRestoredRef.current = true;
+        return;
+      }
       if (initialState.input) {
         setInput(initialState.input);
         setUndoStack([initialState.input]);
@@ -1577,6 +1669,22 @@ export function WorkspaceContent({
       if (initialState.viewMode) setRightView(initialState.viewMode);
       setActiveOperation((initialState.activeOperation as OperationAction) ?? "format");
       if (typeof initialState.split === "number") setSplit(Math.max(20, Math.min(80, initialState.split)));
+      if (initialState.diffKind) setDiffKind(initialState.diffKind as "document" | "list" | "single");
+      if (initialState.diffLeftInput) setDiffLeftInput(initialState.diffLeftInput);
+      if (initialState.diffRightInput) setDiffRightInput(initialState.diffRightInput);
+      if (initialState.listCompareOptions) setListCompareOptions((prev) => ({ ...prev, ...initialState.listCompareOptions }));
+      if (initialState.csvColumn) setCsvColumn(initialState.csvColumn);
+      if (initialState.queryText) setQueryText(initialState.queryText);
+      if (initialState.utilTab) setUtilTab(initialState.utilTab as UtilTab);
+      if (initialState.activeOperation === "diff" || initialState.activeOperation === "utils") setIsOutputMaximized(true);
+      const urlId2 = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("id") : null;
+      if (urlId2) {
+        setSharedLinkId(urlId2);
+        setSharedLinkUrl(`${window.location.origin}/playground?id=${urlId2}`);
+      } else if (initialSharedLinkId) {
+        setSharedLinkId(initialSharedLinkId);
+        if (initialSharedLinkUrl) setSharedLinkUrl(initialSharedLinkUrl);
+      }
       sessionRestoredRef.current = true;
       return;
     }
@@ -1635,6 +1743,46 @@ export function WorkspaceContent({
     const state = hash ? decodeState(hash) : null;
     if (state) {
       if (shared) isViewingSharedRef.current = true;
+      const hs = state as WorkspaceState & { tabs?: Tab[]; activeTabId?: string; showTabs?: boolean; tabSnapshots?: Record<string, TabSnapshot> };
+      if (Array.isArray(hs.tabs) && hs.tabs.length > 0 && hs.tabSnapshots && typeof hs.tabSnapshots === "object") {
+        const migrated: Tab[] = hs.tabs.map((t: Tab, i: number) => ({
+          ...t,
+          num: (t as Partial<Tab>).num ?? (Number(String((t as Partial<Tab>).label ?? "").replace(/\D/g, "")) || i + 1),
+          renamed: Boolean((t as Partial<Tab>).renamed),
+        }));
+        setTabs(migrated);
+        tabCounterRef.current = Math.max(0, ...migrated.map((t: Tab) => t.num));
+        const activeId = hs.activeTabId && migrated.some((t: Tab) => t.id === hs.activeTabId) ? hs.activeTabId : migrated[0].id;
+        setActiveTabId(activeId);
+        if (typeof hs.showTabs === "boolean") setShowTabs(hs.showTabs);
+        const map = new Map<string, TabSnapshot>();
+        for (const [k, v] of Object.entries(hs.tabSnapshots)) {
+          if (v && typeof v === "object") {
+            const snap = { ...(v as object) } as { output?: string };
+            if (isStaleDiffOutput(snap.output)) snap.output = "";
+            map.set(k, snap as TabSnapshot);
+          }
+        }
+        tabSnapshotsRef.current = map;
+        const activeSnap = map.get(activeId) as TabSnapshot | undefined;
+        if (activeSnap) {
+          historyLock.current = true;
+          applyTabSnapshot(activeSnap);
+          if (activeSnap.listCompareOptions) setListCompareOptions((prev) => ({ ...prev, ...activeSnap.listCompareOptions }));
+          if (activeSnap.csvColumn) setCsvColumn(activeSnap.csvColumn);
+          if (activeSnap.queryText) setQueryText(activeSnap.queryText);
+          if (activeSnap.utilTab) setUtilTab(activeSnap.utilTab as UtilTab);
+          setTimeout(() => { historyLock.current = false; }, 0);
+        }
+        if (hs.diffKind) setDiffKind(hs.diffKind as "document" | "list" | "single");
+        if (hs.listCompareOptions) setListCompareOptions((prev) => ({ ...prev, ...hs.listCompareOptions }));
+        if (hs.csvColumn) setCsvColumn(hs.csvColumn);
+        if (hs.queryText) setQueryText(hs.queryText);
+        if (hs.utilTab) setUtilTab(hs.utilTab as UtilTab);
+        if (typeof hs.split === "number") setSplit(Math.max(20, Math.min(80, hs.split)));
+        sessionRestoredRef.current = true;
+        return;
+      }
       if (state.input) {
         setInput(state.input);
         setUndoStack([state.input]);
@@ -1676,7 +1824,16 @@ export function WorkspaceContent({
       if (state.typeLanguage) setTypeLanguage(state.typeLanguage);
       if (state.viewMode) setRightView(state.viewMode);
       if (typeof state.split === "number") setSplit(Math.max(20, Math.min(80, state.split)));
-      if (state.input) sessionRestoredRef.current = true;
+      if (state.diffKind) setDiffKind(state.diffKind as "document" | "list" | "single");
+      if (state.diffLeftInput) setDiffLeftInput(state.diffLeftInput);
+      if (state.diffRightInput) setDiffRightInput(state.diffRightInput);
+      if (state.listCompareOptions) setListCompareOptions((prev) => ({ ...prev, ...state.listCompareOptions }));
+      if (state.csvColumn) setCsvColumn(state.csvColumn);
+      if (state.queryText) setQueryText(state.queryText);
+      if (state.utilTab) setUtilTab(state.utilTab as UtilTab);
+      if (state.activeOperation === "diff" || state.activeOperation === "utils") setIsOutputMaximized(true);
+      else setActiveOperation((state.activeOperation as OperationAction) ?? null);
+      if (state.input || state.diffLeftInput || state.diffRightInput) sessionRestoredRef.current = true;
       return;
     }
     const raw = localStorage.getItem("formaty-session");
@@ -1751,19 +1908,22 @@ export function WorkspaceContent({
             data.activeTabId && data.tabs.some((t: Tab) => t.id === data.activeTabId)
               ? data.activeTabId
               : data.tabs[0].id;
-          const activeSnap = map.get(activeId) as TabSnapshot | undefined;
-          if (activeSnap) {
-            if (activeSnap.utilTab) setUtilTab(activeSnap.utilTab);
-            if (activeSnap.utilsByTool) setUtilsByTool(activeSnap.utilsByTool);
-            if (activeSnap.diffKind) setDiffKind(activeSnap.diffKind);
-            if (typeof activeSnap.diffLeftInput === "string") setDiffLeftInput(activeSnap.diffLeftInput);
-            if (typeof activeSnap.diffRightInput === "string") setDiffRightInput(activeSnap.diffRightInput);
-            if (typeof activeSnap.diffSideBySide === "boolean") setDiffSideBySide(activeSnap.diffSideBySide);
-            if (typeof activeSnap.diffIgnoreWhitespace === "boolean") setDiffIgnoreWhitespace(activeSnap.diffIgnoreWhitespace);
-            if (typeof activeSnap.diffShowPaths === "boolean") setDiffShowPaths(activeSnap.diffShowPaths);
-            if (activeSnap.copyAsMemory && typeof activeSnap.copyAsMemory === "object") setCopyAsMemory(activeSnap.copyAsMemory);
-            if (activeSnap.graphCopyFormat) setGraphCopyFormat(activeSnap.graphCopyFormat);
-          }
+           const activeSnap = map.get(activeId) as TabSnapshot | undefined;
+           if (activeSnap) {
+             if (activeSnap.utilTab) setUtilTab(activeSnap.utilTab);
+             if (activeSnap.utilsByTool) setUtilsByTool(activeSnap.utilsByTool);
+             if (activeSnap.diffKind) setDiffKind(activeSnap.diffKind);
+             if (activeSnap.listCompareOptions) setListCompareOptions((prev) => ({ ...prev, ...activeSnap.listCompareOptions }));
+             if (activeSnap.csvColumn) setCsvColumn(activeSnap.csvColumn);
+             if (activeSnap.queryText) setQueryText(activeSnap.queryText);
+             if (typeof activeSnap.diffLeftInput === "string") setDiffLeftInput(activeSnap.diffLeftInput);
+             if (typeof activeSnap.diffRightInput === "string") setDiffRightInput(activeSnap.diffRightInput);
+             if (typeof activeSnap.diffSideBySide === "boolean") setDiffSideBySide(activeSnap.diffSideBySide);
+             if (typeof activeSnap.diffIgnoreWhitespace === "boolean") setDiffIgnoreWhitespace(activeSnap.diffIgnoreWhitespace);
+             if (typeof activeSnap.diffShowPaths === "boolean") setDiffShowPaths(activeSnap.diffShowPaths);
+             if (activeSnap.copyAsMemory && typeof activeSnap.copyAsMemory === "object") setCopyAsMemory(activeSnap.copyAsMemory);
+             if (activeSnap.graphCopyFormat) setGraphCopyFormat(activeSnap.graphCopyFormat);
+           }
         }
       }
       sessionRestoredRef.current = true;
@@ -3763,6 +3923,8 @@ export function WorkspaceContent({
     { id: "tab-toggle", label: showTabs ? "Disable multi-tab mode" : "Enable multi-tab mode", category: "Workspace", keywords: ["tab", "tabs", "multi", "mode", "enable", "disable"], badge: showTabs ? "on" : undefined, action: () => setShowTabs((v) => !v) },
     { id: "tab-new",   label: "New tab",           category: "Workspace", keywords: ["tab", "new", "document", "add"], disabled: !showTabs, action: addTab },
     { id: "tab-close", label: "Close current tab", category: "Workspace", keywords: ["tab", "close", "remove"], disabled: !showTabs || tabs.length <= 1, action: () => closeTab(activeTabId) },
+    { id: "tab-close-others", label: "Close other tabs", category: "Workspace", keywords: ["tab", "close", "others", "keep", "current"], disabled: !showTabs || tabs.length <= 1, action: () => closeOtherTabs() },
+    { id: "tab-close-all", label: "Close all tabs", category: "Workspace", keywords: ["tab", "close", "all", "reset", "tabs"], disabled: !showTabs || tabs.length <= 1, action: () => closeAllTabs() },
     // Auto-format on paste
     { id: "auto-fmt-paste", label: autoFormatOnPaste ? "Auto-format on paste: On (turn off)" : "Auto-format on paste: Off (turn on)", category: "Settings", keywords: ["auto", "format", "paste", "beautify", "pretty"], badge: autoFormatOnPaste ? "on" : undefined, action: () => setAutoFormatOnPaste((v) => !v) },
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -4016,6 +4178,24 @@ export function WorkspaceContent({
               </button>
             ))}
           </div>
+        </div>
+        <div>
+          <p className="pb-1 text-[10px] font-medium text-[var(--workspace-text-muted)]">Input</p>
+          <div className="flex flex-wrap gap-1">
+            <button
+              type="button"
+              onClick={() => setListCompareOptions((prev) => ({ ...prev, autoClean: !(prev.autoClean ?? true) }))}
+              className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors ${
+                (listCompareOptions.autoClean ?? true)
+                  ? "bg-primary/15 text-primary"
+                  : "bg-muted text-[var(--workspace-text-muted)] hover:bg-primary/10 hover:text-[var(--workspace-text)]"
+              }`}
+            >
+              <span className={`h-1.5 w-1.5 rounded-full ${(listCompareOptions.autoClean ?? true) ? "bg-primary" : "bg-[var(--workspace-border)]"}`} />
+              Auto-clean on paste
+            </button>
+          </div>
+          <p className="mt-1 text-[10px] leading-snug text-[var(--workspace-text-muted)]">Strips quotes/brackets, splits commas → one per line. Undo to revert.</p>
         </div>
       </div>
       <p className="mt-3 rounded-md bg-primary/5 px-2 py-1.5 text-[10px] leading-snug text-[var(--workspace-text-muted)]">
@@ -4364,6 +4544,29 @@ export function WorkspaceContent({
               <PlusIcon className="h-3.5 w-3.5" />
             </button>
             </Tooltip>
+            {tabs.length > 1 && (
+              <>
+                <div className="mx-auto my-1 h-px w-4 bg-[var(--workspace-border)]" aria-hidden />
+                <Tooltip content="Close all tabs">
+                <button
+                  type="button"
+                  className="flex h-7 w-full items-center justify-center text-[var(--workspace-text-muted)] transition-all duration-100 hover:bg-red-500/10 hover:text-red-500"
+                  onClick={closeAllTabs}
+                >
+                  <TrashIcon className="h-3.5 w-3.5" />
+                </button>
+                </Tooltip>
+                <Tooltip content="Close other tabs">
+                <button
+                  type="button"
+                  className="flex h-6 w-full items-center justify-center text-[var(--workspace-text-muted)] transition-all duration-100 hover:bg-amber-500/10 hover:text-amber-600"
+                  onClick={closeOtherTabs}
+                >
+                  <XCircleIcon className="h-3.5 w-3.5" />
+                </button>
+                </Tooltip>
+              </>
+            )}
           </div>
         )}
         {renamingTabId && renameRect && (
