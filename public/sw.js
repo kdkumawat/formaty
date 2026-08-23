@@ -1,7 +1,7 @@
 /* Formaty offline service worker.
    Static export: cache-first for same-origin GET requests, so pages and
    assets already visited work fully offline. Bump CACHE to invalidate. */
-const CACHE = "formaty-v2.1.2";
+const CACHE = "formaty-v2.2";
 
 self.addEventListener("install", () => {
   self.skipWaiting();
