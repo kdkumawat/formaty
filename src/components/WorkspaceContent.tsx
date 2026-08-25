@@ -87,7 +87,7 @@ const JsonDiffEditor = dynamic(
 ) as ComponentType<JsonDiffEditorProps & RefAttributes<JsonDiffEditorRef>>;
 import { GraphView, type GraphViewRef } from "@/components/GraphView";
 import { getInstantActions } from "@/lib/instant/actionBus";
-import { InstantSettingsPanel } from "@/components/instant/InstantSettingsPanel";
+import { clearAllTabSettings } from "@/lib/instant/persist";
 import { TreeView, type TreeViewRef } from "@/components/TreeView";
 import { QueryView } from "@/components/QueryView";
 import { TableView } from "@/components/TableView";
@@ -1493,6 +1493,7 @@ export function WorkspaceContent({
     trackEvent("tab_close_all");
     tabSnapshotsRef.current.clear();
     tabSnapshotsRef.current.set("t1", emptyTabSnapshot());
+    clearAllTabSettings();
     tabCounterRef.current = 1;
     setTabs([{ id: "t1", label: "T1", num: 1 }]);
     setActiveTabId("t1");
@@ -4347,12 +4348,9 @@ export function WorkspaceContent({
     </>
   )}
   {settingsTab === "utils" && (
-    <>
-      <p className="mt-3 rounded-md bg-primary/5 px-2 py-1.5 text-[10px] leading-snug text-[var(--workspace-text-muted)]">
-        Each utility keeps its own options (count, length, character sets) right in the tool pane.
-      </p>
-      <InstantSettingsPanel />
-    </>
+    <p className="mt-3 rounded-md bg-primary/5 px-2 py-1.5 text-[10px] leading-snug text-[var(--workspace-text-muted)]">
+      Each utility keeps its own options (count, length, character sets) right in the tool pane.
+    </p>
   )}
 
   {settingsTab === "general" && (
@@ -5684,6 +5682,7 @@ export function WorkspaceContent({
                 }}
                 stateByTool={utilsByTool}
                 regenKey={utilsRegenKey}
+                tabId={activeTabId}
                 onStateByToolChange={(next) => {
                   setUtilsByTool(next);
                   if (!utilsHistoryLock.current) pushUtilsHistory(next);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   isValidIana,
   listIanaZones,
@@ -17,6 +17,7 @@ import type { Location } from "@/lib/instant/types";
 
 interface LocationPickerProps {
   open: boolean;
+  anchor: HTMLElement | null;
   onClose: () => void;
   onPick: (location: Location) => void;
   atInstant: number;
@@ -35,7 +36,46 @@ function groupByRegion(zones: string[]): Array<{ region: string; items: string[]
     .map(([region, items]) => ({ region, items: [...items].sort() }));
 }
 
-export function LocationPicker({ open, onClose, onPick, atInstant }: LocationPickerProps) {
+export function LocationPicker({ open, anchor, onClose, onPick, atInstant }: LocationPickerProps) {
+  // Anchor the popover to the trigger button. Recompute on scroll/resize so
+  // the popover stays glued to the button when the sticky header moves.
+  const popRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
+  useLayoutEffect(() => {
+    if (!open || !anchor) {
+      setPos(null);
+      return;
+    }
+    const update = () => {
+      const r = anchor.getBoundingClientRect();
+      // Align the popover's right edge with the button's right edge so it
+      // grows leftward and stays on-screen for buttons near the viewport edge.
+      setPos({ top: r.bottom + 6, right: Math.max(8, window.innerWidth - r.right) });
+    };
+    update();
+    window.addEventListener("scroll", update, true);
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("resize", update);
+    };
+  }, [open, anchor]);
+
+  // Click outside (button + popover are exempt) closes. mousedown so the
+  // popover's own clicks fire before close.
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node | null;
+      if (!t) return;
+      if (popRef.current?.contains(t)) return;
+      if (anchor?.contains(t)) return;
+      onClose();
+    };
+    window.addEventListener("mousedown", onDown);
+    return () => window.removeEventListener("mousedown", onDown);
+  }, [open, anchor, onClose]);
+
   const [q, setQ] = useState("");
   const [custom, setCustom] = useState(false);
   const [city, setCity] = useState("");
@@ -44,7 +84,10 @@ export function LocationPicker({ open, onClose, onPick, atInstant }: LocationPic
   const [iana, setIana] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [ianaFocus, setIanaFocus] = useState(false);
+  /** Arrow-key cursor. Resets when the query or tab changes. */
+  const [focusIdx, setFocusIdx] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
   const listId = useId();
   const allZones = useMemo(() => (open ? listIanaZones() : []), [open]);
   // When the user types: curated cities (top 8) + scored IANA list (up to 80).
@@ -76,6 +119,80 @@ export function LocationPicker({ open, onClose, onPick, atInstant }: LocationPic
     return null;
   }, [q, cityResults, ianaResults]);
 
+  // Flat ordered list of selectable results — drives arrow-key nav and
+  // highlights the focused row. Search mode and the empty-query browse mode
+  // share this so the user can always press Up/Down then Enter.
+  type Result =
+    | { key: string; kind: "country"; entry: CountryEntry }
+    | { key: string; kind: "city"; city: CatalogCity }
+    | { key: string; kind: "zone"; iana: string; label: string };
+  const browseZoneLabel = (z: string) =>
+    z.split("/").slice(1).join("/").replace(/_/g, " ") || z;
+  const results: Result[] = useMemo(() => {
+    if (custom) return [];
+    if (q.trim()) {
+      return [
+        ...countryResults.map(
+          (c): Result => ({ key: `country-${c.code}`, kind: "country", entry: c }),
+        ),
+        ...cityResults.map(
+          (c): Result => ({ key: `city-${c.iana}-${c.city}`, kind: "city", city: c }),
+        ),
+        ...ianaResults.map(
+          (z): Result => ({ key: `zone-${z.iana}`, kind: "zone", iana: z.iana, label: z.label }),
+        ),
+        ...(queryAsZone
+          ? ([
+              {
+                key: `query-${queryAsZone.iana}`,
+                kind: "zone" as const,
+                iana: queryAsZone.iana,
+                label: queryAsZone.label,
+              },
+            ] as Result[])
+          : []),
+      ];
+    }
+    // Empty query: popular cities first, then the full IANA list grouped
+    // by region (region grouping is purely visual — the flat list is the
+    // source of truth for keyboard nav).
+    return [
+      ...SUGGESTED_CITIES.map(
+        (c): Result => ({ key: `sug-${c.iana}-${c.city}`, kind: "city", city: c }),
+      ),
+      ...allZones.map(
+        (z): Result => ({ key: `allzone-${z}`, kind: "zone", iana: z, label: browseZoneLabel(z) }),
+      ),
+    ];
+  }, [custom, q, countryResults, cityResults, ianaResults, queryAsZone, allZones]);
+
+  const pickResult = (r: Result) => {
+    if (r.kind === "country") return pickCountry(r.entry);
+    if (r.kind === "city") return pickCity(r.city);
+    return pickIana(r.iana);
+  };
+
+  // Flat idx lookup for the per-section render below.
+  const idxByKey = useMemo(() => {
+    const m = new Map<string, number>();
+    results.forEach((r, i) => m.set(r.key, i));
+    return m;
+  }, [results]);
+
+  // Reset the keyboard cursor when the result set changes shape (query,
+  // tab switch, or first open) so the user always lands on the first hit.
+  useEffect(() => {
+    setFocusIdx(0);
+  }, [q, custom, open]);
+
+  // Keep the focused row in view as the user arrows down through long lists.
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    const el = list.querySelector<HTMLElement>(`[data-idx="${focusIdx}"]`);
+    el?.scrollIntoView({ block: "nearest" });
+  }, [focusIdx]);
+
   useEffect(() => {
     if (open) {
       setQ("");
@@ -90,7 +207,128 @@ export function LocationPicker({ open, onClose, onPick, atInstant }: LocationPic
     }
   }, [open]);
 
-  if (!open) return null;
+  // Render a single selectable row. Index + focus drive the keyboard
+  // cursor and the active highlight; the list parent supplies the section
+  // header so the visual structure is preserved.
+  const rowClass = (focused: boolean) =>
+    `flex w-full items-baseline justify-between gap-3 px-4 py-2 text-left transition-colors ${
+      focused
+        ? "bg-primary/15 text-[var(--workspace-text)]"
+        : "hover:bg-[var(--workspace-background)]"
+    }`;
+  const renderResultRow = (r: Result, idx: number) => {
+    const focused = idx === focusIdx;
+    const rowId = `${listId}-${idx}`;
+    if (r.kind === "country") {
+      const p = projectInstant(atInstant, r.entry.iana);
+      return (
+        <li
+          key={r.key}
+          id={rowId}
+          data-idx={idx}
+          role="option"
+          aria-selected={focused}
+        >
+          <button
+            type="button"
+            className={rowClass(focused)}
+            onMouseEnter={() => setFocusIdx(idx)}
+            onClick={() => pickResult(r)}
+          >
+            <span className="min-w-0">
+              <span className="block truncate text-sm text-[var(--workspace-text)]">
+                {r.entry.name}
+                <span className="ml-1.5 font-mono text-[10px] text-[var(--workspace-text-muted)]">
+                  {r.entry.code}
+                </span>
+              </span>
+              <span className="text-[11px] text-[var(--workspace-text-muted)]">
+                {r.entry.capital} · {r.entry.iana}
+              </span>
+            </span>
+            <span className="shrink-0 font-mono text-[11px] tabular-nums text-[var(--workspace-text-muted)]">
+              UTC{p.offsetLabel}
+            </span>
+          </button>
+        </li>
+      );
+    }
+    if (r.kind === "city") {
+      const p = projectInstant(atInstant, r.city.iana);
+      return (
+        <li
+          key={r.key}
+          id={rowId}
+          data-idx={idx}
+          role="option"
+          aria-selected={focused}
+        >
+          <button
+            type="button"
+            className={rowClass(focused)}
+            onMouseEnter={() => setFocusIdx(idx)}
+            onClick={() => pickResult(r)}
+          >
+            <span className="min-w-0">
+              <span className="block truncate text-sm text-[var(--workspace-text)]">
+                {r.city.city}
+                {r.city.countryCode ? (
+                  <span className="ml-1.5 font-mono text-[10px] text-[var(--workspace-text-muted)]">
+                    {r.city.countryCode}
+                  </span>
+                ) : null}
+              </span>
+              <span className="text-[11px] text-[var(--workspace-text-muted)]">
+                {r.city.country}
+                {r.city.country ? " · " : ""}
+                {r.city.iana}
+              </span>
+            </span>
+            <span className="shrink-0 font-mono text-[11px] tabular-nums text-[var(--workspace-text-muted)]">
+              UTC{p.offsetLabel}
+            </span>
+          </button>
+        </li>
+      );
+    }
+    // zone
+    const p = projectInstant(atInstant, r.iana);
+    const isQueryZone = r.key.startsWith("query-");
+    return (
+      <li
+        key={r.key}
+        id={rowId}
+        data-idx={idx}
+        role="option"
+        aria-selected={focused}
+      >
+        <button
+          type="button"
+          className={rowClass(focused)}
+          onMouseEnter={() => setFocusIdx(idx)}
+          onClick={() => pickResult(r)}
+        >
+          <span className="min-w-0">
+            <span className="block truncate text-sm text-[var(--workspace-text)]">
+              {r.label}
+            </span>
+            <span className="font-mono text-[11px] text-[var(--workspace-text-muted)]">
+              {r.iana}
+            </span>
+          </span>
+          {isQueryZone ? (
+            <span className="shrink-0 text-[10px] uppercase tracking-wider text-primary">Use</span>
+          ) : (
+            <span className="shrink-0 font-mono text-[11px] tabular-nums text-[var(--workspace-text-muted)]">
+              UTC{p.offsetLabel}
+            </span>
+          )}
+        </button>
+      </li>
+    );
+  };
+
+  if (!open || !pos) return null;
 
   const submitCustom = () => {
     const zone = iana.trim();
@@ -147,29 +385,46 @@ export function LocationPicker({ open, onClose, onPick, atInstant }: LocationPic
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 px-4 pt-[12vh]" onClick={onClose}>
+    <div
+      ref={popRef}
+      role="dialog"
+      aria-label="Add location"
+      style={{ position: "fixed", top: pos.top, right: pos.right, zIndex: 60 }}
+      className="w-96 max-w-[calc(100vw-1rem)] overflow-hidden rounded-2xl border border-[var(--workspace-border)] bg-[var(--workspace-panel)] shadow-2xl"
+    >
+      {/* Segmented tab switch matching the workspace settings panel
+          (General | Compare | Utils). Same container + active fill so the
+          user gets a single pattern across the app. */}
       <div
-        className="w-full max-w-md overflow-hidden rounded-2xl border border-[var(--workspace-border)] bg-[var(--workspace-panel)] shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-label="Add location"
+        className="flex items-center gap-px border-b border-[var(--workspace-border)] bg-muted/50 p-1"
+        role="tablist"
+        aria-label="Location source"
       >
-        <div className="flex border-b border-[var(--workspace-border)]">
-          <button
-            type="button"
-            className={`flex-1 py-2.5 text-xs font-semibold ${!custom ? "text-primary" : "text-[var(--workspace-text-muted)]"}`}
-            onClick={() => setCustom(false)}
-          >
-            Search
-          </button>
-          <button
-            type="button"
-            className={`flex-1 py-2.5 text-xs font-semibold ${custom ? "text-primary" : "text-[var(--workspace-text-muted)]"}`}
-            onClick={() => setCustom(true)}
-          >
-            Custom
-          </button>
-        </div>
+        {(
+          [
+            ["search", "Search"],
+            ["custom", "Custom"],
+          ] as const
+        ).map(([key, label]) => {
+          const active = key === "custom" ? custom : !custom;
+          return (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              className={`h-7 flex-1 rounded-md text-[11px] font-semibold transition-colors ${
+                active
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)] hover:text-[var(--workspace-text)]"
+              }`}
+              onClick={() => setCustom(key === "custom")}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
 
         {!custom ? (
           <>
@@ -178,20 +433,38 @@ export function LocationPicker({ open, onClose, onPick, atInstant }: LocationPic
               value={q}
               onChange={(e) => setQ(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Escape") onClose();
+                if (e.key === "Escape") {
+                  onClose();
+                  return;
+                }
+                if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  setFocusIdx((i) => Math.min(i + 1, Math.max(0, results.length - 1)));
+                  return;
+                }
+                if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  setFocusIdx((i) => Math.max(0, i - 1));
+                  return;
+                }
                 if (e.key === "Enter") {
-                  if (countryResults[0]) pickCountry(countryResults[0]);
-                  else if (cityResults[0]) pickCity(cityResults[0]);
-                  else if (ianaResults[0]) pickIana(ianaResults[0].iana);
-                  else if (queryAsZone) pickIana(queryAsZone.iana);
+                  e.preventDefault();
+                  const r = results[focusIdx];
+                  if (r) pickResult(r);
                 }
               }}
               placeholder="City, country, IN, or Asia/Kolkata"
               className="w-full border-b border-[var(--workspace-border)] bg-transparent px-4 py-2.5 text-xs text-[var(--workspace-text)] outline-none placeholder:text-[var(--workspace-text-muted)]"
               aria-autocomplete="list"
               aria-controls={listId}
+              aria-activedescendant={results[focusIdx] ? `${listId}-${focusIdx}` : undefined}
             />
-            <ul id={listId} role="listbox" className="max-h-96 overflow-y-auto py-1">
+            <ul
+              id={listId}
+              ref={listRef}
+              role="listbox"
+              className="max-h-96 overflow-y-auto py-1"
+            >
               {q.trim() ? (
                 <>
                   {countryResults.length > 0 && (
@@ -199,119 +472,61 @@ export function LocationPicker({ open, onClose, onPick, atInstant }: LocationPic
                       Countries
                     </li>
                   )}
-                  {countryResults.map((c, i) => {
-                    const p = projectInstant(atInstant, c.iana);
-                    return (
-                      <li key={`country-${c.code}`} role="option" aria-selected={i === 0}>
-                        <button
-                          type="button"
-                          className="flex w-full items-baseline justify-between gap-3 px-4 py-2 text-left hover:bg-[var(--workspace-background)]"
-                          onClick={() => pickCountry(c)}
-                        >
-                          <span className="min-w-0">
-                            <span className="block truncate text-sm text-[var(--workspace-text)]">
-                              {c.name}
-                              <span className="ml-1.5 font-mono text-[10px] text-[var(--workspace-text-muted)]">
-                                {c.code}
-                              </span>
-                            </span>
-                            <span className="text-[11px] text-[var(--workspace-text-muted)]">
-                              {c.capital} · {c.iana}
-                            </span>
-                          </span>
-                          <span className="shrink-0 font-mono text-[11px] tabular-nums text-[var(--workspace-text-muted)]">
-                            UTC{p.offsetLabel}
-                          </span>
-                        </button>
-                      </li>
-                    );
+                  {countryResults.map((c) => {
+                    const key = `country-${c.code}`;
+                    const idx = idxByKey.get(key);
+                    if (idx == null) return null;
+                    const r: Result = { key, kind: "country", entry: c };
+                    return renderResultRow(r, idx);
                   })}
                   {cityResults.length > 0 && (
                     <li className="px-4 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]">
                       Cities
                     </li>
                   )}
-              {cityResults.map((c, i) => {
-                const p = projectInstant(atInstant, c.iana);
-                return (
-                  <li key={`city-${c.iana}-${c.city}`} role="option" aria-selected={i === 0}>
-                    <button
-                      type="button"
-                      className="flex w-full items-baseline justify-between gap-3 px-4 py-2 text-left hover:bg-[var(--workspace-background)]"
-                      onClick={() => pickCity(c)}
-                    >
-                      <span className="min-w-0">
-                        <span className="block truncate text-sm text-[var(--workspace-text)]">
-                          {c.city}
-                          {c.countryCode ? (
-                            <span className="ml-1.5 font-mono text-[10px] text-[var(--workspace-text-muted)]">
-                              {c.countryCode}
-                            </span>
-                          ) : null}
-                        </span>
-                        <span className="text-[11px] text-[var(--workspace-text-muted)]">
-                          {c.country}
-                          {c.country ? " · " : ""}
-                          {c.iana}
-                        </span>
-                      </span>
-                      <span className="shrink-0 font-mono text-[11px] tabular-nums text-[var(--workspace-text-muted)]">
-                        UTC{p.offsetLabel}
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-              {ianaResults.length > 0 && (
-                <li className="mt-1 px-4 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]">
-                  Timezones
-                </li>
-              )}
-              {ianaResults.map((z) => {
-                const p = projectInstant(atInstant, z.iana);
-                return (
-                  <li key={`zone-${z.iana}`} role="option">
-                    <button
-                      type="button"
-                      className="flex w-full items-baseline justify-between gap-3 px-4 py-2 text-left hover:bg-[var(--workspace-background)]"
-                      onClick={() => pickIana(z.iana)}
-                    >
-                      <span className="min-w-0">
-                        <span className="block truncate text-sm text-[var(--workspace-text)]">{z.label}</span>
-                        <span className="font-mono text-[11px] text-[var(--workspace-text-muted)]">{z.iana}</span>
-                      </span>
-                      <span className="shrink-0 font-mono text-[11px] tabular-nums text-[var(--workspace-text-muted)]">
-                        UTC{p.offsetLabel}
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-              {queryAsZone ? (
-                <li className="mt-1 border-t border-[var(--workspace-border)] px-4 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]">
-                  Add as raw IANA
-                </li>
-              ) : null}
-              {queryAsZone ? (
-                <li role="option">
-                  <button
-                    type="button"
-                    className="flex w-full items-baseline justify-between gap-3 px-4 py-2 text-left hover:bg-[var(--workspace-background)]"
-                    onClick={() => pickIana(queryAsZone.iana)}
-                  >
-                    <span className="min-w-0">
-                      <span className="block truncate text-sm text-[var(--workspace-text)]">{queryAsZone.label}</span>
-                      <span className="font-mono text-[11px] text-[var(--workspace-text-muted)]">{queryAsZone.iana}</span>
-                    </span>
-                    <span className="shrink-0 text-[10px] uppercase tracking-wider text-primary">Use</span>
-                  </button>
-                </li>
-              ) : null}
-              {countryResults.length === 0 && cityResults.length === 0 && ianaResults.length === 0 && !queryAsZone ? (
-                <li className="px-4 py-6 text-sm text-[var(--workspace-text-muted)]">
-                  No matches. Try a city, country, code, or IANA zone.
-                </li>
-              ) : null}
+                  {cityResults.map((c) => {
+                    const key = `city-${c.iana}-${c.city}`;
+                    const idx = idxByKey.get(key);
+                    if (idx == null) return null;
+                    const r: Result = { key, kind: "city", city: c };
+                    return renderResultRow(r, idx);
+                  })}
+                  {ianaResults.length > 0 && (
+                    <li className="mt-1 px-4 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]">
+                      Timezones
+                    </li>
+                  )}
+                  {ianaResults.map((z) => {
+                    const key = `zone-${z.iana}`;
+                    const idx = idxByKey.get(key);
+                    if (idx == null) return null;
+                    const r: Result = { key, kind: "zone", iana: z.iana, label: z.label };
+                    return renderResultRow(r, idx);
+                  })}
+                  {queryAsZone ? (
+                    <li className="mt-1 border-t border-[var(--workspace-border)] px-4 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]">
+                      Add as raw IANA
+                    </li>
+                  ) : null}
+                  {queryAsZone
+                    ? (() => {
+                        const key = `query-${queryAsZone.iana}`;
+                        const idx = idxByKey.get(key);
+                        if (idx == null) return null;
+                        const r: Result = {
+                          key,
+                          kind: "zone",
+                          iana: queryAsZone.iana,
+                          label: queryAsZone.label,
+                        };
+                        return renderResultRow(r, idx);
+                      })()
+                    : null}
+                  {countryResults.length === 0 && cityResults.length === 0 && ianaResults.length === 0 && !queryAsZone ? (
+                    <li className="px-4 py-6 text-sm text-[var(--workspace-text-muted)]">
+                      No matches. Try a city, country, code, or IANA zone.
+                    </li>
+                  ) : null}
                 </>
               ) : (
                 <>
@@ -319,33 +534,11 @@ export function LocationPicker({ open, onClose, onPick, atInstant }: LocationPic
                     Popular
                   </li>
                   {SUGGESTED_CITIES.map((c) => {
-                    const p = projectInstant(atInstant, c.iana);
-                    return (
-                      <li key={`sug-${c.iana}-${c.city}`} role="option">
-                        <button
-                          type="button"
-                          className="flex w-full items-baseline justify-between gap-3 px-4 py-2 text-left hover:bg-[var(--workspace-background)]"
-                          onClick={() => pickCity(c)}
-                        >
-                          <span className="min-w-0">
-                            <span className="block truncate text-sm text-[var(--workspace-text)]">
-                              {c.city}
-                              {c.countryCode ? (
-                                <span className="ml-1.5 font-mono text-[10px] text-[var(--workspace-text-muted)]">
-                                  {c.countryCode}
-                                </span>
-                              ) : null}
-                            </span>
-                            <span className="text-[11px] text-[var(--workspace-text-muted)]">
-                              {c.country} · {c.iana}
-                            </span>
-                          </span>
-                          <span className="shrink-0 font-mono text-[11px] tabular-nums text-[var(--workspace-text-muted)]">
-                            UTC{p.offsetLabel}
-                          </span>
-                        </button>
-                      </li>
-                    );
+                    const key = `sug-${c.iana}-${c.city}`;
+                    const idx = idxByKey.get(key);
+                    if (idx == null) return null;
+                    const r: Result = { key, kind: "city", city: c };
+                    return renderResultRow(r, idx);
                   })}
                   {grouped.map(({ region, items }) => (
                     <li key={region}>
@@ -355,26 +548,16 @@ export function LocationPicker({ open, onClose, onPick, atInstant }: LocationPic
                       </div>
                       <ul>
                         {items.map((ianaZone) => {
-                          const p = projectInstant(atInstant, ianaZone);
-                          return (
-                            <li key={`zone-${ianaZone}`} role="option">
-                              <button
-                                type="button"
-                                className="flex w-full items-baseline justify-between gap-3 px-4 py-1.5 text-left hover:bg-[var(--workspace-background)]"
-                                onClick={() => pickIana(ianaZone)}
-                              >
-                                <span className="min-w-0">
-                                  <span className="block truncate text-sm text-[var(--workspace-text)]">
-                                    {ianaZone.split("/").slice(1).join("/").replace(/_/g, " ") || ianaZone}
-                                  </span>
-                                  <span className="font-mono text-[11px] text-[var(--workspace-text-muted)]">{ianaZone}</span>
-                                </span>
-                                <span className="shrink-0 font-mono text-[11px] tabular-nums text-[var(--workspace-text-muted)]">
-                                  UTC{p.offsetLabel}
-                                </span>
-                              </button>
-                            </li>
-                          );
+                          const key = `allzone-${ianaZone}`;
+                          const idx = idxByKey.get(key);
+                          if (idx == null) return null;
+                          const r: Result = {
+                            key,
+                            kind: "zone",
+                            iana: ianaZone,
+                            label: ianaZone.split("/").slice(1).join("/").replace(/_/g, " ") || ianaZone,
+                          };
+                          return renderResultRow(r, idx);
                         })}
                       </ul>
                     </li>
@@ -504,7 +687,6 @@ export function LocationPicker({ open, onClose, onPick, atInstant }: LocationPic
             </button>
           </form>
         )}
-      </div>
     </div>
   );
 }

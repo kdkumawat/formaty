@@ -7,8 +7,10 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   PlusIcon,
+  XMarkIcon,
 } from "@heroicons/react/24/outline";
 import { Toaster, toast } from "@/components/Toast";
+import { Tooltip } from "@/components/workspace/Tooltip";
 import { LocationPicker } from "@/components/instant/LocationPicker";
 import { TimelineBoard } from "@/components/instant/TimelineBoard";
 import {
@@ -30,7 +32,7 @@ import {
 } from "@/lib/instant/engine";
 import { locationFromCity, locationFromIana, uniqueIanas } from "@/lib/instant/locations";
 import { parseInstantInput } from "@/lib/instant/parse";
-import { loadOnboarded, loadPrefs, saveOnboarded, savePrefs } from "@/lib/instant/persist";
+import { loadOnboarded, loadPrefs, loadTabSettings, saveOnboarded, savePrefs, saveTabSettings } from "@/lib/instant/persist";
 import { getInstantSettings, setInstantSettings, subscribeInstantSettings, subscribeInstantShifts } from "@/lib/instant/settingsBus";
 import { registerInstantActions } from "@/lib/instant/actionBus";
 import { defaultWindow, maybePanWindow } from "@/lib/instant/timeline";
@@ -57,7 +59,18 @@ type DstNotice =
  *   timeline ·  horizontal hour-strip board
  *   footer  ·  raw Unix timestamp converter with per-row copy
  */
-export function InstantApp({ embedded = false }: { embedded?: boolean } = {}) {
+export function InstantApp({
+  embedded = false,
+  /** Workspace tab id. When set, Instant state is persisted per-tab so
+   *  switching tabs preserves locations, primary zone, the selected
+   *  moment, mode/range, and display preferences. Omit for the
+   *  standalone /utils/instant page (which uses the global Instant
+   *  prefs + URL query). */
+  settingsKey,
+}: {
+  embedded?: boolean;
+  settingsKey?: string;
+} = {}) {
   const searchParams = useSearchParams();
   // Keep the global copy/share/reset/download available on the Instant bar.
   // Download saves the human-readable conversion as a .txt file; copy covers
@@ -86,6 +99,10 @@ export function InstantApp({ embedded = false }: { embedded?: boolean } = {}) {
   const [showSeconds, setShowSeconds] = useState(false);
   const [timeFormat, setTimeFormat] = useState<TimeFormat>("12h");
   const [hoverInstant, setHoverInstant] = useState<number | null>(null);
+  /** Drag-and-drop reorder state for the location chips. Tracks the chip
+   *  being dragged and the chip currently under the cursor. */
+  const [dragSrcId, setDragSrcId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [nowInstant, setNowInstant] = useState(() => Date.now());
   const [pickerOpen, setPickerOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -95,6 +112,12 @@ export function InstantApp({ embedded = false }: { embedded?: boolean } = {}) {
   const searchRef = useRef<HTMLInputElement>(null);
   const datePickerRef = useRef<HTMLInputElement>(null);
   const hydrated = useRef(false);
+  // Anchor the Location popover to the + Location button so the popover
+  // tracks the button's position on scroll.
+  const [locationAnchor, setLocationAnchor] = useState<HTMLButtonElement | null>(null);
+  const locationButtonRef = useCallback((el: HTMLButtonElement | null) => {
+    setLocationAnchor(el);
+  }, []);
 
   const commitInstant = useCallback((ms: number, live = false) => {
     setSelectedInstant(ms);
@@ -113,21 +136,34 @@ export function InstantApp({ embedded = false }: { embedded?: boolean } = {}) {
     setTimeWindow((w) => maybePanWindow(b, maybePanWindow(a, w)));
   }, []);
 
+  // Reset the hydration guard when the per-tab key changes so a workspace
+  // tab switch re-loads the stored Instant state (the component may stay
+  // mounted if both tabs use the utils pane).
+  useEffect(() => {
+    hydrated.current = false;
+  }, [settingsKey]);
+
   useEffect(() => {
     if (hydrated.current) return;
     hydrated.current = true;
     const q = parseInstantQuery(new URLSearchParams(searchParams.toString()));
     const prefs = loadPrefs();
+    // Per-tab settings take precedence over global prefs/URL so each workspace
+    // tab keeps its own Instant state across remounts.
+    const tab = settingsKey ? loadTabSettings(settingsKey) : null;
     // In embedded mode, the workspace settings panel may have already seeded
     // a spanHours/timeFormat/showSeconds that beats both the URL and prefs.
     const bus = getInstantSettings();
     const localIana = detectLocalIana();
-    const fmt = q.fmt ?? prefs?.timeFormat ?? bus.timeFormat ?? detectTimeFormat();
-    const sec = q.sec ?? prefs?.showSeconds ?? bus.showSeconds ?? false;
-    const tz = q.tz ?? prefs?.primaryTimezone ?? localIana;
+    const fmt = tab?.timeFormat ?? q.fmt ?? prefs?.timeFormat ?? bus.timeFormat ?? detectTimeFormat();
+    const sec = tab?.showSeconds ?? q.sec ?? prefs?.showSeconds ?? bus.showSeconds ?? false;
+    const tz = tab?.primaryTimezone ?? q.tz ?? prefs?.primaryTimezone ?? localIana;
+    const span = (tab?.spanHours ?? prefs?.spanHours ?? bus.spanHours ?? 24) as TimelineSpanHours;
 
     let locs: Location[];
-    if (q.locations.length) {
+    if (tab?.locations?.length) {
+      locs = tab.locations.map((l) => ({ ...l, isPrimary: l.iana === tz }));
+    } else if (q.locations.length) {
       locs = q.locations.map((iana) => locationFromIana(iana, iana === tz));
       if (!locs.some((l) => l.iana === tz)) {
         locs = [locationFromIana(tz, true), ...locs.map((l) => ({ ...l, isPrimary: false }))];
@@ -147,23 +183,52 @@ export function InstantApp({ embedded = false }: { embedded?: boolean } = {}) {
     setShowSeconds(sec);
     const hasAt = q.at != null;
     const hasRange = q.start != null && q.end != null && q.start !== q.end;
-    const instant = hasRange ? Math.min(q.start!, q.end!) : hasAt ? q.at! : Date.now();
+    // Per-tab state restores the moment + mode even without a URL query.
+    const useTabMoment = tab && hasAt === false && hasRange === false;
+    const instant = hasRange
+      ? Math.min(q.start!, q.end!)
+      : hasAt
+        ? q.at!
+        : useTabMoment
+          ? tab!.selectedInstant
+          : Date.now();
     setSelectedInstant(instant);
-    setIsLive(!hasAt && !hasRange);
+    setIsLive(hasAt || hasRange ? false : useTabMoment ? tab!.isLive : true);
     if (hasRange) {
       setMode("range");
       setRange({ start: Math.min(q.start!, q.end!), end: Math.max(q.start!, q.end!) });
+    } else if (useTabMoment && tab!.mode === "range" && tab!.range) {
+      setMode("range");
+      setRange(tab!.range);
+    } else {
+      setMode("instant");
+      setRange(null);
     }
-    setTimeWindow(defaultWindow(instant, prefs?.spanHours ?? bus.spanHours ?? 24));
-    setSpanHours(prefs?.spanHours ?? bus.spanHours ?? 24);
-    setOnboard(!loadOnboarded());
+    setTimeWindow(defaultWindow(instant, span));
+    setSpanHours(span);
+    setOnboard(tab ? !tab.onboarded : !loadOnboarded());
     setReady(true);
-  }, [searchParams]);
+  }, [searchParams, settingsKey]);
 
   useEffect(() => {
     if (!ready) return;
-    savePrefs({ locations, primaryTimezone, timeFormat, showSeconds, spanHours });
-  }, [ready, locations, primaryTimezone, timeFormat, showSeconds, spanHours]);
+    if (settingsKey) {
+      saveTabSettings(settingsKey, {
+        locations,
+        primaryTimezone,
+        timeFormat,
+        showSeconds,
+        spanHours,
+        selectedInstant,
+        isLive,
+        mode,
+        range,
+        onboarded: !onboard,
+      });
+    } else {
+      savePrefs({ locations, primaryTimezone, timeFormat, showSeconds, spanHours });
+    }
+  }, [ready, settingsKey, locations, primaryTimezone, timeFormat, showSeconds, spanHours, selectedInstant, isLive, mode, range, onboard]);
 
   // Mirror the live settings into the settings bus so the workspace settings
   // panel reflects them when the user opens the gear. One-way write is
@@ -537,7 +602,7 @@ export function InstantApp({ embedded = false }: { embedded?: boolean } = {}) {
       <header className="sticky top-0 z-40 border-b border-[var(--workspace-border)]/80 bg-[var(--workspace-background)]/80 backdrop-blur-xl">
         <div className={`mx-auto flex h-12 items-center gap-2 px-3 ${embedded ? "" : "max-w-[1400px]"}`}>
           <form
-            className="min-w-0 flex-1"
+            className="w-96 shrink-0"
             onSubmit={(e) => {
               e.preventDefault();
               submitSearch();
@@ -578,6 +643,70 @@ export function InstantApp({ embedded = false }: { embedded?: boolean } = {}) {
               className="sr-only"
             />
           </form>
+          {/* Display cluster: days / 12h-24h / seconds. Three independent
+              toggles, visually grouped. Same wiring in embedded + standalone.
+              ml-auto pushes the right-side group flush to the bar's end while
+              the input stays anchored to the left. */}
+          <div className="ml-auto flex h-7 shrink-0 items-center gap-1">
+            <div className="flex h-7 items-stretch overflow-hidden rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-panel)]">
+              <button
+                type="button"
+                onClick={() => setSpanHours((h) => Math.max(24, h - 24) as TimelineSpanHours)}
+                className="px-1.5 text-[11px] font-medium text-[var(--workspace-text-muted)] hover:bg-primary/5 hover:text-[var(--workspace-text)]"
+                title="Fewer days"
+                aria-label="Fewer days"
+              >
+                −
+              </button>
+              <span className="inline-flex items-center px-1 text-[11px] font-mono tabular-nums text-[var(--workspace-text)]">
+                {spanHours / 24}d
+              </span>
+              <button
+                type="button"
+                onClick={() => setSpanHours((h) => Math.min(14 * 24, h + 24) as TimelineSpanHours)}
+                className="px-1.5 text-[11px] font-medium text-[var(--workspace-text-muted)] hover:bg-primary/5 hover:text-[var(--workspace-text)]"
+                title="More days"
+                aria-label="More days"
+              >
+                +
+              </button>
+            </div>
+            <div className="flex h-7 items-stretch overflow-hidden rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-panel)]">
+              {(["12h", "24h"] as TimeFormat[]).map((f) => (
+                <button
+                  key={f}
+                  type="button"
+                  onClick={() => setTimeFormat(f)}
+                  aria-pressed={timeFormat === f}
+                  className={`px-1.5 text-[11px] font-medium transition-colors ${
+                    timeFormat === f
+                      ? "bg-primary/15 text-primary"
+                      : "text-[var(--workspace-text-muted)] hover:bg-primary/5 hover:text-[var(--workspace-text)]"
+                  }`}
+                >
+                  {f}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowSeconds((s) => !s)}
+              aria-pressed={showSeconds}
+              className={`inline-flex h-7 items-center gap-1 rounded-md border px-1.5 text-[11px] font-medium transition-colors ${
+                showSeconds
+                  ? "border-primary/40 bg-primary/10 text-primary"
+                  : "border-[var(--workspace-border)] bg-[var(--workspace-panel)] text-[var(--workspace-text-muted)] hover:text-[var(--workspace-text)]"
+              }`}
+              title="Show seconds"
+            >
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${
+                  showSeconds ? "bg-primary" : "bg-[var(--workspace-text-muted)]/40"
+                }`}
+              />
+              Sec
+            </button>
+          </div>
           <button
             type="button"
             onClick={goNow}
@@ -640,16 +769,6 @@ export function InstantApp({ embedded = false }: { embedded?: boolean } = {}) {
               <ChevronRightIcon className="h-3 w-3" />
             </button>
           </div>
-          <button
-            type="button"
-            onClick={() => setPickerOpen(true)}
-            className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-2 text-[11px] font-medium text-[var(--workspace-text-muted)] transition-colors hover:border-primary/40 hover:text-[var(--workspace-text)]"
-            title="Add a location (A)"
-            aria-label="Add a location"
-          >
-            <PlusIcon className="h-3.5 w-3.5" />
-            <span>Location</span>
-          </button>
           {!embedded && (
             <OutputActionBar
               canCopy
@@ -787,53 +906,153 @@ export function InstantApp({ embedded = false }: { embedded?: boolean } = {}) {
           </div>
         </div>
 
-        {/* Location chips (click to set primary, × to remove) */}
-        {locations.length > 0 && (
-          <div className="mb-3 flex flex-wrap items-center gap-1.5">
+        {/* Location chips + add chip. Pill style — click body to set
+            primary. Drag the chip to reorder. The "+ Location" pill sits
+            last in the strip so adding a new location reads as the natural
+            next step, and the popover anchors to it without crowding the
+            top bar. */}
+        <div className="mb-3 flex flex-wrap items-center gap-1.5">
             {locations.map((loc) => {
               const proj = projections.find((p) => p.timeZone === loc.iana);
               if (!proj) return null;
               const isPrimary = loc.iana === primaryTimezone;
+              const diffMin = primaryProj.offsetMinutes - proj.offsetMinutes;
+              const diffHours = Math.round(diffMin / 60);
+              const diffLabel =
+                isPrimary
+                  ? "you"
+                  : diffHours === 0
+                    ? "same"
+                    : diffHours > 0
+                      ? `+${diffHours}h`
+                      : `${diffHours}h`;
+              const rowTime = formatLocalTime(proj, timeFormat, showSeconds);
+              const setPrimary = () => {
+                if (isPrimary) return;
+                setPrimaryTimezone(loc.iana);
+                setLocations((prev) => {
+                  const next = prev.map((l) => ({ ...l, isPrimary: l.iana === loc.iana }));
+                  return [
+                    ...next.filter((l) => l.isPrimary),
+                    ...next.filter((l) => !l.isPrimary),
+                  ];
+                });
+              };
+              const isDragging = dragSrcId === loc.id;
+              const isDragOver = dragOverId === loc.id && dragSrcId !== loc.id;
               return (
-                <button
+                <div
                   key={loc.id}
-                  type="button"
-                  onClick={() => {
-                    setPrimaryTimezone(loc.iana);
-                    setLocations((prev) => {
-                      const next = prev.map((l) => ({ ...l, isPrimary: l.iana === loc.iana }));
-                      return [...next.filter((l) => l.isPrimary), ...next.filter((l) => !l.isPrimary)];
-                    });
+                  draggable
+                  onDragStart={(e) => {
+                    setDragSrcId(loc.id);
+                    setDragOverId(loc.id);
+                    // Plain text payload so the browser shows a generic
+                    // drag image (we render our own visual feedback in
+                    // place, no need for a custom drag image).
+                    e.dataTransfer.effectAllowed = "move";
+                    e.dataTransfer.setData("text/plain", loc.id);
                   }}
-                  className={`group inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] transition-colors ${
-                    isPrimary
-                      ? "border-primary/40 bg-primary/10 text-primary"
-                      : "border-[var(--workspace-border)] bg-[var(--workspace-panel)] text-[var(--workspace-text-muted)] hover:border-primary/30 hover:text-[var(--workspace-text)]"
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = "move";
+                    if (dragOverId !== loc.id) setDragOverId(loc.id);
+                  }}
+                  onDragLeave={() => {
+                    if (dragOverId === loc.id) setDragOverId(null);
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const srcId = e.dataTransfer.getData("text/plain") || dragSrcId;
+                    if (!srcId || srcId === loc.id) {
+                      setDragSrcId(null);
+                      setDragOverId(null);
+                      return;
+                    }
+                    setLocations((prev) => {
+                      const fromIdx = prev.findIndex((l) => l.id === srcId);
+                      const toIdx = prev.findIndex((l) => l.id === loc.id);
+                      if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return prev;
+                      const next = [...prev];
+                      const [moved] = next.splice(fromIdx, 1);
+                      next.splice(toIdx, 0, moved);
+                      return next;
+                    });
+                    setDragSrcId(null);
+                    setDragOverId(null);
+                  }}
+                  onDragEnd={() => {
+                    setDragSrcId(null);
+                    setDragOverId(null);
+                  }}
+                  className={`group inline-flex cursor-grab items-center rounded-full border text-[11px] transition-all active:cursor-grabbing ${
+                    isDragging
+                      ? "border-primary/40 bg-primary/10 text-primary opacity-50"
+                      : isDragOver
+                        ? "border-primary bg-primary/10 text-[var(--workspace-text)]"
+                        : isPrimary
+                          ? "border-primary/40 bg-primary/10 text-primary"
+                          : "border-[var(--workspace-border)] bg-[var(--workspace-panel)] text-[var(--workspace-text-muted)] hover:border-primary/30"
                   }`}
-                  title={`Set ${loc.city} as primary`}
                 >
-                  <span className="font-medium">{loc.city}</span>
-                  <span className="font-mono tabular-nums">
-                    {formatLocalTime(proj, timeFormat, showSeconds)}
-                  </span>
-                  {!isPrimary && locations.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={setPrimary}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1"
+                    aria-label={isPrimary ? `Primary: ${loc.city}` : `Set ${loc.city} as primary`}
+                    aria-pressed={isPrimary}
+                  >
+                    <span className="font-medium">{loc.city}</span>
                     <span
-                      role="button"
-                      aria-label={`Remove ${loc.city}`}
-                      className="ml-0.5 rounded-full px-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)] hover:text-destructive"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setLocations((prev) => prev.filter((l) => l.id !== loc.id || l.isPrimary));
-                      }}
+                      className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-medium ${
+                        isPrimary
+                          ? "bg-primary/20 text-primary"
+                          : "bg-[var(--workspace-background)] text-[var(--workspace-text-muted)]"
+                      }`}
                     >
-                      ×
+                      {diffLabel}
                     </span>
+                    <span className="font-mono tabular-nums">{rowTime}</span>
+                  </button>
+                  {!isPrimary && locations.length > 1 && (
+                    <Tooltip content="Remove" side="bottom">
+                      <button
+                        type="button"
+                        aria-label={`Remove ${loc.city}`}
+                        // Stop the chip drag from starting when the user
+                        // clicks the remove button.
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setLocations((prev) => prev.filter((l) => l.id !== loc.id || l.isPrimary));
+                        }}
+                        className="mr-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)] hover:text-destructive"
+                      >
+                        <XMarkIcon className="h-3 w-3" />
+                      </button>
+                    </Tooltip>
                   )}
-                </button>
+                </div>
               );
             })}
-          </div>
-        )}
+          <Tooltip content={`Add a location (A)`} side="bottom">
+            <button
+              ref={locationButtonRef}
+              type="button"
+              onClick={() => setPickerOpen(true)}
+              aria-label="Add a location"
+              aria-expanded={pickerOpen}
+              className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-dashed px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                pickerOpen
+                  ? "border-primary/40 bg-primary/10 text-primary"
+                  : "border-[var(--workspace-border)] bg-transparent text-[var(--workspace-text-muted)] hover:border-primary/30 hover:text-[var(--workspace-text)]"
+              }`}
+            >
+              <PlusIcon className="h-3 w-3" />
+              <span>Location</span>
+            </button>
+          </Tooltip>
+        </div>
 
         {/* Stepper-style quick-nav lives in the workspace settings panel
             (Utils tab) for embedded, or in the inline Display row below for
@@ -845,64 +1064,8 @@ export function InstantApp({ embedded = false }: { embedded?: boolean } = {}) {
           </p>
         ) : null}
 
-        {/* Standalone: surface the same controls the workspace settings
-            panel exposes for Instant. Reads/writes go through the bus so
-            both surfaces stay in sync. Hidden inside the workspace, where
-            the gear → Utils tab covers the same ground. Step + Now live in
-            the header so the row only carries the non-action settings. */}
-        {!embedded && (
-          <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-3 py-2 text-xs">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]">
-              Display
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="text-[var(--workspace-text-muted)]">Days</span>
-              <button
-                type="button"
-                className="h-6 w-6 rounded border border-[var(--workspace-border)] text-[var(--workspace-text-muted)] hover:text-[var(--workspace-text)]"
-                aria-label="Fewer days"
-                onClick={() => setSpanHours((h) => Math.max(24, h - 24) as TimelineSpanHours)}
-              >
-                −
-              </button>
-              <span className="min-w-[1.5rem] text-center font-mono tabular-nums">{spanHours / 24}</span>
-              <button
-                type="button"
-                className="h-6 w-6 rounded border border-[var(--workspace-border)] text-[var(--workspace-text-muted)] hover:text-[var(--workspace-text)]"
-                aria-label="More days"
-                onClick={() => setSpanHours((h) => Math.min(14 * 24, h + 24) as TimelineSpanHours)}
-              >
-                +
-              </button>
-            </span>
-            <span className="inline-flex overflow-hidden rounded-md border border-[var(--workspace-border)]/60">
-              {(["12h", "24h"] as TimeFormat[]).map((f) => (
-                <button
-                  key={f}
-                  type="button"
-                  className={`h-6 px-2 text-[11px] font-medium ${
-                    timeFormat === f
-                      ? "bg-primary/15 text-primary"
-                      : "text-[var(--workspace-text-muted)] hover:bg-primary/5 hover:text-[var(--workspace-text)]"
-                  }`}
-                  onClick={() => setTimeFormat(f)}
-                >
-                  {f}
-                </button>
-              ))}
-            </span>
-            <label className="inline-flex h-6 cursor-pointer items-center gap-1.5 rounded-md border border-[var(--workspace-border)]/60 px-2 text-[11px] text-[var(--workspace-text-muted)] transition-colors hover:border-primary/30 hover:text-[var(--workspace-text)] has-[[data-state=checked]]:border-primary/40 has-[[data-state=checked]]:bg-primary/10 has-[[data-state=checked]]:text-primary">
-              <input
-                type="checkbox"
-                checked={showSeconds}
-                onChange={(e) => setShowSeconds(e.target.checked)}
-                className="h-3 w-3 cursor-pointer accent-primary"
-                aria-label="Show seconds"
-              />
-              Seconds
-            </label>
-          </div>
-        )}
+        {/* Display options (days / 12h-24h / seconds) live in the top
+            bar header in both modes, so this row is intentionally omitted. */}
 
         <TimelineBoard
           locations={locations}
@@ -920,31 +1083,11 @@ export function InstantApp({ embedded = false }: { embedded?: boolean } = {}) {
           onCommitInstant={(ms) => commitInstant(ms)}
           onCommitRange={commitRange}
           onHoverInstant={setHoverInstant}
-          onSetPrimary={(iana) => {
-            setPrimaryTimezone(iana);
-            setLocations((prev) => {
-              const next = prev.map((l) => ({ ...l, isPrimary: l.iana === iana }));
-              // Primary always lives at the top so the eye lands on it.
-              return [...next.filter((l) => l.isPrimary), ...next.filter((l) => !l.isPrimary)];
-            });
-          }}
-          onRemove={(id) => setLocations((prev) => prev.filter((l) => l.id !== id || l.isPrimary))}
-          onMove={(id, dir) =>
-            setLocations((prev) => {
-              const i = prev.findIndex((l) => l.id === id);
-              const j = i + dir;
-              if (i < 0 || j < 0 || j >= prev.length) return prev;
-              const next = [...prev];
-              const [row] = next.splice(i, 1);
-              next.splice(j, 0, row);
-              return next;
-            })
-          }
           onCopyRow={(text) => void copyText(text, "Copied")}
         />
       </main>
 
-      <LocationPicker open={pickerOpen} onClose={() => setPickerOpen(false)} onPick={addCity} atInstant={selectedInstant} />
+      <LocationPicker open={pickerOpen} anchor={locationAnchor} onClose={() => setPickerOpen(false)} onPick={addCity} atInstant={selectedInstant} />
     </div>
   );
 }

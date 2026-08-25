@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ClipboardDocumentIcon } from "@heroicons/react/24/outline";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { CheckIcon, ClipboardDocumentIcon } from "@heroicons/react/24/outline";
+import { Tooltip } from "@/components/workspace/Tooltip";
 import {
   formatLocalDate,
   formatLocalTime,
@@ -54,14 +55,13 @@ function hourLabel(hour: number, timeFormat: TimeFormat): string {
 }
 
 /**
- * Copy the row's current wall time. Clicking the row's hover-icon copies
- * "10:30" for a clock input or "2026-08-25 10:30" if the moment is not
- * today in the row's zone. ISO with offset goes in the full context.
+ * Copy the row's current wall time. Always emits the full date+time so the
+ * clipboard entry is unambiguous no matter which row or day the user is on.
  */
-function buildRowCopyText(proj: ZonedProjection, isToday: boolean, timeFormat: TimeFormat, showSeconds: boolean): string {
+function buildRowCopyText(proj: ZonedProjection, timeFormat: TimeFormat, showSeconds: boolean): string {
   const date = formatLocalDate(proj).replace(/,/g, "");
   const time = formatLocalTime(proj, timeFormat, showSeconds);
-  return isToday ? time : `${date} ${time}`;
+  return `${date} ${time}`;
 }
 
 /**
@@ -90,15 +90,12 @@ interface TimelineBoardProps {
   isLive: boolean;
   timeFormat: TimeFormat;
   showSeconds: boolean;
-  primaryTimezone: string;
+  primaryTimezone?: string;
   mode: InstantMode;
   range: { start: number; end: number } | null;
   onCommitInstant: (ms: number) => void;
   onCommitRange: (start: number, end: number) => void;
   onHoverInstant: (ms: number | null) => void;
-  onSetPrimary: (iana: string) => void;
-  onRemove: (id: string) => void;
-  onMove: (id: string, dir: -1 | 1) => void;
   onCopyRow: (text: string) => void;
 }
 
@@ -114,23 +111,29 @@ export function TimelineBoard({
   isLive,
   timeFormat,
   showSeconds,
-  primaryTimezone,
   mode,
   range,
   onCommitInstant,
   onCommitRange,
   onHoverInstant,
-  onSetPrimary,
-  onRemove,
-  onMove,
   onCopyRow,
 }: TimelineBoardProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const trackRef = useRef<HTMLDivElement>(null);
   const [minWidth, setMinWidth] = useState(640);
   const [dragging, setDragging] = useState<DragKind | null>(null);
+  /** Location id whose copy icon is currently in the "copied" animation
+   *  state. Cleared by a per-row timeout so successive copies on the same
+   *  row restart the animation. */
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const copyTimer = useRef<number | null>(null);
   const dragOrigin = useRef<{ ms: number; start: number; end: number } | null>(null);
   const reduced = useRef(false);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimer.current != null) window.clearTimeout(copyTimer.current);
+    };
+  }, []);
 
   useEffect(() => {
     reduced.current = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -163,27 +166,24 @@ export function TimelineBoard({
   const xAt = useCallback((ms: number) => instantToX(ms, timeWindow, trackW), [timeWindow, trackW]);
 
   const clientToInstant = useCallback(
-    (clientX: number) => {
-      const el = trackRef.current;
-      if (!el) return selectedInstant;
-      const rect = el.getBoundingClientRect();
+    (clientX: number, strip: HTMLElement) => {
+      // The strip is a per-row element. Use the strip that actually
+      // received the pointer event so the rect matches the visible track —
+      // sharing a ref across rows misaligned the click-to-instant mapping
+      // once the header was removed.
+      const rect = strip.getBoundingClientRect();
       const x = Math.min(Math.max(clientX - rect.left, 0), rect.width);
       return snapInstant(xToInstant(x, timeWindow, rect.width));
     },
-    [selectedInstant, timeWindow],
-  );
-
-  const primaryMarks = useMemo(
-    () => hourMarkers(timeWindow.start, timeWindow.end, primaryTimezone),
-    [timeWindow.start, timeWindow.end, primaryTimezone],
+    [timeWindow],
   );
 
   const rangeStart = range ? Math.min(range.start, range.end) : null;
   const rangeEnd = range ? Math.max(range.start, range.end) : null;
 
-  const startDrag = (kind: DragKind, clientX: number, pointerId: number, target: HTMLElement) => {
-    target.setPointerCapture(pointerId);
-    const ms = clientToInstant(clientX);
+  const startDrag = (kind: DragKind, clientX: number, pointerId: number, strip: HTMLElement) => {
+    strip.setPointerCapture(pointerId);
+    const ms = clientToInstant(clientX, strip);
     if (kind === "cursor") {
       if (mode === "range") {
         const end = ms + 2 * 3600 * 1000;
@@ -201,9 +201,9 @@ export function TimelineBoard({
     setDragging(kind);
   };
 
-  const resolveKind = (clientX: number): DragKind => {
+  const resolveKind = (clientX: number, strip: HTMLElement): DragKind => {
     if (mode !== "range" || !range) return "cursor";
-    const ms = clientToInstant(clientX);
+    const ms = clientToInstant(clientX, strip);
     const x = xAt(ms);
     const xs = xAt(range.start);
     const xe = xAt(range.end);
@@ -215,11 +215,11 @@ export function TimelineBoard({
 
   const onStripDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
-    startDrag(resolveKind(e.clientX), e.clientX, e.pointerId, e.currentTarget);
+    startDrag(resolveKind(e.clientX, e.currentTarget), e.clientX, e.pointerId, e.currentTarget);
   };
 
   const onStripMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    const ms = clientToInstant(e.clientX);
+    const ms = clientToInstant(e.clientX, e.currentTarget);
     if (!dragging) {
       if (window.matchMedia("(hover: hover)").matches) onHoverInstant(ms);
       return;
@@ -257,29 +257,6 @@ export function TimelineBoard({
     <div className="overflow-hidden rounded-2xl border border-[var(--workspace-border)] bg-[var(--workspace-panel)]">
       <div ref={scrollRef} className="overflow-x-auto overscroll-x-contain">
         <div style={{ width: LABEL_W + trackW, minWidth: "100%" }}>
-          <div className="flex border-b border-[var(--workspace-border)]">
-            <div
-              className="sticky left-0 z-20 flex shrink-0 items-end border-r border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--workspace-text-muted)]"
-              style={{ width: LABEL_W }}
-            >
-              Location
-            </div>
-            <div ref={trackRef} className="relative h-11 shrink-0" style={{ width: trackW }}>
-              {primaryMarks.map((m) => (
-                <div
-                  key={m.instant}
-                  className="absolute top-0 flex h-full flex-col justify-end"
-                  style={{ left: xAt(m.instant) }}
-                >
-                  <span className="mb-0.5 -translate-x-1/2 rounded-sm bg-[var(--workspace-panel)] px-1 py-px font-mono text-[10px] font-semibold tabular-nums leading-none text-[var(--workspace-text)]">
-                    {hourLabel(m.hour, timeFormat)}
-                  </span>
-                  <span className="h-1.5 w-px bg-[var(--workspace-border)]" />
-                </div>
-              ))}
-            </div>
-          </div>
-
           {locations.length === 0 && (
             <div className="px-4 py-8 text-center">
               <p className="font-display text-lg text-[var(--workspace-text)]">Compare time anywhere</p>
@@ -293,11 +270,6 @@ export function TimelineBoard({
             const proj = projections[i] ?? projectInstant(selectedInstant, loc.iana);
             const hoverProj = hoverInstant != null ? projectInstant(hoverInstant, loc.iana) : null;
             const shown = hoverProj ?? proj;
-            const rowNowProj = projectInstant(nowInstant, loc.iana);
-            const rowIsToday =
-              shown.year === rowNowProj.year &&
-              shown.month === rowNowProj.month &&
-              shown.day === rowNowProj.day;
             const midnights = localMidnights(timeWindow.start, timeWindow.end, loc.iana);
             const marks = hourMarkers(timeWindow.start, timeWindow.end, loc.iana);
             const gradient = stripGradient(timeWindow, loc.iana);
@@ -306,8 +278,15 @@ export function TimelineBoard({
             const diffMin = !loc.isPrimary ? proj.offsetMinutes - projections[0]!.offsetMinutes : 0;
             const diffLabel = formatOffsetDiff(diffMin);
             const handleCopy = () => {
-              onCopyRow(buildRowCopyText(shown, rowIsToday, timeFormat, showSeconds));
+              onCopyRow(buildRowCopyText(shown, timeFormat, showSeconds));
+              setCopiedId(loc.id);
+              if (copyTimer.current != null) window.clearTimeout(copyTimer.current);
+              copyTimer.current = window.setTimeout(() => {
+                setCopiedId(null);
+                copyTimer.current = null;
+              }, 1400);
             };
+            const justCopied = copiedId === loc.id;
             return (
               <div key={loc.id} className="group/row flex border-b border-[var(--workspace-border)] last:border-b-0">
                 <div
@@ -334,15 +313,35 @@ export function TimelineBoard({
                           {diffLabel}
                         </span>
                       )}
-                      <button
-                        type="button"
-                        onClick={handleCopy}
-                        className="ml-auto inline-flex h-5 w-5 items-center justify-center rounded text-[var(--workspace-text-muted)] opacity-0 transition-opacity hover:bg-[var(--workspace-background)] hover:text-[var(--workspace-text)] group-hover/row:opacity-100"
-                        title={`Copy ${loc.city} time`}
-                        aria-label={`Copy ${loc.city} time`}
+                      <Tooltip
+                        content={justCopied ? "Copied" : `Copy ${loc.city} time`}
+                        side="bottom"
                       >
-                        <ClipboardDocumentIcon className="h-3.5 w-3.5" />
-                      </button>
+                        <button
+                          type="button"
+                          onClick={handleCopy}
+                          aria-label={`Copy ${loc.city} time`}
+                          className="ml-auto inline-flex h-5 w-5 items-center justify-center rounded text-[var(--workspace-text-muted)] opacity-0 transition-opacity hover:bg-[var(--workspace-background)] hover:text-[var(--workspace-text)] group-hover/row:opacity-100"
+                        >
+                          {/* Icon swap driven by `justCopied`. The key change
+                              forces a remount so the scale-in animation
+                              plays on each fresh copy, not just the first. */}
+                          <ClipboardDocumentIcon
+                            className={`h-3.5 w-3.5 transition-all duration-200 ${
+                              justCopied
+                                ? "scale-0 opacity-0"
+                                : "scale-100 opacity-100"
+                            }`}
+                          />
+                          <CheckIcon
+                            className={`-ml-3.5 h-3.5 w-3.5 text-primary transition-all duration-200 ${
+                              justCopied
+                                ? "scale-100 opacity-100"
+                                : "scale-0 opacity-0"
+                            }`}
+                          />
+                        </button>
+                      </Tooltip>
                     </div>
                     <div className="mt-0.5 font-mono text-[15px] font-semibold tabular-nums tracking-tight text-[var(--workspace-text)]">
                       {formatLocalTime(shown, timeFormat, showSeconds)}
@@ -350,16 +349,6 @@ export function TimelineBoard({
                     <div className="truncate text-[11px] text-[var(--workspace-text-muted)]">
                       UTC{shown.offsetLabel} · {shown.abbreviation}
                     </div>
-                  </div>
-                  <div className="flex shrink-0 flex-col gap-0.5">
-                    <button type="button" className="rounded px-1 text-[10px] text-[var(--workspace-text-muted)] hover:text-[var(--workspace-text)]" onClick={() => onMove(loc.id, -1)} aria-label={`Move ${loc.city} up`}>↑</button>
-                    <button type="button" className="rounded px-1 text-[10px] text-[var(--workspace-text-muted)] hover:text-[var(--workspace-text)]" onClick={() => onMove(loc.id, 1)} aria-label={`Move ${loc.city} down`}>↓</button>
-                    {!loc.isPrimary && (
-                      <>
-                        <button type="button" className="rounded px-1 text-[9px] uppercase tracking-wide text-[var(--workspace-text-muted)] hover:text-primary" onClick={() => onSetPrimary(loc.iana)}>Primary</button>
-                        <button type="button" className="rounded px-1 text-[9px] text-[var(--workspace-text-muted)] hover:text-destructive" onClick={() => onRemove(loc.id)} aria-label={`Remove ${loc.city}`}>✕</button>
-                      </>
-                    )}
                   </div>
                 </div>
                 <div
