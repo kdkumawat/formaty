@@ -82,7 +82,7 @@ Use cases: debugging auth flows, inspecting access and refresh tokens, checking 
       "Verify claim names and expiry",
       "Understand IdP-issued tokens",
     ],
-    relatedTools: ["base64-encoder", "unix-timestamp-converter", "sha-hash-generator", "url-parser"],
+    relatedTools: ["base64-encoder", "instant", "sha-hash-generator", "url-parser"],
   },
   "sha-hash-generator": {
     route: "sha-hash-generator",
@@ -238,28 +238,6 @@ Use cases: escaping user-generated content, building email templates, debugging 
     ],
     relatedTools: ["json-string-escape", "base64-encoder", "url-encoder-decoder", "regex-tester"],
   },
-  "unix-timestamp-converter": {
-    route: "unix-timestamp-converter",
-    util: "time",
-    title: "Unix Timestamp Converter | Formaty",
-    description:
-      "Convert Unix timestamps to dates and back instantly. Free online timestamp converter for seconds and milliseconds. Runs locally.",
-    h1: "Unix Timestamp Converter",
-    content: `Unix timestamps power logs, APIs, and databases - but reading 1710000000 as a human date is painful. Convert it and reverse it in one place.
-
-Paste a Unix timestamp (seconds or milliseconds, auto-detected) to get the ISO date, or paste an ISO date to get both seconds and milliseconds. Includes live "now" values for quick reference.
-
-Use cases: reading API and log timestamps, debugging expiry values, scheduling tests, and comparing timezones. Runs entirely in your browser.`,
-    inputExample: "1710000000",
-    outputExample: "2024-03-09T16:00:00.000Z (UTC)",
-    useCases: [
-      "Read API and log timestamps",
-      "Debug token expiry values",
-      "Convert dates for scripting",
-      "Normalize timezone data",
-    ],
-    relatedTools: ["jwt-decoder", "cron-expression-explainer", "text-stats", "url-parser"],
-  },
   "hex-converter": {
     route: "hex-converter",
     util: "hex",
@@ -324,7 +302,7 @@ Use cases: debugging redirects, inspecting API call URLs, parsing OAuth callback
       "Parse OAuth callback URLs",
       "Document link structures",
     ],
-    relatedTools: ["url-encoder-decoder", "jwt-decoder", "unix-timestamp-converter", "regex-tester"],
+    relatedTools: ["url-encoder-decoder", "jwt-decoder", "instant", "regex-tester"],
   },
   "color-converter": {
     route: "color-converter",
@@ -368,7 +346,7 @@ Use cases: reviewing CI and backup schedules, documenting cron jobs, teaching cr
       "Validate expressions pre-deploy",
       "Teach and learn cron syntax",
     ],
-    relatedTools: ["unix-timestamp-converter", "text-stats", "text-case-converter", "regex-tester"],
+    relatedTools: ["instant", "text-stats", "text-case-converter", "regex-tester"],
   },
   "lorem-ipsum-generator": {
     route: "lorem-ipsum-generator",
@@ -417,6 +395,13 @@ Use cases: checking API rate and size limits, estimating log volume, meeting con
 };
 
 export const UTIL_ROUTES: string[] = Object.keys(UTIL_PAGES);
+
+/**
+ * Routes that no longer have their own page. Each maps the old slug to the
+ * util route that now covers that workflow, so the old URL still resolves
+ * (with a canonical + redirect to the replacement) instead of 404ing.
+ */
+export const UTIL_REDIRECTS: Record<string, string> = {};
 
 export function isToolPageConfig(config: ToolPageConfig | UtilPageConfig | undefined): config is ToolPageConfig {
   return !!config && !("util" in config);

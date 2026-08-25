@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLongRightIcon,
   CheckIcon,
@@ -32,6 +32,7 @@ import {
   menuItemClass as sharedMenuItemClass,
   menuCheck as sharedMenuCheck,
 } from "@/components/workspace/menuStyles";
+import { InstantApp } from "@/components/instant/InstantApp";
 import { toast } from "@/components/Toast";
 import { TreeView } from "@/components/TreeView";
 import type { JsonValue } from "@/lib/json/core";
@@ -39,7 +40,6 @@ import {
   generateLorem,
   generatePassword,
   generateUuid,
-  nowIso,
   utilPlaceholder,
   uuidNil,
   type ColorParts,
@@ -328,11 +328,11 @@ export function UtilsPanel({
   const runGen = useRef(0);
   useEffect(() => {
     const s = mapRef.current[activeTab] ?? defaultUtilToolState(activeTab);
+    if (activeTab === "instant") return;
     if (GENERATOR_TABS.has(activeTab)) return; // handled by dedicated effects above
     // Codec right-side (encoded) editing is handled by a dedicated effect below.
     if (CODEC_TABS.has(activeTab) && s.editSide === "right") return;
     const gen = ++runGen.current;
-    const delay = activeTab === "time" ? 0 : 160;
     const id = window.setTimeout(() => {
       void (async () => {
         try {
@@ -364,7 +364,7 @@ export function UtilsPanel({
           });
         }
       })();
-    }, delay);
+    }, 160);
     return () => window.clearTimeout(id);
   }, [
     activeTab,
@@ -539,7 +539,19 @@ export function UtilsPanel({
       </nav>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-      {GENERATOR_TABS.has(activeTab) ? (
+      {activeTab === "instant" ? (
+        <div className="min-h-0 flex-1 overflow-auto">
+          <Suspense
+            fallback={
+              <div className="flex h-40 items-center justify-center text-sm text-[var(--workspace-text-muted)]">
+                Loading Instant…
+              </div>
+            }
+          >
+            <InstantApp embedded />
+          </Suspense>
+        </div>
+      ) : GENERATOR_TABS.has(activeTab) ? (
         <div className="flex h-full min-h-0 flex-col">
           <div className="flex h-9 shrink-0 items-center gap-1.5 border-b border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-2">
             <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-[var(--workspace-text-muted)]">
@@ -1247,17 +1259,6 @@ export function UtilsPanel({
                   ))}
                 </div>
               </Dropdown>
-            )}
-            {activeTab === "time" && (
-              <Tooltip content="Insert current time (ISO)">
-              <button
-                type="button"
-                className={toolBtn(false)}
-                onClick={() => patch({ input: nowIso(), error: null })}
-              >
-                Now
-              </button>
-              </Tooltip>
             )}
           </div>
           <div className="flex min-h-0 flex-1 flex-col bg-[var(--workspace-panel)]">

@@ -128,30 +128,9 @@ export async function sha1Hex(text: string): Promise<string> {
 
 /* ── Time ── */
 
+/** Current time as ISO-8601 string in UTC (e.g. "2024-03-09T16:00:00.000Z"). */
 export function nowIso(): string {
   return new Date().toISOString();
-}
-
-export function nowUnixSeconds(): number {
-  return Math.floor(Date.now() / 1000);
-}
-
-export function nowUnixMs(): number {
-  return Date.now();
-}
-
-export function unixToIso(unix: string | number): string {
-  const n = typeof unix === "string" ? Number(unix.trim()) : unix;
-  if (!Number.isFinite(n)) throw new Error("Invalid unix timestamp");
-  // seconds vs ms heuristic
-  const ms = n > 1e12 ? n : n * 1000;
-  return new Date(ms).toISOString();
-}
-
-export function isoToUnix(iso: string): { seconds: number; ms: number } {
-  const d = new Date(iso.trim());
-  if (Number.isNaN(d.getTime())) throw new Error("Invalid ISO date");
-  return { seconds: Math.floor(d.getTime() / 1000), ms: d.getTime() };
 }
 
 /* ── JWT ── */
@@ -647,7 +626,6 @@ export type UtilTab =
   | "base64"
   | "jwt"
   | "hash"
-  | "time"
   | "url"
   | "case"
   | "hex"
@@ -660,10 +638,12 @@ export type UtilTab =
   | "color"
   | "lorem"
   | "cron"
-  | "urlparse";
+  | "urlparse"
+  | "instant";
 
 export const UTIL_TABS: { id: UtilTab; label: string; short?: string }[] = [
   // Ordered by typical usage - most-used tools at the top.
+  { id: "instant", label: "Instant" },
   { id: "uuid", label: "UUID" },
   { id: "base64", label: "Base64" },
   { id: "jwt", label: "JWT" },
@@ -674,7 +654,6 @@ export const UTIL_TABS: { id: UtilTab; label: string; short?: string }[] = [
   { id: "case", label: "Case" },
   { id: "escape", label: "Escape" },
   { id: "html", label: "HTML" },
-  { id: "time", label: "Time" },
   { id: "hex", label: "Hex" },
   { id: "number", label: "Number" },
   { id: "urlparse", label: "URL Parse" },
@@ -689,7 +668,7 @@ export const UTIL_SAMPLES: Record<UtilTab, string> = {
   base64: "Hello, Formaty!",
   jwt: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkZvcm1hdHkiLCJpYXQiOjE1MTYyMzkwMjJ9.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
   hash: "formaty local-first toolkit",
-  time: "1710000000",
+  instant: "",
   url: "https://formaty.dev/playground?q=hello world&x=1",
   urlparse: "https://user:pass@formaty.dev:443/playground?tool=json&tab=2#section",
   case: "hello_world formatyAPI",
@@ -709,8 +688,8 @@ export function utilPlaceholder(tab: UtilTab): string {
   switch (tab) {
     case "jwt":
       return "Paste JWT (header.payload.signature)…";
-    case "time":
-      return "Unix seconds/ms or ISO date - empty for now";
+    case "instant":
+      return "";
     case "hash":
       return "Text to hash (SHA-256 / SHA-1)…";
     case "url":

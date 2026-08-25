@@ -52,12 +52,20 @@ export default function sitemap(): MetadataRoute.Sitemap {
     changeFrequency: "monthly" as const,
     priority: 0.85,
   }));
-  const utilPages: MetadataRoute.Sitemap = UTIL_ROUTES.map((route) => ({
-    url: `${SITE_URL}/utils/${route}`,
-    lastModified: new Date(),
-    changeFrequency: "monthly" as const,
-    priority: 0.8,
-  }));
+  const utilPages: MetadataRoute.Sitemap = [
+    {
+      url: `${SITE_URL}/utils/instant`,
+      lastModified: new Date(),
+      changeFrequency: "monthly" as const,
+      priority: 0.86,
+    },
+    ...UTIL_ROUTES.map((route) => ({
+      url: `${SITE_URL}/utils/${route}`,
+      lastModified: new Date(),
+      changeFrequency: "monthly" as const,
+      priority: 0.8,
+    })),
+  ];
   const guidePages: MetadataRoute.Sitemap = GUIDE_ROUTES.map((route) => ({
     url: `${SITE_URL}/guides/${route}`,
     lastModified: new Date(),

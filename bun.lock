@@ -35,6 +35,7 @@
         "react": "^19.2.8",
         "react-dom": "^19.2.8",
         "tailwind-merge": "^3.6.0",
+        "temporal-polyfill": "^1.0.4",
         "zustand": "^5.0.11",
       },
       "devDependencies": {
@@ -1210,6 +1211,12 @@
     "tapable": ["tapable@2.3.3", "", {}, "sha512-uxc/zpqFg6x7C8vOE7lh6Lbda8eEL9zmVm/PLeTPBRhh1xCgdWaQ+J1CUieGpIfm2HdtsUpRv+HshiasBMcc6A=="],
 
     "tape": ["tape@4.17.0", "", { "dependencies": { "@ljharb/resumer": "~0.0.1", "@ljharb/through": "~2.3.9", "call-bind": "~1.0.2", "deep-equal": "~1.1.1", "defined": "~1.0.1", "dotignore": "~0.1.2", "for-each": "~0.3.3", "glob": "~7.2.3", "has": "~1.0.3", "inherits": "~2.0.4", "is-regex": "~1.1.4", "minimist": "~1.2.8", "mock-property": "~1.0.0", "object-inspect": "~1.12.3", "resolve": "~1.22.6", "string.prototype.trim": "~1.2.8" }, "bin": { "tape": "bin/tape" } }, "sha512-KCuXjYxCZ3ru40dmND+oCLsXyuA8hoseu2SS404Px5ouyS0A99v8X/mdiLqsR5MTAyamMBN7PRwt2Dv3+xGIxw=="],
+
+    "temporal-polyfill": ["temporal-polyfill@1.0.4", "", { "dependencies": { "temporal-spec": "1.0.1", "temporal-utils": "1.0.2" } }, "sha512-MLEU0qOD2uXlz24oINNtdLZQl8RgmMxSnRtKEGZGGetTJjlRwQJjk+VsJ4EREaUoiaTb8NJOcUiKtoAiWn9EBg=="],
+
+    "temporal-spec": ["temporal-spec@1.0.1", "", {}, "sha512-wxVoanmDeavXie1vu2JaQ3WIc3JZnWAOYFBsJyATaVsXsycKYUflGsyBmrRSnoCpZJpwPyr38VpgSUlQ8CbFxg=="],
+
+    "temporal-utils": ["temporal-utils@1.0.2", "", {}, "sha512-1B8Dl4KzrOvsNUlpoWGno2VLQlxroLjDgc5NBjVC9ax9ymdo+ezfyvhyjEMx+IVfhINr6CIG2gcnlP95iRrybQ=="],
 
     "text-segmentation": ["text-segmentation@1.0.3", "", { "dependencies": { "utrie": "^1.0.2" } }, "sha512-iOiPUo/BGnZ6+54OsWxZidGCsdU8YbE4PSpdPinp7DeMtUJNJBoJ/ouUSTJjHkh1KntHaltHl/gDs2FC4i5+Nw=="],
 

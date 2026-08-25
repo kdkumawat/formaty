@@ -7,12 +7,8 @@ import {
   fromHex,
   htmlDecode,
   htmlEncode,
-  isoToUnix,
   jsonEscape,
   jsonUnescape,
-  nowIso,
-  nowUnixMs,
-  nowUnixSeconds,
   parseColor,
   parseUrl,
   prettyJson,
@@ -23,7 +19,6 @@ import {
   toBase64,
   toHex,
   transformCase,
-  unixToIso,
   urlDecode,
   urlEncode,
   type LoremUnit,
@@ -140,9 +135,6 @@ export function applyUtilSample(tab: UtilTab, cur?: UtilToolState): UtilToolStat
   if (tab === "password") {
     return { ...base, passwordLen: 16, pwCount: 5, pwList: [], output: "", error: null, touched: true };
   }
-  if (tab === "time") {
-    return { ...base, input: "", output: "", error: null, touched: true };
-  }
   if (tab === "lorem") {
     return { ...base, loremUnit: "paragraphs", loremCount: 3, output: "", error: null, touched: true };
   }
@@ -184,20 +176,8 @@ export async function computeUtil(tab: UtilTab, s: UtilToolState): Promise<Parti
     const hex = s.hashAlgo === "sha1" ? await sha1Hex(s.input) : await sha256Hex(s.input);
     return { output: hex, error: null };
   }
-  if (tab === "time") {
-    const t = s.input.trim();
-    if (!t) {
-      return {
-        output: prettyJson({
-          iso: nowIso(),
-          unixSeconds: nowUnixSeconds(),
-          unixMs: nowUnixMs(),
-        }),
-        error: null,
-      };
-    }
-    if (/^\d+(\.\d+)?$/.test(t)) return { output: unixToIso(t), error: null };
-    return { output: prettyJson(isoToUnix(t)), error: null };
+  if (tab === "instant") {
+    return {};
   }
   if (tab === "case") {
     if (!s.input) return { output: "", error: null };
