@@ -97,20 +97,20 @@ function parseIso(text: string): number | null {
 
 export function parseInstantInput(raw: string, ctx: ParseContext): ParseResult {
   const text = raw.trim();
-  if (!text) return { status: "invalid", message: "Enter a valid date, time, or timestamp." };
+  if (!text) return { status: "invalid", message: "That didn't parse. Try a time (10:30), a date (2024-03-09), or a timestamp (1716710400)." };
 
   if (/^-?\d+(\.\d+)?$/.test(text)) {
     const n = Number(text);
-    if (!Number.isFinite(n)) return { status: "invalid", message: "Enter a valid date, time, or timestamp." };
+    if (!Number.isFinite(n)) return { status: "invalid", message: "That didn't parse. Try a time (10:30), a date (2024-03-09), or a timestamp (1716710400)." };
     const epochMs = Math.abs(n) > 1e12 ? n : n * 1000;
-    if (!Number.isFinite(epochMs)) return { status: "invalid", message: "Enter a valid date, time, or timestamp." };
+    if (!Number.isFinite(epochMs)) return { status: "invalid", message: "That didn't parse. Try a time (10:30), a date (2024-03-09), or a timestamp (1716710400)." };
     return { status: "ok", epochMs };
   }
 
   if (ISO_RE.test(text) || /^\d{4}-\d{2}-\d{2}T/.test(text)) {
     const ms = parseIso(text);
     if (ms != null) return { status: "ok", epochMs: ms };
-    return { status: "invalid", message: "Enter a valid date, time, or timestamp." };
+    return { status: "invalid", message: "That didn't parse. Try a time (10:30), a date (2024-03-09), or a timestamp (1716710400)." };
   }
 
   let rest = text;
@@ -150,7 +150,7 @@ export function parseInstantInput(raw: string, ctx: ParseContext): ParseResult {
 
   const clock = parseClock(timeRaw);
   if (!clock) {
-    return { status: "invalid", message: "Enter a valid date, time, or timestamp." };
+    return { status: "invalid", message: "That didn't parse. Try a time (10:30), a date (2024-03-09), or a timestamp (1716710400)." };
   }
 
   let timeZone = ctx.defaultTimeZone;
@@ -170,7 +170,7 @@ export function parseInstantInput(raw: string, ctx: ParseContext): ParseResult {
     } else {
       const resolved = resolveZoneToken(zoneRaw);
       if (!resolved) {
-        return { status: "invalid", message: `We couldn't identify "${zoneRaw}". Choose a location.` };
+        return { status: "invalid", message: `No timezone matches "${zoneRaw}". Try a city or an IANA id like Asia/Kolkata.` };
       }
       timeZone = resolved;
     }

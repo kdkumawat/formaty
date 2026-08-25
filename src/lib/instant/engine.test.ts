@@ -83,7 +83,7 @@ describe("resolveLocalDateTime", () => {
     expect(result.status).toBe("nonexistent");
     if (result.status === "nonexistent") {
       expect(result.nearestEpochMs).toBeGreaterThan(0);
-      expect(result.message).toMatch(/does not exist/i);
+      expect(result.message).toMatch(/doesn'?t exist/i);
     }
   });
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CheckIcon, ClipboardDocumentIcon } from "@heroicons/react/24/outline";
+import { CheckIcon, ClipboardDocumentIcon, SunIcon } from "@heroicons/react/24/outline";
 import { Tooltip } from "@/components/workspace/Tooltip";
 import {
   formatLocalDate,
@@ -23,10 +23,10 @@ import type { DayPeriod, Location, TimeFormat, ZonedProjection } from "@/lib/ins
 const LABEL_W = 208;
 
 const PERIOD_TINT: Record<DayPeriod, string> = {
-  night: "rgba(148, 163, 196, 0.28)",
-  morning: "rgba(255, 196, 120, 0.36)",
-  afternoon: "rgba(255, 224, 150, 0.24)",
-  evening: "rgba(255, 168, 112, 0.38)",
+  night: "var(--period-night)",
+  morning: "var(--period-morning)",
+  afternoon: "var(--period-afternoon)",
+  evening: "var(--period-evening)",
 };
 
 function clockGradient(window: TimeWindow, timeZone: string): string {
@@ -91,6 +91,9 @@ interface TimelineBoardProps {
   timeFormat: TimeFormat;
   showSeconds: boolean;
   primaryTimezone?: string;
+  /** Local solar noon in the primary zone — drives the sun terminator
+   *  column. Pass 0 to hide the column (e.g. when the zone has no coords). */
+  noonMs?: number;
   mode: InstantMode;
   range: { start: number; end: number } | null;
   onCommitInstant: (ms: number) => void;
@@ -111,6 +114,7 @@ export function TimelineBoard({
   isLive,
   timeFormat,
   showSeconds,
+  noonMs,
   mode,
   range,
   onCommitInstant,
@@ -253,16 +257,45 @@ export function TimelineBoard({
       </>
     ) : null;
 
+  const noonX = noonMs ? xAt(noonMs) : null;
+  const showTerminator = noonX != null && noonX >= 0 && noonX <= trackW;
+
   return (
     <div className="overflow-hidden rounded-2xl border border-[var(--workspace-border)] bg-[var(--workspace-panel)]">
       <div ref={scrollRef} className="overflow-x-auto overscroll-x-contain">
-        <div style={{ width: LABEL_W + trackW, minWidth: "100%" }}>
+        <div style={{ width: LABEL_W + trackW, minWidth: "100%" }} className="relative">
           {locations.length === 0 && (
             <div className="px-4 py-8 text-center">
               <p className="font-display text-lg text-[var(--workspace-text)]">Compare time anywhere</p>
               <p className="mt-1 text-sm text-[var(--workspace-text-muted)]">
                 Add a location to start comparing time across the world.
               </p>
+            </div>
+          )}
+          {/* Sun terminator — a single column at the primary zone's local
+              solar noon. Sits above every row, so the page reads the sun's
+              position at a glance. SunIcon chips anchor the column at the
+              top and bottom of the board. */}
+          {showTerminator && (
+            <div
+              className="pointer-events-none absolute inset-y-0 z-[4] w-px bg-[var(--sun)]/60"
+              style={{
+                left: LABEL_W + (noonX as number),
+                boxShadow: "0 0 12px rgba(255, 184, 77, 0.5)",
+              }}
+            >
+              <div
+                className="absolute -left-2.5 -top-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full border border-[var(--sun)]/40 bg-[var(--ink-2)] text-[var(--sun)]"
+                aria-hidden="true"
+              >
+                <SunIcon className="h-3 w-3" />
+              </div>
+              <div
+                className="absolute -bottom-1.5 -left-2.5 inline-flex h-5 w-5 items-center justify-center rounded-full border border-[var(--sun)]/40 bg-[var(--ink-2)] text-[var(--sun)]"
+                aria-hidden="true"
+              >
+                <SunIcon className="h-3 w-3" />
+              </div>
             </div>
           )}
 

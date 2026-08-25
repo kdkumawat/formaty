@@ -35,6 +35,7 @@ import { parseInstantInput } from "@/lib/instant/parse";
 import { loadOnboarded, loadPrefs, loadTabSettings, saveOnboarded, savePrefs, saveTabSettings } from "@/lib/instant/persist";
 import { getInstantSettings, setInstantSettings, subscribeInstantSettings, subscribeInstantShifts } from "@/lib/instant/settingsBus";
 import { registerInstantActions } from "@/lib/instant/actionBus";
+import { solarPosition } from "@/lib/instant/sun";
 import { defaultWindow, maybePanWindow } from "@/lib/instant/timeline";
 import type { Location, TimeFormat, TimelineSpanHours } from "@/lib/instant/types";
 import { parseInstantQuery, serializeInstantQuery } from "@/lib/instant/url";
@@ -112,12 +113,6 @@ export function InstantApp({
   const searchRef = useRef<HTMLInputElement>(null);
   const datePickerRef = useRef<HTMLInputElement>(null);
   const hydrated = useRef(false);
-  // Anchor the Location popover to the + Location button so the popover
-  // tracks the button's position on scroll.
-  const [locationAnchor, setLocationAnchor] = useState<HTMLButtonElement | null>(null);
-  const locationButtonRef = useCallback((el: HTMLButtonElement | null) => {
-    setLocationAnchor(el);
-  }, []);
 
   const commitInstant = useCallback((ms: number, live = false) => {
     setSelectedInstant(ms);
@@ -301,6 +296,13 @@ export function InstantApp({
     () => locations.map((l) => projectInstant(selectedInstant, l.iana)),
     [locations, selectedInstant],
   );
+  /** Sun position across the user's list at the selected moment. Drives the
+   *  sun terminator column inside the timeline board and the two counters
+   *  above it ("Where it's light: N" / "Where it's dark: N"). */
+  const sunInfo = useMemo(() => {
+    if (locations.length === 0) return { noonMs: 0, dayCount: 0, nightCount: 0 };
+    return solarPosition(selectedInstant, primaryTimezone, locations.map((l) => l.iana));
+  }, [locations, selectedInstant, primaryTimezone]);
 
   const applyWallInZone = useCallback(
     (
@@ -616,7 +618,7 @@ export function InstantApp({
                   setSearch(e.target.value);
                   setSearchError(null);
                 }}
-                placeholder="10:30 Asia/Kolkata · 1710000000 · 2024-03-09T14:00Z"
+                placeholder="Pick a moment. Paste anything: 10:30 Kolkata, 2024-03-09T14:00Z, 1716710400."
                 className="h-7 w-full rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-panel)] pl-2 pr-7 font-mono text-[11px] leading-none text-[var(--workspace-text)] outline-none placeholder:text-[10px] placeholder:text-[var(--workspace-text-muted)] focus:border-primary/40"
                 aria-label="Convert a moment"
               />
@@ -780,7 +782,7 @@ export function InstantApp({
               onCopy={() => void copySelected()}
               onDownload={downloadText}
               onReset={resetAll}
-              resetLabel="Reset to your timezone + UTC"
+              resetLabel="Reset to now, your timezone and UTC"
               className="ml-0.5"
             />
           )}
@@ -814,25 +816,25 @@ export function InstantApp({
           <div className="mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm">
             <p>{dstNotice.message}</p>
             <button type="button" className="text-primary" onClick={() => commitInstant(dstNotice.nearestEpochMs)}>
-              Use nearest valid time
+              Use the closest valid time
             </button>
           </div>
         )}
         {dstNotice?.kind === "ambiguous" && (
           <div className="mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 text-sm">
-            <p>This local time occurs twice. Choose one:</p>
+            <p>That time happens twice today. Pick one:</p>
             <button type="button" className="text-primary" onClick={() => commitInstant(dstNotice.earlierEpochMs)}>
-              {dstNotice.earlierAbbreviation} (earlier)
+              Earlier, before the clock change
             </button>
             <button type="button" className="text-primary" onClick={() => commitInstant(dstNotice.laterEpochMs)}>
-              {dstNotice.laterAbbreviation} (later)
+              Later, after the clock change
             </button>
           </div>
         )}
 
         <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
           <div>
-            <p className="font-display text-3xl font-medium leading-none tracking-tight tabular-nums sm:text-4xl">
+            <p className="text-3xl font-medium leading-none tracking-tight tabular-nums sm:text-4xl">
               {formatLocalTime(primaryProj, timeFormat, showSeconds)}
             </p>
             <p className="mt-1 text-[10px] font-medium uppercase tracking-wider text-[var(--workspace-text-muted)]">
@@ -1035,21 +1037,20 @@ export function InstantApp({
                 </div>
               );
             })}
-          <Tooltip content={`Add a location (A)`} side="bottom">
+          <Tooltip content="Add a city (A)" side="bottom">
             <button
-              ref={locationButtonRef}
               type="button"
               onClick={() => setPickerOpen(true)}
-              aria-label="Add a location"
+              aria-label="Add a city"
               aria-expanded={pickerOpen}
               className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-dashed px-2.5 py-1 text-[11px] font-medium transition-colors ${
                 pickerOpen
                   ? "border-primary/40 bg-primary/10 text-primary"
-                  : "border-[var(--workspace-border)] bg-transparent text-[var(--workspace-text-muted)] hover:border-primary/30 hover:text-[var(--workspace-text)]"
+                  : "border-primary/30 bg-transparent text-[var(--workspace-text)] hover:border-primary/50 hover:bg-primary/5"
               }`}
             >
               <PlusIcon className="h-3 w-3" />
-              <span>Location</span>
+              <span>Add a city</span>
             </button>
           </Tooltip>
         </div>
@@ -1060,12 +1061,29 @@ export function InstantApp({
 
         {mode === "range" && range ? (
           <p className="mb-3 text-[10px] tabular-nums text-[var(--workspace-text-muted)]">
-            {Math.max(1, Math.round((range.end - range.start) / 60000))}m range
+            From {formatLocalTime(projectInstant(range.start, primaryTimezone), timeFormat, showSeconds)} to{" "}
+            {formatLocalTime(projectInstant(range.end, primaryTimezone), timeFormat, showSeconds)}
           </p>
         ) : null}
 
         {/* Display options (days / 12h-24h / seconds) live in the top
             bar header in both modes, so this row is intentionally omitted. */}
+
+        {/* Sun position across the user's list at the selected moment. The
+            timeline board renders the actual terminator column; these two
+            counters summarize the daylight split for the current set. */}
+        {locations.length > 0 && (
+          <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-[var(--workspace-text-muted)]">
+            <span>
+              Where it&apos;s light:{" "}
+              <span className="font-mono tabular-nums text-[var(--workspace-text)]">{sunInfo.dayCount}</span>
+            </span>
+            <span>
+              Where it&apos;s dark:{" "}
+              <span className="font-mono tabular-nums text-[var(--workspace-text)]">{sunInfo.nightCount}</span>
+            </span>
+          </div>
+        )}
 
         <TimelineBoard
           locations={locations}
@@ -1078,6 +1096,7 @@ export function InstantApp({
           timeFormat={timeFormat}
           showSeconds={showSeconds}
           primaryTimezone={primaryTimezone}
+          noonMs={sunInfo.noonMs}
           mode={mode}
           range={range}
           onCommitInstant={(ms) => commitInstant(ms)}
@@ -1087,7 +1106,7 @@ export function InstantApp({
         />
       </main>
 
-      <LocationPicker open={pickerOpen} anchor={locationAnchor} onClose={() => setPickerOpen(false)} onPick={addCity} atInstant={selectedInstant} />
+      <LocationPicker open={pickerOpen} onClose={() => setPickerOpen(false)} onPick={addCity} atInstant={selectedInstant} />
     </div>
   );
 }

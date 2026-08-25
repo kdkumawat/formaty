@@ -129,7 +129,7 @@ export function resolveLocalDateTime(
     return {
       status: "nonexistent",
       nearestEpochMs: nearest.epochMilliseconds,
-      message: `${wallClockLabel(input)} does not exist on this date in this timezone.`,
+      message: `${wallClockLabel(input)} doesn't exist on that date in this timezone — the clock skipped past it.`,
     };
   }
 }

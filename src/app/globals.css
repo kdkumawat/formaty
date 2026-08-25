@@ -8,7 +8,7 @@
 @theme inline {
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;
-  --font-display: var(--font-space-grotesk), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-display: var(--font-inter), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 
   /* shadcn/ui color utilities */
   --color-background: var(--background);
@@ -33,70 +33,106 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+
+  /* Almanac-at-midnight palette: ink (canvas), bone (text), twilight (accent),
+     sun (day), meridian (night), hairline (rules). Maps to the values set in
+     the [data-theme] blocks below. Used by /utils/instant and re-usable. */
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-bone: var(--bone);
+  --color-bone-muted: var(--bone-muted);
+  --color-meridian: var(--meridian);
+  --color-twilight: var(--twilight);
+  --color-sun: var(--sun);
+  --color-destructive-warm: var(--destructive-warm);
+  --color-hairline: var(--hairline);
+  --color-glow: var(--glow-color);
 }
 
-/* ── Dark (default, hero look) ─────────────────────────── */
+/* ── Dark (default, almanac-at-midnight) ───────────────── */
 [data-theme="dark"],
 html:not([data-theme]) {
   color-scheme: dark;
-  /* Layered surfaces: canvas → panel → popover */
-  --background: #0a0a10;
-  --foreground: #ececf1;
-  --card: #12121a;
-  --card-foreground: #ececf1;
-  --popover: #171721;
-  --popover-foreground: #ececf1;
-  --primary: oklch(0.72 0.19 280);
-  --primary-foreground: #0b0b12;
+  /* Layered surfaces: canvas (ink) → panel (ink-2) → popover (ink-2) */
+  --ink: #0e0e16;
+  --ink-2: #15151f;
+  --bone: #f3f0e8;
+  --bone-muted: #9a948a;
+  --meridian: #2a4d8f;
+  --twilight: #7a5cc4;
+  --sun: #ffb84d;
+  --destructive-warm: #c44747;
+  --hairline: rgba(243, 240, 232, 0.08);
+
+  --background: var(--ink);
+  --foreground: var(--bone);
+  --card: var(--ink-2);
+  --card-foreground: var(--bone);
+  --popover: var(--ink-2);
+  --popover-foreground: var(--bone);
+  --primary: var(--twilight);
+  --primary-foreground: var(--bone);
   --secondary: #1c1c27;
-  --secondary-foreground: #ececf1;
+  --secondary-foreground: var(--bone);
   --muted: #191924;
-  --muted-foreground: #9a9aa5;
+  --muted-foreground: var(--bone-muted);
   --accent: #1e1e2b;
-  --accent-foreground: #ececf1;
-  --destructive: oklch(0.64 0.2 25);
-  --border: #23232e;
+  --accent-foreground: var(--bone);
+  --destructive: var(--destructive-warm);
+  --border: var(--hairline);
   --input: #2f2f3c;
-  --ring: oklch(0.72 0.19 280);
+  --ring: var(--twilight);
   --radius: 0.6rem;
 
-  --workspace-background: #0a0a10;
-  --workspace-panel: #12121a;
-  --workspace-border: #23232e;
-  --workspace-text: #ececf1;
-  --workspace-text-muted: #9a9aa5;
-  --glow-color: rgba(109, 109, 244, 0.28);
+  /* Legacy aliases — kept until Phase 7 migrates all call sites. */
+  --workspace-background: var(--ink);
+  --workspace-panel: var(--ink-2);
+  --workspace-border: var(--hairline);
+  --workspace-text: var(--bone);
+  --workspace-text-muted: var(--bone-muted);
+  --glow-color: rgba(122, 92, 196, 0.32);
 }
 
-/* ── Light ─────────────────────────────────────────────── */
+/* ── Light (almanac-by-daylight) ───────────────────────── */
 [data-theme="light"] {
   color-scheme: light;
-  --background: #f7f7fa;
-  --foreground: #181820;
+  --ink: #18181f;
+  --ink-2: #1f1f28;
+  --bone: #f3f0e8;
+  --bone-muted: #5a564f;
+  --meridian: #1f3b6e;
+  --twilight: #5b3da3;
+  --sun: #e08a1a;
+  --destructive-warm: #a13a3a;
+  --hairline: rgba(24, 24, 31, 0.08);
+
+  --background: var(--bone);
+  --foreground: var(--ink);
   --card: #ffffff;
-  --card-foreground: #181820;
+  --card-foreground: var(--ink);
   --popover: #ffffff;
-  --popover-foreground: #181820;
-  --primary: oklch(0.56 0.22 278);
+  --popover-foreground: var(--ink);
+  --primary: var(--twilight);
   --primary-foreground: #ffffff;
   --secondary: #eef0f5;
-  --secondary-foreground: #181820;
+  --secondary-foreground: var(--ink);
   --muted: #eceef3;
-  --muted-foreground: #5f5f6b;
+  --muted-foreground: var(--bone-muted);
   --accent: #eef0f5;
-  --accent-foreground: #181820;
-  --destructive: oklch(0.58 0.23 25);
-  --border: #e7e7ef;
+  --accent-foreground: var(--ink);
+  --destructive: var(--destructive-warm);
+  --border: var(--hairline);
   --input: #d8d8e2;
-  --ring: oklch(0.56 0.22 278);
+  --ring: var(--twilight);
   --radius: 0.6rem;
 
-  --workspace-background: #f7f7fa;
+  /* Legacy aliases — kept until Phase 7 migrates all call sites. */
+  --workspace-background: var(--bone);
   --workspace-panel: #ffffff;
-  --workspace-border: #e7e7ef;
-  --workspace-text: #181820;
-  --workspace-text-muted: #5f5f6b;
-  --glow-color: rgba(91, 91, 214, 0.22);
+  --workspace-border: var(--hairline);
+  --workspace-text: var(--ink);
+  --workspace-text-muted: var(--bone-muted);
+  --glow-color: rgba(91, 61, 163, 0.22);
 }
 
 html {
@@ -122,11 +158,10 @@ body {
 
 /* ── Global typography ─────────────────────────────────── */
 
-/* Headings: display font, tighter tracking, balanced lines */
+/* Headings: tighter tracking, balanced lines. */
 h1, h2, h3, h4, h5, h6 {
-  font-family: var(--font-display);
-  letter-spacing: -0.025em;
-  line-height: 1.22;
+  letter-spacing: -0.02em;
+  line-height: 1.18;
   text-wrap: balance;
 }
 
@@ -162,9 +197,9 @@ input[type="number"] {
   font-variant-numeric: tabular-nums;
 }
 
-/* Selection: indigo-violet in both themes */
+/* Selection: twilight wash in both themes */
 ::selection {
-  background: rgba(109, 109, 244, 0.3);
+  background: rgba(122, 92, 196, 0.32);
   color: inherit;
 }
 
@@ -208,7 +243,7 @@ input[type="number"] {
 /* ── Utility classes ─────────────────────────────────────── */
 
 .gradient-text {
-  background: linear-gradient(135deg, #6d6df4 0%, #8b5cf6 45%, #4f8ff7 100%);
+  background: linear-gradient(135deg, var(--twilight) 0%, #b08bd6 45%, var(--sun) 100%);
   background-size: 200% auto;
   -webkit-background-clip: text;
   background-clip: text;
@@ -240,7 +275,7 @@ input[type="number"] {
   animation-play-state: paused;
 }
 
-/* ── Hover-glow tracking card (Linear-style) ───────────── */
+/* ── Hover-glow tracking card (twilight) ───────────────── */
 .glow-card {
   position: relative;
 }
@@ -252,7 +287,7 @@ input[type="number"] {
   padding: 1px;
   background: radial-gradient(
     320px circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
-    rgba(109, 109, 244, 0.55),
+    rgba(122, 92, 196, 0.6),
     transparent 45%
   );
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
@@ -308,7 +343,7 @@ button:disabled,
 
 /* ── Focus ring ──────────────────────────────────────────── */
 :focus-visible {
-  outline: 2px solid rgba(109, 109, 244, 0.6);
+  outline: 2px solid var(--twilight);
   outline-offset: 2px;
 }
 input:focus-visible,
@@ -320,4 +355,14 @@ textarea:focus-visible {
 @keyframes toolbar-pop {
   0%   { transform: scale(0.92); opacity: 0.7; }
   100% { transform: scale(1);    opacity: 1; }
+}
+
+/* ── Period tints (timeline row gradients) ───────────────── */
+:root,
+[data-theme="dark"],
+[data-theme="light"] {
+  --period-night: rgba(148, 163, 196, 0.28);
+  --period-morning: rgba(255, 196, 120, 0.36);
+  --period-afternoon: rgba(255, 224, 150, 0.24);
+  --period-evening: rgba(255, 168, 112, 0.38);
 }

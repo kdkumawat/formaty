@@ -104,3 +104,50 @@ export function sunGradient(startMs: number, endMs: number, coord: GeoCoord, sam
   }
   return `linear-gradient(to right, ${stops.join(", ")})`;
 }
+
+/** True when the sun is above the horizon for `iana` at `epochMs`. Falls
+ *  back to "day" when the zone has no coordinates — better than misleading
+ *  the user with a false "night" callout. */
+export function isDaylight(epochMs: number, iana: string): boolean {
+  const coord = coordsForZone(iana);
+  if (!coord) return true;
+  return solarElevationDeg(coord.lat, coord.lng, epochMs) > 0;
+}
+
+/** Offset in ms from `epochMs` to the next local solar noon at `iana`.
+ *  Samples the next 24h at 5-min intervals and returns the ms to the peak
+ *  elevation. Returns 0 if the zone has no coordinates — caller can treat
+ *  that as "no terminator" and skip rendering the column. */
+export function solarNoonOffsetMs(epochMs: number, iana: string): number {
+  const coord = coordsForZone(iana);
+  if (!coord) return 0;
+  const STEP = 5 * 60 * 1000;
+  const WINDOW = 24 * 60 * 60 * 1000;
+  let bestOffset = 0;
+  let bestElev = -Infinity;
+  for (let t = 0; t <= WINDOW; t += STEP) {
+    const elev = solarElevationDeg(coord.lat, coord.lng, epochMs + t);
+    if (elev > bestElev) {
+      bestElev = elev;
+      bestOffset = t;
+    }
+  }
+  return bestOffset;
+}
+
+/** Aggregate solar info for the Instant page: where the noon is, and how
+ *  many of the user's locations are currently in daylight. */
+export function solarPosition(
+  epochMs: number,
+  primaryIana: string,
+  allIanas: string[],
+): { noonMs: number; dayCount: number; nightCount: number } {
+  const noonMs = epochMs + solarNoonOffsetMs(epochMs, primaryIana);
+  let dayCount = 0;
+  let nightCount = 0;
+  for (const z of allIanas) {
+    if (isDaylight(epochMs, z)) dayCount++;
+    else nightCount++;
+  }
+  return { noonMs, dayCount, nightCount };
+}

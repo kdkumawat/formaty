@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   isValidIana,
   listIanaZones,
@@ -14,10 +14,17 @@ import {
 import { projectInstant } from "@/lib/instant/engine";
 import { locationFromCity, locationFromCustom } from "@/lib/instant/locations";
 import type { Location } from "@/lib/instant/types";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 
 interface LocationPickerProps {
   open: boolean;
-  anchor: HTMLElement | null;
   onClose: () => void;
   onPick: (location: Location) => void;
   atInstant: number;
@@ -36,46 +43,7 @@ function groupByRegion(zones: string[]): Array<{ region: string; items: string[]
     .map(([region, items]) => ({ region, items: [...items].sort() }));
 }
 
-export function LocationPicker({ open, anchor, onClose, onPick, atInstant }: LocationPickerProps) {
-  // Anchor the popover to the trigger button. Recompute on scroll/resize so
-  // the popover stays glued to the button when the sticky header moves.
-  const popRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
-  useLayoutEffect(() => {
-    if (!open || !anchor) {
-      setPos(null);
-      return;
-    }
-    const update = () => {
-      const r = anchor.getBoundingClientRect();
-      // Align the popover's right edge with the button's right edge so it
-      // grows leftward and stays on-screen for buttons near the viewport edge.
-      setPos({ top: r.bottom + 6, right: Math.max(8, window.innerWidth - r.right) });
-    };
-    update();
-    window.addEventListener("scroll", update, true);
-    window.addEventListener("resize", update);
-    return () => {
-      window.removeEventListener("scroll", update, true);
-      window.removeEventListener("resize", update);
-    };
-  }, [open, anchor]);
-
-  // Click outside (button + popover are exempt) closes. mousedown so the
-  // popover's own clicks fire before close.
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      const t = e.target as Node | null;
-      if (!t) return;
-      if (popRef.current?.contains(t)) return;
-      if (anchor?.contains(t)) return;
-      onClose();
-    };
-    window.addEventListener("mousedown", onDown);
-    return () => window.removeEventListener("mousedown", onDown);
-  }, [open, anchor, onClose]);
-
+export function LocationPicker({ open, onClose, onPick, atInstant }: LocationPickerProps) {
   const [q, setQ] = useState("");
   const [custom, setCustom] = useState(false);
   const [city, setCity] = useState("");
@@ -211,7 +179,7 @@ export function LocationPicker({ open, anchor, onClose, onPick, atInstant }: Loc
   // cursor and the active highlight; the list parent supplies the section
   // header so the visual structure is preserved.
   const rowClass = (focused: boolean) =>
-    `flex w-full items-baseline justify-between gap-3 px-4 py-2 text-left transition-colors ${
+    `flex w-full items-baseline justify-between gap-3 px-4 py-2 text-left text-sm text-[var(--workspace-text)] transition-colors ${
       focused
         ? "bg-primary/15 text-[var(--workspace-text)]"
         : "hover:bg-[var(--workspace-background)]"
@@ -328,8 +296,6 @@ export function LocationPicker({ open, anchor, onClose, onPick, atInstant }: Loc
     );
   };
 
-  if (!open || !pos) return null;
-
   const submitCustom = () => {
     const zone = iana.trim();
     if (!zone || !isValidIana(zone)) {
@@ -385,50 +351,49 @@ export function LocationPicker({ open, anchor, onClose, onPick, atInstant }: Loc
   };
 
   return (
-    <div
-      ref={popRef}
-      role="dialog"
-      aria-label="Add location"
-      style={{ position: "fixed", top: pos.top, right: pos.right, zIndex: 60 }}
-      className="w-96 max-w-[calc(100vw-1rem)] overflow-hidden rounded-2xl border border-[var(--workspace-border)] bg-[var(--workspace-panel)] shadow-2xl"
-    >
-      {/* Segmented tab switch matching the workspace settings panel
-          (General | Compare | Utils). Same container + active fill so the
-          user gets a single pattern across the app. */}
-      <div
-        className="flex items-center gap-px border-b border-[var(--workspace-border)] bg-muted/50 p-1"
-        role="tablist"
-        aria-label="Location source"
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent
+        aria-label="Add a city"
+        className="max-h-[90vh] w-full max-w-md gap-0 overflow-hidden rounded-2xl border border-[var(--workspace-text-muted)]/30 bg-[var(--secondary)] p-0 text-[var(--workspace-text)] shadow-2xl"
       >
-        {(
-          [
-            ["search", "Search"],
-            ["custom", "Custom"],
-          ] as const
-        ).map(([key, label]) => {
-          const active = key === "custom" ? custom : !custom;
-          return (
-            <button
-              key={key}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              className={`h-7 flex-1 rounded-md text-[11px] font-semibold transition-colors ${
-                active
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)] hover:text-[var(--workspace-text)]"
-              }`}
-              onClick={() => setCustom(key === "custom")}
-            >
-              {label}
-            </button>
-          );
-        })}
-      </div>
+        <DialogTitle className="sr-only">Add a city</DialogTitle>
+        {/* Segmented tab switch matching the workspace settings panel
+            (General | Compare | Utils). Same container + active fill so the
+            user gets a single pattern across the app. */}
+        <div
+          className="flex items-center gap-px border-b border-[var(--workspace-text-muted)]/20 bg-[var(--workspace-background)] p-1"
+          role="tablist"
+          aria-label="Location source"
+        >
+          {(
+            [
+              ["search", "Search"],
+              ["custom", "Custom"],
+            ] as const
+          ).map(([key, label]) => {
+            const active = key === "custom" ? custom : !custom;
+            return (
+              <button
+                key={key}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                className={`h-7 flex-1 rounded-md text-[11px] font-semibold transition-colors ${
+                  active
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)] hover:text-[var(--workspace-text)]"
+                }`}
+                onClick={() => setCustom(key === "custom")}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
 
         {!custom ? (
           <>
-            <input
+            <Input
               ref={inputRef}
               value={q}
               onChange={(e) => setQ(e.target.value)}
@@ -454,7 +419,7 @@ export function LocationPicker({ open, anchor, onClose, onPick, atInstant }: Loc
                 }
               }}
               placeholder="City, country, IN, or Asia/Kolkata"
-              className="w-full border-b border-[var(--workspace-border)] bg-transparent px-4 py-2.5 text-xs text-[var(--workspace-text)] outline-none placeholder:text-[var(--workspace-text-muted)]"
+              className="h-9 rounded-none border-0 border-b border-[var(--workspace-text-muted)]/20 bg-[var(--workspace-background)] px-4 text-sm text-[var(--workspace-text)] placeholder:text-[var(--workspace-text-muted)] focus-visible:ring-0"
               aria-autocomplete="list"
               aria-controls={listId}
               aria-activedescendant={results[focusIdx] ? `${listId}-${focusIdx}` : undefined}
@@ -463,7 +428,7 @@ export function LocationPicker({ open, anchor, onClose, onPick, atInstant }: Loc
               id={listId}
               ref={listRef}
               role="listbox"
-              className="max-h-96 overflow-y-auto py-1"
+              className="max-h-[60vh] overflow-y-auto py-1"
             >
               {q.trim() ? (
                 <>
@@ -504,7 +469,7 @@ export function LocationPicker({ open, anchor, onClose, onPick, atInstant }: Loc
                     return renderResultRow(r, idx);
                   })}
                   {queryAsZone ? (
-                    <li className="mt-1 border-t border-[var(--workspace-border)] px-4 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]">
+                    <li className="mt-1 border-t border-[var(--hairline)] px-4 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]">
                       Add as raw IANA
                     </li>
                   ) : null}
@@ -574,50 +539,62 @@ export function LocationPicker({ open, anchor, onClose, onPick, atInstant }: Loc
               submitCustom();
             }}
           >
-            <label className="block text-[10px] text-[var(--workspace-text-muted)]">
-              City
-              <input
+            <div className="space-y-1.5">
+              <Label htmlFor="loc-city" className="text-[10px] uppercase tracking-wider text-[var(--workspace-text-muted)]">
+                City
+              </Label>
+              <Input
+                id="loc-city"
                 value={city}
                 onChange={(e) => setCity(e.target.value)}
                 required
-                className="mt-1 h-7 w-full rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-2 text-xs text-[var(--workspace-text)] outline-none"
+                className="h-8 text-xs"
               />
-            </label>
+            </div>
             <div className="grid grid-cols-[1fr_5rem] gap-2">
-              <label className="block text-[10px] text-[var(--workspace-text-muted)]">
-                Country
-                <input
+              <div className="space-y-1.5">
+                <Label htmlFor="loc-country" className="text-[10px] uppercase tracking-wider text-[var(--workspace-text-muted)]">
+                  Country
+                </Label>
+                <Input
+                  id="loc-country"
                   value={country}
                   onChange={(e) => setCountry(e.target.value)}
-                  className="mt-1 h-7 w-full rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-2 text-xs text-[var(--workspace-text)] outline-none"
+                  className="h-8 text-xs"
                 />
-              </label>
-              <label className="block text-[10px] text-[var(--workspace-text-muted)]">
-                Code
-                <input
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="loc-code" className="text-[10px] uppercase tracking-wider text-[var(--workspace-text-muted)]">
+                  Code
+                </Label>
+                <Input
+                  id="loc-code"
                   value={countryCode}
                   onChange={(e) => setCountryCode(e.target.value.toUpperCase().slice(0, 3))}
                   placeholder="IN"
-                  className="mt-1 h-7 w-full rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-2 font-mono text-xs uppercase text-[var(--workspace-text)] outline-none"
+                  className="h-8 font-mono text-xs uppercase"
                 />
-              </label>
+              </div>
             </div>
-            <label className="block text-[10px] text-[var(--workspace-text-muted)]">
-              Timezone (IANA)
-              <div className="relative mt-1">
-                <input
+            <div className="space-y-1.5">
+              <Label htmlFor="loc-iana" className="text-[10px] uppercase tracking-wider text-[var(--workspace-text-muted)]">
+                Timezone (IANA)
+              </Label>
+              <div className="relative">
+                <Input
+                  id="loc-iana"
                   value={iana}
                   onChange={(e) => setIana(e.target.value)}
                   onFocus={() => setIanaFocus(true)}
                   onBlur={() => window.setTimeout(() => setIanaFocus(false), 120)}
                   placeholder="Asia/Kolkata"
-                  className="h-7 w-full rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-2 font-mono text-xs text-[var(--workspace-text)] outline-none focus:border-primary/40"
+                  className="h-8 font-mono text-xs"
                   aria-autocomplete="list"
                 />
                 {ianaFocus && (ianaSuggestions.length > 0 || matchedCountry) && (
                   <ul
                     role="listbox"
-                    className="absolute left-0 right-0 top-full z-20 mt-1 max-h-60 overflow-y-auto rounded-md border border-primary/30 bg-[var(--workspace-panel)] py-1 text-xs shadow-2xl"
+                    className="absolute left-0 right-0 top-full z-20 mt-1 max-h-60 overflow-y-auto rounded-md border border-primary/30 bg-[var(--ink-2)] py-1 text-xs shadow-2xl"
                   >
                     {matchedCountry && (
                       <li className="px-3 pb-1 pt-1.5 text-[9px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]">
@@ -673,20 +650,18 @@ export function LocationPicker({ open, anchor, onClose, onPick, atInstant }: Loc
                   </ul>
                 )}
               </div>
-            </label>
+            </div>
             {error && (
               <p className="text-xs text-destructive" role="alert">
                 {error}
               </p>
             )}
-            <button
-              type="submit"
-              className="h-8 rounded-lg bg-primary/15 text-xs font-semibold text-primary"
-            >
-              Add location
-            </button>
+            <Button type="submit" size="sm" className="mt-1">
+              Add city
+            </Button>
           </form>
         )}
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
