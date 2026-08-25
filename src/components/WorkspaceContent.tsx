@@ -86,6 +86,8 @@ const JsonDiffEditor = dynamic(
   { ssr: false },
 ) as ComponentType<JsonDiffEditorProps & RefAttributes<JsonDiffEditorRef>>;
 import { GraphView, type GraphViewRef } from "@/components/GraphView";
+import { getInstantActions } from "@/lib/instant/actionBus";
+import { InstantSettingsPanel } from "@/components/instant/InstantSettingsPanel";
 import { TreeView, type TreeViewRef } from "@/components/TreeView";
 import { QueryView } from "@/components/QueryView";
 import { TableView } from "@/components/TableView";
@@ -4230,6 +4232,7 @@ export function WorkspaceContent({
       <p className="mt-3 rounded-md bg-primary/5 px-2 py-1.5 text-[10px] leading-snug text-[var(--workspace-text-muted)]">
         Each utility keeps its own options (count, length, character sets) right in the tool pane.
       </p>
+      <InstantSettingsPanel />
     </>
   )}
 
@@ -5119,7 +5122,11 @@ export function WorkspaceContent({
           )}
 
           <OutputActionBar
-              canCopy={Boolean(getActiveOutputText().trim()) || (!isDiffMode && !isUtilsMode && canDownload)}
+              canCopy={
+                Boolean(getActiveOutputText().trim()) ||
+                (!isDiffMode && !isUtilsMode && canDownload) ||
+                (isUtilsMode && utilTab === "instant")
+              }
               canShare
               canShareAll={showTabs && tabs.length > 1}
               isGraphView={!isDiffMode && !isUtilsMode && isGraphView}
@@ -5148,6 +5155,12 @@ export function WorkspaceContent({
               canUndo={!isDiffMode && !isUtilsMode ? canUndo : isUtilsMode ? canUtilsUndo : undefined}
               canRedo={!isDiffMode && !isUtilsMode ? canRedo : isUtilsMode ? canUtilsRedo : undefined}
               onShare={() => {
+                // Instant: defer to its registered handler (the workspace bar
+                // is the only chrome in embedded mode).
+                if (isUtilsMode && utilTab === "instant") {
+                  getInstantActions()?.onShare();
+                  return;
+                }
                 setShareAllTabs(false);
                 requestShare();
               }}
@@ -5156,6 +5169,10 @@ export function WorkspaceContent({
                 requestShare();
               }}
               onCopy={() => {
+                if (isUtilsMode && utilTab === "instant") {
+                  getInstantActions()?.onCopy();
+                  return;
+                }
                 // List modes: use stored quote+layout preference.
                 if (isListCopyMode && copyItems.length > 0) {
                   const pref = loadListCopyPref(copyMode);
@@ -5187,6 +5204,10 @@ export function WorkspaceContent({
                 );
               }}
               onDownload={() => {
+                if (isUtilsMode && utilTab === "instant") {
+                  getInstantActions()?.onDownload();
+                  return;
+                }
                 if (isUtilsMode) {
                   const text = getActiveOutputText();
                   if (!text) return;
@@ -5231,13 +5252,21 @@ export function WorkspaceContent({
               onGraphCopy={graphCopy}
               graphCopyFormat={graphCopyFormat}
               onGraphCopyFormatChange={setGraphCopyFormat}
-              onReset={handleWorkspaceReset}
+              onReset={() => {
+                if (isUtilsMode && utilTab === "instant") {
+                  getInstantActions()?.onReset();
+                  return;
+                }
+                handleWorkspaceReset();
+              }}
               resetLabel={
-                isUtilsMode
-                  ? "Reset util"
-                  : isDiffMode
-                    ? "Reset both sides"
-                    : "Reset input & output"
+                isUtilsMode && utilTab === "instant"
+                  ? getInstantActions()?.resetLabel ?? "Reset"
+                  : isUtilsMode
+                    ? "Reset util"
+                    : isDiffMode
+                      ? "Reset both sides"
+                      : "Reset input & output"
               }
               formatPopover={
                 isListCopyMode

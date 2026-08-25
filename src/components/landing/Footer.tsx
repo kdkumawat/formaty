@@ -59,12 +59,12 @@ const CONVERSION_LINKS = [
 ];
 
 const UTIL_LINKS = [
+  { route: "/utils/instant", label: "Instant" },
   { route: "/utils/uuid-generator", label: "UUID Generator" },
   { route: "/utils/base64-encoder", label: "Base64 Encoder" },
   { route: "/utils/jwt-decoder", label: "JWT Decoder" },
   { route: "/utils/sha-hash-generator", label: "SHA Hash Generator" },
   { route: "/utils/password-generator", label: "Password Generator" },
-  { route: "/utils/unix-timestamp-converter", label: "Unix Timestamp" },
   { route: "/utils/color-converter", label: "Color Converter" },
   { route: "/utils/cron-expression-explainer", label: "Cron Explainer" },
 ];

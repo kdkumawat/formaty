@@ -58,6 +58,27 @@ The worker is a thin dispatcher — the actual logic is pure functions in **`src
 
 cURL parsing and client-code generation live in `src/lib/curl/` (`parseCurl.ts`, `codegen.ts` → fetch/Axios/Python/Go).
 
+### Instant — timezone / world-time tool
+
+`/utils/instant` is the timezone comparison page. It is **not** in `TOOL_PAGES` or `UTIL_PAGES` — it has its own dedicated route (`src/app/utils/instant/page.tsx`) and its own SEO config (`src/lib/seoInstant.ts` → `INSTANT_PAGE`). The page can also be embedded inside the workspace's Utils tab (`UtilsPanel.tsx` → `<InstantApp embedded />`).
+
+Code layout under `src/lib/instant/`:
+
+- `catalog.ts` — curated city list (`CITY_CATALOG`), IANA zone utilities (`listIanaZones`, `searchIanaZones`, `resolveZoneToken`, `isValidIana`, `detectLocalIana`, `detectTimeFormat`). Re-exports the country search helpers from `./countries`. `listIanaZones` prefers `Intl.supportedValuesOf("timeZone")` for a full IANA list, falling back to the curated set on older runtimes.
+- `countries.ts` — ISO 3166-1 country list (`COUNTRY_CATALOG`) with capital + primary IANA per country. Powers the "Countries" section of the LocationPicker so searches like `Brazil` or `jp` surface a country-level result.
+- `engine.ts` — `projectInstant` (instant → zoned wall-time via `temporal-polyfill`), `resolveLocalDateTime` (handles DST nonexistent/ambiguous), `formatLocalTime`/`formatLocalDate`/`isoUtc`/`unixSeconds`.
+- `parse.ts` — `parseInstantInput` — smart parser for Unix seconds/ms, ISO 8601, "10:30 Asia/Kolkata", "Mar 9 10:30", "10:30 UTC+05:30". Bare clock inputs default to **real today** (not the currently displayed day) so `10:30` always means "today at 10:30".
+- `url.ts` — URL query serialization for sharing an Instant state (`?at=…&tz=…&locations=…&fmt=…&sec=…`).
+- `timeline.ts` — `defaultWindow`, `maybePanWindow`, `hourMarkers` for the horizontal hour-strip board.
+- `sun.ts` — sunrise/sunset helpers (used by the TimelineBoard gradients).
+- `persist.ts` — localStorage prefs (`locations`, `primaryTimezone`, `timeFormat`, `showSeconds`, `spanHours`) + onboard flag.
+- `settingsBus.ts` — module-level pub/sub so the workspace settings panel (Utils tab → `InstantSettingsPanel`) can read and write Instant's `spanHours` / `timeFormat` / `showSeconds` without lifting state out of `InstantApp`. The standalone `/utils/instant` page renders the same controls inline (no duplicate gear) since it has no settings panel.
+- `locations.ts` — builders for `Location` from a catalog row, custom input, or IANA id.
+- `types.ts` — `Location`, `ZonedProjection`, `TimeFormat`, `TimelineSpanHours`, `InstantMode`.
+- `copy.ts` — clipboard text emitters (`copyHuman` builds the multi-zone summary).
+
+Components: `src/components/instant/InstantApp.tsx` (compact header with primary-location chip + unified smart input + hidden `<input type="datetime-local">` fallback + Now/Live pill + global OutputActionBar for copy/share/reset; primary moment + day nav with "Today" highlight; −1d/−1h/+1h/+1d quick-nav; range mode; location chips; inline display-options row on standalone; TimelineBoard), `src/components/instant/InstantSettingsPanel.tsx` (settings slot for the workspace settings panel's Utils tab — days stepper, 12h/24h, show seconds), and `src/components/instant/LocationPicker.tsx` (modal that surfaces countries first, then curated cities + the full IANA zone list grouped by region; matches by country, city, country code, or raw IANA id). The per-row `<input type="time">` and bottom Unix converter in the timeline board were removed — edit the displayed moment through the unified header input. `TimelineBoard.tsx` now has a hover-revealed copy icon per row (copies that row's wall time) and renders the primary location first.
+
 ### Shareable state
 
 `src/lib/shareState.ts` serializes the workspace state (`WorkspaceState`) into a URL hash — `j:` + encoded JSON for small state, `e:` + lz-string for large. Shared links rehydrate state from the hash.

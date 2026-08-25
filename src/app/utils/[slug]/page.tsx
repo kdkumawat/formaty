@@ -1,11 +1,18 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { ToolPage } from "@/components/ToolPage";
+import { ToolRedirect } from "@/components/ToolRedirect";
 import { getCanonicalUrl, SITE_URL } from "@/lib/seo";
-import { getPageConfig, isUtilPageConfig, UTIL_ROUTES } from "@/lib/seoUtils";
+import {
+  UTIL_PAGES,
+  UTIL_REDIRECTS,
+  UTIL_ROUTES,
+  getPageConfig,
+  isUtilPageConfig,
+} from "@/lib/seoUtils";
 
 export async function generateStaticParams() {
-  return UTIL_ROUTES.map((slug) => ({ slug }));
+  return [...UTIL_ROUTES, ...Object.keys(UTIL_REDIRECTS)].map((slug) => ({ slug }));
 }
 
 /** With `output: "export"`, unknown paths must 404 - not try to render on demand. */
@@ -17,8 +24,26 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const config = getPageConfig(slug);
-  if (!config || !isUtilPageConfig(config)) return {};
+  const redirectTarget = UTIL_REDIRECTS[slug];
+  if (redirectTarget) {
+    const target = UTIL_PAGES[redirectTarget] ?? getPageConfig(redirectTarget);
+    if (!target) return {};
+    const canonical = getCanonicalUrl(`/utils/${redirectTarget}`);
+    return {
+      title: target.h1,
+      description: target.description,
+      alternates: { canonical },
+      robots: { index: false, follow: true },
+      openGraph: {
+        title: target.h1,
+        url: canonical,
+        siteName: "Formaty",
+        type: "website",
+      },
+    };
+  }
+  const config = UTIL_PAGES[slug];
+  if (!config) return {};
   const canonical = getCanonicalUrl(`/utils/${slug}`);
   const pageTitle = config.title.replace(/\s*\|\s*Formaty\s*$/i, "");
   return {
@@ -49,8 +74,20 @@ export default async function UtilRoutePage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const config = getPageConfig(slug);
-  if (!config || !isUtilPageConfig(config)) notFound();
+  const redirectTarget = UTIL_REDIRECTS[slug];
+  if (redirectTarget) {
+    const target = UTIL_PAGES[redirectTarget] ?? getPageConfig(redirectTarget);
+    if (!target) notFound();
+    return (
+      <>
+        {/* Hoisted to <head> by React 19 - instant redirect without JS. */}
+        <meta httpEquiv="refresh" content={`0; url=/utils/${redirectTarget}`} />
+        <ToolRedirect to={`/utils/${redirectTarget}`} label={target.h1} />
+      </>
+    );
+  }
+  const config = UTIL_PAGES[slug];
+  if (!config) notFound();
   const canonical = getCanonicalUrl(`/utils/${slug}`);
 
   const jsonLd = {

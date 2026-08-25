@@ -40,6 +40,7 @@
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "tailwind-merge": "^3.6.0",
+    "temporal-polyfill": "^1.0.4",
     "zustand": "^5.0.11"
   },
   "devDependencies": {

@@ -4,6 +4,7 @@ import { Logo } from "@/components/Logo";
 import type { ToolPageConfig } from "@/lib/seo";
 import type { UtilPageConfig } from "@/lib/seoUtils";
 import { UTIL_PAGES, getPageConfig } from "@/lib/seoUtils";
+import { INSTANT_PAGE } from "@/lib/seoInstant";
 
 type PageConfig = ToolPageConfig | UtilPageConfig;
 
@@ -19,9 +20,10 @@ function RelatedTools({ related }: { related: string[] }) {
       </h2>
       <ul className="grid gap-2 sm:grid-cols-2">
         {related.map((route) => {
-          const c = getPageConfig(route);
+          const isInstant = route === "instant";
+          const c = isInstant ? INSTANT_PAGE : getPageConfig(route);
           if (!c) return null;
-          const href = route in UTIL_PAGES ? `/utils/${route}` : `/${route}`;
+          const href = isInstant || route in UTIL_PAGES ? `/utils/${route}` : `/${route}`;
           return (
             <li key={route}>
               <Link

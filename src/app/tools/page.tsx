@@ -118,6 +118,15 @@ export default function ToolsPage() {
               Utils
             </h2>
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              <Link
+                href="/utils/instant"
+                className="group flex items-center justify-between rounded-xl border border-primary/20 bg-[var(--workspace-panel)] px-4 py-3 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md hover:shadow-primary/5"
+              >
+                <span className="text-sm font-medium text-[var(--workspace-text)] group-hover:text-primary">
+                  Instant
+                </span>
+                <ArrowRightIcon className="h-3.5 w-3.5 text-[var(--workspace-text-muted)] transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
+              </Link>
               {UTIL_ROUTES.map((slug) => {
                 const c = UTIL_PAGES[slug];
                 if (!c) return null;

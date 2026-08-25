@@ -12,7 +12,9 @@ import { Logo } from "@/components/Logo";
 export function ToolRedirect({ to, label }: { to: string; label: string }) {
   useEffect(() => {
     const id = setTimeout(() => {
-      window.location.replace(`/${to}`);
+      // Accept either a root-relative path ("/foo") or a full URL.
+      const target = to.startsWith("/") ? to : `/${to}`;
+      window.location.replace(target);
     }, 50);
     return () => clearTimeout(id);
   }, [to]);
@@ -27,7 +29,7 @@ export function ToolRedirect({ to, label }: { to: string; label: string }) {
         <p className="mt-1 text-sm text-[var(--workspace-text-muted)]">
           Redirecting to{" "}
           <Link
-            href={`/${to}`}
+            href={to.startsWith("/") ? to : `/${to}`}
             className="font-semibold text-primary hover:underline"
           >
             {label}
