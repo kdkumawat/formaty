@@ -4739,8 +4739,8 @@ export function WorkspaceContent({
             }}
             onBlur={commitListRename}
             aria-label="Rename list"
-            className="fixed z-[90] h-7 rounded-md border border-primary/40 bg-[var(--workspace-panel)] px-2 text-xs text-[var(--workspace-text)] shadow-lg outline-none"
-            style={{ top: listRenameRect.top, left: listRenameRect.left, width: listRenameRect.width }}
+            className="fixed z-[90] h-7 min-w-32 rounded-md border border-primary/40 bg-[var(--workspace-panel)] px-2 text-xs text-[var(--workspace-text)] shadow-lg outline-none"
+            style={{ top: listRenameRect.top, left: listRenameRect.left, width: Math.max(128, listRenameRect.width) }}
           />
         )}
       {/* Column: stable full-width tool row + split (icons never jump when left panel hides) */}
