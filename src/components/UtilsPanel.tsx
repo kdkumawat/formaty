@@ -78,6 +78,9 @@ interface UtilsPanelProps {
   regenKey?: number;
   /** Match Monaco / playground editor font size */
   fontSize?: number;
+  /** Workspace tab id — when set, InstantApp persists its state per workspace
+   *  tab so switching tabs preserves the Instant setup. */
+  tabId?: string;
 }
 
 export function UtilsPanel({
@@ -90,6 +93,7 @@ export function UtilsPanel({
   onStateByToolChange,
   regenKey = 0,
   fontSize = 13,
+  tabId,
 }: UtilsPanelProps) {
   // Merge restored state over defaults so partial snapshots (older sessions /
   // shared links) always expose every field - fixes crashes on missing lists.
@@ -548,7 +552,7 @@ export function UtilsPanel({
               </div>
             }
           >
-            <InstantApp embedded />
+            <InstantApp embedded settingsKey={tabId} />
           </Suspense>
         </div>
       ) : GENERATOR_TABS.has(activeTab) ? (
