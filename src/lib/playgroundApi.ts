@@ -1,6 +1,8 @@
 import type { WorkspaceState } from "./shareState";
+import { COMPARE_BUCKETS } from "./shareState";
 import type { FormatKind } from "./formats";
 import type { TypeTargetLanguage } from "./json/core";
+import type { ListBucket } from "./json/listCompare";
 
 const API_URL = process.env.FORMATY_API_URL ?? "";
 
@@ -35,10 +37,12 @@ export function mapStateToPayload(state: WorkspaceState): PlaygroundApiPayload {
       listCompareOptions: state.listCompareOptions,
       csvColumn: state.csvColumn,
       diffKind: state.diffKind,
+      compareActiveBucket: state.compareActiveBucket,
       // Multi-tab fields — spread only present keys so the API receives them
       ...pickDefined(state as unknown as Record<string, unknown>, [
         "tabs", "activeTabId", "showTabs", "tabSnapshots",
         "diffLeftInput", "diffRightInput", "utilTab",
+        "leftLabel", "rightLabel",
       ]),
     },
   };
@@ -74,6 +78,8 @@ export function mapPayloadToState(payload: PlaygroundApiPayload): WorkspaceState
     csvColumn: typeof opts.csvColumn === "string" ? opts.csvColumn : undefined,
     diffKind: (typeof opts.diffKind === "string" && (opts.diffKind === "document" || opts.diffKind === "list" || opts.diffKind === "single"))
       ? opts.diffKind : undefined,
+    compareActiveBucket: (typeof opts.compareActiveBucket === "string" && (COMPARE_BUCKETS as readonly string[]).includes(opts.compareActiveBucket))
+      ? (opts.compareActiveBucket as ListBucket) : undefined,
     // Multi-tab fields — pass through verbatim so restore code can read them
     ...(opts.tabs != null ? { tabs: opts.tabs } : {}),
     ...(opts.activeTabId != null ? { activeTabId: opts.activeTabId } : {}),
@@ -82,6 +88,8 @@ export function mapPayloadToState(payload: PlaygroundApiPayload): WorkspaceState
     ...(opts.diffLeftInput != null ? { diffLeftInput: opts.diffLeftInput } : {}),
     ...(opts.diffRightInput != null ? { diffRightInput: opts.diffRightInput } : {}),
     ...(opts.utilTab != null ? { utilTab: opts.utilTab } : {}),
+    ...(opts.leftLabel != null ? { leftLabel: opts.leftLabel as string } : {}),
+    ...(opts.rightLabel != null ? { rightLabel: opts.rightLabel as string } : {}),
   } as WorkspaceState;
 }
 

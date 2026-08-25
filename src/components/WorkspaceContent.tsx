@@ -53,7 +53,7 @@ import type { ComponentType, RefAttributes } from "react";
 import type { DiffNavState, JsonDiffEditorProps, JsonDiffEditorRef } from "@/components/JsonDiffEditor";
 import { ListComparePanel, type ListCompareExport } from "@/components/ListComparePanel";
 import { SingleListPanel } from "@/components/SingleListPanel";
-import { DEFAULT_LIST_PARSE_OPTIONS, type ListParseOptions } from "@/lib/json/listCompare";
+import { DEFAULT_LIST_PARSE_OPTIONS, type ListBucket, type ListParseOptions } from "@/lib/json/listCompare";
 import {
   menuItemClass as sharedMenuItemClass,
   menuItemActiveClass as sharedMenuItemActiveClass,
@@ -435,7 +435,15 @@ type ThemeMode = "system" | "dark" | "light";
 type ModalKind = "validate" | "diff" | null;
 type RightView = "raw" | "tree" | "graph" | "query" | "table";
 type QuoteStyle = "double" | "single";
-type Tab = { id: string; label: string; num: number; renamed?: boolean };
+type Tab = {
+  id: string;
+  label: string;
+  num: number;
+  renamed?: boolean;
+  /** Per-tab custom names for the Left/Right list panes. */
+  leftLabel?: string;
+  rightLabel?: string;
+};
 type FormatOptions = {
   indentation: number;
   quoteStyle: QuoteStyle;
@@ -576,6 +584,8 @@ export function WorkspaceContent({
   const [csvColumn, setCsvColumn] = useState<string | null>(null);
   /** Query-view text, lifted for share links. */
   const [queryText, setQueryText] = useState("");
+  /** Currently shown bucket in the per-bucket list-compare view (persisted in share links). */
+  const [activeBucket, setActiveBucket] = useState<ListBucket>("common");
   /** Ref into TreeView search box (Cmd/Ctrl+F). */
   const treeViewRef = useRef<TreeViewRef | null>(null);
   /** Info about the last file dropped/imported (shown as a chip, cleared on demand). */
@@ -672,6 +682,11 @@ export function WorkspaceContent({
   const [renamingTabId, setRenamingTabId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [renameRect, setRenameRect] = useState<{ top: number; left: number } | null>(null);
+  /** Inline list-pane rename editor (floating input next to the Left/Right/List header). */
+  type RenameSide = "left" | "right" | "list";
+  const [renamingListSide, setRenamingListSide] = useState<RenameSide | null>(null);
+  const [listRenameValue, setListRenameValue] = useState("");
+  const [listRenameRect, setListRenameRect] = useState<{ top: number; left: number; width: number } | null>(null);
   // Recent command palette actions
   const [recentActions, setRecentActions] = useState<string[]>([]);
   // Split input
@@ -765,6 +780,8 @@ export function WorkspaceContent({
     listCompareOptions?: Partial<ListParseOptions>;
     csvColumn?: string | null;
     queryText?: string;
+    /** Per-tab bucket currently shown in the per-bucket view (e.g. "common", "leftOnly"). */
+    compareActiveBucket?: ListBucket;
     /** Per-tab diff toolbar preferences - preserved like other toolbar settings. */
     diffSideBySide: boolean;
     diffIgnoreWhitespace: boolean;
@@ -801,6 +818,7 @@ export function WorkspaceContent({
     listCompareOptions: {},
     csvColumn: null,
     queryText: "",
+    compareActiveBucket: undefined,
     diffSideBySide: true,
     diffIgnoreWhitespace: false,
     diffShowPaths: false,
@@ -832,6 +850,7 @@ export function WorkspaceContent({
     listCompareOptions,
     csvColumn,
     queryText,
+    compareActiveBucket: activeBucket,
     diffSideBySide,
     diffIgnoreWhitespace,
     diffShowPaths,
@@ -842,7 +861,7 @@ export function WorkspaceContent({
     graphCopyFormat,
     formatOptions,
     outputActionVisibility,
-  }), [input, inputFormatOverride, undoStack, undoIndex, output, parsedOutput, outputExt, outputLanguage, activeOperation, error, convertToFormat, typeLanguage, rightView, diffLeftInput, diffRightInput, diffKind, listCompareOptions, csvColumn, queryText, diffSideBySide, diffIgnoreWhitespace, diffShowPaths, isOutputMaximized, utilTab, utilsByTool, copyAsMemory, graphCopyFormat, formatOptions, outputActionVisibility]);
+  }), [input, inputFormatOverride, undoStack, undoIndex, output, parsedOutput, outputExt, outputLanguage, activeOperation, error, convertToFormat, typeLanguage, rightView, diffLeftInput, diffRightInput, diffKind, listCompareOptions, csvColumn, queryText, activeBucket, diffSideBySide, diffIgnoreWhitespace, diffShowPaths, isOutputMaximized, utilTab, utilsByTool, copyAsMemory, graphCopyFormat, formatOptions, outputActionVisibility]);
   const applyTabSnapshot = (snap: TabSnapshot) => {
     setInput(snap.input);
     setInputFormatOverride(snap.inputFormatOverride);
@@ -866,6 +885,7 @@ export function WorkspaceContent({
     }
     if (snap.csvColumn) setCsvColumn(snap.csvColumn);
     if (snap.queryText) setQueryText(snap.queryText);
+    if (snap.compareActiveBucket) setActiveBucket(snap.compareActiveBucket);
     setDiffSideBySide(snap.diffSideBySide ?? true);
     setDiffIgnoreWhitespace(snap.diffIgnoreWhitespace ?? false);
     setDiffShowPaths(snap.diffShowPaths ?? false);
@@ -1541,6 +1561,45 @@ export function WorkspaceContent({
     setRenameRect(null);
   }, []);
 
+  /** Refs/handlers for the Left/Right/List header rename editor. */
+  const renamingListSideRef = useRef<RenameSide | null>(null);
+  const startListRename = useCallback(
+    (side: RenameSide, el: HTMLElement | null) => {
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      renamingListSideRef.current = side;
+      setListRenameRect({ top: r.top, left: r.left, width: r.width });
+      setRenamingListSide(side);
+      const current = tabs.find((t) => t.id === activeTabId);
+      const existing = side === "left" ? current?.leftLabel : current?.rightLabel;
+      setListRenameValue(existing ?? (side === "left" ? "Left" : side === "right" ? "Right" : "List"));
+    },
+    [tabs, activeTabId],
+  );
+  const commitListRename = useCallback(() => {
+    const side = renamingListSideRef.current;
+    const v = listRenameValue.trim();
+    renamingListSideRef.current = null;
+    setRenamingListSide(null);
+    setListRenameRect(null);
+    if (!side) return;
+    if (!v) {
+      // Empty = clear custom label
+      setTabs((prev) => prev.map((t) => (t.id === activeTabId
+        ? { ...t, leftLabel: side === "left" ? undefined : t.leftLabel, rightLabel: side === "right" ? undefined : t.rightLabel }
+        : t)));
+      return;
+    }
+    setTabs((prev) => prev.map((t) => (t.id === activeTabId
+      ? { ...t, leftLabel: side === "left" ? v : t.leftLabel, rightLabel: side === "right" ? v : t.rightLabel }
+      : t)));
+  }, [listRenameValue, activeTabId]);
+  const cancelListRename = useCallback(() => {
+    renamingListSideRef.current = null;
+    setRenamingListSide(null);
+    setListRenameRect(null);
+  }, []);
+
   useEffect(() => {
     try {
       const s = localStorage.getItem("formaty-session");
@@ -1620,6 +1679,7 @@ export function WorkspaceContent({
           if (activeSnap.listCompareOptions) setListCompareOptions((prev) => ({ ...prev, ...activeSnap.listCompareOptions }));
           if (activeSnap.csvColumn) setCsvColumn(activeSnap.csvColumn);
           if (activeSnap.queryText) setQueryText(activeSnap.queryText);
+          if (activeSnap.compareActiveBucket) setActiveBucket(activeSnap.compareActiveBucket);
           if (activeSnap.utilTab) setUtilTab(activeSnap.utilTab as UtilTab);
           setTimeout(() => { historyLock.current = false; }, 0);
         }
@@ -1628,6 +1688,7 @@ export function WorkspaceContent({
         if (s.listCompareOptions) setListCompareOptions((prev) => ({ ...prev, ...s.listCompareOptions }));
         if (s.csvColumn) setCsvColumn(s.csvColumn);
         if (s.queryText) setQueryText(s.queryText);
+        if (s.compareActiveBucket) setActiveBucket(s.compareActiveBucket);
         if (s.utilTab) setUtilTab(s.utilTab as UtilTab);
         if (typeof s.split === "number") setSplit(Math.max(20, Math.min(80, s.split)));
         const urlId = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("id") : null;
@@ -1687,7 +1748,13 @@ export function WorkspaceContent({
       if (initialState.listCompareOptions) setListCompareOptions((prev) => ({ ...prev, ...initialState.listCompareOptions }));
       if (initialState.csvColumn) setCsvColumn(initialState.csvColumn);
       if (initialState.queryText) setQueryText(initialState.queryText);
+      if (initialState.compareActiveBucket) setActiveBucket(initialState.compareActiveBucket);
       if (initialState.utilTab) setUtilTab(initialState.utilTab as UtilTab);
+      if (initialState.leftLabel || initialState.rightLabel) {
+        setTabs((prev) => prev.map((t) => (t.id === activeTabId
+          ? { ...t, leftLabel: initialState.leftLabel, rightLabel: initialState.rightLabel }
+          : t)));
+      }
       if (initialState.activeOperation === "diff" || initialState.activeOperation === "utils") setIsOutputMaximized(true);
       const urlId2 = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("id") : null;
       if (urlId2) {
@@ -1783,6 +1850,7 @@ export function WorkspaceContent({
           if (activeSnap.listCompareOptions) setListCompareOptions((prev) => ({ ...prev, ...activeSnap.listCompareOptions }));
           if (activeSnap.csvColumn) setCsvColumn(activeSnap.csvColumn);
           if (activeSnap.queryText) setQueryText(activeSnap.queryText);
+          if (activeSnap.compareActiveBucket) setActiveBucket(activeSnap.compareActiveBucket);
           if (activeSnap.utilTab) setUtilTab(activeSnap.utilTab as UtilTab);
           setTimeout(() => { historyLock.current = false; }, 0);
         }
@@ -1790,6 +1858,7 @@ export function WorkspaceContent({
         if (hs.listCompareOptions) setListCompareOptions((prev) => ({ ...prev, ...hs.listCompareOptions }));
         if (hs.csvColumn) setCsvColumn(hs.csvColumn);
         if (hs.queryText) setQueryText(hs.queryText);
+        if (hs.compareActiveBucket) setActiveBucket(hs.compareActiveBucket);
         if (hs.utilTab) setUtilTab(hs.utilTab as UtilTab);
         if (typeof hs.split === "number") setSplit(Math.max(20, Math.min(80, hs.split)));
         sessionRestoredRef.current = true;
@@ -1842,7 +1911,13 @@ export function WorkspaceContent({
       if (state.listCompareOptions) setListCompareOptions((prev) => ({ ...prev, ...state.listCompareOptions }));
       if (state.csvColumn) setCsvColumn(state.csvColumn);
       if (state.queryText) setQueryText(state.queryText);
+      if (state.compareActiveBucket) setActiveBucket(state.compareActiveBucket);
       if (state.utilTab) setUtilTab(state.utilTab as UtilTab);
+      if (state.leftLabel || state.rightLabel) {
+        setTabs((prev) => prev.map((t) => (t.id === activeTabId
+          ? { ...t, leftLabel: state.leftLabel, rightLabel: state.rightLabel }
+          : t)));
+      }
       if (state.activeOperation === "diff" || state.activeOperation === "utils") setIsOutputMaximized(true);
       else setActiveOperation((state.activeOperation as OperationAction) ?? null);
       if (state.input || state.diffLeftInput || state.diffRightInput) sessionRestoredRef.current = true;
@@ -1929,6 +2004,7 @@ export function WorkspaceContent({
              if (activeSnap.listCompareOptions) setListCompareOptions((prev) => ({ ...prev, ...activeSnap.listCompareOptions }));
              if (activeSnap.csvColumn) setCsvColumn(activeSnap.csvColumn);
              if (activeSnap.queryText) setQueryText(activeSnap.queryText);
+             if (activeSnap.compareActiveBucket) setActiveBucket(activeSnap.compareActiveBucket);
              if (typeof activeSnap.diffLeftInput === "string") setDiffLeftInput(activeSnap.diffLeftInput);
              if (typeof activeSnap.diffRightInput === "string") setDiffRightInput(activeSnap.diffRightInput);
              if (typeof activeSnap.diffSideBySide === "boolean") setDiffSideBySide(activeSnap.diffSideBySide);
@@ -2177,6 +2253,15 @@ export function WorkspaceContent({
       return;
     }
     if (!liveTransform || !input.trim()) return;
+    // Don't clobber a user-driven output mode (Types/Schema/Validate/Compare/Utils)
+    // with a Transform cycle just because the input was edited.
+    if (
+      activeOperation === "generateTypes" ||
+      activeOperation === "schema" ||
+      activeOperation === "validate" ||
+      activeOperation === "diff" ||
+      activeOperation === "utils"
+    ) return;
     const fmt = detectFormat(input);
     if (fmt === "curl") return; // cURL: execute only on explicit run (Cmd+Enter)
     liveTransformTimeoutRef.current = setTimeout(() => {
@@ -2193,9 +2278,15 @@ export function WorkspaceContent({
           setOutputExt(EXT_BY_FORMAT[convertToFormat]);
           setOutputLanguage(convertToFormat);
           setParsedOutput(json);
-          // Keep Transform mode (don't clobber Compare/Utils)
-          setActiveOperation((op) => (op === "diff" || op === "utils" ? op : null));
+          // Keep Transform mode and the user's chosen output view (don't clobber Compare/Utils,
+          // and don't clobber Types/Schema modes when the user picks "Load sample" on a tab
+          // that inherited those settings from another tab).
+          setActiveOperation((op) => {
+            if (op === "diff" || op === "utils" || op === "generateTypes" || op === "schema" || op === "validate") return op;
+            return null;
+          });
           if (
+            rightView === "raw" && // only switch to table when the view is still the default — don't clobber inherited view choices
             convertToFormat !== "csv" && // never yank CSV output away from Raw
             Array.isArray(json) &&
             json.length > 0 &&
@@ -2213,7 +2304,32 @@ export function WorkspaceContent({
     // Debounced live transform reads the latest input via inputRef; convertJsonToOutput is
     // declared below and intentionally not in deps.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [liveTransform, input, convertToFormat, run]);
+  }, [liveTransform, input, convertToFormat, activeOperation, run]);
+
+  // Re-run Types/Schema/Validate when the input changes so a sample loaded on a
+  // tab that inherited these modes from another tab regenerates the output
+  // (liveTransform above early-returns for these modes, so they need their own
+  // debounce).
+  useEffect(() => {
+    if (!input.trim()) return;
+    if (
+      activeOperation !== "generateTypes" &&
+      activeOperation !== "schema" &&
+      activeOperation !== "validate"
+    ) return;
+    const id = setTimeout(() => {
+      if (!inputRef.current.trim()) return;
+      if (activeOperation === "generateTypes") {
+        executeOperation("generateTypes", { typeLanguage, inputText: inputRef.current });
+      } else if (activeOperation === "schema") {
+        executeOperation("schema", { inputText: inputRef.current });
+      } else if (activeOperation === "validate") {
+        executeOperation("validate", { inputText: inputRef.current });
+      }
+    }, 400);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [input, activeOperation, typeLanguage]);
 
 
 
@@ -2990,7 +3106,10 @@ export function WorkspaceContent({
       utilTab,
       queryText: rightView === "query" ? queryText : undefined,
       listCompareOptions: isDiffMode ? listCompareOptions : undefined,
-      csvColumn: isDiffMode && diffKind === "list" ? csvColumn ?? undefined : undefined,
+      csvColumn: isDiffMode ? csvColumn ?? undefined : undefined,
+      compareActiveBucket: isDiffMode && !includeAllTabs ? activeBucket : undefined,
+      leftLabel: !includeAllTabs ? tabs.find((t) => t.id === activeTabId)?.leftLabel : undefined,
+      rightLabel: !includeAllTabs ? tabs.find((t) => t.id === activeTabId)?.rightLabel : undefined,
     };
     if (includeAllTabs) {
       const all: Record<string, TabSnapshot> = {};
@@ -4609,6 +4728,21 @@ export function WorkspaceContent({
             style={{ top: renameRect.top, left: renameRect.left }}
           />
         )}
+        {renamingListSide && listRenameRect && (
+          <input
+            autoFocus
+            value={listRenameValue}
+            onChange={(e) => setListRenameValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commitListRename();
+              else if (e.key === "Escape") cancelListRename();
+            }}
+            onBlur={commitListRename}
+            aria-label="Rename list"
+            className="fixed z-[90] h-7 rounded-md border border-primary/40 bg-[var(--workspace-panel)] px-2 text-xs text-[var(--workspace-text)] shadow-lg outline-none"
+            style={{ top: listRenameRect.top, left: listRenameRect.left, width: listRenameRect.width }}
+          />
+        )}
       {/* Column: stable full-width tool row + split (icons never jump when left panel hides) */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         {/* ── Full-width secondary toolbar (Transform | Compare | Utils + output actions) ── */}
@@ -5573,6 +5707,11 @@ export function WorkspaceContent({
                     options={listCompareOptions}
                     initialCsvColumn={csvColumn}
                     onCsvColumnChange={setCsvColumn}
+                    activeBucket={activeBucket}
+                    onActiveBucketChange={setActiveBucket}
+                    leftLabel={tabs.find((t) => t.id === activeTabId)?.leftLabel}
+                    rightLabel={tabs.find((t) => t.id === activeTabId)?.rightLabel}
+                    onStartListRename={startListRename}
                   />
                 ) : diffKind === "single" ? (
                   <SingleListPanel
@@ -5585,6 +5724,8 @@ export function WorkspaceContent({
                     onExportChange={setListCompareExport}
                     fontSize={editorFontSize}
                     options={listCompareOptions}
+                    listLabel={tabs.find((t) => t.id === activeTabId)?.leftLabel ?? tabs.find((t) => t.id === activeTabId)?.rightLabel}
+                    onStartListRename={startListRename}
                   />
                 ) : (
                   <div className="flex min-h-0 flex-1 overflow-hidden">

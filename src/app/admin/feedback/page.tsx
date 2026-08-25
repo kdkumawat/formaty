@@ -148,10 +148,10 @@ export default function FeedbackAdminPage() {
     setItems([]);
   };
 
-  /** Copy every loaded item as compact bullet points, ready to paste into an AI. */
+  /** Copy items in the currently selected tab as compact bullet points, ready to paste into an AI. */
   const copyAll = async () => {
-    if (items.length === 0) return;
-    const lines = items.map((item) => {
+    if (visible.length === 0) return;
+    const lines = visible.map((item) => {
       const meta: string[] = [];
       if (item.page) meta.push(`page: ${item.page}`);
       if (item.email) meta.push(`email: ${item.email}`);
@@ -160,10 +160,11 @@ export default function FeedbackAdminPage() {
       return `- [${categoryLabel(item.category).toLowerCase()}] ${item.message}${metaStr}`;
     });
     const text = lines.join("\n");
+    const tabLabel = activeTab === "all" ? "All" : FEEDBACK_STATUSES.find((s) => s.id === activeTab)?.label ?? activeTab;
     try {
       await navigator.clipboard.writeText(text);
       toast({
-        message: `Copied ${items.length} feedback item${items.length === 1 ? "" : "s"} as bullets`,
+        message: `Copied ${visible.length} feedback item${visible.length === 1 ? "" : "s"} from ${tabLabel} as bullets`,
         type: "success",
       });
     } catch {
@@ -250,7 +251,7 @@ export default function FeedbackAdminPage() {
               variant="outline"
               size="sm"
               onClick={() => void copyAll()}
-              disabled={loading || items.length === 0}
+              disabled={loading || visible.length === 0}
             >
               <ClipboardDocumentListIcon className="h-4 w-4" />
               Copy all

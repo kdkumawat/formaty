@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
   ArrowsRightLeftIcon,
   ChartPieIcon,
   ChevronDownIcon,
+  ChevronRightIcon,
   ClipboardDocumentIcon,
   SparklesIcon,
   TableCellsIcon,
@@ -70,6 +71,15 @@ interface ListComparePanelProps {
   initialCsvColumn?: string | null;
   /** Report the selected CSV column up so share links can preserve it. */
   onCsvColumnChange?: (col: string | null) => void;
+  /** Currently selected bucket — controlled from the parent so share/restore can preserve it. */
+  activeBucket?: ListBucket;
+  /** Report the selected bucket up so share links can preserve it. */
+  onActiveBucketChange?: (bucket: ListBucket) => void;
+  /** Custom user labels for the Left and Right list panes. */
+  leftLabel?: string;
+  rightLabel?: string;
+  /** Trigger the inline rename editor for a list-pane header. */
+  onStartListRename?: (side: "left" | "right" | "list", el: HTMLElement | null) => void;
 }
 
 const PRIMARY_BUCKETS: ListBucket[] = ["common", "leftOnly", "rightOnly", "union", "symmetric", "changed"];
@@ -151,6 +161,11 @@ export function ListComparePanel({
   options,
   initialCsvColumn,
   onCsvColumnChange,
+  activeBucket: controlledActiveBucket,
+  onActiveBucketChange,
+  leftLabel,
+  rightLabel,
+  onStartListRename,
 }: ListComparePanelProps) {
   const effectiveOptions = options ?? DEFAULT_LIST_PARSE_OPTIONS;
   const [resultSort, setResultSort] = useState<ListSortMode>(() =>
@@ -162,9 +177,38 @@ export function ListComparePanel({
   const [rightSort, setRightSort] = useState<ListSortMode>(() =>
     loadStoredSort(RIGHT_SORT_STORAGE_KEY, "none"),
   );
-  const [activeBucket, setActiveBucket] = useState<ListBucket>(loadStoredBucket);
+  const [activeBucket, setActiveBucketState] = useState<ListBucket>(
+    () => controlledActiveBucket ?? loadStoredBucket(),
+  );
+  /** If the parent passes a controlled value, mirror it back into local state. */
+  useEffect(() => {
+    if (controlledActiveBucket && controlledActiveBucket !== activeBucket) {
+      setActiveBucketState(controlledActiveBucket);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [controlledActiveBucket]);
+  const setActiveBucket = useCallback(
+    (b: ListBucket | ((prev: ListBucket) => ListBucket)) => {
+      setActiveBucketState((prev) => {
+        const next = typeof b === "function" ? (b as (p: ListBucket) => ListBucket)(prev) : b;
+        onActiveBucketChange?.(next);
+        return next;
+      });
+    },
+    [onActiveBucketChange],
+  );
   /** Bucket shown before the last dup-link click - clicking again restores it. */
   const prevBucketRef = useRef<ListBucket>("common");
+  /** Summary-view section collapse state — all open by default. */
+  const [summaryCollapsed, setSummaryCollapsed] = useState<Set<ListBucket>>(() => new Set());
+  const toggleSummarySection = (b: ListBucket) => {
+    setSummaryCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(b)) next.delete(b);
+      else next.add(b);
+      return next;
+    });
+  };
 
   const toggleDupBucket = (b: "leftDupes" | "rightDupes") => {
     if (activeBucket === b) {
@@ -637,7 +681,16 @@ export function ListComparePanel({
           <div className="flex min-h-0 min-w-0 flex-1 flex-col border-b border-[var(--workspace-border)] sm:border-b-0 sm:border-r">
             <div className={paneHeader}>
               <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-sky-400" />
-              <span className="text-[11px] font-semibold text-[var(--workspace-text)]">Left</span>
+              <span
+                className="cursor-text select-none rounded px-1 text-[11px] font-semibold text-[var(--workspace-text)] hover:bg-[var(--workspace-border)]/60"
+                title="Double-click to rename"
+                onDoubleClick={(e) => {
+                  e.stopPropagation();
+                  onStartListRename?.("left", e.currentTarget);
+                }}
+              >
+                {leftLabel ?? "Left"}
+              </span>
               <span className="flex min-w-0 items-center gap-1 text-[10px] tabular-nums text-[var(--workspace-text-muted)]">
                 <span className="shrink-0">{result.left.rawCount} items</span>
                 <span aria-hidden>·</span>
@@ -724,7 +777,16 @@ export function ListComparePanel({
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             <div className={paneHeader}>
               <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-violet-400" />
-              <span className="text-[11px] font-semibold text-[var(--workspace-text)]">Right</span>
+              <span
+                className="cursor-text select-none rounded px-1 text-[11px] font-semibold text-[var(--workspace-text)] hover:bg-[var(--workspace-border)]/60"
+                title="Double-click to rename"
+                onDoubleClick={(e) => {
+                  e.stopPropagation();
+                  onStartListRename?.("right", e.currentTarget);
+                }}
+              >
+                {rightLabel ?? "Right"}
+              </span>
               <span className="flex min-w-0 items-center gap-1 text-[10px] tabular-nums text-[var(--workspace-text-muted)]">
                 <span className="shrink-0">{result.right.rawCount} items</span>
                 <span aria-hidden>·</span>
@@ -1009,43 +1071,66 @@ export function ListComparePanel({
             <div className="min-h-0 flex-1 overflow-auto bg-[var(--workspace-panel)] px-3 py-2.5" style={{ fontSize }}>
               {left.trim() || right.trim() ? (
                 <div className="flex flex-col gap-3.5">
-                  {summary?.sections.map((section) => (
-                    <section key={section.bucket}>
-                      <button
-                        type="button"
-                        onClick={() => setActiveBucket(section.bucket)}
-                        title={`Show ${section.label} items`}
-                        className="group flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--workspace-text)] transition-colors hover:text-primary"
-                      >
-                        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${bucketDot(section.bucket)}`} />
-                        {section.label}
-                        <span className="font-mono tabular-nums text-[var(--workspace-text-muted)]">
-                          {section.count}
-                        </span>
-                        <span className="opacity-0 transition-opacity group-hover:opacity-100 text-[var(--workspace-text-muted)]">
-                          →
-                        </span>
-                      </button>
-                      <div className="mt-1 flex flex-col gap-px border-l border-[var(--workspace-border)] pl-2.5">
-                        {section.items.map((item) => {
-                          const d = deltaByKey.get(item.key);
-                          return (
-                            <span
-                              key={item.key}
-                              className="whitespace-pre-wrap break-words font-mono leading-relaxed text-[var(--workspace-text)]"
-                            >
-                              {item.value}
-                              {section.bucket === "common" && d ? (
-                                <span className="text-[var(--workspace-text-muted)]">
-                                  {" "}×{d.left} left, ×{d.right} right
-                                </span>
-                              ) : null}
+                  {summary?.sections.map((section) => {
+                    const collapsed = summaryCollapsed.has(section.bucket);
+                    return (
+                      <section key={section.bucket}>
+                        <div className="group flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--workspace-text)]">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleSummarySection(section.bucket);
+                            }}
+                            title={collapsed ? `Expand ${section.label}` : `Collapse ${section.label}`}
+                            aria-label={collapsed ? `Expand ${section.label}` : `Collapse ${section.label}`}
+                            className="flex h-4 w-4 items-center justify-center rounded text-[var(--workspace-text-muted)] transition-colors hover:bg-[var(--workspace-border)] hover:text-[var(--workspace-text)]"
+                          >
+                            {collapsed ? (
+                              <ChevronRightIcon className="h-3 w-3" />
+                            ) : (
+                              <ChevronDownIcon className="h-3 w-3" />
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setActiveBucket(section.bucket)}
+                            title={`Show ${section.label} items`}
+                            className="flex flex-1 items-center gap-1.5 text-left transition-colors hover:text-primary"
+                          >
+                            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${bucketDot(section.bucket)}`} />
+                            {section.label}
+                            <span className="font-mono tabular-nums text-[var(--workspace-text-muted)]">
+                              {section.count}
                             </span>
-                          );
-                        })}
-                      </div>
-                    </section>
-                  ))}
+                            <span className="opacity-0 transition-opacity group-hover:opacity-100 text-[var(--workspace-text-muted)]">
+                              →
+                            </span>
+                          </button>
+                        </div>
+                        {collapsed ? null : (
+                          <div className="mt-1 flex flex-col gap-px border-l border-[var(--workspace-border)] pl-2.5">
+                            {section.items.map((item) => {
+                              const d = deltaByKey.get(item.key);
+                              return (
+                                <span
+                                  key={item.key}
+                                  className="whitespace-pre-wrap break-words font-mono leading-relaxed text-[var(--workspace-text)]"
+                                >
+                                  {item.value}
+                                  {section.bucket === "common" && d ? (
+                                    <span className="text-[var(--workspace-text-muted)]">
+                                      {" "}×{d.left} left, ×{d.right} right
+                                    </span>
+                                  ) : null}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </section>
+                    );
+                  })}
                 </div>
               ) : (
                 <p className="font-mono text-[var(--workspace-text-muted)]">
