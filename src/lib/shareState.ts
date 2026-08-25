@@ -4,7 +4,20 @@ import {
 } from "lz-string";
 import type { FormatKind } from "./formats";
 import type { TypeTargetLanguage } from "./json/core";
-import type { ListParseOptions } from "./json/listCompare";
+import type { ListBucket, ListParseOptions } from "./json/listCompare";
+
+/** Valid values for the shared `compareActiveBucket` field. */
+export const COMPARE_BUCKETS: readonly ListBucket[] = [
+  "common",
+  "leftOnly",
+  "rightOnly",
+  "union",
+  "symmetric",
+  "leftDupes",
+  "rightDupes",
+  "changed",
+  "summary",
+] as const;
 
 export type OutputDisplayKind = FormatKind | TypeTargetLanguage | "plaintext";
 
@@ -34,10 +47,15 @@ export interface WorkspaceState {
   /** Compare: literal left/right inputs (single-tab share). */
   diffLeftInput?: string;
   diffRightInput?: string;
+  /** Compare: bucket currently shown in the per-bucket view (e.g. "common", "leftOnly"). */
+  compareActiveBucket?: ListBucket;
+  /** Compare: custom user labels for the Left and Right list panes (per active tab). */
+  leftLabel?: string;
+  rightLabel?: string;
   /** Utils: active util tab. */
   utilTab?: string;
   /** Multi-tab share: list of tabs. */
-  tabs?: Array<{ id: string; label: string; num: number; renamed?: boolean }>;
+  tabs?: Array<{ id: string; label: string; num: number; renamed?: boolean; leftLabel?: string; rightLabel?: string; compareActiveBucket?: ListBucket }>;
   activeTabId?: string;
   showTabs?: boolean;
   /** Multi-tab snapshots keyed by tab id. */

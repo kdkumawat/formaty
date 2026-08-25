@@ -47,6 +47,10 @@ interface SingleListPanelProps {
   onExportChange?: (exportInfo: ListCompareExport | null) => void;
   fontSize?: number;
   options?: ListParseOptions;
+  /** Custom user label for the single list pane. */
+  listLabel?: string;
+  /** Trigger the inline rename editor for the list header. */
+  onStartListRename?: (side: "left" | "right" | "list", el: HTMLElement | null) => void;
 }
 
 const EXPORT_GROUPS: { label: string; items: ListExportFormat[] }[] = [
@@ -120,6 +124,8 @@ export function SingleListPanel({
   onExportChange,
   fontSize = 13,
   options,
+  listLabel,
+  onStartListRename,
 }: SingleListPanelProps) {
   const effectiveOptions = options ?? DEFAULT_LIST_PARSE_OPTIONS;
   const [view, setView] = useState<SingleView>(loadStoredView);
@@ -370,7 +376,16 @@ export function SingleListPanel({
         <div className="flex min-h-0 min-w-0 flex-1 flex-col border-b border-[var(--workspace-border)] lg:border-b-0 lg:border-r">
           <div className={paneHeader}>
             <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />
-            <span className="text-[11px] font-semibold text-[var(--workspace-text)]">List</span>
+            <span
+              className="cursor-text select-none rounded px-1 text-[11px] font-semibold text-[var(--workspace-text)] hover:bg-[var(--workspace-border)]/60"
+              title="Double-click to rename"
+              onDoubleClick={(e) => {
+                e.stopPropagation();
+                onStartListRename?.("list", e.currentTarget);
+              }}
+            >
+              {listLabel ?? "List"}
+            </span>
             <span className="truncate text-[10px] tabular-nums text-[var(--workspace-text-muted)]">
               {analysis.rawCount} items · {analysis.uniqueCount} unique
               {analysis.duplicateKeys > 0 ? ` · ${analysis.duplicateKeys} dup` : ""}
