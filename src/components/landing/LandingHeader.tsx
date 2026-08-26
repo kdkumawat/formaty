@@ -25,10 +25,16 @@ export function LandingHeader() {
           className="flex items-center gap-0.5 text-[var(--workspace-text)] transition-opacity hover:opacity-85"
         >
           <Logo size={22} />
-          <span className="text-lg font-bold tracking-tight text-primary">ormaty</span>
+          <span className="text-lg font-bold tracking-tight text-primary">Formaty</span>
         </Link>
 
         <nav className="flex items-center gap-1.5 sm:gap-2">
+          <Link
+            href="/#use-cases"
+            className="hidden rounded-lg px-3 py-1.5 text-sm text-[var(--workspace-text-muted)] transition-colors hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] sm:inline-flex"
+          >
+            Use cases
+          </Link>
           <Link
             href="/tools"
             className="hidden rounded-lg px-3 py-1.5 text-sm text-[var(--workspace-text-muted)] transition-colors hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] sm:inline-flex"

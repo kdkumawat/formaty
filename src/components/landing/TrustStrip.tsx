@@ -3,25 +3,20 @@
 import {
   ShieldCheckIcon,
   UserIcon,
-  BoltIcon,
   GlobeAltIcon,
-  LockClosedIcon,
   CpuChipIcon,
 } from "@heroicons/react/24/outline";
 
 const ITEMS = [
   { icon: ShieldCheckIcon, text: "100% local - data never leaves your browser" },
   { icon: UserIcon, text: "No account required" },
-  { icon: BoltIcon, text: "Completely free, forever" },
   { icon: GlobeAltIcon, text: "Works offline" },
-  { icon: LockClosedIcon, text: "Zero tracking" },
   { icon: CpuChipIcon, text: "Powered by WebWorkers" },
 ];
 
 export function TrustStrip() {
   return (
     <section className="fixed inset-x-0 bottom-0 z-40 overflow-hidden border-t border-[var(--workspace-border)] bg-[var(--workspace-panel)] py-2.5 backdrop-blur-sm">
-      {/* Fade edges */}
       <div
         className="pointer-events-none absolute bottom-0 left-0 top-0 z-10 w-24"
         style={{ background: "linear-gradient(to right, var(--workspace-panel), transparent)" }}
@@ -33,7 +28,6 @@ export function TrustStrip() {
         aria-hidden
       />
 
-      {/* Marquee - two copies; gap-12 + pr-12 make the -50% translate seamless */}
       <div className="flex w-full overflow-hidden" aria-hidden>
         <div className="marquee-track flex shrink-0 items-center gap-12 pr-12">
           {[...ITEMS, ...ITEMS].map(({ icon: Icon, text }, i) => (

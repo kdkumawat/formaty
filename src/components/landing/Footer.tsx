@@ -26,7 +26,7 @@ function MadeWithLove() {
         target="_blank"
         rel="noopener noreferrer"
         className="font-semibold text-[var(--workspace-text)] transition-colors hover:text-primary"
-        title="Kuldeep Kumawat on LinkedIn"
+        title="Kuldeep Kumawat on X"
       >
        / X
       </a>

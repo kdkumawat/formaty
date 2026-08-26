@@ -7,10 +7,8 @@ import { ArrowRightIcon } from "@heroicons/react/24/outline";
 export function FinalCTA() {
   return (
     <section className="relative overflow-hidden border-t border-[var(--workspace-border)] px-4 py-16 md:py-24">
-      {/* Grid */}
       <div className="pointer-events-none absolute inset-0 hero-grid" aria-hidden />
 
-      {/* Blob A - top left */}
       <div
         className="blob-drift-a pointer-events-none absolute -left-20 -top-20 h-[500px] w-[500px]"
         style={{
@@ -19,7 +17,6 @@ export function FinalCTA() {
         }}
         aria-hidden
       />
-      {/* Blob B - bottom right */}
       <div
         className="blob-drift-b pointer-events-none absolute -bottom-20 -right-20 h-[500px] w-[500px]"
         style={{
@@ -41,7 +38,7 @@ export function FinalCTA() {
           <span className="gradient-text">Paste it into Formaty.</span>
         </h2>
         <p className="text-base text-[var(--workspace-text-muted)] md:text-lg">
-          Format · Inspect · Query · Compare · Reconcile · Generate - local, offline, no signup.
+          Format · Convert · Compare · Query · Generate - local, offline, no signup.
         </p>
         <div className="flex flex-wrap items-center justify-center gap-3">
           <Link

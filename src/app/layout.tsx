@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 import { Suspense } from "react";
+import { MotionConfig } from "framer-motion";
 import { Inter, JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import { Analytics } from "@/components/Analytics";
 import { ConsentBanner } from "@/components/ConsentBanner";
@@ -304,10 +305,12 @@ export default function RootLayout({
             </Script>
           </>
         ) : null}
-        {children}
-        <Suspense fallback={null}>
-          <Analytics />
-        </Suspense>
+        <MotionConfig reducedMotion="user">
+          {children}
+          <Suspense fallback={null}>
+            <Analytics />
+          </Suspense>
+        </MotionConfig>
         <ServiceWorkerRegister />
         <ConsentBanner />
       </body>
