@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* Theme-aware `dark:` variant — keyed to the app's `data-theme` attribute
+/* Theme-aware `dark:` variant - keyed to the app's `data-theme` attribute
    (default dark), not the OS media query Tailwind ships with. Fixes status
    colors / ring / shadow tints appearing wrong when app theme ≠ OS theme. */
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *, :root:not([data-theme]) *));
@@ -314,6 +314,18 @@ button:disabled,
 input:focus-visible,
 textarea:focus-visible {
   outline: none;
+}
+
+/* ── Smooth scroll for in-page anchors ───────────────────── */
+html { scroll-behavior: smooth; }
+
+/* ── Print stylesheet - clean docs PDF export ────────────── */
+@media print {
+  header, aside, .no-print, [data-docs-toc] { display: none !important; }
+  main { padding: 0 !important; max-width: 100% !important; }
+  section { break-inside: avoid; page-break-inside: avoid; }
+  a { color: inherit; text-decoration: underline; }
+  body, html { background: #fff !important; color: #000 !important; }
 }
 
 /* ── Toolbar active state ────────────────────────────────── */
