@@ -186,8 +186,8 @@ input[type="number"] {
 .blob-drift-b { animation: drift-b 20s ease-in-out infinite; }
 
 @keyframes shimmer {
-  0%   { background-position: -200% center; }
-  100% { background-position: 200% center; }
+  0%   { background-position: 200% center; }
+  100% { background-position: -200% center; }
 }
 
 @keyframes float {
@@ -208,12 +208,12 @@ input[type="number"] {
 /* ── Utility classes ─────────────────────────────────────── */
 
 .gradient-text {
-  background: linear-gradient(135deg, #6d6df4 0%, #8b5cf6 45%, #4f8ff7 100%);
-  background-size: 200% auto;
+  background: linear-gradient(110deg, #f59e0b 0%, #ec4899 28%, #a855f7 58%, #6d6df4 100%);
+  background-size: 300% auto;
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
-  animation: shimmer 6s linear infinite;
+  animation: shimmer 10s linear infinite;
 }
 
 .dot-grid {

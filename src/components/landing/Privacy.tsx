@@ -2,40 +2,33 @@
 
 import { motion } from "framer-motion";
 import { CheckIcon } from "@heroicons/react/24/outline";
+import { Reveal } from "@/components/motion";
+import { fadeUp, staggerContainer } from "@/lib/motion";
 
 const CLAIMS = [
   {
-    title: "Runs in your browser",
-    desc: "Formatting, conversion, comparison, queries, and type generation all execute client-side in a Web Worker.",
+    title: "Open source",
+    desc: "The whole app is on GitHub. Read the code, audit the worker, run your own copy.",
   },
   {
-    title: "Works offline",
-    desc: "After the first visit, the whole app runs from a cached service worker - no network needed.",
+    title: "Service worker cache",
+    desc: "After the first load, the app, fonts, and worker ship from a local cache. No CDN, no API on repeat visits.",
   },
   {
-    title: "No signup",
-    desc: "There are no accounts, no logins, and no cloud persistence. Just open and use it.",
+    title: "URL-only sharing",
+    desc: "Share links encode your input into the URL itself - nothing is stored on a server until you decide to send it.",
   },
   {
-    title: "No uploads for local workflows",
-    desc: "Transform, compare, and utils never send your data anywhere. Your data stays in your browser.",
-  },
-  {
-    title: "Explicit, optional exceptions",
-    desc: "Sharing encodes your state into the link you choose to copy. Executing a cURL request talks to the API you point it at. Both are explicit actions.",
+    title: "No telemetry, no cookies",
+    desc: "Analytics is opt-in and anonymized. No third-party trackers, no fingerprinting, no advertising.",
   },
 ];
 
 export function Privacy() {
   return (
-    <section className="border-t border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-4 py-14 md:py-20">
+    <section id="privacy" className="scroll-mt-16 border-t border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-4 py-14 md:py-20">
       <div className="mx-auto max-w-6xl">
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          className="mx-auto max-w-2xl space-y-4 text-center"
-        >
+        <Reveal className="mx-auto max-w-2xl space-y-4 text-center">
           <p className="text-xs font-semibold uppercase tracking-widest text-primary">
             Privacy
           </p>
@@ -43,21 +36,21 @@ export function Privacy() {
             Your data stays yours.
           </h2>
           <p className="mx-auto max-w-xl text-sm text-[var(--workspace-text-muted)] md:text-base">
-            Formaty is a local-first developer tool. For every local workflow - format, convert,
-            compare, query, generate - your data never leaves your device.
+            Formaty is a local-first developer tool. Beyond the four points below, your data never leaves your device.
           </p>
-        </motion.div>
+        </Reveal>
 
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ delay: 0.08 }}
+          variants={staggerContainer}
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true, amount: 0.15 }}
           className="mx-auto mt-10 grid max-w-4xl gap-3 sm:grid-cols-2"
         >
           {CLAIMS.map(({ title, desc }) => (
-            <div
+            <motion.div
               key={title}
+              variants={fadeUp}
               className="flex items-start gap-3 rounded-xl border border-[var(--workspace-border)] bg-[var(--workspace-background)] p-5"
             >
               <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/15">
@@ -67,21 +60,9 @@ export function Privacy() {
                 <h3 className="text-sm font-semibold text-[var(--workspace-text)]">{title}</h3>
                 <p className="mt-1 text-xs leading-relaxed text-[var(--workspace-text-muted)]">{desc}</p>
               </div>
-            </div>
+            </motion.div>
           ))}
         </motion.div>
-
-        <motion.p
-          initial={{ opacity: 0 }}
-          whileInView={{ opacity: 1 }}
-          viewport={{ once: true }}
-          transition={{ delay: 0.12 }}
-          className="mx-auto mt-6 max-w-2xl text-center text-xs leading-relaxed text-[var(--workspace-text-muted)]"
-        >
-          Share links encode your data into the URL itself - nothing is stored on a server, and
-          nothing is transmitted until you decide to send the link. Local session state is kept in
-          your browser&apos;s localStorage only.
-        </motion.p>
       </div>
     </section>
   );

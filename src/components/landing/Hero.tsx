@@ -8,10 +8,13 @@ import {
   ArrowDownTrayIcon,
   ArrowsRightLeftIcon,
   BoltIcon,
-  ChevronDownIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
   ClipboardDocumentIcon,
   CodeBracketIcon,
   QueueListIcon,
+  PauseIcon,
+  PlayIcon,
   ShareIcon,
   SparklesIcon,
   SwatchIcon,
@@ -26,8 +29,9 @@ import {
   useIconAnimation,
   type AnimatedIconHandle,
 } from "@/components/icons";
+import { CountUp } from "@/components/motion";
+import { useReducedMotionSafe } from "@/lib/motion";
 
-// Each slide: {inputLabel, inputColor, outputLabel, outputColor, statusText, InputPane, OutputPane}
 type Slide = {
   id: string;
   inputLabel: string;
@@ -153,6 +157,23 @@ function CurlToJsonOut() {
   );
 }
 
+function SqlOut() {
+  return (
+    <pre className="font-mono text-[10px] leading-[1.8]">
+      <span className="text-sky-400">CREATE TABLE</span>{" "}
+      <span className="text-[var(--workspace-text)]">users (</span>{"\n"}
+      {"  "}<span className="text-sky-500">id</span>{" "}
+      <span className="text-amber-400">INTEGER PRIMARY KEY</span>,{"\n"}
+      {"  "}<span className="text-sky-500">name</span>{" "}
+      <span className="text-amber-400">TEXT NOT NULL</span>,{"\n"}
+      {"  "}<span className="text-sky-500">email</span>{" "}
+      <span className="text-amber-400">TEXT UNIQUE</span>{"\n"}
+      <span className="text-[var(--workspace-text)]">);</span>{"\n"}
+      <span className="text-emerald-500">-- + 1 INSERT row</span>
+    </pre>
+  );
+}
+
 function CsvTableOut() {
   return (
     <div className="overflow-hidden rounded-md border border-[var(--workspace-border)] text-[9.5px]">
@@ -269,7 +290,6 @@ function HeroToolbarChip({
     >
       <Animated ref={icon.ref} className={iconClassName} />
       <span className="font-semibold text-[var(--workspace-text)]">{label}</span>
-      <ChevronDownIcon className="h-2.5 w-2.5 opacity-50" aria-hidden />
     </span>
   );
 }
@@ -318,6 +338,13 @@ const SLIDES: Slide[] = [
     InputPane: CurlInput, OutputPane: CurlToJsonOut,
   },
   {
+    id: "json-sql",
+    inputLabel: "JSON", inputColor: "text-amber-500",
+    outputLabel: "SQL DDL + INSERT", outputColor: "text-emerald-500",
+    statusText: "JSON → SQL schema + seed",
+    InputPane: JsonInput, OutputPane: SqlOut,
+  },
+  {
     id: "csv-table",
     inputLabel: "CSV", inputColor: "text-blue-500",
     outputLabel: "Table View", outputColor: "text-emerald-500",
@@ -326,15 +353,27 @@ const SLIDES: Slide[] = [
   },
 ];
 
+const STATS = [
+  { value: 5, label: "formats" },
+  { value: 41, label: "tools" },
+  { value: 12, label: "code targets" },
+] as const;
+
 export function Hero() {
   const [slideIdx, setSlideIdx] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const reduced = useReducedMotionSafe();
 
   useEffect(() => {
+    if (reduced || paused) return;
     const id = setInterval(() => {
       setSlideIdx((i) => (i + 1) % SLIDES.length);
     }, 3400);
     return () => clearInterval(id);
-  }, []);
+  }, [reduced, paused]);
+
+  const goPrev = () => setSlideIdx((i) => (i - 1 + SLIDES.length) % SLIDES.length);
+  const goNext = () => setSlideIdx((i) => (i + 1) % SLIDES.length);
 
   const slide = SLIDES[slideIdx];
   const { InputPane, OutputPane } = slide;
@@ -396,11 +435,9 @@ export function Hero() {
             transition={{ duration: 0.5, delay: 0.14 }}
             className="mx-auto max-w-lg text-base leading-relaxed text-[var(--workspace-text-muted)] lg:mx-0 lg:text-lg"
           >
-            Format, convert, compare, reconcile, query, and generate code from structured data{" "}
-            <span className="font-semibold text-[var(--workspace-text)]">
-              directly in your browser
-            </span>
-            {" "}- JSON · XML · YAML · TOML · CSV · lists · API responses.
+            Local-first. Format, convert, compare, query, and generate from JSON, XML, YAML, TOML and CSV - list compare and dev utils included -{" "}
+            <br className="hidden sm:inline" />
+            <span className="font-semibold text-[var(--workspace-text)]">in your browser, never on a server</span>.
           </motion.p>
 
           {/* CTA row */}
@@ -411,12 +448,6 @@ export function Hero() {
             className="flex flex-wrap items-center justify-center gap-3 lg:justify-start"
           >
             <HeroCtaLink />
-            <Link
-              href="/#tools"
-              className="inline-flex items-center gap-2 rounded-xl border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-6 py-3 text-sm font-medium text-[var(--workspace-text)] shadow-sm transition-all duration-200 hover:border-primary/40 hover:scale-[1.03] hover:shadow-md"
-            >
-              Explore Tools
-            </Link>
           </motion.div>
 
           {/* Stats row - light social proof */}
@@ -426,45 +457,44 @@ export function Hero() {
             transition={{ duration: 0.5, delay: 0.28 }}
             className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 lg:justify-start"
           >
-            {[
-              { value: "5", label: "Data formats" },
-              { value: "12", label: "Code targets" },
-              { value: "0", label: "Sign-ups" },
-              { value: "100%", label: "Local & offline" },
-            ].map((s) => (
+            {STATS.map((s) => (
               <div key={s.label} className="flex items-center gap-2">
                 <span className="font-mono text-lg font-bold tabular-nums text-[var(--workspace-text)]">
-                  {s.value}
+                  <CountUp value={s.value} />
                 </span>
                 <span className="text-xs font-medium text-[var(--workspace-text-muted)]">{s.label}</span>
               </div>
             ))}
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-lg font-bold tabular-nums text-[var(--workspace-text)]">100%</span>
+              <span className="text-xs font-medium text-[var(--workspace-text-muted)]">Local &amp; offline</span>
+            </div>
           </motion.div>
 
-          {/* Format pills - with active slide highlighted */}
+          {/* Featured - on the left */}
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.5, delay: 0.32 }}
-            className="flex flex-wrap items-center justify-center gap-1.5 lg:justify-start"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.4 }}
+            className="flex flex-wrap items-center justify-center gap-2 lg:justify-start"
           >
-            {[
-              { label: "JSON",       id: "json-ts",   color: "text-amber-500 border-amber-500/25 bg-amber-500/5",   activeColor: "text-amber-600 border-amber-500/60 bg-amber-500/15 scale-105" },
-              { label: "Compare",    id: "compare",   color: "text-rose-500 border-rose-500/25 bg-rose-500/5",     activeColor: "text-rose-600 border-rose-500/60 bg-rose-500/15 scale-105" },
-              { label: "Utils",      id: "utils",     color: "text-violet-500 border-violet-500/25 bg-violet-500/5", activeColor: "text-violet-600 border-violet-500/60 bg-violet-500/15 scale-105" },
-              { label: "XML",        id: "xml-yaml",  color: "text-red-500 border-red-500/25 bg-red-500/5",         activeColor: "text-red-600 border-red-500/60 bg-red-500/15 scale-105" },
-              { label: "YAML",       id: "yaml-toml", color: "text-lime-600 border-lime-600/25 bg-lime-600/5",       activeColor: "text-lime-700 border-lime-600/60 bg-lime-600/15 scale-105" },
-              { label: "cURL",       id: "curl-json", color: "text-sky-500 border-sky-500/25 bg-sky-500/5",         activeColor: "text-sky-600 border-sky-500/60 bg-sky-500/15 scale-105" },
-              { label: "CSV",        id: "csv-table", color: "text-blue-500 border-blue-500/25 bg-blue-500/5",      activeColor: "text-blue-600 border-blue-500/60 bg-blue-500/15 scale-105" },
-              { label: "SQL",        id: "compare",   color: "text-emerald-500 border-emerald-500/25 bg-emerald-500/5", activeColor: "text-emerald-600 border-emerald-500/60 bg-emerald-500/15 scale-105" },
-            ].map(({ label, id, color, activeColor }) => (
-              <span
-                key={label}
-                className={`inline-flex items-center rounded-md border px-2.5 py-0.5 font-mono text-[10px] font-medium transition-all duration-300 ${slide.id === id ? activeColor : color}`}
-              >
-                {label}
-              </span>
-            ))}
+            <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-[var(--workspace-text-muted)]">
+              Featured
+            </span>
+            <Link
+              href="/compare-lists"
+              className="inline-flex items-center gap-1.5 rounded-full border border-rose-500/30 bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-500 transition-all hover:scale-[1.04] hover:bg-rose-500/20"
+            >
+              <ArrowsRightLeftIcon className="h-3 w-3" aria-hidden />
+              Compare lists &amp; SQL IN
+            </Link>
+            <Link
+              href="/playground"
+              className="inline-flex items-center gap-1.5 rounded-full border border-violet-500/30 bg-violet-500/10 px-3 py-1 text-xs font-semibold text-violet-500 transition-all hover:scale-[1.04] hover:bg-violet-500/20"
+            >
+              <SwatchIcon className="h-3 w-3" aria-hidden />
+              Utils: JWT, Base64, UUID
+            </Link>
           </motion.div>
         </div>
 
@@ -554,6 +584,27 @@ export function Hero() {
                       iconClassName="h-3 w-3 text-emerald-500"
                     />
                   </>
+                ) : slide.id === "json-sql" ? (
+                  <>
+                    <HeroToolbarChip
+                      label="JSON"
+                      title="Input"
+                      Icon={AnimatedBracesIcon}
+                      iconClassName="h-3 w-3 text-amber-500"
+                    />
+                    <HeroToolbarChip
+                      label="SQL"
+                      title="Output dialect"
+                      Icon={AnimatedCodeIcon}
+                      iconClassName="h-3 w-3 text-emerald-500"
+                    />
+                    <HeroToolbarChip
+                      label="Postgres"
+                      title="Choose dialect"
+                      Icon={SparklesIcon}
+                      iconClassName="h-3 w-3 text-primary"
+                    />
+                  </>
                 ) : (
                   <>
                     <HeroToolbarChip
@@ -590,7 +641,6 @@ export function Hero() {
                         TS
                       </span>
                       <span className="font-semibold text-[var(--workspace-text)]">Types</span>
-                      <ChevronDownIcon className="h-2.5 w-2.5 opacity-50" aria-hidden />
                     </span>
                   </>
                 )}
@@ -668,23 +718,95 @@ export function Hero() {
                 </AnimatePresence>
               </div>
 
-              {/* Slide indicator dots */}
-              <div className="flex items-center justify-center gap-1.5 border-t border-[var(--workspace-border)] bg-[var(--workspace-background)] py-2">
-                {SLIDES.map((s, i) => (
+              {/* Slide indicator dots + carousel controls */}
+              <div
+                role="group"
+                aria-roledescription="carousel"
+                aria-label="IDE preview slides"
+                className="flex items-center justify-between gap-2 border-t border-[var(--workspace-border)] bg-[var(--workspace-background)] px-3 py-2"
+              >
+                <div className="flex items-center gap-1">
                   <button
-                    key={s.id}
                     type="button"
-                    aria-label={`Show ${s.inputLabel} → ${s.outputLabel}`}
-                    className={`h-1.5 rounded-full transition-all duration-300 ${i === slideIdx ? "w-4 bg-primary" : "w-1.5 bg-[var(--workspace-border)] hover:bg-primary/40"}`}
-                    onClick={() => setSlideIdx(i)}
-                  />
-                ))}
+                    aria-label="Previous slide"
+                    onClick={goPrev}
+                    className="inline-flex h-11 w-11 items-center justify-center rounded-md text-[var(--workspace-text-muted)] transition-colors hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)]"
+                  >
+                    <ChevronLeftIcon className="h-4 w-4" aria-hidden />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={paused ? "Resume auto-rotation" : "Pause auto-rotation"}
+                    aria-pressed={paused}
+                    onClick={() => setPaused((p) => !p)}
+                    className="inline-flex h-11 w-11 items-center justify-center rounded-md text-[var(--workspace-text-muted)] transition-colors hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)]"
+                  >
+                    {paused ? (
+                      <PlayIcon className="h-4 w-4" aria-hidden />
+                    ) : (
+                      <PauseIcon className="h-4 w-4" aria-hidden />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Next slide"
+                    onClick={goNext}
+                    className="inline-flex h-11 w-11 items-center justify-center rounded-md text-[var(--workspace-text-muted)] transition-colors hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)]"
+                  >
+                    <ChevronRightIcon className="h-4 w-4" aria-hidden />
+                  </button>
+                </div>
+                <div
+                  className="flex items-center gap-1.5"
+                  role="tablist"
+                  aria-label="Choose slide"
+                >
+                  {SLIDES.map((s, i) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={i === slideIdx}
+                      aria-label={`Show ${s.inputLabel} to ${s.outputLabel}`}
+                      className={`h-1.5 rounded-full transition-all duration-300 ${i === slideIdx ? "w-4 bg-primary" : "w-1.5 bg-[var(--workspace-border)] hover:bg-primary/40"}`}
+                      onClick={() => setSlideIdx(i)}
+                    />
+                  ))}
+                </div>
+                <span aria-live="polite" aria-atomic="true" className="sr-only">
+                  Slide {slideIdx + 1} of {SLIDES.length}: {slide.inputLabel} to {slide.outputLabel}
+                </span>
               </div>
             </div>
           </div>
+
+          {/* Format pills - under the IDE preview */}
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.5 }}
+            className="mt-5 flex flex-wrap items-center justify-center gap-1.5"
+          >
+            {[
+              { label: "JSON",       id: "json-ts",   color: "text-amber-500 border-amber-500/25 bg-amber-500/5",   activeColor: "text-amber-600 border-amber-500/60 bg-amber-500/15 scale-105" },
+              { label: "Compare",    id: "compare",   color: "text-rose-500 border-rose-500/25 bg-rose-500/5",     activeColor: "text-rose-600 border-rose-500/60 bg-rose-500/15 scale-105" },
+              { label: "Utils",      id: "utils",     color: "text-violet-500 border-violet-500/25 bg-violet-500/5", activeColor: "text-violet-600 border-violet-500/60 bg-violet-500/15 scale-105" },
+              { label: "XML",        id: "xml-yaml",  color: "text-red-500 border-red-500/25 bg-red-500/5",         activeColor: "text-red-600 border-red-500/60 bg-red-500/15 scale-105" },
+              { label: "YAML",       id: "yaml-toml", color: "text-lime-600 border-lime-600/25 bg-lime-600/5",       activeColor: "text-lime-700 border-lime-600/60 bg-lime-600/15 scale-105" },
+              { label: "cURL",       id: "curl-json", color: "text-sky-500 border-sky-500/25 bg-sky-500/5",         activeColor: "text-sky-600 border-sky-500/60 bg-sky-500/15 scale-105" },
+              { label: "SQL",        id: "json-sql",  color: "text-emerald-500 border-emerald-500/25 bg-emerald-500/5", activeColor: "text-emerald-600 border-emerald-500/60 bg-emerald-500/15 scale-105" },
+              { label: "CSV",        id: "csv-table", color: "text-blue-500 border-blue-500/25 bg-blue-500/5",      activeColor: "text-blue-600 border-blue-500/60 bg-blue-500/15 scale-105" },
+            ].map(({ label, id, color, activeColor }) => (
+              <span
+                key={label}
+                className={`inline-flex items-center rounded-md border px-2.5 py-0.5 font-mono text-[10px] font-medium transition-all duration-300 ${slide.id === id ? activeColor : color}`}
+              >
+                {label}
+              </span>
+            ))}
+          </motion.div>
         </motion.div>
       </div>
     </section>
   );
 }
-

@@ -3,7 +3,12 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ArrowRightIcon, SparklesIcon } from "@heroicons/react/24/outline";
+import {
+  ArrowRightIcon,
+  CheckCircleIcon,
+  ExclamationCircleIcon,
+  SparklesIcon,
+} from "@heroicons/react/24/outline";
 import { formatJson, minifyJson, parseJsonInput } from "@/lib/json/core";
 
 const SAMPLE = '{"id":1,"name":"Alice","roles":["admin","dev"],"meta":{"active":true}}';
@@ -73,8 +78,16 @@ export function TryIt() {
               <p className="text-xs font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]">
                 Your JSON
               </p>
-              <span className={`font-mono text-[11px] font-semibold ${valid ? "text-emerald-500" : "text-red-400"}`}>
-                {valid ? "Valid JSON" : "Invalid"}
+              <span
+                className={`inline-flex items-center gap-1 font-mono text-[11px] font-semibold ${valid ? "text-emerald-500" : "text-red-400"}`}
+                aria-live="polite"
+              >
+                {valid ? (
+                  <CheckCircleIcon className="h-3.5 w-3.5" aria-hidden />
+                ) : (
+                  <ExclamationCircleIcon className="h-3.5 w-3.5" aria-hidden />
+                )}
+                {valid ? "Valid JSON" : "Invalid JSON"}
               </span>
             </div>
             <textarea
@@ -82,8 +95,9 @@ export function TryIt() {
               onChange={(e) => setInput(e.target.value)}
               spellCheck={false}
               rows={5}
+              aria-label="JSON input"
               placeholder='Paste JSON, e.g. {"hello":"world"}'
-              className="w-full resize-y rounded-xl border border-[var(--workspace-border)] bg-[var(--workspace-background)] p-3 font-mono text-xs leading-relaxed text-[var(--workspace-text)] outline-none transition-colors focus:border-primary/50"
+              className="w-full resize-y rounded-xl border border-[var(--workspace-border)] bg-[var(--workspace-background)] p-3 font-mono text-sm leading-relaxed text-[var(--workspace-text)] outline-none transition-colors focus:border-primary/50"
             />
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <button
@@ -119,11 +133,18 @@ export function TryIt() {
               Result
             </p>
             {error ? (
-              <p className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 font-mono text-xs text-red-400">
+              <p
+                role="alert"
+                className="rounded-xl border border-red-500/40 bg-red-500/10 p-3 font-mono text-sm text-red-300"
+              >
                 {error}
               </p>
             ) : (
-              <pre className="max-h-64 overflow-auto rounded-xl border border-[var(--workspace-border)] bg-[var(--workspace-background)] p-3 font-mono text-xs leading-relaxed text-[var(--workspace-text)]">
+              <pre
+                aria-live="polite"
+                aria-label="Formatted JSON output"
+                className="max-h-64 overflow-auto rounded-xl border border-[var(--workspace-border)] bg-[var(--workspace-background)] p-3 font-mono text-sm leading-relaxed text-[var(--workspace-text)]"
+              >
                 {output || " "}
               </pre>
             )}

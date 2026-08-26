@@ -180,7 +180,7 @@ export function CodeGen() {
               <p className="mb-2 font-mono text-[10px] font-bold uppercase tracking-widest text-[var(--workspace-text-muted)]">
                 Input JSON
               </p>
-              <pre className="overflow-x-auto font-mono text-[11px] leading-relaxed text-[var(--workspace-text)]">
+              <pre className="overflow-x-auto rounded-lg bg-[var(--workspace-background)] p-3 font-mono text-[11px] leading-relaxed text-[var(--workspace-text)]">
                 {INPUT}
               </pre>
             </div>
@@ -190,7 +190,7 @@ export function CodeGen() {
               </p>
               <pre
                 key={lang.id}
-                className="overflow-x-auto font-mono text-[11px] leading-relaxed text-[var(--workspace-text)]"
+                className="overflow-x-auto rounded-lg bg-[var(--workspace-background)] p-3 font-mono text-[11px] leading-relaxed text-[var(--workspace-text)]"
               >
                 {lang.output}
               </pre>

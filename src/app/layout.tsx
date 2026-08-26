@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 import { Suspense } from "react";
+import { MotionConfig } from "framer-motion";
 import { Inter, JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import { Analytics } from "@/components/Analytics";
 import { ConsentBanner } from "@/components/ConsentBanner";
@@ -262,6 +263,12 @@ export default function RootLayout({
         />
       </head>
       <body className="antialiased">
+        <a
+          href="#main"
+          className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-md focus:bg-primary focus:px-3 focus:py-1.5 focus:text-sm focus:font-semibold focus:text-primary-foreground focus:shadow-lg"
+        >
+          Skip to main content
+        </a>
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(webSiteJsonLd) }}
@@ -304,10 +311,12 @@ export default function RootLayout({
             </Script>
           </>
         ) : null}
-        {children}
-        <Suspense fallback={null}>
-          <Analytics />
-        </Suspense>
+        <MotionConfig reducedMotion="user">
+          {children}
+          <Suspense fallback={null}>
+            <Analytics />
+          </Suspense>
+        </MotionConfig>
         <ServiceWorkerRegister />
         <ConsentBanner />
       </body>

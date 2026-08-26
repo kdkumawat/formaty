@@ -80,9 +80,8 @@ export default function ChangelogPage() {
     <div className="min-h-screen bg-[var(--workspace-background)]">
       <header className="sticky top-0 z-50 border-b border-[var(--workspace-border)] bg-[var(--workspace-background)]/80 backdrop-blur-xl">
         <div className="mx-auto flex h-14 max-w-3xl items-center justify-between px-4">
-          <Link href="/" className="flex items-center gap-0.5 text-[var(--workspace-text)] transition-opacity hover:opacity-85">
+          <Link href="/" aria-label="Formaty home" className="flex items-center gap-0.5 text-[var(--workspace-text)] transition-opacity hover:opacity-85">
             <Logo size={22} />
-            <span className="text-lg font-bold tracking-tight text-primary">ormaty</span>
           </Link>
           <nav className="flex items-center gap-2">
             <Link href="/docs" className="rounded-lg px-3 py-1.5 text-sm text-[var(--workspace-text-muted)] transition-colors hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)]">

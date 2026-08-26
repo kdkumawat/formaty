@@ -191,12 +191,16 @@ export function ListComparePanel({
     (b: ListBucket | ((prev: ListBucket) => ListBucket)) => {
       setActiveBucketState((prev) => {
         const next = typeof b === "function" ? (b as (p: ListBucket) => ListBucket)(prev) : b;
-        onActiveBucketChange?.(next);
         return next;
       });
     },
-    [onActiveBucketChange],
+    [],
   );
+  /** Notify parent after commit, never during render. */
+  useEffect(() => {
+    onActiveBucketChange?.(activeBucket);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeBucket]);
   /** Bucket shown before the last dup-link click - clicking again restores it. */
   const prevBucketRef = useRef<ListBucket>("common");
   /** Summary-view section collapse state — all open by default. */

@@ -2,56 +2,36 @@
 
 import {
   Hero,
-  TryIt,
-  ProblemSolution,
-  Reconcile,
-  JsonToSql,
-  ApiWorkflow,
-  CompareSection,
-  CodeGen,
-  FeatureGrid,
-  ConversionGrid,
-  PowerFeatures,
-  Capabilities,
-  Workflow,
   UseCases,
-  Recipes,
+  Tools,
+  CodeGen,
+  Compare,
+  TryIt,
+  Instant,
   Privacy,
-  Testimonials,
-  Differentiation,
+  LovedBy,
   FinalCTA,
   Footer,
-  TrustStrip,
+  LandingHeader,
 } from "@/components/landing";
-import { LandingHeader } from "@/components/landing";
 
 export function HomePage() {
   return (
-    <div className="min-h-screen bg-[var(--workspace-background)] pb-12">
+    <div className="min-h-screen bg-[var(--workspace-background)]">
       <LandingHeader />
-      <main className="flex-1">
+      <main id="main" className="flex-1">
         <Hero />
-        <ProblemSolution />
-        <Reconcile />
-        <JsonToSql />
-        <ApiWorkflow />
-        <CompareSection />
-        <CodeGen />
-        <TryIt />
-        <FeatureGrid />
-        <ConversionGrid />
-        <PowerFeatures />
-        <Capabilities />
-        <Workflow />
         <UseCases />
-        <Recipes />
+        <Tools />
+        <CodeGen />
+        <Compare />
+        <TryIt />
+        <Instant />
         <Privacy />
-        <Testimonials />
-        <Differentiation />
+        <LovedBy />
         <FinalCTA />
         <Footer />
       </main>
-      <TrustStrip />
     </div>
   );
 }
