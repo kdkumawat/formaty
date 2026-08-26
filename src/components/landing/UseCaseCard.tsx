@@ -33,6 +33,13 @@ export function UseCaseCard({
       variants={fadeUp}
       className="group relative flex h-full flex-col gap-5 overflow-hidden rounded-2xl border border-[var(--workspace-border)] bg-[var(--workspace-panel)] p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-xl hover:shadow-black/10 md:p-6"
     >
+      {/* Whole card is the link target — CTAs from the section are decoupled */}
+      <Link
+        href={cta.href}
+        aria-label={`${title} - ${cta.label}`}
+        className="absolute inset-0 z-10 rounded-2xl"
+      />
+
       <header className="flex items-start justify-between gap-3">
         <div className="space-y-1.5">
           <p className={`font-mono text-[10px] font-semibold uppercase tracking-widest ${accent}`}>
@@ -61,7 +68,7 @@ export function UseCaseCard({
             <p className="font-mono text-[9px] font-semibold uppercase tracking-widest text-[var(--workspace-text-muted)]">
               {i === 0 ? "Paste" : i === 1 ? "Transform" : "Export"}
             </p>
-            <p className="mt-0.5 truncate text-[11px] font-medium text-[var(--workspace-text)]">
+            <p className="mt-0.5 whitespace-normal break-words text-[11px] font-medium leading-tight text-[var(--workspace-text)]">
               {step.label}
             </p>
           </li>
@@ -69,17 +76,15 @@ export function UseCaseCard({
       </ol>
 
       {/* Tiny monospace preview */}
-      <div className="overflow-hidden rounded-xl border border-[var(--workspace-border)] bg-[var(--workspace-background)]">
+      <div className="relative z-0 overflow-hidden rounded-xl border border-[var(--workspace-border)] bg-[var(--workspace-background)] p-3.5">
         {preview}
       </div>
 
-      <Link
-        href={cta.href}
-        className="mt-auto inline-flex w-fit items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-all hover:scale-[1.03] hover:bg-primary/15"
-      >
+      {/* Subordinate inline link, not a button — section-level CTA covers the same ground */}
+      <span className="relative z-10 mt-auto inline-flex items-center gap-1 text-xs font-medium text-primary transition-transform group-hover:translate-x-0.5">
         {cta.label}
-        <ArrowRightIcon className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden />
-      </Link>
+        <ArrowRightIcon className="h-3.5 w-3.5" aria-hidden />
+      </span>
     </motion.article>
   );
 }

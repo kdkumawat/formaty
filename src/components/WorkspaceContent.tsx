@@ -6008,9 +6008,8 @@ export function WorkspaceContent({
                     transition={{ duration: 0.35 }}
                     className="flex flex-col items-center gap-2"
                   >
-                    <div className="flex gap-0.5 items-center">
+                    <div className="flex gap-0.5 items-center" aria-label="Formaty">
                       <Logo size={36} className="shrink-0" />
-                      <span className="text-xl font-extrabold tracking-tight text-primary">ormaty</span>
                     </div>
                     <p className="max-w-md text-sm text-[var(--workspace-text-muted)] leading-relaxed">
                       Format, convert, compare, and developer utils - JSON, XML, YAML, and more. Everything runs locally in your browser.

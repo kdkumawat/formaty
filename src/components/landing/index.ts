@@ -1,6 +1,5 @@
 export { Hero } from "./Hero";
 export { TryIt } from "./TryIt";
-export { TrustStrip } from "./TrustStrip";
 export { UseCases } from "./UseCases";
 export { UseCaseCard } from "./UseCaseCard";
 export { Tools } from "./Tools";

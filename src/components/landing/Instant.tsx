@@ -52,7 +52,7 @@ export function Instant() {
   }, [reduced]);
 
   return (
-    <section className="relative overflow-hidden border-t border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-4 py-14 md:py-20">
+    <section id="instant" className="scroll-mt-16 relative overflow-hidden border-t border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-4 py-14 md:py-20">
       <div
         className="pointer-events-none absolute -right-20 top-1/3 h-[420px] w-[420px]"
         style={{

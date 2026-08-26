@@ -82,16 +82,18 @@ user-7   ×3
   );
 }
 
-function TimezonePreview() {
+function JsonToSqlPreview() {
   return (
     <pre className="font-mono text-[10.5px] leading-[1.65]">
-{`10:30  Mon 13 Oct
-─────────────────
-London    10:30
-New York  05:30
-Tokyo     18:30
+{`-- 1 sample → CREATE TABLE + INSERT
+CREATE TABLE users (
+  id     INTEGER PRIMARY KEY,
+  email  TEXT NOT NULL,
+  roles  TEXT
+);
 
-→ share:  /utils/instant?at=…&tz=…`}
+INSERT INTO users VALUES
+  (1, 'a@b.com', '["admin"]');`}
     </pre>
   );
 }
@@ -100,11 +102,19 @@ Tokyo     18:30
 
 export function UseCases() {
   return (
-    <section id="use-cases" className="scroll-mt-16 border-t border-[var(--workspace-border)] bg-[var(--workspace-background)] px-4 py-14 md:py-20">
-      <div className="mx-auto max-w-6xl space-y-10">
+    <section id="use-cases" className="relative overflow-hidden scroll-mt-16 border-t border-[var(--workspace-border)] bg-[var(--workspace-background)] px-4 py-14 md:py-20">
+      <div
+        className="pointer-events-none absolute -right-32 top-1/3 h-[420px] w-[420px]"
+        style={{
+          background: "radial-gradient(circle, rgba(139,92,246,0.08) 0%, transparent 65%)",
+          filter: "blur(64px)",
+        }}
+        aria-hidden
+      />
+      <div className="relative mx-auto max-w-6xl space-y-10">
         <Reveal className="mx-auto max-w-2xl space-y-4 text-center">
           <p className="text-xs font-semibold uppercase tracking-widest text-primary">
-            Workflows
+            Use cases
           </p>
           <h2 className="text-3xl font-semibold leading-[1.08] tracking-tight text-[var(--workspace-text)] md:text-[2.6rem]">
             Real jobs. One paste each.
@@ -199,17 +209,17 @@ export function UseCases() {
 
           <UseCaseCard
             index={6}
-            eyebrow="Time · Instant"
-            title="Plan a meeting across timezones"
-            summary="Type a wall clock, pick cities, get a multi-zone timeline. DST-safe, shareable as a URL, and never leaves your browser."
+            eyebrow="Type · SQL"
+            title="Generate SQL from a JSON sample"
+            summary="Turn a JSON object into CREATE TABLE + INSERT statements for Postgres, MySQL, or SQLite - with the right types, nullability, and seed rows."
             steps={[
-              { label: "Wall clock", tone: "in" },
-              { label: "Project zones", tone: "mid" },
-              { label: "Share link", tone: "out" },
+              { label: "JSON", tone: "in" },
+              { label: "Infer schema", tone: "mid" },
+              { label: "SQL DDL", tone: "out" },
             ]}
-            preview={<TimezonePreview />}
-            cta={{ label: "Open Instant", href: "/utils/instant" }}
-            accent="text-amber-500"
+            preview={<JsonToSqlPreview />}
+            cta={{ label: "Open JSON to SQL", href: "/json-to-sql" }}
+            accent="text-emerald-500"
           />
         </motion.div>
       </div>

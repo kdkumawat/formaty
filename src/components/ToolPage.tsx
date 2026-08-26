@@ -53,10 +53,10 @@ export function ToolPage({ config }: ToolPageProps) {
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
           <Link
             href="/"
+            aria-label="Formaty home"
             className="flex items-center gap-0.5 text-[var(--workspace-text)] transition-opacity hover:opacity-85"
           >
             <Logo size={22} />
-            <span className="text-lg font-bold tracking-tight text-primary">ormaty</span>
           </Link>
           <nav className="flex items-center gap-2">
             <Link

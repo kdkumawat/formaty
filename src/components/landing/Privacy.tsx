@@ -7,26 +7,26 @@ import { fadeUp, staggerContainer } from "@/lib/motion";
 
 const CLAIMS = [
   {
-    title: "Runs in your browser",
-    desc: "Formatting, conversion, comparison, queries, and type generation all execute in a Web Worker on your device.",
+    title: "Open source",
+    desc: "The whole app is on GitHub. Read the code, audit the worker, run your own copy.",
   },
   {
-    title: "Works offline",
-    desc: "After the first visit, the whole app runs from a cached service worker. No network needed.",
+    title: "Service worker cache",
+    desc: "After the first load, the app, fonts, and worker ship from a local cache. No CDN, no API on repeat visits.",
   },
   {
-    title: "No signup, no tracking",
-    desc: "No accounts, no logins, no cloud persistence. Open the page and start working.",
+    title: "URL-only sharing",
+    desc: "Share links encode your input into the URL itself - nothing is stored on a server until you decide to send it.",
   },
   {
-    title: "Explicit, local sharing",
-    desc: "Share links encode your state into the URL itself - nothing is stored on a server until you decide to send the link.",
+    title: "No telemetry, no cookies",
+    desc: "Analytics is opt-in and anonymized. No third-party trackers, no fingerprinting, no advertising.",
   },
 ];
 
 export function Privacy() {
   return (
-    <section className="border-t border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-4 py-14 md:py-20">
+    <section id="privacy" className="scroll-mt-16 border-t border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-4 py-14 md:py-20">
       <div className="mx-auto max-w-6xl">
         <Reveal className="mx-auto max-w-2xl space-y-4 text-center">
           <p className="text-xs font-semibold uppercase tracking-widest text-primary">
@@ -36,7 +36,7 @@ export function Privacy() {
             Your data stays yours.
           </h2>
           <p className="mx-auto max-w-xl text-sm text-[var(--workspace-text-muted)] md:text-base">
-            Formaty is a local-first developer tool. Your data never leaves your device.
+            Formaty is a local-first developer tool. Beyond the four points below, your data never leaves your device.
           </p>
         </Reveal>
 

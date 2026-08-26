@@ -70,9 +70,8 @@ export function Header({
     >
       {/* Brand */}
       <div className="flex min-w-0 shrink-0 items-center gap-2.5">
-        <Link href="/" className="flex shrink-0 items-center gap-0.5 transition-opacity hover:opacity-80">
+        <Link href="/" aria-label="Formaty home" className="flex shrink-0 items-center gap-0.5 transition-opacity hover:opacity-80">
           <Logo size={18} />
-          <span className="truncate text-sm font-bold tracking-tight text-primary">ormaty</span>
         </Link>
         <span className="hidden h-3.5 w-px bg-[var(--workspace-border)] sm:block" aria-hidden />
         <span className="hidden select-none truncate text-[10px] tracking-wide text-[var(--workspace-text-muted)] sm:inline">

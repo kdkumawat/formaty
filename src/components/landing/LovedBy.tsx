@@ -4,15 +4,15 @@ import { Reveal } from "@/components/motion";
 import { staggerContainer, fadeUp } from "@/lib/motion";
 import { motion } from "framer-motion";
 
-const STACK = [
-  "Postman",
-  "cURL",
-  "Kubernetes",
-  "GitHub Actions",
-  "Docker Compose",
-  "VS Code",
-  "OpenAPI",
-  "Webhooks",
+const STACK: { name: string; href: string }[] = [
+  { name: "Postman", href: "/api-import" },
+  { name: "cURL", href: "/api-import" },
+  { name: "Kubernetes", href: "/json-to-yaml" },
+  { name: "GitHub Actions", href: "/yaml-formatter" },
+  { name: "Docker Compose", href: "/yaml-formatter" },
+  { name: "VS Code", href: "/tools" },
+  { name: "OpenAPI", href: "/json-to-typescript" },
+  { name: "Webhooks", href: "/api-import" },
 ];
 
 export function LovedBy() {
@@ -39,13 +39,13 @@ export function LovedBy() {
           viewport={{ once: true, amount: 0.2 }}
           className="flex flex-wrap items-center justify-center gap-2.5"
         >
-          {STACK.map((name) => (
+          {STACK.map(({ name, href }) => (
             <motion.li
               key={name}
               variants={fadeUp}
               className="rounded-full border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-4 py-1.5 text-xs font-semibold text-[var(--workspace-text)] transition-colors hover:border-primary/30 hover:text-primary"
             >
-              {name}
+              <a href={href}>{name}</a>
             </motion.li>
           ))}
         </motion.ul>

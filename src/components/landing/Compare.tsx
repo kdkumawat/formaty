@@ -50,12 +50,11 @@ const DOC_LINKS = [
 export function Compare() {
   const [tab, setTab] = useState<Tab>("lists");
   const outcomes = tab === "lists" ? OUTCOMES_LISTS : OUTCOMES_DOCS;
-  const links = tab === "lists" ? COMPARE_LINKS : DOC_LINKS;
   const primaryHref = tab === "lists" ? "/compare-lists" : "/json-diff";
   const primaryLabel = tab === "lists" ? "Open List Compare" : "Open Document Diff";
 
   return (
-    <section className="border-t border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-4 py-14 md:py-20">
+    <section id="compare" className="scroll-mt-16 border-t border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-4 py-14 md:py-20">
       <div className="mx-auto max-w-6xl space-y-10">
         <Reveal className="mx-auto max-w-2xl space-y-4 text-center">
           <p className="text-xs font-semibold uppercase tracking-widest text-primary">
@@ -71,6 +70,31 @@ export function Compare() {
         </Reveal>
 
         <div className="mx-auto max-w-5xl">
+          {/* All compare tools - always visible, above tabs */}
+          <div className="mb-4 flex flex-wrap items-center justify-center gap-1.5">
+            <span className="mr-1 text-[10px] font-semibold uppercase tracking-widest text-[var(--workspace-text-muted)]">
+              All compare tools
+            </span>
+            {COMPARE_LINKS.map(({ label, href }) => (
+              <Link
+                key={label}
+                href={href}
+                className="rounded-full border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-3 py-1 font-mono text-[11px] font-medium text-[var(--workspace-text)] transition-all hover:border-primary/50 hover:text-primary"
+              >
+                {label}
+              </Link>
+            ))}
+            {DOC_LINKS.map(({ label, href }) => (
+              <Link
+                key={label}
+                href={href}
+                className="rounded-full border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-3 py-1 font-mono text-[11px] font-medium text-[var(--workspace-text)] transition-all hover:border-primary/50 hover:text-primary"
+              >
+                {label} diff
+              </Link>
+            ))}
+          </div>
+
           <div className="mb-5 flex flex-wrap items-center justify-center gap-1 rounded-xl border border-[var(--workspace-border)] bg-[var(--workspace-background)] p-1">
             {TABS.map(({ id, label, icon: Icon }) => (
               <button
@@ -129,18 +153,6 @@ export function Compare() {
                 </ul>
               )}
 
-              <div className="flex flex-wrap items-center gap-1.5">
-                {links.map(({ label, href }) => (
-                  <Link
-                    key={label}
-                    href={href}
-                    className="rounded-full border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-3 py-1 font-mono text-[11px] font-medium text-[var(--workspace-text)] transition-all hover:border-primary/50 hover:text-primary"
-                  >
-                    {label}
-                  </Link>
-                ))}
-              </div>
-
               <Link
                 href={primaryHref}
                 className="group inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-md shadow-primary/20 transition-all hover:scale-[1.03] hover:shadow-primary/30"
@@ -163,18 +175,18 @@ export function Compare() {
 
               {tab === "lists" ? (
                 <div className="grid grid-cols-2 divide-x divide-[var(--workspace-border)] font-mono text-[11px]">
-                  <div className="space-y-1 p-4">
+                  <div className="space-y-0.5 p-4">
                     <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-sky-500">Production</p>
                     {PROD.map((id) => (
-                      <p key={id} className="text-[var(--workspace-text)]">
+                      <p key={id} className="rounded px-2 py-1 text-[var(--workspace-text)]">
                         {id}
                       </p>
                     ))}
                   </div>
-                  <div className="space-y-1 p-4">
+                  <div className="space-y-0.5 p-4">
                     <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-violet-500">Staging</p>
                     {STAGE.map((id) => (
-                      <p key={id} className="text-[var(--workspace-text)]">
+                      <p key={id} className="rounded px-2 py-1 text-[var(--workspace-text)]">
                         {id}
                       </p>
                     ))}

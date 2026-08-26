@@ -17,14 +17,6 @@ export function FinalCTA() {
         }}
         aria-hidden
       />
-      <div
-        className="blob-drift-b pointer-events-none absolute -bottom-20 -right-20 h-[500px] w-[500px]"
-        style={{
-          background: "radial-gradient(circle, rgba(37,99,235,0.12) 0%, transparent 65%)",
-          filter: "blur(60px)",
-        }}
-        aria-hidden
-      />
 
       <motion.div
         initial={{ opacity: 0, y: 24 }}
@@ -38,7 +30,7 @@ export function FinalCTA() {
           <span className="gradient-text">Paste it into Formaty.</span>
         </h2>
         <p className="text-base text-[var(--workspace-text-muted)] md:text-lg">
-          Format · Convert · Compare · Query · Generate - local, offline, no signup.
+          Local, offline, no signup - open the playground and start.
         </p>
         <div className="flex flex-wrap items-center justify-center gap-3">
           <Link

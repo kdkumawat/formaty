@@ -8,10 +8,13 @@ import {
   ArrowDownTrayIcon,
   ArrowsRightLeftIcon,
   BoltIcon,
-  ChevronDownIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
   ClipboardDocumentIcon,
   CodeBracketIcon,
   QueueListIcon,
+  PauseIcon,
+  PlayIcon,
   ShareIcon,
   SparklesIcon,
   SwatchIcon,
@@ -27,6 +30,7 @@ import {
   type AnimatedIconHandle,
 } from "@/components/icons";
 import { CountUp } from "@/components/motion";
+import { useReducedMotionSafe } from "@/lib/motion";
 
 type Slide = {
   id: string;
@@ -286,7 +290,6 @@ function HeroToolbarChip({
     >
       <Animated ref={icon.ref} className={iconClassName} />
       <span className="font-semibold text-[var(--workspace-text)]">{label}</span>
-      <ChevronDownIcon className="h-2.5 w-2.5 opacity-50" aria-hidden />
     </span>
   );
 }
@@ -358,13 +361,19 @@ const STATS = [
 
 export function Hero() {
   const [slideIdx, setSlideIdx] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const reduced = useReducedMotionSafe();
 
   useEffect(() => {
+    if (reduced || paused) return;
     const id = setInterval(() => {
       setSlideIdx((i) => (i + 1) % SLIDES.length);
     }, 3400);
     return () => clearInterval(id);
-  }, []);
+  }, [reduced, paused]);
+
+  const goPrev = () => setSlideIdx((i) => (i - 1 + SLIDES.length) % SLIDES.length);
+  const goNext = () => setSlideIdx((i) => (i + 1) % SLIDES.length);
 
   const slide = SLIDES[slideIdx];
   const { InputPane, OutputPane } = slide;
@@ -426,7 +435,8 @@ export function Hero() {
             transition={{ duration: 0.5, delay: 0.14 }}
             className="mx-auto max-w-lg text-base leading-relaxed text-[var(--workspace-text-muted)] lg:mx-0 lg:text-lg"
           >
-            Format, convert, compare, query, and generate from JSON, XML, YAML, TOML and CSV -{" "}
+            Local-first. Format, convert, compare, query, and generate from JSON, XML, YAML, TOML and CSV - list compare and dev utils included -{" "}
+            <br className="hidden sm:inline" />
             <span className="font-semibold text-[var(--workspace-text)]">in your browser, never on a server</span>.
           </motion.p>
 
@@ -438,12 +448,6 @@ export function Hero() {
             className="flex flex-wrap items-center justify-center gap-3 lg:justify-start"
           >
             <HeroCtaLink />
-            <Link
-              href="/#tools"
-              className="inline-flex items-center gap-2 rounded-xl border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-6 py-3 text-sm font-medium text-[var(--workspace-text)] shadow-sm transition-all duration-200 hover:border-primary/40 hover:scale-[1.03] hover:shadow-md"
-            >
-              Explore Tools
-            </Link>
           </motion.div>
 
           {/* Stats row - light social proof */}
@@ -462,7 +466,7 @@ export function Hero() {
               </div>
             ))}
             <div className="flex items-center gap-2">
-              <span className="font-mono text-lg font-bold tabular-nums text-emerald-500">100%</span>
+              <span className="font-mono text-lg font-bold tabular-nums text-[var(--workspace-text)]">100%</span>
               <span className="text-xs font-medium text-[var(--workspace-text-muted)]">Local &amp; offline</span>
             </div>
           </motion.div>
@@ -637,7 +641,6 @@ export function Hero() {
                         TS
                       </span>
                       <span className="font-semibold text-[var(--workspace-text)]">Types</span>
-                      <ChevronDownIcon className="h-2.5 w-2.5 opacity-50" aria-hidden />
                     </span>
                   </>
                 )}
@@ -715,17 +718,64 @@ export function Hero() {
                 </AnimatePresence>
               </div>
 
-              {/* Slide indicator dots */}
-              <div className="flex items-center justify-center gap-1.5 border-t border-[var(--workspace-border)] bg-[var(--workspace-background)] py-2">
-                {SLIDES.map((s, i) => (
+              {/* Slide indicator dots + carousel controls */}
+              <div
+                role="group"
+                aria-roledescription="carousel"
+                aria-label="IDE preview slides"
+                className="flex items-center justify-between gap-2 border-t border-[var(--workspace-border)] bg-[var(--workspace-background)] px-3 py-2"
+              >
+                <div className="flex items-center gap-1">
                   <button
-                    key={s.id}
                     type="button"
-                    aria-label={`Show ${s.inputLabel} to ${s.outputLabel}`}
-                    className={`h-1.5 rounded-full transition-all duration-300 ${i === slideIdx ? "w-4 bg-primary" : "w-1.5 bg-[var(--workspace-border)] hover:bg-primary/40"}`}
-                    onClick={() => setSlideIdx(i)}
-                  />
-                ))}
+                    aria-label="Previous slide"
+                    onClick={goPrev}
+                    className="inline-flex h-11 w-11 items-center justify-center rounded-md text-[var(--workspace-text-muted)] transition-colors hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)]"
+                  >
+                    <ChevronLeftIcon className="h-4 w-4" aria-hidden />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={paused ? "Resume auto-rotation" : "Pause auto-rotation"}
+                    aria-pressed={paused}
+                    onClick={() => setPaused((p) => !p)}
+                    className="inline-flex h-11 w-11 items-center justify-center rounded-md text-[var(--workspace-text-muted)] transition-colors hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)]"
+                  >
+                    {paused ? (
+                      <PlayIcon className="h-4 w-4" aria-hidden />
+                    ) : (
+                      <PauseIcon className="h-4 w-4" aria-hidden />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Next slide"
+                    onClick={goNext}
+                    className="inline-flex h-11 w-11 items-center justify-center rounded-md text-[var(--workspace-text-muted)] transition-colors hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)]"
+                  >
+                    <ChevronRightIcon className="h-4 w-4" aria-hidden />
+                  </button>
+                </div>
+                <div
+                  className="flex items-center gap-1.5"
+                  role="tablist"
+                  aria-label="Choose slide"
+                >
+                  {SLIDES.map((s, i) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={i === slideIdx}
+                      aria-label={`Show ${s.inputLabel} to ${s.outputLabel}`}
+                      className={`h-1.5 rounded-full transition-all duration-300 ${i === slideIdx ? "w-4 bg-primary" : "w-1.5 bg-[var(--workspace-border)] hover:bg-primary/40"}`}
+                      onClick={() => setSlideIdx(i)}
+                    />
+                  ))}
+                </div>
+                <span aria-live="polite" aria-atomic="true" className="sr-only">
+                  Slide {slideIdx + 1} of {SLIDES.length}: {slide.inputLabel} to {slide.outputLabel}
+                </span>
               </div>
             </div>
           </div>
