@@ -296,6 +296,14 @@ export function TimelineBoard({
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
                       <span className="truncate text-sm font-medium text-[var(--workspace-text)]">{loc.city}</span>
+                      {loc.countryCode && (
+                        <span
+                          className="shrink-0 rounded bg-[var(--workspace-background)] px-1 py-px font-mono text-[9px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]"
+                          title={loc.country}
+                        >
+                          {loc.countryCode}
+                        </span>
+                      )}
                       {loc.isPrimary && (
                         <span className="rounded px-1 py-px text-[9px] font-semibold uppercase tracking-wider text-primary">
                           You

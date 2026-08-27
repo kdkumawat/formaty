@@ -775,6 +775,18 @@ export function ListComparePanel({
                   if (cleanedNext === e.target.value) setLeftCleanSnapshot(null);
                 }
               }}
+              onKeyDown={(e) => {
+                // The browser's native textarea undo is unreliable after a
+                // programmatic value replacement (it usually reverts one
+                // character at a time and leaves a half-cleaned string). If
+                // the most recent change was our auto/manual clean, intercept
+                // Cmd/Ctrl+Z and roll the value back to the pre-clean paste
+                // in a single step.
+                if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === "z" && leftCleanSnapshot !== null) {
+                  e.preventDefault();
+                  undoLeftClean();
+                }
+              }}
               placeholder={"Paste list…\none per line, CSV, or JSON array"}
               spellCheck={false}
               className={editorClass}
@@ -869,6 +881,12 @@ export function ListComparePanel({
                 if (rightCleanSnapshot !== null) {
                   const cleanedNext = cleanListInput(e.target.value);
                   if (cleanedNext === e.target.value) setRightCleanSnapshot(null);
+                }
+              }}
+              onKeyDown={(e) => {
+                if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === "z" && rightCleanSnapshot !== null) {
+                  e.preventDefault();
+                  undoRightClean();
                 }
               }}
               placeholder={"Second list…"}

@@ -5365,6 +5365,12 @@ export function WorkspaceContent({
                 setShareAllTabs(true);
                 requestShare();
               }}
+              onShareInstant={
+                isUtilsMode && utilTab === "instant"
+                  ? () => getInstantActions()?.onShare()
+                  : undefined
+              }
+              shareInstantLabel="Share Instant only"
               onCopy={() => {
                 if (isUtilsMode && utilTab === "instant") {
                   getInstantActions()?.onCopy();

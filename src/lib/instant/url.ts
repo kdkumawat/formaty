@@ -9,6 +9,8 @@ export interface InstantQuery {
   locations: string[];
   fmt: TimeFormat | null;
   sec: boolean | null;
+  /** When true, the recipient should snap to "now" instead of a frozen moment. */
+  live: boolean;
 }
 
 const IANA_RE = /^[A-Za-z0-9_+\-]+(?:\/[A-Za-z0-9_+\-]+)*$/;
@@ -45,9 +47,16 @@ export function serializeInstantQuery(input: {
   sec: boolean;
   start?: number | null;
   end?: number | null;
+  /** When true, omit `at` and emit `live=1` so the recipient lands in
+   *  live-now mode instead of a frozen moment. */
+  live?: boolean;
 }): URLSearchParams {
   const q = new URLSearchParams();
-  q.set("at", isoSecond(input.at));
+  if (input.live) {
+    q.set("live", "1");
+  } else {
+    q.set("at", isoSecond(input.at));
+  }
   if (input.start != null && input.end != null) {
     q.set("start", isoSecond(input.start));
     q.set("end", isoSecond(input.end));
@@ -79,5 +88,7 @@ export function parseInstantQuery(params: URLSearchParams): InstantQuery {
   const secRaw = params.get("sec");
   const sec = secRaw === "1" ? true : secRaw === "0" ? false : null;
 
-  return { at, start, end, tz, locations, fmt, sec };
+  const live = params.get("live") === "1";
+
+  return { at, start, end, tz, locations, fmt, sec, live };
 }

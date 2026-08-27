@@ -6,11 +6,16 @@ import {
   CalendarIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  ComputerDesktopIcon,
+  MoonIcon,
   PlusIcon,
+  SunIcon,
   XMarkIcon,
 } from "@heroicons/react/24/outline";
 import { Toaster, toast } from "@/components/Toast";
 import { Tooltip } from "@/components/workspace/Tooltip";
+import { Dropdown } from "@/components/workspace/Dropdown";
+import { useTheme } from "@/hooks/useTheme";
 import { LocationPicker } from "@/components/instant/LocationPicker";
 import { TimelineBoard } from "@/components/instant/TimelineBoard";
 import {
@@ -72,6 +77,11 @@ export function InstantApp({
   settingsKey?: string;
 } = {}) {
   const searchParams = useSearchParams();
+  // Standalone page owns its own theme toggle so visitors can flip modes
+  // without going back to the landing. Default is system (handled in
+  // useTheme) and the choice persists in localStorage like the rest of
+  // the app.
+  const { themeMode, setThemeMode } = useTheme();
   // Keep the global copy/share/reset/download available on the Instant bar.
   // Download saves the human-readable conversion as a .txt file; copy covers
   // the same text via the clipboard. No undo/redo/copy-as/maximize — the
@@ -105,6 +115,7 @@ export function InstantApp({
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [nowInstant, setNowInstant] = useState(() => Date.now());
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [themeMenuOpen, setThemeMenuOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [searchError, setSearchError] = useState<string | null>(null);
   const [dstNotice, setDstNotice] = useState<DstNotice | null>(null);
@@ -183,8 +194,9 @@ export function InstantApp({
     setShowSeconds(sec);
     const hasAt = q.at != null;
     const hasRange = q.start != null && q.end != null && q.start !== q.end;
+    const hasLive = q.live && !hasAt && !hasRange;
     // Per-tab state restores the moment + mode even without a URL query.
-    const useTabMoment = tab && hasAt === false && hasRange === false;
+    const useTabMoment = tab && hasAt === false && hasRange === false && !hasLive;
     const instant = hasRange
       ? Math.min(q.start!, q.end!)
       : hasAt
@@ -193,7 +205,7 @@ export function InstantApp({
           ? tab!.selectedInstant
           : Date.now();
     setSelectedInstant(instant);
-    setIsLive(hasAt || hasRange ? false : useTabMoment ? tab!.isLive : true);
+    setIsLive(hasAt || hasRange ? false : hasLive ? true : useTabMoment ? tab!.isLive : true);
     if (hasRange) {
       setMode("range");
       setRange({ start: Math.min(q.start!, q.end!), end: Math.max(q.start!, q.end!) });
@@ -268,9 +280,13 @@ export function InstantApp({
       sec: showSeconds,
       start: mode === "range" ? range?.start : null,
       end: mode === "range" ? range?.end : null,
+      // Live mode shares as `live=1` so the recipient lands in live-now
+      // instead of the exact epoch ms the moment was when the URL was
+      // last replaced (which would freeze on the second of sharing).
+      live: isLive,
     });
     window.history.replaceState(null, "", `${window.location.pathname}?${q.toString()}`);
-  }, [ready, embedded, selectedInstant, primaryTimezone, locations, timeFormat, showSeconds, mode, range]);
+  }, [ready, embedded, selectedInstant, primaryTimezone, locations, timeFormat, showSeconds, mode, range, isLive]);
 
   useEffect(() => {
     const id = window.setInterval(() => {
@@ -461,6 +477,7 @@ export function InstantApp({
       sec: showSeconds,
       start: mode === "range" ? range?.start : null,
       end: mode === "range" ? range?.end : null,
+      live: isLive,
     });
     const url = `${window.location.origin}/utils/instant?${q.toString()}`;
     try {
@@ -472,7 +489,7 @@ export function InstantApp({
       // User cancelled or share failed; fall back to clipboard.
     }
     await copyText(url, "Share link copied");
-  }, [selectedInstant, primaryTimezone, locations, timeFormat, showSeconds, mode, range]);
+  }, [selectedInstant, primaryTimezone, locations, timeFormat, showSeconds, mode, range, isLive]);
 
   // Publish copy/share/reset/download to the action bus so the workspace's
   // existing OutputActionBar can drive Instant's actions when Instant is the
@@ -770,19 +787,75 @@ export function InstantApp({
             </button>
           </div>
           {!embedded && (
-            <OutputActionBar
-              canCopy
-              canShare
-              visibility={outputActionVisibility}
-              downloadMenuOpen={false}
-              onDownloadMenuOpenChange={() => {}}
-              onShare={() => void share()}
-              onCopy={() => void copySelected()}
-              onDownload={downloadText}
-              onReset={resetAll}
-              resetLabel="Reset to your timezone + UTC"
-              className="ml-0.5"
-            />
+            <>
+              {/* Standalone theme switch — embedded mode inherits the
+                  workspace header's theme toggle. System follows the OS
+                  preference until the user picks explicitly. */}
+              <Dropdown
+                open={themeMenuOpen}
+                onOpenChange={setThemeMenuOpen}
+                side="bottom"
+                align="end"
+                contentClassName="w-32"
+                trigger={
+                  <Tooltip content="Theme">
+                    <button
+                      type="button"
+                      aria-label="Theme"
+                      className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--workspace-text-muted)] transition-colors hover:bg-primary/10 hover:text-primary"
+                    >
+                      {themeMode === "system" ? (
+                        <ComputerDesktopIcon className="h-3.5 w-3.5" />
+                      ) : themeMode === "dark" ? (
+                        <MoonIcon className="h-3.5 w-3.5" />
+                      ) : (
+                        <SunIcon className="h-3.5 w-3.5" />
+                      )}
+                    </button>
+                  </Tooltip>
+                }
+              >
+                <div className="flex flex-col" onClick={(e) => e.stopPropagation()}>
+                  {(
+                    [
+                      { mode: "system", label: "System", Icon: ComputerDesktopIcon },
+                      { mode: "light", label: "Light", Icon: SunIcon },
+                      { mode: "dark", label: "Dark", Icon: MoonIcon },
+                    ] as const
+                  ).map(({ mode, label, Icon }) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => {
+                        setThemeMode(mode);
+                        setThemeMenuOpen(false);
+                      }}
+                      className={`inline-flex items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12px] transition-colors ${
+                        themeMode === mode
+                          ? "bg-primary/12 text-primary"
+                          : "text-[var(--workspace-text)] hover:bg-primary/5"
+                      }`}
+                    >
+                      <Icon className="h-3.5 w-3.5" />
+                      <span>{label}</span>
+                    </button>
+                  ))}
+                </div>
+              </Dropdown>
+              <OutputActionBar
+                canCopy
+                canShare
+                visibility={outputActionVisibility}
+                downloadMenuOpen={false}
+                onDownloadMenuOpenChange={() => {}}
+                onShare={() => void share()}
+                onCopy={() => void copySelected()}
+                onDownload={downloadText}
+                onReset={resetAll}
+                resetLabel="Reset to your timezone + UTC"
+                className="ml-0.5"
+              />
+            </>
           )}
         </div>
       </header>

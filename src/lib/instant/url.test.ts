@@ -32,6 +32,7 @@ describe("url state", () => {
     expect(parsed.locations).toEqual(["Asia/Kolkata", "Europe/London", "America/New_York"]);
     expect(parsed.fmt).toBe("24h");
     expect(parsed.sec).toBe(true);
+    expect(parsed.live).toBe(false);
   });
 
   it("round-trips a range via start= and end=", () => {
@@ -51,6 +52,7 @@ describe("url state", () => {
     const parsed = parseInstantQuery(q);
     expect(parsed.start).toBe(start);
     expect(parsed.end).toBe(end);
+    expect(parsed.live).toBe(false);
   });
 
   it("ignores invalid start=/end= without throwing", () => {
@@ -64,6 +66,22 @@ describe("url state", () => {
     const parsed = parseInstantQuery(q);
     expect(parsed.at).toBeNull();
     expect(parsed.tz).toBe("Asia/Kolkata");
+  });
+
+  it("serializes live=1 and omits at= when sharing a live moment", () => {
+    const q = serializeInstantQuery({
+      at: Date.parse("2026-08-23T05:00:00.000Z"),
+      tz: "UTC",
+      locations: ["UTC"],
+      fmt: "24h",
+      sec: false,
+      live: true,
+    });
+    expect(q.get("live")).toBe("1");
+    expect(q.get("at")).toBeNull();
+    const parsed = parseInstantQuery(q);
+    expect(parsed.live).toBe(true);
+    expect(parsed.at).toBeNull();
   });
 });
 

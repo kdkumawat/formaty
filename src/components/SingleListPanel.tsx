@@ -445,6 +445,18 @@ export function SingleListPanel({
                 if (cleanedNext === e.target.value) setCleanSnapshot(null);
               }
             }}
+            onKeyDown={(e) => {
+              // Programmatic value replacement (the auto-clean) doesn't
+              // reliably land in the browser's textarea undo stack, so the
+              // first Cmd/Ctrl+Z would either rewind the paste character by
+              // character or skip the clean entirely. Intercept it while
+              // a clean snapshot exists so a single undo step returns to
+              // the pre-clean paste.
+              if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === "z" && cleanSnapshot !== null) {
+                e.preventDefault();
+                undoClean();
+              }
+            }}
             placeholder={"Paste a list…\none per line, CSV, or JSON array"}
             spellCheck={false}
             className={editorClass}
