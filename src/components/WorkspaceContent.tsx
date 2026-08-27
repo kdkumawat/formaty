@@ -95,6 +95,7 @@ import { trackEvent } from "@/components/Analytics";
 import {
   Dropdown,
   getSizeFormatted,
+  formatSize,
   Header as WorkspaceHeader,
   StatusBar,
   Tooltip,
@@ -143,7 +144,9 @@ import { executeCurlDetailed, parseCurl, type CurlExecutionResult } from "@/lib/
 import { CURL_TARGETS, generateCurlCode, getCurlTarget, type CurlTargetId } from "@/lib/curl/codegen";
 import type { SqlDialect } from "@/lib/json/core";
 import { formatJson } from "@/lib/json/core";
-import { decodeState, encodeState, type WorkspaceState } from "@/lib/shareState";
+import { decodeState, encodeState, SHARE_TOO_LARGE, type WorkspaceState } from "@/lib/shareState";
+import { HUGE_INPUT_BYTES, InputTooLargeError, LARGE_INPUT_BYTES, WORKER_INPUT_CAP_BYTES } from "@/lib/io/size";
+import { readFileAsTextGuarded } from "@/lib/io/ingest";
 import { savePlayground, updatePlayground, deletePlayground } from "@/lib/playgroundApi";
 import { PRESETS, getPreset, type PresetId } from "@/lib/presets";
 import { themeInlineCss } from "@/lib/utils/themeTokens";
@@ -398,9 +401,6 @@ const TYPE_LANGUAGES: Array<{ id: TypeTargetLanguage; label: string; ext: string
   { id: "sql", label: "SQL", ext: "sql" },
 ];
 
-/** Soft caps for heavy views (bytes of input text). */
-const LARGE_INPUT_BYTES = 400 * 1024;
-const HUGE_INPUT_BYTES = 2 * 1024 * 1024;
 
 /** Includes "diff" / "utils" for first-class tools (not transform OPERATION_ACTIONS menus). */
 type OperationAction =
@@ -654,6 +654,10 @@ export function WorkspaceContent({
   const [lineWrap, setLineWrap] = useState(true);
   const [diffSideBySide, setDiffSideBySide] = useState(true);
   const [diffIgnoreWhitespace, setDiffIgnoreWhitespace] = useState(false);
+  // User override to keep the full editor on for inputs above HUGE_INPUT_BYTES.
+  // Defaults off so an accidental 200 MB paste lands on the hardened editor +
+  // lazy views instead of locking the page.
+  const [forceFullEditor, setForceFullEditor] = useState(false);
   const [diffIgnoreOrder, setDiffIgnoreOrder] = useState(false);
   const [diffShowPaths, setDiffShowPaths] = useState(false);
   /** cURL response metadata (status / headers / size / timing) shown for curl input. */
@@ -1028,8 +1032,20 @@ export function WorkspaceContent({
   const inputLineCount = input.split("\n").length;
   const inputSizeFormatted = getSizeFormatted(input);
   const inputByteSize = useMemo(() => (input ? new Blob([input]).size : 0), [input]);
+  const outputByteSize = useMemo(() => (output ? new Blob([output]).size : 0), [output]);
   const isLargeInput = inputByteSize >= LARGE_INPUT_BYTES;
   const isHugeInput = inputByteSize >= HUGE_INPUT_BYTES;
+  // The right-side views render `parsedOutput` (which may be derived from
+  // either the input or the output string). Track the larger of the two
+  // so the huge-mode gate also fires when a small input explodes into a
+  // huge output via a transform.
+  const effectiveRightByteSize = Math.max(inputByteSize, outputByteSize);
+  const isHugeRight = effectiveRightByteSize >= HUGE_INPUT_BYTES;
+  // Table and Graph are much heavier than the tree — they materialize every
+  // cell / node in the DOM. Gate them earlier (at LARGE_INPUT_BYTES) so a
+  // 1.8 MB file does not hang the renderer. The banner shows the same
+  // "first 200 rows" preview as the tree view.
+  const isLargeRight = effectiveRightByteSize >= LARGE_INPUT_BYTES;
   const selectedTypeLanguageLabel =
     TYPE_LANGUAGES.find((item) => item.id === typeLanguage)?.label ?? "Language";
 
@@ -2056,34 +2072,69 @@ export function WorkspaceContent({
       parsedOutput: null,
       error: null,
     };
-    localStorage.setItem(
-      "formaty-session",
-      JSON.stringify({
-        input,
-        output: persistOutput,
-        split,
-        themeMode,
-        typeLanguage,
-        rightView,
-        formatOptions,
-        convertToFormat,
-        liveTransform,
-        editorFontSize,
-        viewAsMenu,
-        lineWrap,
-        autoFormatOnPaste,
+    // Anything over LARGE_INPUT_BYTES (400 KiB) gets dropped from the
+    // persisted session — localStorage quotas (5-10 MB) cannot hold a
+    // 10+ MB input. Settings, tabs, and snapshots still persist; the
+    // user can reload to recover them, and huge inputs go through the
+    // share URL anyway.
+    const isHeavyInput = input.length > LARGE_INPUT_BYTES;
+    const isHeavyOutput = persistOutput.length > LARGE_INPUT_BYTES;
+    const persistInput = isHeavyInput ? "" : input;
+    const persistOut = isHeavyOutput ? "" : persistOutput;
+    const persistSnapshots: Record<string, unknown> = {};
+    if (isHeavyInput) {
+      // Keep the active tab metadata but strip its text fields.
+      const current = allSnapshots[activeTabId] as Record<string, unknown> | undefined;
+      if (current) {
+        const { input: _i, output: _o, undoStack: _u, ...meta } = current;
+        persistSnapshots[activeTabId] = meta;
+      }
+      // Other tab snapshots are safe to keep only if their text is small;
+      // we already cap them implicitly by skipping the whole block.
+    } else {
+      Object.assign(persistSnapshots, allSnapshots);
+    }
+    const payload = {
+      input: persistInput,
+      output: persistOut,
+      split,
+      themeMode,
+      typeLanguage,
+      rightView,
+      formatOptions,
+      convertToFormat,
+      liveTransform,
+      editorFontSize,
+      viewAsMenu,
+      lineWrap,
+      autoFormatOnPaste,
 
-        mobileShowOutput,
-        activeOperation,
-        pinnedItems: Array.from(pinnedItems),
-        outputActionVisibility,
-        tabs,
-        activeTabId,
-        showTabs,
-        tabCounter: tabCounterRef.current,
-        tabSnapshots: allSnapshots,
-      }),
-    );
+      mobileShowOutput,
+      activeOperation,
+      pinnedItems: Array.from(pinnedItems),
+      outputActionVisibility,
+      tabs,
+      activeTabId,
+      showTabs,
+      tabCounter: tabCounterRef.current,
+      tabSnapshots: persistSnapshots,
+    };
+    try {
+      localStorage.setItem("formaty-session", JSON.stringify(payload));
+    } catch (e) {
+      // Last-resort: a stale tab snapshot or a transient setItem failure
+      // should never crash the page. Drop the snapshot map and retry; if
+      // even the empty-state payload fails, swallow the error.
+      if (!(e instanceof Error) || e.name !== "QuotaExceededError") return;
+      try {
+        localStorage.setItem(
+          "formaty-session",
+          JSON.stringify({ ...payload, tabSnapshots: {} }),
+        );
+      } catch {
+        // localStorage is unusable (private mode, locked, etc.) — bail.
+      }
+    }
   }, [input, output, split, themeMode, typeLanguage, rightView, formatOptions, convertToFormat, liveTransform, editorFontSize, viewAsMenu, lineWrap, autoFormatOnPaste, mobileShowOutput, activeOperation, pinnedItems, outputActionVisibility, tabs, activeTabId, showTabs, inputFormatOverride, undoStack, undoIndex, outputExt, outputLanguage, diffLeftInput, diffRightInput, diffKind, isOutputMaximized, utilTab, utilsByTool, captureTabSnapshot]);
 
   // Prefer structured parse for views (table/tree/graph/query)
@@ -3135,13 +3186,27 @@ export function WorkspaceContent({
       const apiResult = await savePlayground(workspaceState);
       id = apiResult?.id ?? null;
     }
+    const encodedHash = encodeState(workspaceState);
+    const hashTooLarge = encodedHash === SHARE_TOO_LARGE;
     const url =
       id && typeof window !== "undefined"
         ? `${window.location.origin}/playground?id=${id}`
-        : `${typeof window !== "undefined" ? window.location.origin + window.location.pathname : ""}#${encodeState(workspaceState)}`;
+        : hashTooLarge
+          ? ""
+          : `${typeof window !== "undefined" ? window.location.origin + window.location.pathname : ""}#${encodedHash}`;
     if (id) {
       setSharedLinkId(id);
       setSharedLinkUrl(url);
+    }
+    if (hashTooLarge) {
+      setShareState("error");
+      toast({
+        message: "Workspace is too large to share as a link. Try removing large inputs from tabs.",
+        type: "error",
+        duration: 5000,
+      });
+      window.setTimeout(() => setShareState("idle"), 1400);
+      return;
     }
     try {
       await navigator.clipboard.writeText(url);
@@ -3601,13 +3666,13 @@ export function WorkspaceContent({
     return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
   }, [modalKind, inputEmpty, focusedPane, activeOperation, diffKind, moveHistory, moveUtilsHistory, isUtilsMode, parseOnly, pasteFromClipboard]);
 
-  const readFileAsText = (file: File): Promise<string> =>
-    new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result ?? ""));
-      reader.onerror = () => reject(new Error("Unable to read file"));
-      reader.readAsText(file);
-    });
+  const readFileAsText = async (file: File): Promise<string> => {
+    const result = await readFileAsTextGuarded(file, WORKER_INPUT_CAP_BYTES);
+    if (result.truncated) {
+      toast({ message: `File truncated: exceeds ${WORKER_INPUT_CAP_BYTES} bytes`, type: "error" });
+    }
+    return result.text;
+  };
 
   const formatLabelForFile = (name: string, text: string): string => {
     const detected = detectFormat(text);
@@ -5483,7 +5548,7 @@ export function WorkspaceContent({
                 {droppedFile.name}
               </span>
               <span className="shrink-0 text-[10px] tabular-nums text-[var(--workspace-text-muted)]">
-                {getSizeFormatted(String(droppedFile.size))}
+                {formatSize(droppedFile.size)}
               </span>
               <button
                 type="button"
@@ -5519,6 +5584,7 @@ export function WorkspaceContent({
                   onCtrlEnter={parseOnly}
                   onCursorChange={(line, column) => { setCursorPosition({ line, column }); cursorPositionRef.current = { line, column }; }}
                   placeholder="Left input…"
+                  disableLargeMode={forceFullEditor}
                 />
               </div>
               <div
@@ -5543,6 +5609,7 @@ export function WorkspaceContent({
                   wordWrap={lineWrap ? "on" : "off"}
                   onEditorMount={(api) => { splitInput2ApiRef.current = api; }}
                   placeholder="Right input…"
+                  disableLargeMode={forceFullEditor}
                 />
               </div>
             </div>
@@ -5568,6 +5635,7 @@ export function WorkspaceContent({
                 onEditorMount={(api) => { inputEditorApiRef.current = api; }}
                 onCtrlEnter={parseOnly}
                 onCursorChange={(line, column) => { setCursorPosition({ line, column }); cursorPositionRef.current = { line, column }; }}
+                disableLargeMode={forceFullEditor}
               />
               {resolvedInputFormat === "curl" && input.trim() && input !== lastExecutedCurlInput && !curlFetching && (
                 <div className="pointer-events-none absolute inset-x-0 bottom-2 z-10 flex justify-center">
@@ -5772,6 +5840,7 @@ export function WorkspaceContent({
                         onLineStatsChange={setDiffLineStats}
                         onNavChange={setDiffNav}
                         outputPanelClass={outputPanelClass}
+                        disableLargeMode={forceFullEditor}
                       />
                     </div>
                     {diffShowPaths && (
@@ -5996,6 +6065,7 @@ export function WorkspaceContent({
                     fontSize={editorFontSize}
                     wordWrap={lineWrap ? "on" : "off"}
                     onEditorMount={(api) => { outputEditorApiRef.current = api; }}
+                    disableLargeMode={forceFullEditor}
                   />
                   )}
                 </div>
@@ -6158,7 +6228,7 @@ export function WorkspaceContent({
             ) : null}
             {!isUtilsMode && !isDiffMode && rightView === "tree" ? (
               parsedOutput ? (
-                isHugeInput ? (
+                isHugeRight ? (
                   <div className={`flex h-full min-h-[200px] flex-col items-center justify-center gap-3 border p-6 text-center text-sm text-[var(--workspace-text-muted)] ${outputPanelClass}`}>
                     <p>Tree view is disabled for inputs over ~2MB to keep the UI responsive.</p>
                     <button type="button" className={`${linkBtnClass} h-8 px-3 font-medium text-primary`} onClick={() => setRightView("raw")}>Switch to Raw</button>
@@ -6170,6 +6240,7 @@ export function WorkspaceContent({
                     isDark={isDark}
                     largeFile={isLargeInput}
                     fontSize={editorFontSize}
+                    byteSize={effectiveRightByteSize}
                     onNotify={(msg) => toast({ message: msg })}
                     className={`${outputPanelClass} min-h-0 flex-1 overflow-auto`}
                   />
@@ -6182,28 +6253,17 @@ export function WorkspaceContent({
             ) : null}
             {!isUtilsMode && !isDiffMode && rightView === "graph" ? (
               parsedOutput ? (
-                isHugeInput ? (
+                isLargeRight ? (
                   <div className={`flex h-full min-h-[200px] flex-col items-center justify-center gap-3 border p-6 text-center text-sm text-[var(--workspace-text-muted)] ${outputPanelClass}`}>
-                    <p>Graph view is disabled for inputs over ~2MB. Use Raw, Query, or download instead.</p>
+                    <p>Graph view is disabled for inputs over ~400KB. Use Raw, Query, or download instead.</p>
                     <button type="button" className={`${linkBtnClass} h-8 px-3 font-medium text-primary`} onClick={() => setRightView("raw")}>Switch to Raw</button>
-                  </div>
-                ) : isLargeInput ? (
-                  <div className={`flex h-full min-h-0 flex-1 flex-col overflow-hidden ${outputPanelClass}`}>
-                    <div className="shrink-0 border-b border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-[11px] text-amber-700 dark:text-amber-300">
-                      Large file - graph may be slow. Prefer Query or Tree for exploration.
-                    </div>
-                    <GraphView
-                      ref={graphViewRef}
-                      data={parsedOutput}
-                      isDark={isDark}
-                      className="min-h-0 flex-1"
-                    />
                   </div>
                 ) : (
                   <GraphView
                     ref={graphViewRef}
                     data={parsedOutput}
                     isDark={isDark}
+                    byteSize={effectiveRightByteSize}
                     className={`${outputPanelClass} min-h-0 flex-1`}
                   />
                 )
@@ -6250,12 +6310,21 @@ export function WorkspaceContent({
                 };
                 if (data == null && output.trim()) data = tryParse(output);
                 if (data == null && input.trim()) data = tryParse(input);
+                if (isLargeRight) {
+                  return (
+                    <div className={`flex h-full min-h-[200px] flex-col items-center justify-center gap-3 border p-6 text-center text-sm text-[var(--workspace-text-muted)] ${outputPanelClass}`}>
+                      <p>Table view is disabled for inputs over ~400KB to keep the UI responsive.</p>
+                      <button type="button" className={`${linkBtnClass} h-8 px-3 font-medium text-primary`} onClick={() => setRightView("raw")}>Switch to Raw</button>
+                    </div>
+                  );
+                }
                 return data != null ? (
                   <TableView
                     data={data}
                     className={`${outputPanelClass} min-h-0 flex-1 overflow-auto`}
                     isDark={isDark}
                     fontSize={editorFontSize}
+                    byteSize={effectiveRightByteSize}
                   />
                 ) : (
                   <div className={`flex h-full min-h-[200px] flex-col items-center justify-center gap-2 border p-6 text-center text-sm text-[var(--workspace-text-muted)] ${outputPanelClass}`}>
@@ -6296,6 +6365,33 @@ export function WorkspaceContent({
       </div>
 
       {embed && <div className="h-px shrink-0 bg-[var(--workspace-border)]" aria-hidden />}
+
+      {isHugeInput && !embed ? (
+        <div className="flex shrink-0 items-center gap-2 border-b border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-[11px] text-amber-700 dark:text-amber-300">
+          <span className="font-semibold">Huge input — read-only mode.</span>
+          <span>Tree/Table/Graph show the first 200 rows. Editor is hardened (no syntax worker, max 5 000 lines visible).</span>
+          {forceFullEditor ? (
+            <button
+              type="button"
+              className="ml-auto rounded-md border border-amber-500/40 px-2 py-0.5 text-[11px] font-medium hover:bg-amber-500/15"
+              onClick={() => setForceFullEditor(false)}
+            >
+              Re-enable safety
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="ml-auto rounded-md border border-amber-500/40 px-2 py-0.5 text-[11px] font-medium hover:bg-amber-500/15"
+              onClick={() => {
+                setForceFullEditor(true);
+                toast({ message: "Full editor on — page may lag at this size", type: "info" });
+              }}
+            >
+              Edit anyway
+            </button>
+          )}
+        </div>
+      ) : null}
 
       <StatusBar
         valid={inputValid}

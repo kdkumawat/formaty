@@ -22,6 +22,8 @@ import {
 import "jsoncrack-react/style.css";
 import type { JSONCrackProps, JSONCrackRef, LayoutDirection } from "jsoncrack-react";
 import type { JsonValue } from "@/lib/json/core";
+import { searchJson } from "@/lib/json/core";
+import { HUGE_INPUT_BYTES } from "@/lib/io/size";
 import { Tooltip } from "@/components/workspace/Tooltip";
 
 const JSONCrackDynamic = dynamic(
@@ -33,6 +35,9 @@ interface GraphViewProps {
   data: JsonValue;
   className?: string;
   isDark?: boolean;
+  /** Parent-known size of the source string. When set, the huge-mode gate
+   *  uses this directly instead of stringifying samples (which OOMs). */
+  byteSize?: number;
 }
 
 export interface GraphViewRef {
@@ -46,7 +51,7 @@ export interface GraphViewRef {
 const LAYOUTS: LayoutDirection[] = ["DOWN", "RIGHT", "UP", "LEFT"];
 
 export const GraphView = forwardRef<GraphViewRef, GraphViewProps>(function GraphView(
-  { data, className, isDark = false }: GraphViewProps,
+  { data, className, isDark = false, byteSize }: GraphViewProps,
   ref,
 ) {
   const graphRef = useRef<JSONCrackRef | null>(null);
@@ -61,12 +66,39 @@ export const GraphView = forwardRef<GraphViewRef, GraphViewProps>(function Graph
     return { value: data };
   }, [data]);
 
+  // Prefer the parent-supplied byte size (known from the source string).
+  // Fall back to the sample-and-extrapolate estimate only when no size is
+  // provided; stringifying a 2+ MiB object OOMs and would silently disable
+  // the gate by returning null.
+  const estimatedSize = useMemo<number | null>(() => {
+    if (byteSize !== undefined) return byteSize;
+    if (data == null) return 2;
+    try {
+      if (Array.isArray(data)) {
+        if (data.length === 0) return 2;
+        const sample = data.length > 100 ? data.slice(0, 100) : data;
+        const sampleBytes = sample.reduce<number>((acc, v) => acc + JSON.stringify(v).length, 0);
+        if (sampleBytes > HUGE_INPUT_BYTES) return sampleBytes;
+        return Math.ceil((sampleBytes / sample.length) * data.length) + 2;
+      }
+      return JSON.stringify(data).length;
+    } catch {
+      return null;
+    }
+  }, [data, byteSize]);
+  const isHuge = estimatedSize !== null && estimatedSize > HUGE_INPUT_BYTES;
+
   const searchMatches = useMemo(() => {
-    const term = search.trim().toLowerCase();
+    const term = search.trim();
     if (!term) return 0;
-    const source = JSON.stringify(normalizedData).toLowerCase();
-    return source.split(term).length - 1;
-  }, [normalizedData, search]);
+    if (isHuge) {
+      // searchJson already caps at 5_000 hits; at huge size the per-keystroke
+      // walk is the same cost the user already pays on every other view, and
+      // we avoid the old JSON.stringify(.toLowerCase()) of the whole tree.
+      return searchJson(normalizedData, term, "value", false).length;
+    }
+    return searchJson(normalizedData, term, "value", false).length;
+  }, [normalizedData, search, isHuge]);
 
   useEffect(() => {
     const el = exportRef.current;

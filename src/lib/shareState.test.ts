@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decodeState, encodeState } from "./shareState";
+import { decodeState, encodeState, MAX_SHARE_HASH_CHARS, SHARE_TOO_LARGE } from "./shareState";
 
 describe("shareState encode/decode", () => {
   it("roundtrips a simple state", () => {
@@ -52,11 +52,27 @@ describe("shareState encode/decode", () => {
 
   it("handles very large compressed payloads", () => {
     const big = JSON.stringify(
-      Array.from({ length: 20_000 }, (_, i) => ({ id: i, name: `user-${i}`, tags: ["a", "b"] })),
+      Array.from({ length: 2_000 }, (_, i) => ({ id: i, name: `user-${i}`, tags: ["a", "b"] })),
     );
     const state = { input: big };
     const hash = encodeState(state);
+    expect(hash).not.toBe(SHARE_TOO_LARGE);
     const decoded = decodeState(hash);
+    expect(decoded?.input?.length).toBe(big.length);
     expect(decoded?.input).toBe(big);
+  });
+
+  it("refuses to encode payloads whose hash exceeds MAX_SHARE_HASH_CHARS", () => {
+    // lz-string compresses repetitive input aggressively, so use a
+    // pseudo-random base36 string that won't compress below the 32kB cap.
+    const big = Array.from({ length: 100_000 }, (_, i) => i.toString(36)).join("");
+    const state = { input: big };
+    const hash = encodeState(state);
+    expect(hash).toBe(SHARE_TOO_LARGE);
+    expect(decodeState(SHARE_TOO_LARGE)).toBeNull();
+  });
+
+  it("exposes MAX_SHARE_HASH_CHARS as 32_000", () => {
+    expect(MAX_SHARE_HASH_CHARS).toBe(32_000);
   });
 });

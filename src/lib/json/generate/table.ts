@@ -1,4 +1,5 @@
 import type { JsonValue } from "../core";
+import { StringBuilder } from "../streaming";
 
 function escapeHtml(s: string): string {
   return s
@@ -30,36 +31,50 @@ function tableRows(input: JsonValue): { rows: Record<string, JsonValue>[]; heade
 export function toMarkdownTable(input: JsonValue): string {
   const { rows, headers } = tableRows(input);
   if (rows.length === 0 || headers.length === 0) return "";
-  const header = `| ${headers.map(escapeMarkdownCell).join(" | ")} |`;
-  const divider = `| ${headers.map(() => "---").join(" | ")} |`;
-  const body = rows.map((row) =>
-    `| ${headers
-      .map((h) => {
-        const v = row[h];
-        const s = v === null || v === undefined ? "" : typeof v === "object" ? JSON.stringify(v) : String(v);
-        return escapeMarkdownCell(s);
-      })
-      .join(" | ")} |`,
-  );
-  return [header, divider, ...body].join("\n");
+  const out = new StringBuilder();
+  out.push("| ");
+  for (let i = 0; i < headers.length; i++) {
+    if (i > 0) out.push(" | ");
+    out.push(escapeMarkdownCell(headers[i]));
+  }
+  out.push(" |\n| ");
+  for (let i = 0; i < headers.length; i++) {
+    if (i > 0) out.push(" | ");
+    out.push("---");
+  }
+  out.push(" |\n");
+  for (let r = 0; r < rows.length; r++) {
+    const row = rows[r];
+    if (r > 0) out.push("\n");
+    out.push("| ");
+    for (let i = 0; i < headers.length; i++) {
+      if (i > 0) out.push(" | ");
+      const v = row[headers[i]];
+      const s = v === null || v === undefined ? "" : typeof v === "object" ? JSON.stringify(v) : String(v);
+      out.push(escapeMarkdownCell(s));
+    }
+    out.push(" |");
+  }
+  return out.toString();
 }
 
 /** Render an array of objects (or a single object) as an HTML table. */
 export function toHtmlTable(input: JsonValue): string {
   const { rows, headers } = tableRows(input);
   if (rows.length === 0 || headers.length === 0) return "";
-  const thead = `    <tr>${headers.map((h) => `<th>${escapeHtml(h)}</th>`).join("")}</tr>`;
-  const tbody = rows
-    .map((row) => {
-      const cells = headers
-        .map((h) => {
-          const v = row[h];
-          const s = v === null || v === undefined ? "" : typeof v === "object" ? JSON.stringify(v) : String(v);
-          return `<td>${escapeHtml(s)}</td>`;
-        })
-        .join("");
-      return `    <tr>${cells}</tr>`;
-    })
-    .join("\n");
-  return ["<table>", "  <thead>", thead, "  </thead>", "  <tbody>", tbody, "  </tbody>", "</table>"].join("\n");
+  const out = new StringBuilder();
+  out.push("<table>\n  <thead>\n    <tr>");
+  for (const h of headers) out.push(`<th>${escapeHtml(h)}</th>`);
+  out.push("</tr>\n  </thead>\n  <tbody>\n");
+  for (const row of rows) {
+    out.push("    <tr>");
+    for (const h of headers) {
+      const v = row[h];
+      const s = v === null || v === undefined ? "" : typeof v === "object" ? JSON.stringify(v) : String(v);
+      out.push(`<td>${escapeHtml(s)}</td>`);
+    }
+    out.push("</tr>\n");
+  }
+  out.push("  </tbody>\n</table>");
+  return out.toString();
 }

@@ -20,6 +20,8 @@ import { AnimatedMagnifierIcon, useIconAnimation } from "@/components/icons";
 import type { JsonValue } from "@/lib/json/core";
 import { searchJson, type SearchMatch } from "@/lib/json/core";
 import { Tooltip } from "@/components/workspace/Tooltip";
+import { HUGE_INPUT_BYTES } from "@/lib/io/size";
+import { ReadOnlyTextViewer } from "@/components/editor/ReadOnlyTextViewer";
 
 type SearchMode = "key" | "value";
 
@@ -57,6 +59,9 @@ interface TreeViewProps {
   defaultExpanded?: boolean;
   /** Content font size (px) - kept in sync with the editor font size. */
   fontSize?: number;
+  /** Parent-known size of the source string. When set, the huge-mode gate
+   *  uses this directly instead of stringifying samples (which OOMs). */
+  byteSize?: number;
 }
 
 const MAX_INITIAL_DEPTH = 2;
@@ -328,6 +333,7 @@ export const TreeView = forwardRef<TreeViewRef, TreeViewProps>(function TreeView
     showTypeBadges = true,
     defaultExpanded = false,
     fontSize = 13,
+    byteSize,
   }: TreeViewProps,
   ref,
 ) {
@@ -337,6 +343,28 @@ export const TreeView = forwardRef<TreeViewRef, TreeViewProps>(function TreeView
   );
   const [expandAll, setExpandAll] = useState<boolean | null>(null);
   const [collapseGen, setCollapseGen] = useState(0);
+
+  // Prefer the parent-supplied byte size (known from the source string).
+  // Fall back to the sample-and-extrapolate estimate only when no size is
+  // provided; stringifying a 2+ MiB object OOMs and would silently disable
+  // the gate by returning null.
+  const estimatedSize = useMemo<number | null>(() => {
+    if (byteSize !== undefined) return byteSize;
+    if (data == null) return 2;
+    try {
+      if (Array.isArray(data)) {
+        if (data.length === 0) return 2;
+        const sample = data.length > 100 ? data.slice(0, 100) : data;
+        const sampleBytes = sample.reduce<number>((acc, v) => acc + JSON.stringify(v).length, 0);
+        if (sampleBytes > HUGE_INPUT_BYTES) return sampleBytes;
+        return Math.ceil((sampleBytes / sample.length) * data.length) + 2;
+      }
+      return JSON.stringify(data).length;
+    } catch {
+      return null;
+    }
+  }, [data, byteSize]);
+  const isHuge = estimatedSize !== null && estimatedSize > HUGE_INPUT_BYTES;
 
   const [query, setQuery] = useState("");
   const [mode, setMode] = useState<SearchMode>("value");
@@ -407,6 +435,36 @@ export const TreeView = forwardRef<TreeViewRef, TreeViewProps>(function TreeView
         ? "bg-primary/15 text-primary"
         : "text-[var(--workspace-text-muted)] hover:bg-primary/10 hover:text-[var(--workspace-text)]"
     }`;
+
+  const hugePreview = useMemo<string>(() => {
+    if (!isHuge) return "";
+    try {
+      if (Array.isArray(data)) {
+        // Render the first 200 elements then a summary line for the rest.
+        const head = data.slice(0, 200);
+        const headText = head.map((v) => JSON.stringify(v)).join(",\n");
+        return head.length < data.length
+          ? `${headText},\n… (${data.length - head.length} more items, view in editor)`
+          : headText;
+      }
+      return JSON.stringify(data, null, 2);
+    } catch {
+      return "(unable to preview)";
+    }
+  }, [data, isHuge]);
+
+  if (isHuge) {
+    return (
+      <div
+        className={`flex h-full min-h-0 flex-col overflow-hidden border border-[var(--workspace-border)] bg-[var(--workspace-panel)] ${className ?? ""}`}
+      >
+        <div className="shrink-0 border-b border-[var(--workspace-border)] px-3 py-1.5 text-[11px] text-[var(--workspace-text-muted)]">
+          Huge input — tree view disabled. Showing the first 200 items.
+        </div>
+        <ReadOnlyTextViewer value={hugePreview} language="json" className="flex-1" />
+      </div>
+    );
+  }
 
   return (
     <div

@@ -23,4 +23,4 @@ export {
 } from "./OutputActionBar";
 export { Tooltip } from "./Tooltip";
 export { PanelHeader } from "./PanelHeader";
-export { StatusBar, getSizeFormatted } from "./StatusBar";
+export { StatusBar, getSizeFormatted, formatSize } from "./StatusBar";

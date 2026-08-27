@@ -23,6 +23,7 @@ import {
   type TypeTargetLanguage,
 } from "@/lib/json/core";
 import { parseInput, stringifyOutput, type FormatKind, type FormatStringifyOptions } from "@/lib/formats";
+import { WORKER_INPUT_CAP_BYTES, assertBelowCap } from "@/lib/io/size";
 
 type WorkerAction =
   | "parse"
@@ -55,16 +56,46 @@ interface WorkerResponse {
   error?: string;
 }
 
-const ctx: Worker = self as unknown as Worker;
+// `self` is the DedicatedWorkerGlobalScope when this module is loaded as a
+// real Web Worker. In Node (vitest, jsdom) it is undefined; we keep a stub so
+// the pure `dispatch` function stays importable for unit tests.
+const ctx: Worker =
+  (typeof self !== "undefined"
+    ? (self as unknown as Worker)
+    : ({
+        postMessage: () => undefined,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+      } as unknown as Worker));
 const ajv = new Ajv({ allErrors: true, strict: false });
 
-ctx.onmessage = (event: MessageEvent<WorkerRequest>) => {
-  const { id, action, payload } = event.data;
+/** Actions that accept a `payload.input` string. The byte cap is enforced
+ *  before any parsing to keep a 200 MB paste from OOMing the worker. */
+const STRING_INPUT_ACTIONS = new Set<WorkerAction>([
+  "parse",
+  "parseFormat",
+  "format",
+  "minify",
+  "convert",
+]);
 
+/** Pure dispatcher. Exported for unit testing. Returns the response payload
+ *  (no id, no postMessage) so the caller can serialize it. */
+export function dispatch(action: string, payload: Record<string, unknown>): {
+  ok: boolean;
+  result?: unknown;
+  error?: string;
+} {
   try {
-    let result: unknown;
+    if (STRING_INPUT_ACTIONS.has(action as WorkerAction)) {
+      const input = payload.input;
+      if (typeof input === "string") {
+        assertBelowCap(input.length, WORKER_INPUT_CAP_BYTES, "worker input");
+      }
+    }
 
-    switch (action) {
+    let result: unknown;
+    switch (action as WorkerAction) {
       case "parse":
         result = parseJsonInput(payload.input as string);
         break;
@@ -124,12 +155,12 @@ ctx.onmessage = (event: MessageEvent<WorkerRequest>) => {
         result = inferJsonSchema(payload.json as JsonValue);
         break;
       case "validate": {
+        const schemaId = "__current__";
         const validate = ajv.compile(payload.schema as object);
         const valid = validate(payload.json);
-        result = {
-          valid,
-          errors: validate.errors ?? [],
-        };
+        result = { valid, errors: validate.errors ?? [] };
+        // Bound the schema cache: AJV keeps compiled schemas in a Map.
+        ajv.removeSchema(schemaId);
         break;
       }
       case "format":
@@ -159,19 +190,21 @@ ctx.onmessage = (event: MessageEvent<WorkerRequest>) => {
         break;
       }
       default:
-        throw new Error(`Unsupported action: ${String(action)}`);
+        return { ok: false, error: `Unsupported action: ${String(action)}` };
     }
-
-    const response: WorkerResponse = { id, ok: true, result };
-    ctx.postMessage(response);
+    return { ok: true, result };
   } catch (error) {
-    const response: WorkerResponse = {
-      id,
+    return {
       ok: false,
       error: error instanceof Error ? error.message : "Worker execution failed",
     };
-    ctx.postMessage(response);
   }
+}
+
+ctx.onmessage = (event: MessageEvent<WorkerRequest>) => {
+  const { id, action, payload } = event.data;
+  const response: WorkerResponse = { id, ...dispatch(action, payload) };
+  ctx.postMessage(response);
 };
 
 export {};

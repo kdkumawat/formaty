@@ -66,16 +66,31 @@ export interface WorkspaceState {
 
 const MAX_UNCOMPRESSED = 100_000;
 
+/** Conservative browser URL length cap. Beyond this, `window.location.hash`
+ *  is silently truncated, so we refuse to emit a hash and let the caller
+ *  surface a "share too large" toast. */
+export const MAX_SHARE_HASH_CHARS = 32_000;
+
+/** Sentinel returned by `encodeState` when the hash would exceed
+ *  `MAX_SHARE_HASH_CHARS`. Callers should check for this and not update the URL. */
+export const SHARE_TOO_LARGE = "TOO_LARGE";
+
 export function encodeState(state: WorkspaceState): string {
   const json = JSON.stringify(state);
+  let hash: string;
   if (json.length > MAX_UNCOMPRESSED) {
-    return "e:" + compressToEncodedURIComponent(json);
+    hash = "e:" + compressToEncodedURIComponent(json);
+  } else {
+    hash = "j:" + encodeURIComponent(json);
   }
-  return "j:" + encodeURIComponent(json);
+  if (hash.length > MAX_SHARE_HASH_CHARS) {
+    return SHARE_TOO_LARGE;
+  }
+  return hash;
 }
 
 export function decodeState(hash: string): WorkspaceState | null {
-  if (!hash || hash.length < 2) return null;
+  if (!hash || hash === SHARE_TOO_LARGE || hash.length < 2) return null;
   try {
     const prefix = hash.slice(0, 2);
     const payload = hash.slice(2);

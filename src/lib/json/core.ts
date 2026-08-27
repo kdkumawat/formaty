@@ -1,6 +1,15 @@
 import { XMLBuilder } from "fast-xml-parser";
 import { JSONPath } from "jsonpath-plus";
 import yaml from "js-yaml";
+import {
+  flattenJsonIter,
+  formatJsonIter,
+  getStableKey,
+  minifyJsonIter,
+  StringBuilder,
+  toCsvIter,
+  type JsonValue as IterJsonValue,
+} from "./streaming";
 
 // Generators live in lib/json/generate/ - re-exported here so existing
 // callers (worker, UI, tests) keep importing from a single place.
@@ -132,7 +141,7 @@ export function formatJson(input: JsonValue, options?: FormatJsonOptions): strin
   const quoteStyle = options?.quoteStyle ?? "double";
   const indentation = normalizeIndentation(options?.indentation);
   const normalizedInput = options?.sortKeys ? sortKeysDeep(input) : input;
-  const formatted = JSON.stringify(normalizedInput, null, indentation);
+  const formatted = formatJsonIter(normalizedInput as IterJsonValue, indentation);
   if (quoteStyle === "single") {
     return toSingleQuotedJsonString(formatted);
   }
@@ -140,7 +149,7 @@ export function formatJson(input: JsonValue, options?: FormatJsonOptions): strin
 }
 
 export function minifyJson(input: JsonValue): string {
-  return JSON.stringify(input);
+  return minifyJsonIter(input as IterJsonValue);
 }
 
 export function sortKeysDeep(input: JsonValue): JsonValue {
@@ -190,12 +199,9 @@ export function removeEmptyDeep(input: JsonValue): JsonValue {
 
 export function sortArraysDeep(input: JsonValue): JsonValue {
   if (Array.isArray(input)) {
-    const processed = input.map(sortArraysDeep);
-    return processed.sort((a, b) => {
-      const sa = typeof a === "object" ? JSON.stringify(a) : String(a ?? "");
-      const sb = typeof b === "object" ? JSON.stringify(b) : String(b ?? "");
-      return sa.localeCompare(sb);
-    });
+    const processed = input.map(sortArraysDeep) as IterJsonValue[];
+    const cache = new WeakMap<object, string>();
+    return processed.sort((a, b) => getStableKey(a, cache).localeCompare(getStableKey(b, cache)));
   }
   if (input && typeof input === "object") {
     const next: Record<string, JsonValue> = {};
@@ -210,9 +216,10 @@ export function sortArraysDeep(input: JsonValue): JsonValue {
 export function deduplicateArraysDeep(input: JsonValue): JsonValue {
   if (Array.isArray(input)) {
     const processed = input.map(deduplicateArraysDeep);
+    const cache = new WeakMap<object, string>();
     const seen = new Set<string>();
     return processed.filter((item) => {
-      const key = JSON.stringify(item);
+      const key = getStableKey(item as IterJsonValue, cache);
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
@@ -229,23 +236,7 @@ export function deduplicateArraysDeep(input: JsonValue): JsonValue {
 }
 
 export function flattenJson(input: JsonValue, prefix = ""): Record<string, JsonValue> {
-  const out: Record<string, JsonValue> = {};
-  if (Array.isArray(input)) {
-    input.forEach((value, index) => {
-      const key = prefix ? `${prefix}.${index}` : String(index);
-      Object.assign(out, flattenJson(value, key));
-    });
-    return out;
-  }
-  if (input && typeof input === "object") {
-    Object.entries(input as Record<string, JsonValue>).forEach(([key, value]) => {
-      const nextKey = prefix ? `${prefix}.${key}` : key;
-      Object.assign(out, flattenJson(value, nextKey));
-    });
-    return out;
-  }
-  out[prefix] = input;
-  return out;
+  return flattenJsonIter(input as IterJsonValue, prefix);
 }
 
 export function unflattenJson(flat: Record<string, JsonValue>): JsonValue {

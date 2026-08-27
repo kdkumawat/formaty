@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
+  ArrowsPointingOutIcon,
   BarsArrowDownIcon,
   BarsArrowUpIcon,
   ChevronRightIcon,
@@ -12,6 +13,8 @@ import { AnimatedMagnifierIcon, useIconAnimation } from "@/components/icons";
 import type { JsonValue } from "@/lib/json/core";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tooltip } from "@/components/workspace/Tooltip";
+import { HUGE_INPUT_BYTES } from "@/lib/io/size";
+import { ReadOnlyTextViewer } from "@/components/editor/ReadOnlyTextViewer";
 import {
   Table,
   TableBody,
@@ -28,6 +31,9 @@ interface TableViewProps {
   isDark?: boolean;
   /** Content font size (px) - kept in sync with the editor font size. */
   fontSize?: number;
+  /** Parent-known size of the source string. When set, the huge-mode gate
+   *  uses this directly instead of stringifying samples (which OOMs). */
+  byteSize?: number;
 }
 
 type Row = Record<string, JsonValue>;
@@ -47,6 +53,14 @@ function nestedMeta(val: JsonValue): string {
     return `object · ${Object.keys(val as object).length}`;
   }
   return "object";
+}
+
+const CELL_PREVIEW_LIMIT = 240;
+/** Truncate a cell preview for the single-line (no-wrap) mode. The full
+ *  value is still exposed via the tooltip and the native title attribute. */
+function truncateCell(s: string): string {
+  if (s.length <= CELL_PREVIEW_LIMIT) return s;
+  return `${s.slice(0, CELL_PREVIEW_LIMIT)}…`;
 }
 
 function cellDisplay(val: JsonValue | undefined): string {
@@ -88,7 +102,55 @@ export function toTableRows(data: JsonValue): { rows: Row[]; headers: string[] }
   return null;
 }
 
-export function TableView({ data, className = "", fontSize = 13 }: TableViewProps) {
+export function TableView({ data, className = "", fontSize = 13, byteSize }: TableViewProps) {
+  // Prefer the parent-supplied byte size (known from the source string). Fall
+  // back to a sample-and-extrapolate estimate only if no byteSize is given;
+  // a sample of 100 elements of a >2 MiB array is enough to tip into huge.
+  const estimatedSize = useMemo<number | null>(() => {
+    if (byteSize !== undefined) return byteSize;
+    if (data == null) return 2;
+    try {
+      if (Array.isArray(data)) {
+        if (data.length === 0) return 2;
+        const sample = data.length > 100 ? data.slice(0, 100) : data;
+        const sampleBytes = sample.reduce<number>((acc, v) => acc + JSON.stringify(v).length, 0);
+        if (sampleBytes > HUGE_INPUT_BYTES) return sampleBytes;
+        return Math.ceil((sampleBytes / sample.length) * data.length) + 2;
+      }
+      return JSON.stringify(data).length;
+    } catch {
+      return null;
+    }
+  }, [data, byteSize]);
+  const isHuge = estimatedSize !== null && estimatedSize > HUGE_INPUT_BYTES;
+
+  const hugePreview = useMemo<string>(() => {
+    if (!isHuge) return "";
+    try {
+      if (Array.isArray(data)) {
+        const head = data.slice(0, 200);
+        const headText = head.map((v) => JSON.stringify(v)).join(",\n");
+        return head.length < data.length
+          ? `${headText},\n… (${data.length - head.length} more items, view in editor)`
+          : headText;
+      }
+      return JSON.stringify(data, null, 2);
+    } catch {
+      return "(unable to preview)";
+    }
+  }, [data, isHuge]);
+
+  if (isHuge) {
+    return (
+      <div className={`flex h-full min-h-0 flex-col overflow-hidden ${className ?? ""}`} style={{ fontSize }}>
+        <div className="shrink-0 border-b border-[var(--workspace-border)] px-3 py-1.5 text-[11px] text-[var(--workspace-text-muted)]">
+          Huge input — table view disabled. Showing the first 200 rows.
+        </div>
+        <ReadOnlyTextViewer value={hugePreview} language="json" className="flex-1" />
+      </div>
+    );
+  }
+
   const [stack, setStack] = useState<NavFrame[]>([{ label: "Root", data }]);
 
   // Reset navigation when the root data identity/content changes from parent
@@ -104,6 +166,9 @@ export function TableView({ data, className = "", fontSize = 13 }: TableViewProp
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [query, setQuery] = useState("");
   const [colsOpen, setColsOpen] = useState(false);
+  // Word-wrap cell content. Off (default) keeps each cell to one line with
+  // ellipsis + tooltip; on wraps long values inside the cell.
+  const [wordWrap, setWordWrap] = useState(false);
   /** Search magnifier nudges when the box is hovered or focused. */
   const searchIcon = useIconAnimation();
 
@@ -256,6 +321,21 @@ export function TableView({ data, className = "", fontSize = 13 }: TableViewProp
             ? ` · ${visibleHeaders.length}/${allHeaders.length} cols`
             : ""}
         </span>
+        <Tooltip content={wordWrap ? "Single-line cells with ellipsis" : "Wrap long cell text"}>
+          <button
+            type="button"
+            aria-pressed={wordWrap}
+            onClick={() => setWordWrap((v) => !v)}
+            className={`inline-flex h-7 cursor-pointer items-center gap-1 rounded-md border px-2 text-[11px] font-medium transition-colors ${
+              wordWrap
+                ? "border-primary/40 bg-primary/10 text-primary"
+                : "border-[var(--workspace-border)] text-[var(--workspace-text-muted)] hover:bg-primary/10 hover:text-primary"
+            }`}
+          >
+            <ArrowsPointingOutIcon className="h-3.5 w-3.5" />
+            Wrap
+          </button>
+        </Tooltip>
         <div className="relative">
           <button
             type="button"
@@ -387,9 +467,13 @@ export function TableView({ data, className = "", fontSize = 13 }: TableViewProp
                       }
 
                       return (
-                        <TableCell key={h} className={`${cellClass} max-w-[240px] px-2 py-1 font-mono`}>
-                          <Tooltip content={display} className="block max-w-full truncate">
-                            {display}
+                        <TableCell key={h} className={`${cellClass} max-w-[240px] px-2 py-1 font-mono align-top`}>
+                          <Tooltip content={display} className={`block max-w-full ${wordWrap ? "whitespace-pre-wrap break-words" : "truncate"}`}>
+                            {wordWrap ? (
+                              <span>{display}</span>
+                            ) : (
+                              <span title={display}>{truncateCell(display)}</span>
+                            )}
                           </Tooltip>
                         </TableCell>
                       );

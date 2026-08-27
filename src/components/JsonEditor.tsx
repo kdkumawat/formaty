@@ -4,6 +4,7 @@ import React from "react";
 import type { editor } from "monaco-editor";
 import Editor from "@monaco-editor/react";
 import { defineFormatyThemes, resolveFormatyTheme } from "@/lib/utils/monacoThemes";
+import { applyLargeFileOptions, pinNoopJsonWorker, isHugeInput } from "@/lib/monaco/largeFile";
 
 interface JsonEditorProps {
   value: string;
@@ -28,6 +29,9 @@ interface JsonEditorProps {
   /** Fired on Cmd/Ctrl+Enter - registered as a Monaco keybinding so the editor
    *  does not insert a newline when the app consumes the shortcut. */
   onCtrlEnter?: () => void;
+  /** Bypass the huge-input hardening (caller takes responsibility for the
+   *  performance cost at > HUGE_INPUT_BYTES). */
+  disableLargeMode?: boolean;
 }
 
 export function JsonEditor({
@@ -45,9 +49,24 @@ export function JsonEditor({
   wordWrap = "on",
   onEditorMount,
   onCtrlEnter,
+  disableLargeMode = false,
 }: JsonEditorProps) {
   const editorRef = React.useRef<editor.IStandaloneCodeEditor | null>(null);
   const resolvedTheme = resolveFormatyTheme(monacoTheme);
+  const huge = !disableLargeMode && isHugeInput(value);
+  // The huge-mode options include `lightbulb` whose enum is private in the
+  // published types. Cast once to the loose shape; the `applyLargeFileOptions`
+  // helper does the same on mount.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const hugeOptions: Record<string, any> = huge
+    ? {
+        largeFileOptimizations: true,
+        bracketPairColorization: { enabled: false },
+        guides: { indentation: false, bracketPairs: false, highlightActiveIndentation: false },
+        codeLens: false,
+        lightbulb: { enabled: "off" },
+      }
+    : {};
   /** Keep the latest handler without re-registering the Monaco keybinding: the
    *  editor mounts once, but the onCtrlEnter closure must stay fresh (otherwise
    *  Cmd/Ctrl+Enter would run against stale state from mount time). */
@@ -75,6 +94,11 @@ export function JsonEditor({
         language={language}
         beforeMount={(monaco) => {
           defineFormatyThemes(monaco);
+          if (huge) {
+            // Disable the language worker so the JSON service does not
+            // re-tokenize a >2 MB model on every keystroke.
+            pinNoopJsonWorker();
+          }
         }}
         options={{
           minimap: { enabled: false },
@@ -105,10 +129,14 @@ export function JsonEditor({
           quickSuggestions: !passiveReadOnly,
           suggestOnTriggerCharacters: !passiveReadOnly,
           parameterHints: { enabled: !passiveReadOnly },
+          ...hugeOptions,
         }}
         onChange={(next) => onChange(next ?? "")}
         onMount={(editor, monaco) => {
           editorRef.current = editor;
+          if (huge) {
+            applyLargeFileOptions(editor, monaco);
+          }
           const onCtrlEnter = () => {
             onCtrlEnterRef.current?.();
           };

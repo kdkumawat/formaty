@@ -462,7 +462,7 @@ export function ListComparePanel({
     if (isSummary) return summary?.text ?? "";
     return exportFormat === null
       ? bucketItems.map((i) => i.value).join("\n")
-      : formatListItems(bucketItems, exportFormat, resultSort);
+      : formatListItems(bucketItems, exportFormat, resultSort, 5_000);
   }, [bucketItems, exportFormat, resultSort, isSummary, summary]);
 
   type TableSortKey = "name" | "count";
