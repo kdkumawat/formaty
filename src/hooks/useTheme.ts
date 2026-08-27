@@ -27,8 +27,14 @@ function applyTheme(mode: ThemeMode) {
 }
 
 export function useTheme() {
-  // Dark-first default: match the layout script so a fresh visitor stays dark.
-  const [themeMode, setThemeModeState] = useState<ThemeMode>("dark");
+  // Default to the OS preference so a fresh visitor sees whatever their
+  // machine is set to. Falls back to "light" if `matchMedia` is unavailable
+  // (very old runtimes / non-browser). Once the user picks a mode explicitly
+  // the choice persists in localStorage and wins on every reload.
+  const [themeMode, setThemeModeState] = useState<ThemeMode>(() => {
+    if (typeof window === "undefined") return "light";
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  });
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {

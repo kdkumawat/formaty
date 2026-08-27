@@ -114,6 +114,14 @@ export type OutputActionBarProps = {
   onShare: () => void;
   onShareAll?: () => void;
   canShareAll?: boolean;
+  /** When provided, adds a "Share Instant only" option that copies a link
+   *  to the standalone /utils/instant page (the Instant-specific state, not
+   *  the current workspace tab). Used when Instant is the active tool in
+   *  the workspace, where the default "Share this tab" would copy the
+   *  playground URL instead. */
+  onShareInstant?: () => void;
+  /** Label override for the Instant-only option. */
+  shareInstantLabel?: string;
   onCopy: () => void;
   onDownload: (format?: "png" | "jpg") => void;
   onToggleMaximize?: () => void;
@@ -305,6 +313,8 @@ export function OutputActionBar({
   onShare,
   onShareAll,
   canShareAll = false,
+  onShareInstant,
+  shareInstantLabel,
   onCopy,
   onDownload,
   onToggleMaximize,
@@ -679,6 +689,18 @@ export function OutputActionBar({
               }}
             >
               Share all tabs
+            </button>
+          )}
+          {onShareInstant && (
+            <button
+              type="button"
+              className={sharedMenuItemClass}
+              onClick={() => {
+                onShareInstant();
+                setShareOpen(false);
+              }}
+            >
+              {shareInstantLabel ?? "Share Instant only"}
             </button>
           )}
         </div>
