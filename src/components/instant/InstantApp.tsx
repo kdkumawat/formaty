@@ -115,6 +115,7 @@ export function InstantApp({
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [nowInstant, setNowInstant] = useState(() => Date.now());
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [themeMenuOpen, setThemeMenuOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [searchError, setSearchError] = useState<string | null>(null);
   const [dstNotice, setDstNotice] = useState<DstNotice | null>(null);
@@ -791,6 +792,8 @@ export function InstantApp({
                   workspace header's theme toggle. System follows the OS
                   preference until the user picks explicitly. */}
               <Dropdown
+                open={themeMenuOpen}
+                onOpenChange={setThemeMenuOpen}
                 side="bottom"
                 align="end"
                 contentClassName="w-32"
@@ -823,7 +826,10 @@ export function InstantApp({
                     <button
                       key={mode}
                       type="button"
-                      onClick={() => setThemeMode(mode)}
+                      onClick={() => {
+                        setThemeMode(mode);
+                        setThemeMenuOpen(false);
+                      }}
                       className={`inline-flex items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12px] transition-colors ${
                         themeMode === mode
                           ? "bg-primary/12 text-primary"
