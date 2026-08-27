@@ -12,6 +12,8 @@ import { AnimatedMagnifierIcon, useIconAnimation } from "@/components/icons";
 import type { JsonValue } from "@/lib/json/core";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tooltip } from "@/components/workspace/Tooltip";
+import { HUGE_INPUT_BYTES } from "@/lib/io/size";
+import { ReadOnlyTextViewer } from "@/components/editor/ReadOnlyTextViewer";
 import {
   Table,
   TableBody,
@@ -89,6 +91,51 @@ export function toTableRows(data: JsonValue): { rows: Row[]; headers: string[] }
 }
 
 export function TableView({ data, className = "", fontSize = 13 }: TableViewProps) {
+  // Cheap size estimate: same sample-and-extrapolate trick as TreeView.
+  const estimatedSize = useMemo<number | null>(() => {
+    if (data == null) return 2;
+    try {
+      if (Array.isArray(data)) {
+        if (data.length === 0) return 2;
+        const sample = data.length > 100 ? data.slice(0, 100) : data;
+        const sampleBytes = sample.reduce<number>((acc, v) => acc + JSON.stringify(v).length, 0);
+        if (sampleBytes > HUGE_INPUT_BYTES) return sampleBytes;
+        return Math.ceil((sampleBytes / sample.length) * data.length) + 2;
+      }
+      return JSON.stringify(data).length;
+    } catch {
+      return null;
+    }
+  }, [data]);
+  const isHuge = estimatedSize !== null && estimatedSize > HUGE_INPUT_BYTES;
+
+  const hugePreview = useMemo<string>(() => {
+    if (!isHuge) return "";
+    try {
+      if (Array.isArray(data)) {
+        const head = data.slice(0, 200);
+        const headText = head.map((v) => JSON.stringify(v)).join(",\n");
+        return head.length < data.length
+          ? `${headText},\n… (${data.length - head.length} more items, view in editor)`
+          : headText;
+      }
+      return JSON.stringify(data, null, 2);
+    } catch {
+      return "(unable to preview)";
+    }
+  }, [data, isHuge]);
+
+  if (isHuge) {
+    return (
+      <div className={`flex h-full min-h-0 flex-col overflow-hidden ${className ?? ""}`} style={{ fontSize }}>
+        <div className="shrink-0 border-b border-[var(--workspace-border)] px-3 py-1.5 text-[11px] text-[var(--workspace-text-muted)]">
+          Huge input — table view disabled. Showing the first 200 rows.
+        </div>
+        <ReadOnlyTextViewer value={hugePreview} language="json" className="flex-1" />
+      </div>
+    );
+  }
+
   const [stack, setStack] = useState<NavFrame[]>([{ label: "Root", data }]);
 
   // Reset navigation when the root data identity/content changes from parent

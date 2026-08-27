@@ -249,7 +249,7 @@ export function SingleListPanel({
     () =>
       exportFormat === null
         ? sorted.map((i) => i.value).join("\n")
-        : formatListItems(sorted, exportFormat, resolvedSort),
+        : formatListItems(sorted, exportFormat, resolvedSort, 5_000),
     [sorted, exportFormat, resolvedSort],
   );
 

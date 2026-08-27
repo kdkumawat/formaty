@@ -4,6 +4,7 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRe
 import { DiffEditor, type DiffOnMount } from "@monaco-editor/react";
 import type { editor } from "monaco-editor";
 import { defineFormatyThemes, resolveFormatyTheme } from "@/lib/utils/monacoThemes";
+import { applyLargeFileOptions, pinNoopJsonWorker, isHugeInput } from "@/lib/monaco/largeFile";
 import type { LineDiffStats } from "@/lib/json/diff";
 
 export interface DiffNavState {
@@ -47,6 +48,9 @@ export interface JsonDiffEditorProps {
   outputPanelClass?: string;
   renderSideBySide?: boolean;
   ignoreTrimWhitespace?: boolean;
+  /** Bypass the huge-input hardening (caller takes responsibility for the
+   *  performance cost at > HUGE_INPUT_BYTES). */
+  disableLargeMode?: boolean;
 }
 
 function computeLineStats(changes: editor.ILineChange[] | null): LineDiffStats {
@@ -117,11 +121,24 @@ export const JsonDiffEditor = forwardRef<JsonDiffEditorRef, JsonDiffEditorProps>
     outputPanelClass = "border-base-300 bg-base-100",
     renderSideBySide = true,
     ignoreTrimWhitespace = false,
+    disableLargeMode = false,
   },
   ref,
 ) {
   const diffEditorRef = useRef<editor.IStandaloneDiffEditor | null>(null);
   const monacoRef = useRef<typeof import("monaco-editor") | null>(null);
+  const huge = !disableLargeMode && (isHugeInput(original) || isHugeInput(modified));
+  // See JsonEditor for the cast rationale.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const hugeOptions: Record<string, any> = huge
+    ? {
+        largeFileOptimizations: true,
+        bracketPairColorization: { enabled: false },
+        guides: { indentation: false, bracketPairs: false, highlightActiveIndentation: false },
+        codeLens: false,
+        lightbulb: { enabled: "off" },
+      }
+    : {};
   const onOriginalChangeRef = useRef(onOriginalChange);
   const onModifiedChangeRef = useRef(onModifiedChange);
   const onLineStatsChangeRef = useRef(onLineStatsChange);
@@ -227,8 +244,9 @@ export const JsonDiffEditor = forwardRef<JsonDiffEditorRef, JsonDiffEditorProps>
       renderIndicators: true,
       renderMarginRevertIcon: originalEditable || modifiedEditable,
       enableSplitViewResizing: true,
+      ...hugeOptions,
     }),
-    [originalEditable, modifiedEditable, renderSideBySide, fontSize, ignoreTrimWhitespace],
+    [originalEditable, modifiedEditable, renderSideBySide, fontSize, ignoreTrimWhitespace, huge],
   );
 
   useEffect(() => {
@@ -477,8 +495,22 @@ export const JsonDiffEditor = forwardRef<JsonDiffEditorRef, JsonDiffEditorProps>
         modified={seedModifiedRef.current}
         language={language}
         theme={resolveFormatyTheme(monacoTheme)}
-        beforeMount={(monaco) => defineFormatyThemes(monaco)}
-        onMount={handleMount}
+        beforeMount={(monaco) => {
+          defineFormatyThemes(monaco);
+          if (huge) {
+            // Disable the language worker so the JSON service does not
+            // re-tokenize either side of a >2 MB diff on every keystroke.
+            pinNoopJsonWorker();
+          }
+        }}
+        onMount={(ed, monaco) => {
+          handleMount(ed, monaco);
+          if (huge) {
+            const m = monaco as unknown as typeof import("monaco-editor");
+            applyLargeFileOptions(ed.getOriginalEditor(), m);
+            applyLargeFileOptions(ed.getModifiedEditor(), m);
+          }
+        }}
         options={editorOptions}
       />
     </div>

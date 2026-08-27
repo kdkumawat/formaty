@@ -143,7 +143,9 @@ import { executeCurlDetailed, parseCurl, type CurlExecutionResult } from "@/lib/
 import { CURL_TARGETS, generateCurlCode, getCurlTarget, type CurlTargetId } from "@/lib/curl/codegen";
 import type { SqlDialect } from "@/lib/json/core";
 import { formatJson } from "@/lib/json/core";
-import { decodeState, encodeState, type WorkspaceState } from "@/lib/shareState";
+import { decodeState, encodeState, SHARE_TOO_LARGE, type WorkspaceState } from "@/lib/shareState";
+import { HUGE_INPUT_BYTES, InputTooLargeError, LARGE_INPUT_BYTES, WORKER_INPUT_CAP_BYTES } from "@/lib/io/size";
+import { readFileAsTextGuarded } from "@/lib/io/ingest";
 import { savePlayground, updatePlayground, deletePlayground } from "@/lib/playgroundApi";
 import { PRESETS, getPreset, type PresetId } from "@/lib/presets";
 import { themeInlineCss } from "@/lib/utils/themeTokens";
@@ -398,9 +400,6 @@ const TYPE_LANGUAGES: Array<{ id: TypeTargetLanguage; label: string; ext: string
   { id: "sql", label: "SQL", ext: "sql" },
 ];
 
-/** Soft caps for heavy views (bytes of input text). */
-const LARGE_INPUT_BYTES = 400 * 1024;
-const HUGE_INPUT_BYTES = 2 * 1024 * 1024;
 
 /** Includes "diff" / "utils" for first-class tools (not transform OPERATION_ACTIONS menus). */
 type OperationAction =
@@ -654,6 +653,10 @@ export function WorkspaceContent({
   const [lineWrap, setLineWrap] = useState(true);
   const [diffSideBySide, setDiffSideBySide] = useState(true);
   const [diffIgnoreWhitespace, setDiffIgnoreWhitespace] = useState(false);
+  // User override to keep the full editor on for inputs above HUGE_INPUT_BYTES.
+  // Defaults off so an accidental 200 MB paste lands on the hardened editor +
+  // lazy views instead of locking the page.
+  const [forceFullEditor, setForceFullEditor] = useState(false);
   const [diffIgnoreOrder, setDiffIgnoreOrder] = useState(false);
   const [diffShowPaths, setDiffShowPaths] = useState(false);
   /** cURL response metadata (status / headers / size / timing) shown for curl input. */
@@ -3135,13 +3138,27 @@ export function WorkspaceContent({
       const apiResult = await savePlayground(workspaceState);
       id = apiResult?.id ?? null;
     }
+    const encodedHash = encodeState(workspaceState);
+    const hashTooLarge = encodedHash === SHARE_TOO_LARGE;
     const url =
       id && typeof window !== "undefined"
         ? `${window.location.origin}/playground?id=${id}`
-        : `${typeof window !== "undefined" ? window.location.origin + window.location.pathname : ""}#${encodeState(workspaceState)}`;
+        : hashTooLarge
+          ? ""
+          : `${typeof window !== "undefined" ? window.location.origin + window.location.pathname : ""}#${encodedHash}`;
     if (id) {
       setSharedLinkId(id);
       setSharedLinkUrl(url);
+    }
+    if (hashTooLarge) {
+      setShareState("error");
+      toast({
+        message: "Workspace is too large to share as a link. Try removing large inputs from tabs.",
+        type: "error",
+        duration: 5000,
+      });
+      window.setTimeout(() => setShareState("idle"), 1400);
+      return;
     }
     try {
       await navigator.clipboard.writeText(url);
@@ -3601,13 +3618,13 @@ export function WorkspaceContent({
     return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
   }, [modalKind, inputEmpty, focusedPane, activeOperation, diffKind, moveHistory, moveUtilsHistory, isUtilsMode, parseOnly, pasteFromClipboard]);
 
-  const readFileAsText = (file: File): Promise<string> =>
-    new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result ?? ""));
-      reader.onerror = () => reject(new Error("Unable to read file"));
-      reader.readAsText(file);
-    });
+  const readFileAsText = async (file: File): Promise<string> => {
+    const result = await readFileAsTextGuarded(file, WORKER_INPUT_CAP_BYTES);
+    if (result.truncated) {
+      toast({ message: `File truncated: exceeds ${WORKER_INPUT_CAP_BYTES} bytes`, type: "error" });
+    }
+    return result.text;
+  };
 
   const formatLabelForFile = (name: string, text: string): string => {
     const detected = detectFormat(text);
@@ -5519,6 +5536,7 @@ export function WorkspaceContent({
                   onCtrlEnter={parseOnly}
                   onCursorChange={(line, column) => { setCursorPosition({ line, column }); cursorPositionRef.current = { line, column }; }}
                   placeholder="Left input…"
+                  disableLargeMode={forceFullEditor}
                 />
               </div>
               <div
@@ -5543,6 +5561,7 @@ export function WorkspaceContent({
                   wordWrap={lineWrap ? "on" : "off"}
                   onEditorMount={(api) => { splitInput2ApiRef.current = api; }}
                   placeholder="Right input…"
+                  disableLargeMode={forceFullEditor}
                 />
               </div>
             </div>
@@ -5568,6 +5587,7 @@ export function WorkspaceContent({
                 onEditorMount={(api) => { inputEditorApiRef.current = api; }}
                 onCtrlEnter={parseOnly}
                 onCursorChange={(line, column) => { setCursorPosition({ line, column }); cursorPositionRef.current = { line, column }; }}
+                disableLargeMode={forceFullEditor}
               />
               {resolvedInputFormat === "curl" && input.trim() && input !== lastExecutedCurlInput && !curlFetching && (
                 <div className="pointer-events-none absolute inset-x-0 bottom-2 z-10 flex justify-center">
@@ -5772,6 +5792,7 @@ export function WorkspaceContent({
                         onLineStatsChange={setDiffLineStats}
                         onNavChange={setDiffNav}
                         outputPanelClass={outputPanelClass}
+                        disableLargeMode={forceFullEditor}
                       />
                     </div>
                     {diffShowPaths && (
@@ -5996,6 +6017,7 @@ export function WorkspaceContent({
                     fontSize={editorFontSize}
                     wordWrap={lineWrap ? "on" : "off"}
                     onEditorMount={(api) => { outputEditorApiRef.current = api; }}
+                    disableLargeMode={forceFullEditor}
                   />
                   )}
                 </div>
@@ -6296,6 +6318,33 @@ export function WorkspaceContent({
       </div>
 
       {embed && <div className="h-px shrink-0 bg-[var(--workspace-border)]" aria-hidden />}
+
+      {isHugeInput && !embed ? (
+        <div className="flex shrink-0 items-center gap-2 border-b border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-[11px] text-amber-700 dark:text-amber-300">
+          <span className="font-semibold">Huge input — read-only mode.</span>
+          <span>Tree/Table/Graph show the first 200 rows. Editor is hardened (no syntax worker, max 5 000 lines visible).</span>
+          {forceFullEditor ? (
+            <button
+              type="button"
+              className="ml-auto rounded-md border border-amber-500/40 px-2 py-0.5 text-[11px] font-medium hover:bg-amber-500/15"
+              onClick={() => setForceFullEditor(false)}
+            >
+              Re-enable safety
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="ml-auto rounded-md border border-amber-500/40 px-2 py-0.5 text-[11px] font-medium hover:bg-amber-500/15"
+              onClick={() => {
+                setForceFullEditor(true);
+                toast({ message: "Full editor on — page may lag at this size", type: "info" });
+              }}
+            >
+              Edit anyway
+            </button>
+          )}
+        </div>
+      ) : null}
 
       <StatusBar
         valid={inputValid}

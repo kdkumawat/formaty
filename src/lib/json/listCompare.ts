@@ -584,11 +584,22 @@ export function formatListItems(
   items: ListItem[],
   format: ListExportFormat,
   sortMode: ListSortMode = "none",
+  chunkSize = 0,
 ): string {
   const sorted = sortListItems(items, sortMode);
   const values = sorted.map((i) => i.value);
   if (values.length === 0) return "";
 
+  // For very large lists, render in chunks to keep peak memory bounded.
+  if (chunkSize > 0 && values.length > chunkSize) {
+    const chunks = chunkItems(values, chunkSize);
+    return chunks.map((c) => formatValues(c, format)).join(formatJoiner(format));
+  }
+
+  return formatValues(values, format);
+}
+
+function formatValues(values: string[], format: ListExportFormat): string {
   switch (format) {
     case "sql-in-single":
     case "sql-not-in":
@@ -670,6 +681,27 @@ export function formatListItems(
       return `[${values.map((v) => JSON.stringify(v)).join(", ")}]`;
     default:
       return values.join("\n");
+  }
+}
+
+/** When chunking a list export, how to rejoin the per-chunk strings.
+ *  The chunked output is the same as the full output for the *boundary*
+ *  formats (newline/comma/pipe/tsv/raw); for inline formats like
+ *  `sql-in-single` we keep the in-chunk `, ` joiner so the final output
+ *  remains a single comma-separated list. */
+function formatJoiner(format: ListExportFormat): string {
+  switch (format) {
+    case "newline":
+    case "raw":
+    case "sql-values":
+    case "markdown-table":
+      return "\n";
+    case "html-table":
+      return "\n";
+    case "tsv":
+      return "\n";
+    default:
+      return ", ";
   }
 }
 
