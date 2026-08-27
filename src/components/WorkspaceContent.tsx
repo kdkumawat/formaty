@@ -2059,34 +2059,69 @@ export function WorkspaceContent({
       parsedOutput: null,
       error: null,
     };
-    localStorage.setItem(
-      "formaty-session",
-      JSON.stringify({
-        input,
-        output: persistOutput,
-        split,
-        themeMode,
-        typeLanguage,
-        rightView,
-        formatOptions,
-        convertToFormat,
-        liveTransform,
-        editorFontSize,
-        viewAsMenu,
-        lineWrap,
-        autoFormatOnPaste,
+    // Anything over LARGE_INPUT_BYTES (400 KiB) gets dropped from the
+    // persisted session — localStorage quotas (5-10 MB) cannot hold a
+    // 10+ MB input. Settings, tabs, and snapshots still persist; the
+    // user can reload to recover them, and huge inputs go through the
+    // share URL anyway.
+    const isHeavyInput = input.length > LARGE_INPUT_BYTES;
+    const isHeavyOutput = persistOutput.length > LARGE_INPUT_BYTES;
+    const persistInput = isHeavyInput ? "" : input;
+    const persistOut = isHeavyOutput ? "" : persistOutput;
+    const persistSnapshots: Record<string, unknown> = {};
+    if (isHeavyInput) {
+      // Keep the active tab metadata but strip its text fields.
+      const current = allSnapshots[activeTabId] as Record<string, unknown> | undefined;
+      if (current) {
+        const { input: _i, output: _o, undoStack: _u, ...meta } = current;
+        persistSnapshots[activeTabId] = meta;
+      }
+      // Other tab snapshots are safe to keep only if their text is small;
+      // we already cap them implicitly by skipping the whole block.
+    } else {
+      Object.assign(persistSnapshots, allSnapshots);
+    }
+    const payload = {
+      input: persistInput,
+      output: persistOut,
+      split,
+      themeMode,
+      typeLanguage,
+      rightView,
+      formatOptions,
+      convertToFormat,
+      liveTransform,
+      editorFontSize,
+      viewAsMenu,
+      lineWrap,
+      autoFormatOnPaste,
 
-        mobileShowOutput,
-        activeOperation,
-        pinnedItems: Array.from(pinnedItems),
-        outputActionVisibility,
-        tabs,
-        activeTabId,
-        showTabs,
-        tabCounter: tabCounterRef.current,
-        tabSnapshots: allSnapshots,
-      }),
-    );
+      mobileShowOutput,
+      activeOperation,
+      pinnedItems: Array.from(pinnedItems),
+      outputActionVisibility,
+      tabs,
+      activeTabId,
+      showTabs,
+      tabCounter: tabCounterRef.current,
+      tabSnapshots: persistSnapshots,
+    };
+    try {
+      localStorage.setItem("formaty-session", JSON.stringify(payload));
+    } catch (e) {
+      // Last-resort: a stale tab snapshot or a transient setItem failure
+      // should never crash the page. Drop the snapshot map and retry; if
+      // even the empty-state payload fails, swallow the error.
+      if (!(e instanceof Error) || e.name !== "QuotaExceededError") return;
+      try {
+        localStorage.setItem(
+          "formaty-session",
+          JSON.stringify({ ...payload, tabSnapshots: {} }),
+        );
+      } catch {
+        // localStorage is unusable (private mode, locked, etc.) — bail.
+      }
+    }
   }, [input, output, split, themeMode, typeLanguage, rightView, formatOptions, convertToFormat, liveTransform, editorFontSize, viewAsMenu, lineWrap, autoFormatOnPaste, mobileShowOutput, activeOperation, pinnedItems, outputActionVisibility, tabs, activeTabId, showTabs, inputFormatOverride, undoStack, undoIndex, outputExt, outputLanguage, diffLeftInput, diffRightInput, diffKind, isOutputMaximized, utilTab, utilsByTool, captureTabSnapshot]);
 
   // Prefer structured parse for views (table/tree/graph/query)
