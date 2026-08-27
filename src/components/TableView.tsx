@@ -30,6 +30,9 @@ interface TableViewProps {
   isDark?: boolean;
   /** Content font size (px) - kept in sync with the editor font size. */
   fontSize?: number;
+  /** Parent-known size of the source string. When set, the huge-mode gate
+   *  uses this directly instead of stringifying samples (which OOMs). */
+  byteSize?: number;
 }
 
 type Row = Record<string, JsonValue>;
@@ -90,9 +93,12 @@ export function toTableRows(data: JsonValue): { rows: Row[]; headers: string[] }
   return null;
 }
 
-export function TableView({ data, className = "", fontSize = 13 }: TableViewProps) {
-  // Cheap size estimate: same sample-and-extrapolate trick as TreeView.
+export function TableView({ data, className = "", fontSize = 13, byteSize }: TableViewProps) {
+  // Prefer the parent-supplied byte size (known from the source string). Fall
+  // back to a sample-and-extrapolate estimate only if no byteSize is given;
+  // a sample of 100 elements of a >2 MiB array is enough to tip into huge.
   const estimatedSize = useMemo<number | null>(() => {
+    if (byteSize !== undefined) return byteSize;
     if (data == null) return 2;
     try {
       if (Array.isArray(data)) {
@@ -106,7 +112,7 @@ export function TableView({ data, className = "", fontSize = 13 }: TableViewProp
     } catch {
       return null;
     }
-  }, [data]);
+  }, [data, byteSize]);
   const isHuge = estimatedSize !== null && estimatedSize > HUGE_INPUT_BYTES;
 
   const hugePreview = useMemo<string>(() => {

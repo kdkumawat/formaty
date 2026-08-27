@@ -35,6 +35,9 @@ interface GraphViewProps {
   data: JsonValue;
   className?: string;
   isDark?: boolean;
+  /** Parent-known size of the source string. When set, the huge-mode gate
+   *  uses this directly instead of stringifying samples (which OOMs). */
+  byteSize?: number;
 }
 
 export interface GraphViewRef {
@@ -48,7 +51,7 @@ export interface GraphViewRef {
 const LAYOUTS: LayoutDirection[] = ["DOWN", "RIGHT", "UP", "LEFT"];
 
 export const GraphView = forwardRef<GraphViewRef, GraphViewProps>(function GraphView(
-  { data, className, isDark = false }: GraphViewProps,
+  { data, className, isDark = false, byteSize }: GraphViewProps,
   ref,
 ) {
   const graphRef = useRef<JSONCrackRef | null>(null);
@@ -63,8 +66,12 @@ export const GraphView = forwardRef<GraphViewRef, GraphViewProps>(function Graph
     return { value: data };
   }, [data]);
 
-  // Cheap size estimate: same sample-and-extrapolate trick as TreeView/TableView.
+  // Prefer the parent-supplied byte size (known from the source string).
+  // Fall back to the sample-and-extrapolate estimate only when no size is
+  // provided; stringifying a 2+ MiB object OOMs and would silently disable
+  // the gate by returning null.
   const estimatedSize = useMemo<number | null>(() => {
+    if (byteSize !== undefined) return byteSize;
     if (data == null) return 2;
     try {
       if (Array.isArray(data)) {
@@ -78,7 +85,7 @@ export const GraphView = forwardRef<GraphViewRef, GraphViewProps>(function Graph
     } catch {
       return null;
     }
-  }, [data]);
+  }, [data, byteSize]);
   const isHuge = estimatedSize !== null && estimatedSize > HUGE_INPUT_BYTES;
 
   const searchMatches = useMemo(() => {

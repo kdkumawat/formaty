@@ -1031,8 +1031,15 @@ export function WorkspaceContent({
   const inputLineCount = input.split("\n").length;
   const inputSizeFormatted = getSizeFormatted(input);
   const inputByteSize = useMemo(() => (input ? new Blob([input]).size : 0), [input]);
+  const outputByteSize = useMemo(() => (output ? new Blob([output]).size : 0), [output]);
   const isLargeInput = inputByteSize >= LARGE_INPUT_BYTES;
   const isHugeInput = inputByteSize >= HUGE_INPUT_BYTES;
+  // The right-side views render `parsedOutput` (which may be derived from
+  // either the input or the output string). Track the larger of the two
+  // so the huge-mode gate also fires when a small input explodes into a
+  // huge output via a transform.
+  const effectiveRightByteSize = Math.max(inputByteSize, outputByteSize);
+  const isHugeRight = effectiveRightByteSize >= HUGE_INPUT_BYTES;
   const selectedTypeLanguageLabel =
     TYPE_LANGUAGES.find((item) => item.id === typeLanguage)?.label ?? "Language";
 
@@ -6215,7 +6222,7 @@ export function WorkspaceContent({
             ) : null}
             {!isUtilsMode && !isDiffMode && rightView === "tree" ? (
               parsedOutput ? (
-                isHugeInput ? (
+                isHugeRight ? (
                   <div className={`flex h-full min-h-[200px] flex-col items-center justify-center gap-3 border p-6 text-center text-sm text-[var(--workspace-text-muted)] ${outputPanelClass}`}>
                     <p>Tree view is disabled for inputs over ~2MB to keep the UI responsive.</p>
                     <button type="button" className={`${linkBtnClass} h-8 px-3 font-medium text-primary`} onClick={() => setRightView("raw")}>Switch to Raw</button>
@@ -6227,6 +6234,7 @@ export function WorkspaceContent({
                     isDark={isDark}
                     largeFile={isLargeInput}
                     fontSize={editorFontSize}
+                    byteSize={effectiveRightByteSize}
                     onNotify={(msg) => toast({ message: msg })}
                     className={`${outputPanelClass} min-h-0 flex-1 overflow-auto`}
                   />
@@ -6239,7 +6247,7 @@ export function WorkspaceContent({
             ) : null}
             {!isUtilsMode && !isDiffMode && rightView === "graph" ? (
               parsedOutput ? (
-                isHugeInput ? (
+                isHugeRight ? (
                   <div className={`flex h-full min-h-[200px] flex-col items-center justify-center gap-3 border p-6 text-center text-sm text-[var(--workspace-text-muted)] ${outputPanelClass}`}>
                     <p>Graph view is disabled for inputs over ~2MB. Use Raw, Query, or download instead.</p>
                     <button type="button" className={`${linkBtnClass} h-8 px-3 font-medium text-primary`} onClick={() => setRightView("raw")}>Switch to Raw</button>
@@ -6253,6 +6261,7 @@ export function WorkspaceContent({
                       ref={graphViewRef}
                       data={parsedOutput}
                       isDark={isDark}
+                      byteSize={effectiveRightByteSize}
                       className="min-h-0 flex-1"
                     />
                   </div>
@@ -6261,6 +6270,7 @@ export function WorkspaceContent({
                     ref={graphViewRef}
                     data={parsedOutput}
                     isDark={isDark}
+                    byteSize={effectiveRightByteSize}
                     className={`${outputPanelClass} min-h-0 flex-1`}
                   />
                 )
@@ -6307,12 +6317,21 @@ export function WorkspaceContent({
                 };
                 if (data == null && output.trim()) data = tryParse(output);
                 if (data == null && input.trim()) data = tryParse(input);
+                if (isHugeRight) {
+                  return (
+                    <div className={`flex h-full min-h-[200px] flex-col items-center justify-center gap-3 border p-6 text-center text-sm text-[var(--workspace-text-muted)] ${outputPanelClass}`}>
+                      <p>Table view is disabled for inputs over ~2MB to keep the UI responsive.</p>
+                      <button type="button" className={`${linkBtnClass} h-8 px-3 font-medium text-primary`} onClick={() => setRightView("raw")}>Switch to Raw</button>
+                    </div>
+                  );
+                }
                 return data != null ? (
                   <TableView
                     data={data}
                     className={`${outputPanelClass} min-h-0 flex-1 overflow-auto`}
                     isDark={isDark}
                     fontSize={editorFontSize}
+                    byteSize={effectiveRightByteSize}
                   />
                 ) : (
                   <div className={`flex h-full min-h-[200px] flex-col items-center justify-center gap-2 border p-6 text-center text-sm text-[var(--workspace-text-muted)] ${outputPanelClass}`}>

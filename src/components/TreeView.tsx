@@ -59,6 +59,9 @@ interface TreeViewProps {
   defaultExpanded?: boolean;
   /** Content font size (px) - kept in sync with the editor font size. */
   fontSize?: number;
+  /** Parent-known size of the source string. When set, the huge-mode gate
+   *  uses this directly instead of stringifying samples (which OOMs). */
+  byteSize?: number;
 }
 
 const MAX_INITIAL_DEPTH = 2;
@@ -330,6 +333,7 @@ export const TreeView = forwardRef<TreeViewRef, TreeViewProps>(function TreeView
     showTypeBadges = true,
     defaultExpanded = false,
     fontSize = 13,
+    byteSize,
   }: TreeViewProps,
   ref,
 ) {
@@ -340,11 +344,12 @@ export const TreeView = forwardRef<TreeViewRef, TreeViewProps>(function TreeView
   const [expandAll, setExpandAll] = useState<boolean | null>(null);
   const [collapseGen, setCollapseGen] = useState(0);
 
-  // Cheap size estimate — avoid stringifying the whole tree at huge size.
-  // We sample up to 100 elements of an array (or stringify a non-array)
-  // and extrapolate. The first check short-circuits if even the sample
-  // crosses HUGE_INPUT_BYTES.
+  // Prefer the parent-supplied byte size (known from the source string).
+  // Fall back to the sample-and-extrapolate estimate only when no size is
+  // provided; stringifying a 2+ MiB object OOMs and would silently disable
+  // the gate by returning null.
   const estimatedSize = useMemo<number | null>(() => {
+    if (byteSize !== undefined) return byteSize;
     if (data == null) return 2;
     try {
       if (Array.isArray(data)) {
@@ -358,7 +363,7 @@ export const TreeView = forwardRef<TreeViewRef, TreeViewProps>(function TreeView
     } catch {
       return null;
     }
-  }, [data]);
+  }, [data, byteSize]);
   const isHuge = estimatedSize !== null && estimatedSize > HUGE_INPUT_BYTES;
 
   const [query, setQuery] = useState("");
