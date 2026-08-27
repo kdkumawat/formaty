@@ -95,6 +95,7 @@ import { trackEvent } from "@/components/Analytics";
 import {
   Dropdown,
   getSizeFormatted,
+  formatSize,
   Header as WorkspaceHeader,
   StatusBar,
   Tooltip,
@@ -1040,6 +1041,11 @@ export function WorkspaceContent({
   // huge output via a transform.
   const effectiveRightByteSize = Math.max(inputByteSize, outputByteSize);
   const isHugeRight = effectiveRightByteSize >= HUGE_INPUT_BYTES;
+  // Table and Graph are much heavier than the tree — they materialize every
+  // cell / node in the DOM. Gate them earlier (at LARGE_INPUT_BYTES) so a
+  // 1.8 MB file does not hang the renderer. The banner shows the same
+  // "first 200 rows" preview as the tree view.
+  const isLargeRight = effectiveRightByteSize >= LARGE_INPUT_BYTES;
   const selectedTypeLanguageLabel =
     TYPE_LANGUAGES.find((item) => item.id === typeLanguage)?.label ?? "Language";
 
@@ -5542,7 +5548,7 @@ export function WorkspaceContent({
                 {droppedFile.name}
               </span>
               <span className="shrink-0 text-[10px] tabular-nums text-[var(--workspace-text-muted)]">
-                {getSizeFormatted(String(droppedFile.size))}
+                {formatSize(droppedFile.size)}
               </span>
               <button
                 type="button"
@@ -6247,23 +6253,10 @@ export function WorkspaceContent({
             ) : null}
             {!isUtilsMode && !isDiffMode && rightView === "graph" ? (
               parsedOutput ? (
-                isHugeRight ? (
+                isLargeRight ? (
                   <div className={`flex h-full min-h-[200px] flex-col items-center justify-center gap-3 border p-6 text-center text-sm text-[var(--workspace-text-muted)] ${outputPanelClass}`}>
-                    <p>Graph view is disabled for inputs over ~2MB. Use Raw, Query, or download instead.</p>
+                    <p>Graph view is disabled for inputs over ~400KB. Use Raw, Query, or download instead.</p>
                     <button type="button" className={`${linkBtnClass} h-8 px-3 font-medium text-primary`} onClick={() => setRightView("raw")}>Switch to Raw</button>
-                  </div>
-                ) : isLargeInput ? (
-                  <div className={`flex h-full min-h-0 flex-1 flex-col overflow-hidden ${outputPanelClass}`}>
-                    <div className="shrink-0 border-b border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-[11px] text-amber-700 dark:text-amber-300">
-                      Large file - graph may be slow. Prefer Query or Tree for exploration.
-                    </div>
-                    <GraphView
-                      ref={graphViewRef}
-                      data={parsedOutput}
-                      isDark={isDark}
-                      byteSize={effectiveRightByteSize}
-                      className="min-h-0 flex-1"
-                    />
                   </div>
                 ) : (
                   <GraphView
@@ -6317,10 +6310,10 @@ export function WorkspaceContent({
                 };
                 if (data == null && output.trim()) data = tryParse(output);
                 if (data == null && input.trim()) data = tryParse(input);
-                if (isHugeRight) {
+                if (isLargeRight) {
                   return (
                     <div className={`flex h-full min-h-[200px] flex-col items-center justify-center gap-3 border p-6 text-center text-sm text-[var(--workspace-text-muted)] ${outputPanelClass}`}>
-                      <p>Table view is disabled for inputs over ~2MB to keep the UI responsive.</p>
+                      <p>Table view is disabled for inputs over ~400KB to keep the UI responsive.</p>
                       <button type="button" className={`${linkBtnClass} h-8 px-3 font-medium text-primary`} onClick={() => setRightView("raw")}>Switch to Raw</button>
                     </div>
                   );
