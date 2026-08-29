@@ -2137,6 +2137,33 @@ export function WorkspaceContent({
     }
   }, [input, output, split, themeMode, typeLanguage, rightView, formatOptions, convertToFormat, liveTransform, editorFontSize, viewAsMenu, lineWrap, autoFormatOnPaste, mobileShowOutput, activeOperation, pinnedItems, outputActionVisibility, tabs, activeTabId, showTabs, inputFormatOverride, undoStack, undoIndex, outputExt, outputLanguage, diffLeftInput, diffRightInput, diffKind, isOutputMaximized, utilTab, utilsByTool, captureTabSnapshot]);
 
+  // Synchronous safety-net save on tab hide/reload so the new-version
+  // toast's `location.reload()` never loses an in-flight edit between the
+  // last render commit and the unload.
+  useEffect(() => {
+    const flush = () => {
+      try {
+        const raw = localStorage.getItem("formaty-session");
+        const prev = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
+        localStorage.setItem(
+          "formaty-session",
+          JSON.stringify({
+            ...prev,
+            input,
+            output: cleanSessionOutput(output),
+            tabs,
+            activeTabId,
+            tabCounter: tabCounterRef.current,
+          }),
+        );
+      } catch {
+        /* localStorage unavailable - skip */
+      }
+    };
+    window.addEventListener("pagehide", flush);
+    return () => window.removeEventListener("pagehide", flush);
+  }, [input, output, tabs, activeTabId]);
+
   // Prefer structured parse for views (table/tree/graph/query)
   useEffect(() => {
     // While Compare/Utils own the main pane, keep transform parsed data intact
