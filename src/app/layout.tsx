@@ -6,6 +6,7 @@ import { Inter, JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import { Analytics } from "@/components/Analytics";
 import { ConsentBanner } from "@/components/ConsentBanner";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
+import { UpdateToast } from "@/components/UpdateToast";
 import "./globals.css";
 
 const inter = Inter({
@@ -318,6 +319,7 @@ export default function RootLayout({
           </Suspense>
         </MotionConfig>
         <ServiceWorkerRegister />
+        <UpdateToast />
         <ConsentBanner />
       </body>
     </html>
