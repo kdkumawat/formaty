@@ -134,32 +134,6 @@ export function SingleListPanel({
   const [inputSnapshot, setInputSnapshot] = useState<string | null>(null);
   const [display, setDisplay] = useState<"inline" | "table">(loadStoredDisplay);
   const [cleanSnapshot, setCleanSnapshot] = useState<string | null>(null);
-  const autoCleanEnabled = effectiveOptions.autoClean ?? true;
-  const autoCleanTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Auto-clean on input: normalize messy pasted lists after a short debounce, keep
-  // snapshot so the user can Undo and get the exact pre-clean text back.
-  useEffect(() => {
-    if (!autoCleanEnabled) return;
-    if (!value.trim()) {
-      if (cleanSnapshot) setCleanSnapshot(null);
-      return;
-    }
-    const cleaned = cleanListInput(value);
-    if (cleaned === value || !cleaned) return;
-    const needsClean = /[,[\]()]/.test(value) || /["'`]/.test(value) || /\s{2,}/.test(value);
-    if (!needsClean) return;
-    if (autoCleanTimerRef.current) clearTimeout(autoCleanTimerRef.current);
-    autoCleanTimerRef.current = setTimeout(() => {
-      setCleanSnapshot(value);
-      onChange(cleaned);
-      setInputSnapshot(null);
-      setSortMode("none");
-      toast({ message: "Auto-cleaned", type: "info" });
-    }, 450);
-    return () => {
-      if (autoCleanTimerRef.current) clearTimeout(autoCleanTimerRef.current);
-    };
-  }, [value, autoCleanEnabled, onChange]);
   const undoClean = () => {
     if (cleanSnapshot !== null) {
       const prev = cleanSnapshot;

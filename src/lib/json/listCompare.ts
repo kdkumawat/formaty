@@ -50,8 +50,6 @@ export interface ListParseOptions {
   stripQuotes: boolean;
   /** Treat "01" and 1 as the same key when both parse as numbers. */
   numericNormalize: boolean;
-  /** Auto-normalize pasted list text (strip quotes, split commas, one-per-line). */
-  autoClean: boolean;
 }
 
 export interface ListItem {
@@ -120,7 +118,6 @@ export const DEFAULT_LIST_PARSE_OPTIONS: ListParseOptions = {
   caseInsensitive: false,
   stripQuotes: false,
   numericNormalize: false,
-  autoClean: true,
 };
 
 const EXPORT_LABELS: Record<ListExportFormat, string> = {
@@ -727,8 +724,8 @@ export function formatSqlInClause(
 
 export const BUCKET_LABELS: Record<ListBucket, string> = {
   common: "Common",
-  leftOnly: "Only left",
-  rightOnly: "Only right",
+  leftOnly: "Left",
+  rightOnly: "Right",
   union: "Union",
   symmetric: "Symmetric diff",
   leftDupes: "Left duplicates",
@@ -752,7 +749,7 @@ export interface ListSummarySection {
 }
 
 export interface ListSummary {
-  /** Non-empty sections in render order (Common, Only left, Only right, dupes, Changed). */
+  /** Non-empty sections in render order (Common, Left, Right, dupes, Changed). */
   sections: ListSummarySection[];
   /** Plain-text report - exactly what Copy / Download produce. */
   text: string;

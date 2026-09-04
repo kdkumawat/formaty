@@ -4415,24 +4415,6 @@ export function WorkspaceContent({
             ))}
           </div>
         </div>
-        <div>
-          <p className="pb-1 text-[10px] font-medium text-[var(--workspace-text-muted)]">Input</p>
-          <div className="flex flex-wrap gap-1">
-            <button
-              type="button"
-              onClick={() => setListCompareOptions((prev) => ({ ...prev, autoClean: !(prev.autoClean ?? true) }))}
-              className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors ${
-                (listCompareOptions.autoClean ?? true)
-                  ? "bg-primary/15 text-primary"
-                  : "bg-muted text-[var(--workspace-text-muted)] hover:bg-primary/10 hover:text-[var(--workspace-text)]"
-              }`}
-            >
-              <span className={`h-1.5 w-1.5 rounded-full ${(listCompareOptions.autoClean ?? true) ? "bg-primary" : "bg-[var(--workspace-border)]"}`} />
-              Auto-clean on paste
-            </button>
-          </div>
-          <p className="mt-1 text-[10px] leading-snug text-[var(--workspace-text-muted)]">Strips quotes/brackets, splits commas → one per line. Undo to revert.</p>
-        </div>
       </div>
       <p className="mt-3 rounded-md bg-primary/5 px-2 py-1.5 text-[10px] leading-snug text-[var(--workspace-text-muted)]">
         Document diff options (hunks, inline vs side-by-side, whitespace, paths) live in the Compare toolbar.

@@ -483,7 +483,7 @@ This is the classic database debugging workflow: paste the result of SELECT id F
 
 Every result bucket can be exported - copy as SQL IN, SQL NOT IN, PostgreSQL ARRAY, JSON, CSV, Markdown, or a Go slice - so the output is immediately actionable. Everything runs locally in your browser; nothing is uploaded.`,
     inputExample: "Left:\nid-1001\nid-1002\nid-1003\nid-1004\n\nRight:\nid-1002\nid-1003\nid-1005",
-    outputExample: "Common: id-1002, id-1003\nOnly left: id-1001, id-1004\nOnly right: id-1005",
+    outputExample: "Common: id-1002, id-1003\nLeft: id-1001, id-1004\nRight: id-1005",
     useCases: [
       "Find missing records between two databases",
       "Reconcile production vs staging exports",
@@ -589,7 +589,7 @@ Paste the result of SELECT id FROM table_a on the left and SELECT id FROM table_
 
 Use cases: reconciling expected vs actual, finding records missing from a sync, verifying data migrations, and comparing API response IDs. Everything runs in your browser; your IDs never leave your device.`,
     inputExample: "Left:\n1001\n1002\n1003\n1004\n\nRight:\n1002\n1003\n1005",
-    outputExample: "Common: 1002, 1003\nOnly left: 1001, 1004\nOnly right: 1005",
+    outputExample: "Common: 1002, 1003\nLeft: 1001, 1004\nRight: 1005",
     useCases: [
       "Reconcile expected vs actual records",
       "Find records missing from a sync",
@@ -820,7 +820,7 @@ Paste two CSVs, choose the key column, and Formaty shows values common to both, 
 
 Use cases: comparing email lists, reconciling ID columns across exports, and checking that every expected value arrived. Runs entirely in your browser.`,
     inputExample: "Left: id,email\n1,a@x.com\n2,b@x.com\n\nRight: id,email\n2,b@x.com\n3,c@x.com",
-    outputExample: "Common: b@x.com\nOnly left: a@x.com\nOnly right: c@x.com",
+    outputExample: "Common: b@x.com\nLeft: a@x.com\nRight: c@x.com",
     useCases: [
       "Compare email or ID columns",
       "Reconcile export columns",
