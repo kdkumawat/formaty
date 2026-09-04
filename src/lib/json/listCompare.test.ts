@@ -163,8 +163,8 @@ describe("buildListSummary", () => {
     expect(s.sections[0]!.items.map((i) => i.value)).toEqual(["b", "c"]);
     expect(s.text).toContain("Common (2)");
     expect(s.text).toContain("  b");
-    expect(s.text).toContain("Only left (1)");
-    expect(s.text).toContain("Only right (1)");
+    expect(s.text).toContain("Left (1)");
+    expect(s.text).toContain("Right (1)");
   });
 
   it("includes duplicates sections only when duplicates exist", () => {
@@ -181,8 +181,8 @@ describe("buildListSummary", () => {
     const r = compareLists("a\nb", "a\nb", base);
     const s = buildListSummary(r);
     expect(s.sections.map((x) => x.bucket)).toEqual(["common"]);
-    expect(s.text).not.toContain("Only left");
-    expect(s.text).not.toContain("Only right");
+    expect(s.text).not.toContain("Left (");
+    expect(s.text).not.toContain("Right (");
   });
 
   it("annotates count mismatches inline in the Common section", () => {

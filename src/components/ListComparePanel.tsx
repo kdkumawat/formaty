@@ -309,81 +309,6 @@ export function ListComparePanel({
   const [rightSnapshot, setRightSnapshot] = useState<string | null>(null);
   const [leftCleanSnapshot, setLeftCleanSnapshot] = useState<string | null>(null);
   const [rightCleanSnapshot, setRightCleanSnapshot] = useState<string | null>(null);
-  const autoCleanEnabled = effectiveOptions.autoClean ?? true;
-  const leftAutoCleanRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const rightAutoCleanRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Set true after a manual undo so the auto-clean effect ignores the very next
-  // re-render of that side (it would otherwise re-clean what we just reverted).
-  const undoGuardRef = useRef<{ left: boolean; right: boolean }>({ left: false, right: false });
-  // Per-side CSV detection: never auto-clean a side that already parses as CSV.
-  const leftIsCsv = useMemo(() => detectCsvColumns(left) !== null, [left]);
-  const rightIsCsv = useMemo(() => detectCsvColumns(right) !== null, [right]);
-  useEffect(() => {
-    if (!autoCleanEnabled || !left.trim()) {
-      if (!left.trim() && leftCleanSnapshot) setLeftCleanSnapshot(null);
-      return;
-    }
-    if (leftIsCsv) return;
-    if (undoGuardRef.current.left) {
-      undoGuardRef.current.left = false;
-      return;
-    }
-    const cleaned = cleanListInput(left);
-    if (cleaned === left || !cleaned) return;
-    const needsClean = /[,[\]()]/.test(left) || /["'`]/.test(left) || /\s{2,}/.test(left);
-    if (!needsClean) return;
-    if (leftAutoCleanRef.current) clearTimeout(leftAutoCleanRef.current);
-    leftAutoCleanRef.current = setTimeout(() => {
-      setLeftCleanSnapshot(left);
-      onLeftChange(cleaned);
-      setLeftSnapshot(null);
-      setLeftSort("none");
-      toast({ message: "Left auto-cleaned", type: "info" });
-    }, 450);
-    return () => { if (leftAutoCleanRef.current) clearTimeout(leftAutoCleanRef.current); };
-  }, [left, autoCleanEnabled, onLeftChange, leftIsCsv]);
-  useEffect(() => {
-    if (!autoCleanEnabled || !right.trim()) {
-      if (!right.trim() && rightCleanSnapshot) setRightCleanSnapshot(null);
-      return;
-    }
-    if (rightIsCsv) return;
-    if (undoGuardRef.current.right) {
-      undoGuardRef.current.right = false;
-      return;
-    }
-    const cleaned = cleanListInput(right);
-    if (cleaned === right || !cleaned) return;
-    const needsClean = /[,[\]()]/.test(right) || /["'`]/.test(right) || /\s{2,}/.test(right);
-    if (!needsClean) return;
-    if (rightAutoCleanRef.current) clearTimeout(rightAutoCleanRef.current);
-    rightAutoCleanRef.current = setTimeout(() => {
-      setRightCleanSnapshot(right);
-      onRightChange(cleaned);
-      setRightSnapshot(null);
-      setRightSort("none");
-      toast({ message: "Right auto-cleaned", type: "info" });
-    }, 450);
-    return () => { if (rightAutoCleanRef.current) clearTimeout(rightAutoCleanRef.current); };
-  }, [right, autoCleanEnabled, onRightChange, rightIsCsv]);
-  const undoLeftClean = () => {
-    if (leftCleanSnapshot !== null) {
-      const prev = leftCleanSnapshot;
-      setLeftCleanSnapshot(null);
-      undoGuardRef.current.left = true;
-      onLeftChange(prev);
-      toast({ message: "Left reverted", type: "info" });
-    }
-  };
-  const undoRightClean = () => {
-    if (rightCleanSnapshot !== null) {
-      const prev = rightCleanSnapshot;
-      setRightCleanSnapshot(null);
-      undoGuardRef.current.right = true;
-      onRightChange(prev);
-      toast({ message: "Right reverted", type: "info" });
-    }
-  };
   const cleanLeft = () => {
     const cleaned = cleanListInput(left);
     if (cleaned !== left) setLeftCleanSnapshot(left);
@@ -401,6 +326,22 @@ export function ListComparePanel({
     setRightSnapshot(null);
     setRightSort("none");
     toast({ message: "Right cleaned", type: "success" });
+  };
+  const undoLeftClean = () => {
+    if (leftCleanSnapshot !== null) {
+      const prev = leftCleanSnapshot;
+      setLeftCleanSnapshot(null);
+      onLeftChange(prev);
+      toast({ message: "Left reverted", type: "info" });
+    }
+  };
+  const undoRightClean = () => {
+    if (rightCleanSnapshot !== null) {
+      const prev = rightCleanSnapshot;
+      setRightCleanSnapshot(null);
+      onRightChange(prev);
+      toast({ message: "Right reverted", type: "info" });
+    }
   };
 
   // CSV column detection: when both sides look like header CSVs, offer column compare.

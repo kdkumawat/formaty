@@ -1095,7 +1095,7 @@ local: true`}
             <DefList
               items={[
                 { label: "Switch", value: 'Toolbar tab List / Set, or palette → "Diff: List / set mode".' },
-                { label: "Buckets", value: "Common, Only left, Only right, Union, Symmetric diff, Left/Right duplicates, Changed (CSV key compare) - with live counts." },
+                { label: "Buckets", value: "Common, Left, Right, Union, Symmetric diff, Left/Right duplicates, Changed (CSV key compare) - with live counts." },
                 { label: "CSV column compare", value: "Paste two CSVs with a shared header; pick a key column and see common, missing, extra, and changed rows." },
                 { label: "Counts (multiset)", value: <>Toggle <em>Counts</em> for count-aware comparison: keys on both sides with different occurrence counts are reported (e.g. <InlineCode>A: 1 extra on left</InlineCode>).</> },
                 { label: "Parse", value: "Auto / newline / comma / semicolon / pipe / whitespace / JSON array; toggles for trim, skip empty, ignore case, strip quotes, normalize numbers." },
