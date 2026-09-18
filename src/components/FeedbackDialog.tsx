@@ -25,7 +25,6 @@ import {
   FEEDBACK_MAX_ITEMS,
   FEEDBACK_MAX_MESSAGE,
   FEEDBACK_MIN_MESSAGE,
-  feedbackConfigured,
   submitFeedback,
   type FeedbackCategory,
 } from "@/lib/feedback";
@@ -63,7 +62,6 @@ export function FeedbackDialog({
   const [error, setError] = useState<string | null>(null);
   const [sentCount, setSentCount] = useState<number | null>(null);
   const nextIdRef = useRef(2);
-  const configured = feedbackConfigured();
 
   const validItems = useMemo(
     () => entries.filter((e) => e.message.trim().length >= FEEDBACK_MIN_MESSAGE),

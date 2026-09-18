@@ -45,6 +45,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "monthly" as const,
       priority: 0.7,
     },
+    {
+      url: `${SITE_URL}/utils`,
+      lastModified: new Date(),
+      changeFrequency: "monthly" as const,
+      priority: 0.7,
+    },
   ];
   const toolPages: MetadataRoute.Sitemap = ALL_TOOL_ROUTES.map((route) => ({
     url: `${SITE_URL}/${route}`,

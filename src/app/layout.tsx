@@ -162,45 +162,6 @@ export const metadata: Metadata = {
   },
 };
 
-const faqJsonLd = {
-  "@context": "https://schema.org",
-  "@type": "FAQPage",
-  mainEntity: [
-    {
-      "@type": "Question",
-      name: "Is Formaty really free?",
-      acceptedAnswer: {
-        "@type": "Answer",
-        text: "Yes. Formaty is completely free with no sign-up required. Every tool - formatters, converters, compare, and developer utils - is free to use forever.",
-      },
-    },
-    {
-      "@type": "Question",
-      name: "Does Formaty upload my data to a server?",
-      acceptedAnswer: {
-        "@type": "Answer",
-        text: "No. Everything runs locally in your browser using WebWorkers. Your input never leaves your device, except when you explicitly use the Share feature to create a link.",
-      },
-    },
-    {
-      "@type": "Question",
-      name: "Which formats does Formaty support?",
-      acceptedAnswer: {
-        "@type": "Answer",
-        text: "JSON, XML, YAML, TOML, and CSV formatting and conversion, plus cURL import, JSONPath/JMESPath querying, schema and type generation, diff, and developer utils like UUID, Base64, JWT, hash, regex, and color conversion.",
-      },
-    },
-    {
-      "@type": "Question",
-      name: "Can I use Formaty offline?",
-      acceptedAnswer: {
-        "@type": "Answer",
-        text: "Yes. Formaty is a local-first tool that works without a network connection once loaded. Your session is also persisted so data is restored on reload.",
-      },
-    },
-  ],
-};
-
 const webSiteJsonLd = {
   "@context": "https://schema.org",
   "@type": "WebSite",
@@ -277,10 +238,6 @@ export default function RootLayout({
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-        />
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
         />
         {/* Google Analytics 4 - only loads when NEXT_PUBLIC_GA_MEASUREMENT_ID is set */}
         {process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID ? (

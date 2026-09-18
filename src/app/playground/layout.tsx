@@ -37,6 +37,43 @@ export const metadata: Metadata = {
   },
 };
 
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  name: "Formaty Playground",
+  description:
+    "Free online developer data workspace: format, convert, compare, query, and generate - all in your browser with no data leaving your device.",
+  url: `${SITE_URL}/playground`,
+  applicationCategory: "DeveloperApplication",
+  operatingSystem: "Any",
+  offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+  featureList: [
+    "JSON formatter and validator",
+    "Format conversion: JSON, XML, YAML, TOML, CSV",
+    "JSONPath and JMESPath query playground",
+    "JSON diff with side-by-side comparison",
+    "Type generation (TypeScript, Python, Go, Java, and more)",
+  ],
+};
+
+const breadcrumbJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  itemListElement: [
+    { "@type": "ListItem", position: 1, name: "Formaty", item: SITE_URL },
+    { "@type": "ListItem", position: 2, name: "Playground", item: `${SITE_URL}/playground` },
+  ],
+};
+
 export default function PlaygroundLayout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
+  return (
+    <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
+      />
+      {children}
+    </>
+  );
 }
