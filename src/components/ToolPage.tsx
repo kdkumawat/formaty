@@ -23,7 +23,7 @@ interface ToolPageProps {
 function Highlighted({ code, accent }: { code: string; accent: ToolAccent }) {
   const lines = code.split("\n");
   return (
-    <pre className="whitespace-pre font-mono text-[11.5px] leading-[1.75] text-[var(--workspace-text)]">
+    <pre className="whitespace-pre-wrap break-words font-mono text-[11.5px] leading-[1.75] text-[var(--workspace-text)]">
       {lines.map((line, li) => {
         const tokens: React.JSX.Element[] = [];
         // Simple stateful scan: strings, numbers, comments, punctuation.
@@ -120,7 +120,7 @@ function Highlighted({ code, accent }: { code: string; accent: ToolAccent }) {
 /** Fallback for non-code examples (e.g. "v4 · v1 · v7 · v5" for UUID). */
 function PlainExample({ code, accent }: { code: string; accent: ToolAccent }) {
   return (
-    <pre className="whitespace-pre-wrap font-mono text-[11.5px] leading-[1.75]">
+    <pre className="whitespace-pre-wrap break-words font-mono text-[11.5px] leading-[1.75]">
       <span className={accent.value}>{code}</span>
     </pre>
   );
