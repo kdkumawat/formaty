@@ -1,172 +1,266 @@
-// Regenerates public/og.png, PNG favicons, and per-tool OG images.
+// Regenerates public/og.png, PNG favicons, and per-route OG share cards.
 // Usage: bun scripts/gen-og.mjs
 //
-// Per-tool share cards are rendered from the route slug (e.g. "json-formatter"
-// → "JSON Formatter"). The title map mirrors src/lib/seo.ts / src/lib/seoUtils.ts
-// so share cards match the page. If a tool is added or retitled there, update
-// this map and re-run.
+// All cards are rendered with satori (style objects -> SVG) and rasterized
+// with @resvg/resvg-js using the committed Geist font (assets/fonts/), so the
+// output is deterministic everywhere — including fontless environments where
+// librsvg silently drops every <text> node and produces textless PNGs.
+//
+// Titles/descriptions are imported from src/lib/seo.ts, src/lib/seoUtils.ts
+// and src/lib/seoInstant.ts so share cards always match what the pages emit.
+// If a tool is added or retitled there, re-run this script.
 import sharp from "sharp";
-import { mkdirSync } from "node:fs";
+import satori from "satori";
+import { Resvg } from "@resvg/resvg-js";
+import { mkdirSync, readFileSync } from "node:fs";
+import ts from "typescript";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
+
+// ---------------------------------------------------------------------------
+// Load the app's SEO registries (TypeScript) from this .mjs script.
+// The seo modules import "@/lib/utils/devtools" (a type-only import), so we
+// strip types with the TypeScript compiler and shim that path.
+// ---------------------------------------------------------------------------
+function loadSeo() {
+  mkdirSync(".og-gen", { recursive: true });
+  const shim = `export type UtilTab = string;\n`;
+  require("fs").writeFileSync(".og-gen/devtools.ts", shim);
+  const sources = ["src/lib/seo.ts", "src/lib/seoUtils.ts", "src/lib/seoInstant.ts"];
+  for (const src of sources) {
+    const code = readFileSync(src, "utf8");
+    const js = ts.transpileModule(code, {
+      compilerOptions: {
+        module: ts.ModuleKind.CommonJS,
+        target: ts.ScriptTarget.ES2022,
+        esModuleInterop: true,
+      },
+    }).outputText;
+    const out = src.replace(/^src\//, ".og-gen/").replace(/\.ts$/, ".cjs");
+    require("fs").mkdirSync(out.split("/").slice(0, -1).join("/"), { recursive: true });
+    require("fs").writeFileSync(out, js);
+  }
+  // Shim "@/lib/utils/devtools" for seoUtils' type-only import.
+  const utilsJs = readFileSync(".og-gen/lib/seoUtils.cjs", "utf8").replace(
+    /require\("\@\/lib\/utils\/devtools"\)/g,
+    "{}",
+  );
+  require("fs").writeFileSync(".og-gen/lib/seoUtils.cjs", utilsJs);
+  const seo = require("../.og-gen/lib/seo.cjs");
+  const seoUtils = require("../.og-gen/lib/seoUtils.cjs");
+  const seoInstant = require("../.og-gen/lib/seoInstant.cjs");
+  return { seo, seoUtils, seoInstant };
+}
+
+const { seo, seoUtils, seoInstant } = loadSeo();
 
 const WIDTH = 1200;
 const HEIGHT = 630;
+const FONT = readFileSync("assets/fonts/Geist-Regular.ttf");
 
-// slug → display title (without the " | Formaty" suffix).
+// slug → display title (without " | Formaty"). Imported from the SEO config.
 const TITLES = {
-  // Tools (src/lib/seo.ts)
-  "json-formatter": "JSON Formatter",
-  "json-viewer": "JSON Viewer",
-  "json-diff": "JSON Diff",
-  "json-to-typescript": "JSON to TypeScript",
-  "jsonpath-tester": "JSONPath Tester",
-  "graph-viewer": "JSON Graph Viewer",
-  "api-import": "API Import (cURL)",
-  "schema-generator": "JSON Schema Generator",
-  "json-to-xml": "JSON to XML Converter",
-  "xml-to-json": "XML to JSON Converter",
-  "json-to-yaml": "JSON to YAML Converter",
-  "yaml-to-json": "YAML to JSON Converter",
-  "json-to-toml": "JSON to TOML Converter",
-  "toml-to-json": "TOML to JSON Converter",
-  "json-to-csv": "JSON to CSV Converter",
-  "csv-to-json": "CSV to JSON Converter",
-  "xml-formatter": "XML Formatter",
-  "yaml-formatter": "YAML Formatter",
-  "toml-formatter": "TOML Formatter",
-  "csv-formatter": "CSV Formatter",
-  "compare-lists": "Compare Two Lists",
-  "sql-in-clause-generator": "SQL IN Clause Generator",
-  "json-to-sql": "JSON to SQL Converter",
-  "json-to-go": "JSON to Go Struct",
-  "json-to-python": "JSON to Python",
-  "compare-ids": "Compare Two ID Lists",
-  "find-duplicates-in-list": "Find Duplicates in a List",
-  "sql-values-generator": "SQL VALUES Generator",
-  "json-to-zod": "JSON to Zod Schema",
-  "json-to-java": "JSON to Java Class",
-  "json-to-csharp": "JSON to C# Class",
-  "json-to-pydantic": "JSON to Pydantic Model",
-  "json-to-protobuf": "JSON to Protobuf Message",
-  "json-schema-validator": "JSON Schema Validator",
-  "json-flattener": "JSON Flattener",
-  "compare-csv": "Compare Two CSV Files",
-  "csv-column-compare": "Compare Two CSV Columns",
-  "curl-to-fetch": "cURL to Fetch Converter",
-  "curl-to-axios": "cURL to Axios Converter",
-  "curl-to-python": "cURL to Python Converter",
-  "curl-to-go": "cURL to Go Converter",
-  // Utils (src/lib/seoUtils.ts)
-  "uuid-generator": "UUID Generator",
-  "base64-encoder": "Base64 Encoder & Decoder",
-  "jwt-decoder": "JWT Decoder",
-  "sha-hash-generator": "SHA-256 & SHA-1 Hash Generator",
-  "password-generator": "Password Generator",
-  "url-encoder-decoder": "URL Encoder / Decoder",
-  "text-case-converter": "Text Case Converter",
-  "regex-tester": "Regex Tester",
-  "json-string-escape": "JSON String Escape / Unescape",
-  "html-encoder": "HTML Encoder / Decoder",
-  "hex-converter": "Hex Encoder / Decoder",
-  "number-base-converter": "Number Base Converter",
-  "url-parser": "URL Parser",
-  "color-converter": "Color Converter",
-  "cron-expression-explainer": "Cron Expression Explainer",
-  "lorem-ipsum-generator": "Lorem Ipsum Generator",
-  "text-stats": "Text Stats",
-  // Instant (src/app/utils/instant)
-  instant: "Instant — Timezone Converter",
+  ...Object.fromEntries(
+    Object.values(seo.TOOL_PAGES).map((c) => [c.route, c.h1]),
+  ),
+  ...Object.fromEntries(
+    Object.values(seoUtils.UTIL_PAGES).map((c) => [c.route, c.h1]),
+  ),
+  instant: seoInstant.INSTANT_PAGE.h1,
+};
+
+// route → meta description, shown as the card's tagline.
+const DESCRIPTIONS = {
+  ...Object.fromEntries(
+    Object.values(seo.TOOL_PAGES).map((c) => [c.route, c.description]),
+  ),
+  ...Object.fromEntries(
+    Object.values(seoUtils.UTIL_PAGES).map((c) => [c.route, c.description]),
+  ),
+  instant: seoInstant.INSTANT_PAGE.description,
 };
 
 const ALL_ROUTES = Object.keys(TITLES);
+const BRAND = seo.SITE_NAME || "Formaty";
+const BRAND_LINE = "Free · Local-first · No sign-up";
 
-function titleFor(slug) {
-  if (TITLES[slug]) return TITLES[slug];
-  return slug
-    .split("-")
-    .map((w) => (["json", "xml", "yaml", "toml", "csv", "jwt", "sha", "uuid", "api", "url", "html", "hex"].includes(w) ? w.toUpperCase() : w[0].toUpperCase() + w.slice(1)))
-    .join(" ");
-}
-
-/** Escape XML special chars for safe embedding in SVG text nodes. */
-function esc(s) {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
-
-/** Split a title into at most 2 lines that fit the card width. */
-function wrapTitle(title) {
-  const maxChars = 16;
-  if (title.length <= maxChars) return [title];
-  const words = title.split(" ");
-  let line1 = "";
-  let i = 0;
-  while (i < words.length && (line1 + " " + words[i]).trim().length <= maxChars) {
-    line1 = (line1 + " " + words[i]).trim();
-    i++;
+/** Strip the " | Formaty" suffix and split into at most 2 balanced lines. */
+function titleLines(title) {
+  const clean = title.replace(/\s*\|\s*Formaty\s*$/, "");
+  if (clean.length <= 18) return [clean];
+  const words = clean.split(" ");
+  // Greedy balance: fill line 1 close to half the total length.
+  let best = null;
+  for (let i = 1; i < words.length; i++) {
+    const l1 = words.slice(0, i).join(" ");
+    const l2 = words.slice(i).join(" ");
+    const score = Math.abs(l1.length - l2.length);
+    if (!best || score < best.score) best = { lines: [l1, l2], score };
   }
-  return [line1, words.slice(i).join(" ")];
+  if (best && Math.max(...best.lines.map((l) => l.length)) <= 20) {
+    return best.lines;
+  }
+  // Fall back to letting satori wrap naturally.
+  return [clean];
 }
 
-function toolCardSvg(title) {
-  const lines = wrapTitle(title);
-  const yStart = lines.length === 1 ? 350 : 315;
-  const titleText = lines
-    .map((l, i) => `<text x="88" y="${yStart + i * 76}" font-family="Arial, Helvetica, sans-serif" font-size="64" font-weight="700" fill="url(#title)" letter-spacing="-1.5">${esc(l)}</text>`)
-    .join("\n  ");
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#0a0a10"/>
-      <stop offset="1" stop-color="#10101a"/>
-    </linearGradient>
-    <radialGradient id="glowA" cx="0.2" cy="0.1" r="0.8">
-      <stop offset="0" stop-color="#6d6df4" stop-opacity="0.28"/>
-      <stop offset="1" stop-color="#6d6df4" stop-opacity="0"/>
-    </radialGradient>
-    <linearGradient id="title" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#ececf1"/>
-      <stop offset="1" stop-color="#a5a5ff"/>
-    </linearGradient>
-    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#ffffff" stroke-opacity="0.035" stroke-width="1"/>
-    </pattern>
-  </defs>
+/** Build one satori element tree for a card. */
+function cardElement({ title, subtitle }) {
+  const lines = titleLines(title);
+  const fontSize = lines.length === 2 ? 76 : 88;
+  return {
+    type: "div",
+    props: {
+      style: {
+        width: "100%",
+        height: "100%",
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "space-between",
+        padding: "64px 72px",
+        backgroundImage: "linear-gradient(135deg, #0a0a10 0%, #10101a 55%, #141422 100%)",
+      },
+      children: [
+        // Header: logo mark + brand
+        {
+          type: "div",
+          props: {
+            style: { display: "flex", alignItems: "center", gap: 20 },
+            children: [
+              {
+                type: "div",
+                props: {
+                  style: {
+                    width: 56,
+                    height: 56,
+                    borderRadius: 14,
+                    background: "linear-gradient(135deg, #6d6df4, #4f8ff7)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: "#ffffff",
+                    fontSize: 34,
+                    fontWeight: 700,
+                  },
+                  children: "{ }",
+                },
+              },
+              {
+                type: "div",
+                props: {
+                  style: { fontSize: 40, fontWeight: 700, color: "#ececf1", letterSpacing: -1 },
+                  children: BRAND,
+                },
+              },
+            ],
+          },
+        },
+        // Title block
+        {
+          type: "div",
+          props: {
+            style: {
+              display: "flex",
+              flexDirection: "column",
+              gap: 12,
+            },
+            children: lines.map((line, i) => ({
+              type: "div",
+              props: {
+                style: {
+                  fontSize,
+                  fontWeight: 700,
+                  color: i === 0 && lines.length > 1 ? "#ececf1" : "#a5a5ff",
+                  letterSpacing: -2,
+                  lineHeight: 1.05,
+                },
+                children: line,
+              },
+            })),
+          },
+        },
+        // Footer: description + tagline
+        {
+          type: "div",
+          props: {
+            style: { display: "flex", flexDirection: "column", gap: 10 },
+            children: [
+              {
+                type: "div",
+                props: {
+                  style: {
+                    fontSize: 26,
+                    color: "#9a9aa5",
+                    lineHeight: 1.35,
+                    display: "flex",
+                  },
+                  children: subtitle,
+                },
+              },
+              {
+                type: "div",
+                props: {
+                  style: { fontSize: 24, fontWeight: 600, color: "#ececf1", display: "flex" },
+                  children: BRAND_LINE,
+                },
+              },
+            ],
+          },
+        },
+      ],
+    },
+  };
+}
 
-  <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#bg)"/>
-  <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#grid)"/>
-  <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#glowA)"/>
+/** Satori element tree for the base site card (replaces public/og.svg). */
+function baseCardElement() {
+  const el = cardElement({
+    title: "The Developer Data Workspace",
+    subtitle:
+      "Format, convert, compare, and query JSON, XML, YAML, TOML, and CSV. Generate SQL, types, and schemas from data.",
+  });
+  return el;
+}
 
-  <g transform="translate(88 88)">
-    <path d="M0 32c-12 0-12 12-12 18v6c0 6-6 12-12 12 6 0 12 6 12 12v6c0 6 0 18 12 18" stroke="#9b8cff" stroke-width="9" fill="none" stroke-linecap="round"/>
-    <path d="M48 32c12 0 12 12 12 18v6c0 6 6 12 12 12-6 0-12 6-12 12v6c0 6 0 18-12 18" stroke="#9b8cff" stroke-width="9" fill="none" stroke-linecap="round"/>
-    <path d="M12 80l24-24" stroke="#6d6df4" stroke-width="9" stroke-linecap="round"/>
-  </g>
-  <text x="156" y="118" font-family="Arial, Helvetica, sans-serif" font-size="44" font-weight="700" fill="url(#title)" letter-spacing="-1">Formaty</text>
-
-  ${titleText}
-
-  <text x="88" y="520" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="600" fill="#ececf1">Free · Local-first · No sign-up</text>
-  <text x="88" y="556" font-family="Arial, Helvetica, sans-serif" font-size="22" fill="#9a9aa5">Everything runs in your browser. No data leaves your device.</text>
-</svg>`;
+async function renderPng(element) {
+  const svg = await satori(element, {
+    width: WIDTH,
+    height: HEIGHT,
+    fonts: [{ name: "Geist", data: FONT, weight: 400, style: "normal" }],
+  });
+  const resvg = new Resvg(svg, {
+    fitTo: { mode: "width", value: WIDTH },
+    font: { fontFiles: ["assets/fonts/Geist-Regular.ttf"], loadSystemFonts: false },
+  });
+  const png = resvg.render().asPng();
+  return sharp(png).png({ compressionLevel: 9 }).toBuffer();
 }
 
 async function main() {
-  // Base site OG + favicons (from existing sources)
-  await sharp("public/og.svg").resize(WIDTH, HEIGHT).png().toFile("public/og.png");
-  console.log("generated og.png");
+  // Per-route OG share cards.
+  mkdirSync("public/og", { recursive: true });
+  for (const slug of ALL_ROUTES) {
+    const title = TITLES[slug];
+    const desc = DESCRIPTIONS[slug] || "";
+    const subtitle = desc.length > 150 ? desc.slice(0, 147).replace(/\s+\S*$/, "") + "…" : desc;
+    const buf = await renderPng(cardElement({ title, subtitle }));
+    await sharp(buf).toFile(`public/og/${slug}.png`);
+    console.log(`generated og/${slug}.png — ${title}`);
+  }
+
+  // Base site OG card.
+  const base = await renderPng(baseCardElement());
+  await sharp(base).toFile("public/og.png");
+  console.log("generated og.png (base)");
+
+  // Favicons from src/app/icon.svg (no text, sharp is fine).
   await sharp("src/app/icon.svg").resize(192, 192).png().toFile("public/icon-192.png");
   console.log("generated icon-192.png");
   await sharp("src/app/icon.svg").resize(512, 512).png().toFile("public/icon-512.png");
   console.log("generated icon-512.png");
   await sharp("src/app/icon.svg").resize(180, 180).png().toFile("public/apple-touch-icon.png");
   console.log("generated apple-touch-icon.png");
-
-  // Per-tool OG images
-  mkdirSync("public/og", { recursive: true });
-  for (const slug of ALL_ROUTES) {
-    const svg = Buffer.from(toolCardSvg(titleFor(slug)));
-    await sharp(svg).resize(WIDTH, HEIGHT).png().toFile(`public/og/${slug}.png`);
-    console.log(`generated og/${slug}.png`);
-  }
 }
 
 await main();

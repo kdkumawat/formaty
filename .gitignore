@@ -37,6 +37,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# og generator scratch dir (transpiled seo modules)
+/.og-gen/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
