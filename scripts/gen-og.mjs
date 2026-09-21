@@ -1,10 +1,12 @@
-// Regenerates public/og.png, PNG favicons, and per-route OG share cards.
+// Regenerates public/og.png (real homepage screenshot), PNG favicons, and
+// per-route OG share cards.
 // Usage: bun run build && bun scripts/gen-og.mjs
 //
-// Per-route cards are REAL BROWSER SCREENSHOTS: the static export in out/ is
-// served over localhost, every route is loaded in headless Chromium (Playwright)
-// at exactly 1200x630 with dark theme, and the settled hero capture is saved as
-// public/og/<route>.png. If a route or the browser is unavailable, a satori card
+// Cards are REAL BROWSER SCREENSHOTS: the static export in out/ is
+// served over localhost, every page is loaded in headless Chromium (Playwright)
+// at exactly 1200x630 with dark theme, and the settled capture is saved as
+// public/og/<route>.png (+ public/og.png for the homepage). If a route or the
+// browser is unavailable, a satori card
 // (committed Geist font) is used as fallback so the script always succeeds.
 //
 // Titles/descriptions come from src/lib/seo.ts, src/lib/seoUtils.ts and
@@ -219,9 +221,10 @@ async function fallbackPng(slug) {
 }
 
 // ---------------------------------------------------------------------------
-// Screenshot pass: serve out/ and capture each route's hero at 1200x630.
+// Screenshot pass: serve out/ and capture each page at 1200x630.
+// `pages` is a list of { slug, path }; the capture is keyed by slug.
 // ---------------------------------------------------------------------------
-async function screenshotRoutes(routes) {
+async function screenshotPages(pages) {
   const { chromium } = await import("playwright");
   const { createServer } = await import("node:http");
   const { extname, join, normalize } = await import("node:path");
@@ -284,8 +287,8 @@ async function screenshotRoutes(routes) {
 
   const shots = new Map();
   try {
-    for (const slug of routes) {
-      const url = `${base}${ROUTE_PATHS[slug] ?? `/${slug}`}`;
+    for (const { slug, path } of pages) {
+      const url = `${base}${path}`;
       try {
         await page.goto(url, { waitUntil: "networkidle" });
         await page.evaluate(() => document.fonts.ready);
@@ -318,7 +321,12 @@ async function main() {
     console.log("falling back to satori cards");
   }
 
-  const shots = existsSync("out/index.html") ? await screenshotRoutes(ALL_ROUTES) : new Map();
+  const shots = existsSync("out/index.html")
+    ? await screenshotPages([
+        { slug: "__home__", path: "/" }, // base og.png: real homepage screenshot
+        ...ALL_ROUTES.map((slug) => ({ slug, path: ROUTE_PATHS[slug] ?? `/${slug}` })),
+      ])
+    : new Map();
 
   let used = 0;
   for (const slug of ALL_ROUTES) {
@@ -331,16 +339,19 @@ async function main() {
   }
   console.log(`generated ${ALL_ROUTES.length} route cards (${used} real screenshots, ${ALL_ROUTES.length - used} satori fallbacks)`);
 
-  // Base site card: satori brand card is intentional (no single "hero" to shoot).
-  const base = await renderSatoriPng(
-    cardElement({
-      title: "The Developer Data Workspace",
-      subtitle:
-        "Format, convert, compare, and query JSON, XML, YAML, TOML, and CSV. Generate SQL, types, and schemas from data.",
-    }),
-  );
-  await sharp(base).toFile("public/og.png");
-  console.log("generated og.png (base)");
+  // Base site card: real homepage screenshot (consistent with route cards).
+  const homeShot = shots.get("__home__");
+  const basePng = homeShot
+    ? await sharp(homeShot).png({ compressionLevel: 9 }).toBuffer()
+    : await renderSatoriPng(
+        cardElement({
+          title: "The Developer Data Workspace",
+          subtitle:
+            "Format, convert, compare, and query JSON, XML, YAML, TOML, and CSV. Generate SQL, types, and schemas from data.",
+        }),
+      );
+  await sharp(basePng).toFile("public/og.png");
+  console.log(homeShot ? "generated og.png (homepage screenshot)" : "generated og.png (satori fallback)");
 
   // Favicons from src/app/icon.svg (no text, sharp is fine).
   await sharp("src/app/icon.svg").resize(192, 192).png().toFile("public/icon-192.png");
