@@ -1,13 +1,13 @@
-// Regenerates public/og.png (real homepage screenshot), PNG favicons, and
-// per-route OG share cards.
+// Regenerates PNG favicons and per-route OG share cards.
 // Usage: bun run build && bun scripts/gen-og.mjs
 //
 // Cards are REAL BROWSER SCREENSHOTS: the static export in out/ is
 // served over localhost, every page is loaded in headless Chromium (Playwright)
 // at exactly 1200x630 with dark theme, and the settled capture is saved as
-// public/og/<route>.png (+ public/og.png for the homepage). If a route or the
-// browser is unavailable, a satori card
-// (committed Geist font) is used as fallback so the script always succeeds.
+// public/og/<route>.png. The base public/og.png is a manually-authored image
+// and is intentionally NOT written by this script. If a route or the browser
+// is unavailable, a satori card (committed Geist font) is used as fallback so
+// the script always succeeds.
 //
 // Titles/descriptions come from src/lib/seo.ts, src/lib/seoUtils.ts and
 // src/lib/seoInstant.ts so fallback cards always match what the pages emit.
@@ -322,10 +322,7 @@ async function main() {
   }
 
   const shots = existsSync("out/index.html")
-    ? await screenshotPages([
-        { slug: "__home__", path: "/" }, // base og.png: real homepage screenshot
-        ...ALL_ROUTES.map((slug) => ({ slug, path: ROUTE_PATHS[slug] ?? `/${slug}` })),
-      ])
+    ? await screenshotPages(ALL_ROUTES.map((slug) => ({ slug, path: ROUTE_PATHS[slug] ?? `/${slug}` })))
     : new Map();
 
   let used = 0;
@@ -339,19 +336,7 @@ async function main() {
   }
   console.log(`generated ${ALL_ROUTES.length} route cards (${used} real screenshots, ${ALL_ROUTES.length - used} satori fallbacks)`);
 
-  // Base site card: real homepage screenshot (consistent with route cards).
-  const homeShot = shots.get("__home__");
-  const basePng = homeShot
-    ? await sharp(homeShot).png({ compressionLevel: 9 }).toBuffer()
-    : await renderSatoriPng(
-        cardElement({
-          title: "The Developer Data Workspace",
-          subtitle:
-            "Format, convert, compare, and query JSON, XML, YAML, TOML, and CSV. Generate SQL, types, and schemas from data.",
-        }),
-      );
-  await sharp(basePng).toFile("public/og.png");
-  console.log(homeShot ? "generated og.png (homepage screenshot)" : "generated og.png (satori fallback)");
+  // public/og.png is manually authored — this script never touches it.
 
   // Favicons from src/app/icon.svg (no text, sharp is fine).
   await sharp("src/app/icon.svg").resize(192, 192).png().toFile("public/icon-192.png");
