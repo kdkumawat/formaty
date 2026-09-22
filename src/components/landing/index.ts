@@ -8,6 +8,7 @@ export { Instant } from "./Instant";
 export { LovedBy } from "./LovedBy";
 export { CodeGen } from "./CodeGen";
 export { Privacy } from "./Privacy";
+export { FaqSection } from "./Faq";
 export { FinalCTA } from "./FinalCTA";
 export { Footer } from "./Footer";
 export { LandingHeader } from "./LandingHeader";

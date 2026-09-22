@@ -82,7 +82,9 @@ export function Footer() {
           </div>
           <div>
             <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]">
-              Utils
+              <Link href="/utils" className="transition-colors hover:text-primary">
+                Utils
+              </Link>
             </h3>
             <ul className="flex flex-wrap gap-x-4 gap-y-1.5">
               {UTIL_LINKS.map(({ route, label }) => (

@@ -17,7 +17,7 @@ bun run build            # static export to out/ (Next.js `output: "export"`)
 bun run lint             # eslint (flat config, eslint.config.mjs)
 bun run test             # run all vitest tests once
 bun run test -- <path>   # run a single test file, e.g. bun run test -- src/lib/json/core.test.ts
-bun scripts/gen-og.mjs   # regenerate og.png + PNG favicons from SVG sources
+bun scripts/gen-og.mjs   # regenerate OG share cards (real browser screenshots of each route; requires `bun run build` first) + PNG favicons from SVG sources. Does NOT touch public/og.png (manually authored).
 ```
 
 Tests use **Vitest** (node environment), colocated as `src/**/*.test.ts`. The `@` alias is wired in `vitest.config.ts` (not just `tsconfig.json`).

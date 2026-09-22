@@ -9,6 +9,7 @@ import {
   TryIt,
   Instant,
   Privacy,
+  FaqSection,
   LovedBy,
   FinalCTA,
   Footer,
@@ -28,6 +29,7 @@ export function HomePage() {
         <TryIt />
         <Instant />
         <Privacy />
+        <FaqSection />
         <LovedBy />
         <FinalCTA />
         <Footer />

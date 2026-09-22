@@ -41,10 +41,10 @@
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "tailwind-merge": "^3.6.0",
-    "temporal-polyfill": "^1.0.4",
-    "zustand": "^5.0.11"
+    "temporal-polyfill": "^1.0.4"
   },
   "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/jmespath": "^0.15.2",
     "@types/js-yaml": "^4.0.9",
@@ -54,6 +54,8 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "^16.3.0",
+    "playwright": "^1.63.0",
+    "satori": "^0.33.4",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.9.3",
     "vitest": "^4.1.10"

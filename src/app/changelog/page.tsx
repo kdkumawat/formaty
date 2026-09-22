@@ -1,5 +1,30 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { Logo } from "@/components/Logo";
+import { getCanonicalUrl, SITE_URL } from "@/lib/seo";
+
+export const metadata: Metadata = {
+  title: "Changelog - What's New in Formaty",
+  description:
+    "Every Formaty release: new tools, formats, and workspace features. JSON, XML, YAML, TOML, CSV formatting, compare, type generation, and developer utils - all local-first and free.",
+  alternates: { canonical: "/changelog" },
+  openGraph: {
+    title: "Changelog | Formaty",
+    description:
+      "Every Formaty release: new tools, formats, and workspace features for the local-first developer data workspace.",
+    url: `${SITE_URL}/changelog`,
+    siteName: "Formaty",
+    type: "website",
+    images: [{ url: `${SITE_URL}/og.png`, width: 1200, height: 630, alt: "Formaty changelog" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Changelog | Formaty",
+    description:
+      "Every Formaty release: new tools, formats, and workspace features for the local-first developer data workspace.",
+    images: [`${SITE_URL}/og.png`],
+  },
+};
 
 const ENTRIES = [
   {
