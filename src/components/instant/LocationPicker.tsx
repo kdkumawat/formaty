@@ -7,6 +7,7 @@ import {
   searchCountries,
   searchIanaZones,
   searchLocations,
+  searchZoneAbbreviations,
   SUGGESTED_CITIES,
   type CatalogCity,
   type CountryEntry,
@@ -95,6 +96,8 @@ export function LocationPicker({ open, anchor, onClose, onPick, atInstant }: Loc
   const ianaResults = useMemo(() => searchIanaZones(q, 80), [q]);
   // Countries first — type "Brazil" and pick the country to add its capital.
   const countryResults = useMemo(() => searchCountries(q, 6), [q]);
+  // Timezone abbreviations (PST, PDT, IST, CET, …) map to representative zones.
+  const abbrResults = useMemo(() => searchZoneAbbreviations(q, 4), [q]);
   // When the picker opens empty: show ALL IANA zones grouped by region.
   const grouped = useMemo(() => groupByRegion(allZones), [allZones]);
   // IANA suggestions for the Custom tab combobox - kept in sync with the
@@ -125,7 +128,7 @@ export function LocationPicker({ open, anchor, onClose, onPick, atInstant }: Loc
   type Result =
     | { key: string; kind: "country"; entry: CountryEntry }
     | { key: string; kind: "city"; city: CatalogCity }
-    | { key: string; kind: "zone"; iana: string; label: string };
+    | { key: string; kind: "zone"; iana: string; label: string; abbr?: string };
   const browseZoneLabel = (z: string) =>
     z.split("/").slice(1).join("/").replace(/_/g, " ") || z;
   const results: Result[] = useMemo(() => {
@@ -134,6 +137,9 @@ export function LocationPicker({ open, anchor, onClose, onPick, atInstant }: Loc
       return [
         ...countryResults.map(
           (c): Result => ({ key: `country-${c.code}`, kind: "country", entry: c }),
+        ),
+        ...abbrResults.map(
+          (z): Result => ({ key: `abbr-${z.iana}-${z.label}`, kind: "zone", iana: z.iana, label: z.label, abbr: z.label.split(" ")[0] }),
         ),
         ...cityResults.map(
           (c): Result => ({ key: `city-${c.iana}-${c.city}`, kind: "city", city: c }),
@@ -164,7 +170,7 @@ export function LocationPicker({ open, anchor, onClose, onPick, atInstant }: Loc
         (z): Result => ({ key: `allzone-${z}`, kind: "zone", iana: z, label: browseZoneLabel(z) }),
       ),
     ];
-  }, [custom, q, countryResults, cityResults, ianaResults, queryAsZone, allZones]);
+  }, [custom, q, countryResults, abbrResults, cityResults, ianaResults, queryAsZone, allZones]);
 
   const pickResult = (r: Result) => {
     if (r.kind === "country") return pickCountry(r.entry);
@@ -310,7 +316,12 @@ export function LocationPicker({ open, anchor, onClose, onPick, atInstant }: Loc
         >
           <span className="min-w-0">
             <span className="block truncate text-sm text-[var(--workspace-text)]">
-              {r.label}
+              {r.abbr ? (
+                <span className="mr-1.5 rounded bg-primary/10 px-1 py-px font-mono text-[10px] font-semibold uppercase tracking-wider text-primary">
+                  {r.abbr}
+                </span>
+              ) : null}
+              {r.label.replace(/^[A-Z]{2,5} · /, "")}
             </span>
             <span className="font-mono text-[11px] text-[var(--workspace-text-muted)]">
               {r.iana}
@@ -479,6 +490,18 @@ export function LocationPicker({ open, anchor, onClose, onPick, atInstant }: Loc
                     const r: Result = { key, kind: "country", entry: c };
                     return renderResultRow(r, idx);
                   })}
+                  {abbrResults.length > 0 && (
+                    <li className="px-4 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]">
+                      Timezone abbreviations
+                    </li>
+                  )}
+                  {abbrResults.map((z) => {
+                    const key = `abbr-${z.iana}-${z.label}`;
+                    const idx = idxByKey.get(key);
+                    if (idx == null) return null;
+                    const r: Result = { key, kind: "zone", iana: z.iana, label: z.label, abbr: z.label.split(" ")[0] };
+                    return renderResultRow(r, idx);
+                  })}
                   {cityResults.length > 0 && (
                     <li className="px-4 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]">
                       Cities
@@ -522,7 +545,7 @@ export function LocationPicker({ open, anchor, onClose, onPick, atInstant }: Loc
                         return renderResultRow(r, idx);
                       })()
                     : null}
-                  {countryResults.length === 0 && cityResults.length === 0 && ianaResults.length === 0 && !queryAsZone ? (
+                  {countryResults.length === 0 && abbrResults.length === 0 && cityResults.length === 0 && ianaResults.length === 0 && !queryAsZone ? (
                     <li className="px-4 py-6 text-sm text-[var(--workspace-text-muted)]">
                       No matches. Try a city, country, code, or IANA zone.
                     </li>

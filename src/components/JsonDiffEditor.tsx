@@ -51,6 +51,8 @@ export interface JsonDiffEditorProps {
   /** Bypass the huge-input hardening (caller takes responsibility for the
    *  performance cost at > HUGE_INPUT_BYTES). */
   disableLargeMode?: boolean;
+  /** Word wrap applied to BOTH sides of the diff so wrapped lines line up. */
+  wordWrap?: "on" | "off";
 }
 
 function computeLineStats(changes: editor.ILineChange[] | null): LineDiffStats {
@@ -122,6 +124,7 @@ export const JsonDiffEditor = forwardRef<JsonDiffEditorRef, JsonDiffEditorProps>
     renderSideBySide = true,
     ignoreTrimWhitespace = false,
     disableLargeMode = false,
+    wordWrap = "on",
   },
   ref,
 ) {
@@ -233,20 +236,25 @@ export const JsonDiffEditor = forwardRef<JsonDiffEditorRef, JsonDiffEditorProps>
       readOnly: !(originalEditable || modifiedEditable),
       automaticLayout: true,
       scrollBeyondLastLine: false,
+      // Same overlap fix as JsonEditor: sticky scroll duplicates lines over
+      // the viewport while scrolling.
+      stickyScroll: { enabled: false },
       renderSideBySide,
       minimap: { enabled: false },
       fontFamily: "var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-      wordWrap: "on" as const,
+      wordWrap,
       fontSize,
       originalEditable,
-      diffWordWrap: "on" as const,
+      // Keep the diff renderer's wrap in lockstep so both sides break lines
+      // at the same points and corresponding rows stay aligned.
+      diffWordWrap: wordWrap,
       ignoreTrimWhitespace,
       renderIndicators: true,
       renderMarginRevertIcon: originalEditable || modifiedEditable,
       enableSplitViewResizing: true,
       ...hugeOptions,
     }),
-    [originalEditable, modifiedEditable, renderSideBySide, fontSize, ignoreTrimWhitespace, huge],
+    [originalEditable, modifiedEditable, renderSideBySide, fontSize, ignoreTrimWhitespace, huge, wordWrap],
   );
 
   useEffect(() => {
