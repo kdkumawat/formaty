@@ -404,6 +404,14 @@ export function TimelineBoard({
                     >
                       <div className={`h-full w-px ${dragging || isLive ? "bg-primary" : "bg-primary/80"}`} />
                       <div className="absolute top-1/2 left-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary shadow-[0_0_12px_var(--glow-color)]" />
+                      {/* Selected-time indicator: shows this row's wall time at
+                          the cursor so the moment is readable on every strip,
+                          not just the sticky header labels. */}
+                      {(!isLive || dragging) && (
+                        <span className="absolute -top-0.5 left-1.5 whitespace-nowrap rounded-sm bg-primary px-1 py-px font-mono text-[9px] font-bold leading-none text-primary-foreground shadow">
+                          {formatLocalTime(shown, timeFormat, showSeconds)}
+                        </span>
+                      )}
                     </div>
                   )}
                 </div>

@@ -14,6 +14,7 @@ import {
 import { Dropdown } from "@/components/workspace/Dropdown";
 import { Tooltip } from "@/components/workspace/Tooltip";
 import { CycleSortButton, cycleSort } from "@/components/workspace/CycleSortButton";
+import { useCheckedItems } from "@/components/workspace/useCheckedItems";
 import {
   menuItemClass as sharedMenuItemClass,
   menuItemActiveClass as sharedMenuItemActiveClass,
@@ -92,6 +93,7 @@ const DISPLAY_STORAGE_KEY = "formaty-list-display";
 const RESULT_SORT_STORAGE_KEY = "formaty-list-result-sort";
 const LEFT_SORT_STORAGE_KEY = "formaty-list-left-sort";
 const RIGHT_SORT_STORAGE_KEY = "formaty-list-right-sort";
+const CHECKED_STORAGE_KEY = "formaty-list-checked";
 
 function loadStoredBucket(): ListBucket {
   try {
@@ -226,6 +228,10 @@ export function ListComparePanel({
   const [display, setDisplay] = useState<"inline" | "table">(loadStoredDisplay);
 
   const isSummary = activeBucket === "summary";
+
+  // "Explored" checkboxes: mark items in the result as done. Stored per
+  // bucket so marks in one bucket don't leak into another view.
+  const checkedApi = useCheckedItems(`${CHECKED_STORAGE_KEY}:${activeBucket}`, !isSummary);
 
   // Preserve the selected bucket/view across sessions (localStorage).
   useEffect(() => {
@@ -730,6 +736,22 @@ export function ListComparePanel({
               }}
               placeholder={"Paste list…\none per line, CSV, or JSON array"}
               spellCheck={false}
+              onPaste={(e) => {
+                // Compare setting "Auto-clean": normalize pasted text right
+                // after the browser inserts it (strip quotes/brackets,
+                // one item per line). Snapshot keeps Cmd/Ctrl+Z working.
+                if (!effectiveOptions.autoClean) return;
+                const el = e.currentTarget;
+                window.setTimeout(() => {
+                  const raw = el?.value ?? "";
+                  const cleaned = cleanListInput(raw);
+                  if (!raw || cleaned === raw) return;
+                  setLeftCleanSnapshot(raw);
+                  onLeftChange(cleaned);
+                  setLeftSnapshot(null);
+                  setLeftSort("none");
+                }, 0);
+              }}
               className={editorClass}
               style={{ fontSize }}
             />
@@ -832,6 +854,19 @@ export function ListComparePanel({
               }}
               placeholder={"Second list…"}
               spellCheck={false}
+              onPaste={(e) => {
+                if (!effectiveOptions.autoClean) return;
+                const el = e.currentTarget;
+                window.setTimeout(() => {
+                  const raw = el?.value ?? "";
+                  const cleaned = cleanListInput(raw);
+                  if (!raw || cleaned === raw) return;
+                  setRightCleanSnapshot(raw);
+                  onRightChange(cleaned);
+                  setRightSnapshot(null);
+                  setRightSort("none");
+                }, 0);
+              }}
               className={editorClass}
               style={{ fontSize }}
             />
@@ -958,6 +993,22 @@ export function ListComparePanel({
               onCycle={() => setResultSort((m) => cycleSort(m))}
               titlePrefix="Result sort"
             />
+
+            {/* Explored-marks: count + clear. Hidden when nothing is marked. */}
+            {!isSummary && checkedApi.count > 0 && (
+              <Tooltip content="Clear all explored marks" className="shrink-0">
+                <button
+                  type="button"
+                  onClick={checkedApi.clear}
+                  className={`${linkBtnClass} h-7 min-h-7 gap-1 px-1.5 text-[10px] font-semibold tabular-nums !bg-emerald-500/10 !text-emerald-600 dark:!text-emerald-400`}
+                >
+                  <svg viewBox="0 0 20 20" fill="currentColor" className="h-3 w-3" aria-hidden>
+                    <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
+                  </svg>
+                  {checkedApi.count}
+                </button>
+              </Tooltip>
+            )}
 
             <div className="flex h-7 shrink-0 overflow-hidden rounded-md bg-muted">
               <Tooltip content={isSummary ? "Inline view is disabled in Summary" : "Inline view - comma-separated"}>
@@ -1145,6 +1196,51 @@ export function ListComparePanel({
                     </>
                   )}
                 </p>
+              ) : exportFormat === null ? (
+                // Plain-list view: one checkbox row per item so results can be
+                // marked as explored/done while working through them.
+                <ul className="flex flex-col">
+                  {bucketItems.map((item, i) => {
+                    const done = checkedApi.isChecked(item.key);
+                    return (
+                      <li
+                        key={`${item.key}-${i}`}
+                        className={`group flex items-start gap-2 rounded px-1 py-px transition-colors hover:bg-[var(--workspace-background)] ${
+                          i % 2 === 1 ? "bg-[var(--workspace-background)]/40" : ""
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          role="checkbox"
+                          aria-checked={done}
+                          aria-label={`Mark ${item.value} as explored`}
+                          onClick={() => checkedApi.toggle(item.key)}
+                          className={`mt-1 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border transition-colors ${
+                            done
+                              ? "border-emerald-500 bg-emerald-500 text-white"
+                              : "border-[var(--workspace-border)] text-transparent hover:border-primary"
+                          }`}
+                        >
+                          <svg viewBox="0 0 20 20" fill="currentColor" className="h-2.5 w-2.5" aria-hidden>
+                            <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
+                          </svg>
+                        </button>
+                        <span
+                          className={`min-w-0 flex-1 whitespace-pre-wrap break-words font-mono leading-relaxed ${
+                            done
+                              ? "text-[var(--workspace-text-muted)] line-through decoration-emerald-500/60"
+                              : "text-[var(--workspace-text)]"
+                          }`}
+                        >
+                          {item.value}
+                        </span>
+                      </li>
+                    );
+                  })}
+                  {bucketItems.length === 0 && outputText ? (
+                    <li className="whitespace-pre-wrap break-words font-mono leading-relaxed text-[var(--workspace-text)]">{outputText}</li>
+                  ) : null}
+                </ul>
               ) : (
                 <p className="whitespace-pre-wrap break-words font-mono leading-relaxed text-[var(--workspace-text)]">
                   {outputText}
@@ -1174,6 +1270,7 @@ export function ListComparePanel({
                 <table className="w-full border-collapse">
                   <thead>
                     <tr className="border-b border-[var(--workspace-border)] text-[10px] uppercase tracking-wide text-[var(--workspace-text-muted)]">
+                      <th className="w-6 py-1 text-left font-semibold" aria-label="Mark explored" />
                       <th
                         aria-sort={tableSort?.key === "name" ? (tableSort.dir === "asc" ? "ascending" : "descending") : "none"}
                         className="py-1 pr-3 text-left font-semibold"
@@ -1210,7 +1307,30 @@ export function ListComparePanel({
                           i % 2 === 1 ? "bg-[var(--workspace-background)]" : ""
                         }`}
                       >
-                        <td className="py-0.5 pr-3 font-mono text-[var(--workspace-text)]">{item.value}</td>
+                        <td className="w-6 py-0.5">
+                          {(() => {
+                            const done = checkedApi.isChecked(item.key);
+                            return (
+                              <button
+                                type="button"
+                                role="checkbox"
+                                aria-checked={done}
+                                aria-label={`Mark ${item.value} as explored`}
+                                onClick={() => checkedApi.toggle(item.key)}
+                                className={`flex h-3.5 w-3.5 items-center justify-center rounded-sm border transition-colors ${
+                                  done
+                                    ? "border-emerald-500 bg-emerald-500 text-white"
+                                    : "border-[var(--workspace-border)] text-transparent hover:border-primary"
+                                }`}
+                              >
+                                <svg viewBox="0 0 20 20" fill="currentColor" className="h-2.5 w-2.5" aria-hidden>
+                                  <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
+                                </svg>
+                              </button>
+                            );
+                          })()}
+                        </td>
+                        <td className={`py-0.5 pr-3 font-mono ${checkedApi.isChecked(item.key) ? "text-[var(--workspace-text-muted)] line-through decoration-emerald-500/60" : "text-[var(--workspace-text)]"}`}>{item.value}</td>
                         <td className="py-0.5 text-right font-mono tabular-nums text-[var(--workspace-text-muted)]">
                           ×{item.count}
                         </td>
