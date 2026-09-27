@@ -50,6 +50,8 @@ export interface ListParseOptions {
   stripQuotes: boolean;
   /** Treat "01" and 1 as the same key when both parse as numbers. */
   numericNormalize: boolean;
+  /** Auto-clean pasted text (strip quotes/brackets, one item per line). */
+  autoClean: boolean;
 }
 
 export interface ListItem {
@@ -118,6 +120,7 @@ export const DEFAULT_LIST_PARSE_OPTIONS: ListParseOptions = {
   caseInsensitive: false,
   stripQuotes: false,
   numericNormalize: false,
+  autoClean: false,
 };
 
 const EXPORT_LABELS: Record<ListExportFormat, string> = {

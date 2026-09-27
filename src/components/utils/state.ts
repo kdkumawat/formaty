@@ -1,5 +1,6 @@
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import {
+  cleanJson,
   convertNumberBase,
   decodeJwt,
   explainCron,
@@ -203,6 +204,10 @@ export async function computeUtil(tab: UtilTab, s: UtilToolState): Promise<Parti
   if (tab === "urlparse") {
     if (!s.input.trim()) return { output: "", error: null };
     return { output: prettyJson(parseUrl(s.input)), error: null };
+  }
+  if (tab === "clean") {
+    if (!s.input.trim()) return { output: "", error: null };
+    return { output: cleanJson(s.input), error: null };
   }
   if (tab === "stats") {
     return { output: textStats(s.input), error: null };

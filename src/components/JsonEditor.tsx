@@ -108,6 +108,10 @@ export function JsonEditor({
           automaticLayout: true,
           padding: { top: 6, bottom: 6 },
           scrollBeyondLastLine: false,
+          // Monaco's sticky-scroll widget re-renders code on top of the
+          // viewport while scrolling, which visually overlaps text inside
+          // the fixed-height workspace panes.
+          stickyScroll: { enabled: false },
           wordWrap,
           scrollbar: {
             verticalScrollbarSize: 10,

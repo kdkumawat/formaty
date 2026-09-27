@@ -301,6 +301,124 @@ export function jsonUnescape(text: string): string {
   }
 }
 
+/* ── Clean JSON ── */
+
+/**
+ * Best-effort "clean JSON": repairs common formatting junk so real-world
+ * payloads become valid, pretty-printed JSON:
+ *  - smart/curly quotes → straight quotes
+ *  - single-quoted strings → double-quoted (JSON-aware, not blind)
+ *  - escaped "\"\"...\"\"" wrappers and stray leading/trailing quotes
+ *  - unquoted keys → quoted
+ *  - trailing commas → removed
+ *  - Python literals: True/False/None → true/false/null
+ * Falls back to the best repair pass that parses; throws with a short
+ * message when nothing works.
+ */
+export function cleanJson(text: string): string {
+  const raw = text.trim();
+  if (!raw) return "";
+
+  const passes: Array<(s: string) => string> = [
+    // Pass 0: nothing but pretty-print the input as-is.
+    (s) => s,
+    // Pass 1: smart quotes and Python literals.
+    (s) =>
+      s
+        .replace(/[\u201C\u201D\u201E\u201F]/g, '"')
+        .replace(/[\u2018\u2019\u201A\u201B]/g, "'")
+        .replace(/\bTrue\b/g, "true")
+        .replace(/\bFalse\b/g, "false")
+        .replace(/\bNone\b/g, "null"),
+    // Pass 2: unwrap escaped-quote wrappers: ""..."" (commonly produced by
+    // copying JSON out of logs or CSV cells) and stray symmetric outer quotes.
+    (s) => {
+      let t = s.trim();
+      const m = /^\"{2,}([\s\S]*)\"{2,}$/.exec(t);
+      if (m) t = m[1]!.replace(/"{2}/g, '"');
+      else if (/^"[\s\S]*"$/.test(t)) {
+        // Only unwrap when the interior itself looks like JSON.
+        const inner = t.slice(1, -1);
+        if (/^[\[{\"\d]/.test(inner) && /[\]}\"\d]$/.test(inner)) t = inner;
+      }
+      return t;
+    },
+    // Pass 3: quote unquoted object keys ({a: 1} → {"a": 1}).
+    (s) => s.replace(/([{,]\s*)([A-Za-z_$][\w$]*)(\s*:)/g, '$1"$2"$3'),
+    // Pass 4: single-quoted strings → double quotes, JSON-aware. A
+    // single-quote opens a string only at value/key positions (after
+    // { [ , : or at the start); it closes when the next non-space char is
+    // a structural char (, } ] :) or end of input. Apostrophes elsewhere
+    // are literal content (legal inside double quotes), so prose like
+    // 'it's fine' survives intact.
+    (s) => {
+      let out = "";
+      let inDouble = false;
+      let inSingle = false;
+      let escaped = false;
+      for (let i = 0; i < s.length; i++) {
+        const ch = s[i]!;
+        if (escaped) {
+          out += ch;
+          escaped = false;
+        } else if (ch === "\\" && (inDouble || inSingle)) {
+          // A \' escape is only meaningful inside single quotes; once the
+          // string becomes double-quoted the bare apostrophe is legal, so
+          // drop the backslash instead of emitting an invalid JSON escape.
+          const nextCh = s[i + 1];
+          if (inSingle && nextCh === "'") {
+            out += "'";
+            i++;
+          } else {
+            out += ch;
+            escaped = true;
+          }
+        } else if (ch === '"' && !inSingle) {
+          inDouble = !inDouble;
+          out += ch;
+        } else if (ch === "'" && !inDouble) {
+          if (!inSingle) {
+            // Opening quote: only at value/key positions.
+            const prev = out.trimEnd().slice(-1);
+            if (i === 0 || "[{,:".includes(prev)) {
+              inSingle = true;
+              out += '"';
+            } else {
+              out += ch;
+            }
+          } else {
+            // Closing quote: next non-space char must be structural.
+            const next = s.slice(i + 1).trimStart()[0];
+            if (next === undefined || ",}]:".includes(next)) {
+              inSingle = false;
+              out += '"';
+            } else {
+              out += ch; // apostrophe inside the value
+            }
+          }
+        } else {
+          out += ch;
+        }
+      }
+      return out;
+    },
+    // Pass 5: remove trailing commas before } or ].
+    (s) => s.replace(/,\s*([}\]])/g, "$1"),
+  ];
+
+  // Apply passes cumulatively; the first cumulative result that parses wins.
+  let acc = raw;
+  for (let i = 0; i < passes.length; i++) {
+    if (i > 0) acc = passes[i]!(acc);
+    try {
+      return prettyJson(JSON.parse(acc));
+    } catch {
+      /* keep repairing */
+    }
+  }
+  throw new Error("Could not clean into valid JSON — check quotes and commas");
+}
+
 /* ── HTML entities ── */
 
 export function htmlEncode(text: string): string {
@@ -639,6 +757,7 @@ export type UtilTab =
   | "lorem"
   | "cron"
   | "urlparse"
+  | "clean"
   | "instant";
 
 export const UTIL_TABS: { id: UtilTab; label: string; short?: string }[] = [
@@ -657,6 +776,7 @@ export const UTIL_TABS: { id: UtilTab; label: string; short?: string }[] = [
   { id: "hex", label: "Hex" },
   { id: "number", label: "Number" },
   { id: "urlparse", label: "URL Parse" },
+  { id: "clean", label: "Clean JSON" },
   { id: "color", label: "Color" },
   { id: "cron", label: "Cron" },
   { id: "lorem", label: "Lorem" },
@@ -671,6 +791,7 @@ export const UTIL_SAMPLES: Record<UtilTab, string> = {
   instant: "",
   url: "https://formaty.dev/playground?q=hello world&x=1",
   urlparse: "https://user:pass@formaty.dev:443/playground?tool=json&tab=2#section",
+  clean: '{ "user": { "name": "Aisha", "active": True, }, } // unquoted keys, trailing commas, Python bools',
   case: "hello_world formatyAPI",
   hex: "Formaty",
   number: "255",
@@ -696,6 +817,8 @@ export function utilPlaceholder(tab: UtilTab): string {
       return "URL or percent-encoded string…";
     case "urlparse":
       return "URL to split into parts (protocol, host, query…)…";
+    case "clean":
+      return "Messy JSON — smart quotes, single quotes, trailing commas, unquoted keys…";
     case "base64":
       return "Text to encode, or Base64 to decode…";
     case "case":

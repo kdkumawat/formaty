@@ -607,6 +607,9 @@ export function WorkspaceContent({
   const [pastePromptError, setPastePromptError] = useState(false);
   /** Two-step confirm for the settings "Clear cache" button. */
   const [confirmClearCache, setConfirmClearCache] = useState(false);
+  /** True while a "Clear cache & reload" wipe is in flight — blocks the
+   *  pagehide flush from resurrecting the session after localStorage.clear(). */
+  const suppressSessionFlushRef = useRef(false);
   const [rightView, setRightView] = useState<RightView>("raw");
   /** Latest query-view result - lifted so the global toolbar copies / downloads it. */
   const [queryResult, setQueryResult] = useState("");
@@ -2142,6 +2145,9 @@ export function WorkspaceContent({
   // last render commit and the unload.
   useEffect(() => {
     const flush = () => {
+      // A wipe-all is in flight: leave localStorage empty so the reload
+      // actually boots fresh instead of restoring the old session.
+      if (suppressSessionFlushRef.current) return;
       try {
         const raw = localStorage.getItem("formaty-session");
         const prev = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
@@ -3447,9 +3453,20 @@ export function WorkspaceContent({
         setDiffLeftInput("");
         setDiffRightInput("");
         setListCompareExport(null);
+        setListCompareOptions(DEFAULT_LIST_PARSE_OPTIONS);
+        setCsvColumn(null);
+        setActiveBucket("common");
       } else {
         clearDiffSide("both");
       }
+      // Reset clears pane renames too — "everything" means everything.
+      setTabs((prev) =>
+        prev.map((t) =>
+          t.id === activeTabId && (t.leftLabel || t.rightLabel)
+            ? { ...t, leftLabel: undefined, rightLabel: undefined, renamed: t.renamed && !!t.label }
+            : t,
+        ),
+      );
       toast({ message: "Reset" });
       return;
     }
@@ -3471,6 +3488,7 @@ export function WorkspaceContent({
     utilTab,
     diffKind,
     clearDiffSide,
+    activeTabId,
     pathname,
     searchParams,
     router,
@@ -3944,11 +3962,26 @@ export function WorkspaceContent({
     setIsOutputMaximized(false);
     setUtilTab("uuid");
     setGraphCopyFormat("png");
+    // Settings reset also drops pane renames (Left/Right/list labels) everywhere.
+    setTabs((prev) =>
+      prev.map((t) =>
+        t.leftLabel || t.rightLabel
+          ? { ...t, leftLabel: undefined, rightLabel: undefined, renamed: t.renamed && !!t.label }
+          : t,
+      ),
+    );
     toast({ message: "Settings reset to default across all tabs" });
   }, []);
 
-  /** Wipe all local app state (localStorage + service-worker caches) and load fresh. */
+  /**
+   * Wipe all local app state (localStorage + service-worker caches) and load fresh.
+   * A module-level flag stops the pagehide "safety-net" session flush from
+   * re-writing the workspace payload right after clear() — otherwise the
+   * reload boots with the old tabs/settings/inputs resurrected and "Clear
+   * cache" appears to wipe nothing.
+   */
   const clearAllCache = async () => {
+    suppressSessionFlushRef.current = true;
     try {
       localStorage.clear();
     } catch {
@@ -4393,6 +4426,7 @@ export function WorkspaceContent({
                 ["caseInsensitive", "Ignore case"],
                 ["stripQuotes", "Strip quotes"],
                 ["numericNormalize", "Normalize numbers"],
+                ["autoClean", "Auto-clean on paste"],
               ] as const
             ).map(([key, label]) => (
               <button
@@ -5848,6 +5882,9 @@ export function WorkspaceContent({
                         fontSize={editorFontSize}
                         renderSideBySide={diffSideBySide}
                         ignoreTrimWhitespace={diffIgnoreWhitespace}
+                        // Shared wrap setting: both sides wrap identically so
+                        // corresponding lines stay visually aligned.
+                        wordWrap={lineWrap ? "on" : "off"}
                         originalEditable
                         modifiedEditable
                         onOriginalChange={handleDiffLeftChange}

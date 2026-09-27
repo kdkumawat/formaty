@@ -325,25 +325,60 @@ export const CITY_CATALOG: CatalogCity[] = [
 ].map(withIso);
 
 const ABBR_TO_IANA: Record<string, string> = {
+  UTC: "UTC",
+  GMT: "UTC",
+  // India
   IST: "Asia/Kolkata",
+  // East Asia
   JST: "Asia/Tokyo",
   KST: "Asia/Seoul",
   SGT: "Asia/Singapore",
   HKT: "Asia/Hong_Kong",
+  CST: "America/Chicago",
   GST: "Asia/Dubai",
+  // Europe
   BST: "Europe/London",
-  GMT: "UTC",
-  UTC: "UTC",
+  WET: "Europe/Lisbon",
+  CET: "Europe/Paris",
+  CEST: "Europe/Paris",
+  EET: "Europe/Athens",
+  EEST: "Europe/Athens",
+  MSK: "Europe/Moscow",
+  // US & Canada
   EST: "America/New_York",
   EDT: "America/New_York",
-  CST: "America/Chicago",
   CDT: "America/Chicago",
   MST: "America/Denver",
   MDT: "America/Denver",
   PST: "America/Los_Angeles",
   PDT: "America/Los_Angeles",
+  AKST: "America/Anchorage",
+  AKDT: "America/Anchorage",
+  HST: "Pacific/Honolulu",
+  // Australia & Pacific
   AEST: "Australia/Sydney",
   AEDT: "Australia/Sydney",
+  ACST: "Australia/Adelaide",
+  ACDT: "Australia/Adelaide",
+  AWST: "Australia/Perth",
+  NZST: "Pacific/Auckland",
+  NZDT: "Pacific/Auckland",
+  // South & South-East Asia
+  PKT: "Asia/Karachi",
+  BDT: "Asia/Dhaka",
+  MMT: "Asia/Yangon",
+  ICT: "Asia/Bangkok",
+  WIB: "Asia/Jakarta",
+  WITA: "Asia/Makassar",
+  WIT: "Asia/Jayapura",
+  PHT: "Asia/Manila",
+  MYT: "Asia/Kuala_Lumpur",
+  // Middle East
+  AST: "Asia/Riyadh",
+  EAT: "Africa/Nairobi",
+  SAST: "Africa/Johannesburg",
+  WAT: "Africa/Lagos",
+  CAT: "Africa/Harare",
 };
 
 export const SUGGESTED_CITIES: CatalogCity[] = [
@@ -437,6 +472,27 @@ export function searchIanaZones(query: string, limit = 40): IanaSearchResult[] {
 
 export function cityByIana(iana: string): CatalogCity | undefined {
   return CITY_CATALOG.find((c) => c.iana === iana);
+}
+
+/**
+ * Timezone abbreviation (PST, PDT, IST, CET, ...) to its representative IANA
+ * zone. Exported so the location picker can search by abbreviation too.
+ */
+export function zoneByAbbreviation(abbr: string): string | null {
+  return ABBR_TO_IANA[abbr.trim().toUpperCase()] ?? null;
+}
+
+/** Abbreviation hits for a query, formatted like IANA search results. */
+export function searchZoneAbbreviations(query: string, limit = 6): IanaSearchResult[] {
+  const q = query.trim().toUpperCase();
+  if (!q) return [];
+  const out: IanaSearchResult[] = [];
+  for (const [abbr, iana] of Object.entries(ABBR_TO_IANA)) {
+    if (!abbr.startsWith(q)) continue;
+    out.push({ iana, label: `${abbr} · ${iana.split("/").slice(1).join("/").replace(/_/g, " ") || iana}` });
+    if (out.length >= limit) break;
+  }
+  return out;
 }
 
 export function resolveZoneToken(token: string): string | null {

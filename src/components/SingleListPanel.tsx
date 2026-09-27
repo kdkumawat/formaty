@@ -12,6 +12,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { Dropdown } from "@/components/workspace/Dropdown";
 import { Tooltip } from "@/components/workspace/Tooltip";
+import { useCheckedItems } from "@/components/workspace/useCheckedItems";
 import {
   menuItemClass as sharedMenuItemClass,
   menuItemActiveClass as sharedMenuItemActiveClass,
@@ -80,6 +81,7 @@ const VIEW_LABELS: Record<SingleView, string> = {
 const VIEW_STORAGE_KEY = "formaty-single-view";
 const DISPLAY_STORAGE_KEY = "formaty-single-display";
 const SORT_STORAGE_KEY = "formaty-single-sort";
+const CHECKED_STORAGE_KEY = "formaty-single-checked";
 
 function loadStoredView(): SingleView {
   try {
@@ -134,6 +136,8 @@ export function SingleListPanel({
   const [inputSnapshot, setInputSnapshot] = useState<string | null>(null);
   const [display, setDisplay] = useState<"inline" | "table">(loadStoredDisplay);
   const [cleanSnapshot, setCleanSnapshot] = useState<string | null>(null);
+  // "Explored" checkboxes: mark analyzed items as done (persisted).
+  const checkedApi = useCheckedItems(`${CHECKED_STORAGE_KEY}:${view}`, true);
   const undoClean = () => {
     if (cleanSnapshot !== null) {
       const prev = cleanSnapshot;
@@ -317,6 +321,21 @@ export function SingleListPanel({
 
   const toolbarBody = (
     <>
+      {/* Explored-marks: count + clear. Hidden when nothing is marked. */}
+      {checkedApi.count > 0 && (
+        <Tooltip content="Clear all explored marks" className="shrink-0">
+          <button
+            type="button"
+            onClick={checkedApi.clear}
+            className={`${linkBtnClass} h-7 min-h-7 gap-1 px-1.5 text-[10px] font-semibold tabular-nums !bg-emerald-500/10 !text-emerald-600 dark:!text-emerald-400`}
+          >
+            <svg viewBox="0 0 20 20" fill="currentColor" className="h-3 w-3" aria-hidden>
+              <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
+            </svg>
+            {checkedApi.count}
+          </button>
+        </Tooltip>
+      )}
       <div className="mx-0.5 h-4 w-px shrink-0 bg-[var(--workspace-border)]" aria-hidden />
     </>
   );
@@ -433,6 +452,22 @@ export function SingleListPanel({
             }}
             placeholder={"Paste a list…\none per line, CSV, or JSON array"}
             spellCheck={false}
+            onPaste={(e) => {
+              // Compare setting "Auto-clean": normalize pasted text right
+              // after the browser inserts it (strip quotes/brackets,
+              // one item per line). Snapshot keeps Cmd/Ctrl+Z working.
+              if (!effectiveOptions.autoClean) return;
+              const el = e.currentTarget;
+              window.setTimeout(() => {
+                const raw = el.value;
+                const cleaned = cleanListInput(raw);
+                if (!raw || cleaned === raw) return;
+                setCleanSnapshot(raw);
+                onChange(cleaned);
+                setInputSnapshot(null);
+                setSortMode("none");
+              }, 0);
+            }}
             className={editorClass}
             style={{ fontSize }}
           />
@@ -575,17 +610,65 @@ export function SingleListPanel({
                 )}
               </p>
             ) : display === "inline" ? (
-              <p className="whitespace-pre-wrap break-words font-mono leading-relaxed text-[var(--workspace-text)]">
-                {formatted}
-              </p>
+              exportFormat === null ? (
+                // Plain-list view: one checkbox row per item so results can be
+                // marked as explored/done while working through them.
+                <ul className="flex flex-col">
+                  {sorted.map((item, i) => {
+                    const done = checkedApi.isChecked(item.key);
+                    return (
+                      <li
+                        key={`${item.key}-${i}`}
+                        className={`flex items-start gap-2 rounded px-1 py-px transition-colors hover:bg-[var(--workspace-background)] ${
+                          i % 2 === 1 ? "bg-[var(--workspace-background)]/40" : ""
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          role="checkbox"
+                          aria-checked={done}
+                          aria-label={`Mark ${item.value} as explored`}
+                          onClick={() => checkedApi.toggle(item.key)}
+                          className={`mt-1 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border transition-colors ${
+                            done
+                              ? "border-emerald-500 bg-emerald-500 text-white"
+                              : "border-[var(--workspace-border)] text-transparent hover:border-primary"
+                          }`}
+                        >
+                          <svg viewBox="0 0 20 20" fill="currentColor" className="h-2.5 w-2.5" aria-hidden>
+                            <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
+                          </svg>
+                        </button>
+                        <span
+                          className={`min-w-0 flex-1 whitespace-pre-wrap break-words font-mono leading-relaxed ${
+                            done
+                              ? "text-[var(--workspace-text-muted)] line-through decoration-emerald-500/60"
+                              : rowClass(item)
+                          }`}
+                        >
+                          {item.value}
+                        </span>
+                      </li>
+                    );
+                  })}
+                  {sorted.length === 0 && formatted ? (
+                    <li className="whitespace-pre-wrap break-words font-mono leading-relaxed text-[var(--workspace-text)]">{formatted}</li>
+                  ) : null}
+                </ul>
+              ) : (
+                <p className="whitespace-pre-wrap break-words font-mono leading-relaxed text-[var(--workspace-text)]">
+                  {formatted}
+                </p>
+              )
             ) : (
               <table className="w-full border-collapse">
-                <thead>
-                  <tr className="border-b border-[var(--workspace-border)] text-[10px] uppercase tracking-wide text-[var(--workspace-text-muted)]">
-                    <th
-                      aria-sort={tableSort?.key === "name" ? (tableSort.dir === "asc" ? "ascending" : "descending") : "none"}
-                      className="py-1 pr-3 text-left font-semibold"
-                    >
+                  <thead>
+                    <tr className="border-b border-[var(--workspace-border)] text-[10px] uppercase tracking-wide text-[var(--workspace-text-muted)]">
+                      <th className="w-6 py-1 text-left font-semibold" aria-label="Mark explored" />
+                      <th
+                        aria-sort={tableSort?.key === "name" ? (tableSort.dir === "asc" ? "ascending" : "descending") : "none"}
+                        className="py-1 pr-3 text-left font-semibold"
+                      >
                       <button
                         type="button"
                         onClick={() => toggleTableSort("name")}
@@ -618,7 +701,30 @@ export function SingleListPanel({
                         i % 2 === 1 ? "bg-[var(--workspace-background)]" : ""
                       }`}
                     >
-                      <td className={`py-0.5 pr-3 font-mono ${rowClass(item)}`}>{item.value}</td>
+                      <td className="w-6 py-0.5">
+                        {(() => {
+                          const done = checkedApi.isChecked(item.key);
+                          return (
+                            <button
+                              type="button"
+                              role="checkbox"
+                              aria-checked={done}
+                              aria-label={`Mark ${item.value} as explored`}
+                              onClick={() => checkedApi.toggle(item.key)}
+                              className={`flex h-3.5 w-3.5 items-center justify-center rounded-sm border transition-colors ${
+                                done
+                                  ? "border-emerald-500 bg-emerald-500 text-white"
+                                  : "border-[var(--workspace-border)] text-transparent hover:border-primary"
+                              }`}
+                            >
+                              <svg viewBox="0 0 20 20" fill="currentColor" className="h-2.5 w-2.5" aria-hidden>
+                                <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
+                              </svg>
+                            </button>
+                          );
+                        })()}
+                      </td>
+                      <td className={`py-0.5 pr-3 font-mono ${checkedApi.isChecked(item.key) ? "text-[var(--workspace-text-muted)] line-through decoration-emerald-500/60" : rowClass(item)}`}>{item.value}</td>
                       <td className="py-0.5 text-right font-mono tabular-nums text-[var(--workspace-text-muted)]">
                         ×{item.count}
                       </td>
