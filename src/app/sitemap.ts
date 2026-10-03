@@ -8,73 +8,76 @@ export const dynamic = "force-static";
 const SITE_URL = process.env.SITE_URL || "https://formaty.dev";
 
 export default function sitemap(): MetadataRoute.Sitemap {
+  // Single timestamp per build so every entry shares one lastModified value
+  // instead of drifting by milliseconds per entry.
+  const now = new Date();
   const base = [
     {
       url: SITE_URL,
-      lastModified: new Date(),
+      lastModified: now,
       changeFrequency: "weekly" as const,
       priority: 1,
     },
     {
       url: `${SITE_URL}/playground`,
-      lastModified: new Date(),
+      lastModified: now,
       changeFrequency: "weekly" as const,
       priority: 0.95,
     },
     {
       url: `${SITE_URL}/docs`,
-      lastModified: new Date(),
+      lastModified: now,
       changeFrequency: "weekly" as const,
       priority: 0.9,
     },
     {
       url: `${SITE_URL}/changelog`,
-      lastModified: new Date(),
+      lastModified: now,
       changeFrequency: "monthly" as const,
       priority: 0.4,
     },
     {
       url: `${SITE_URL}/tools`,
-      lastModified: new Date(),
+      lastModified: now,
       changeFrequency: "monthly" as const,
       priority: 0.7,
     },
     {
       url: `${SITE_URL}/guides`,
-      lastModified: new Date(),
+      lastModified: now,
       changeFrequency: "monthly" as const,
       priority: 0.7,
     },
     {
       url: `${SITE_URL}/utils`,
-      lastModified: new Date(),
+      lastModified: now,
       changeFrequency: "monthly" as const,
       priority: 0.7,
     },
   ];
   const toolPages: MetadataRoute.Sitemap = ALL_TOOL_ROUTES.map((route) => ({
     url: `${SITE_URL}/${route}`,
-    lastModified: new Date(),
+    lastModified: now,
     changeFrequency: "monthly" as const,
     priority: 0.85,
   }));
   const utilPages: MetadataRoute.Sitemap = [
     {
       url: `${SITE_URL}/utils/instant`,
-      lastModified: new Date(),
+      lastModified: now,
       changeFrequency: "monthly" as const,
       priority: 0.86,
     },
     ...UTIL_ROUTES.map((route) => ({
       url: `${SITE_URL}/utils/${route}`,
-      lastModified: new Date(),
+      lastModified: now,
       changeFrequency: "monthly" as const,
       priority: 0.8,
     })),
   ];
   const guidePages: MetadataRoute.Sitemap = GUIDE_ROUTES.map((route) => ({
     url: `${SITE_URL}/guides/${route}`,
-    lastModified: new Date(),
+    lastModified: now,
     changeFrequency: "monthly" as const,
     priority: 0.75,
   }));

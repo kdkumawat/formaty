@@ -39,7 +39,7 @@ export const metadata: Metadata = {
   },
 };
 
-const jsonLd = {
+const webAppJsonLd = {
   "@context": "https://schema.org",
   "@type": "WebApplication",
   name: INSTANT_PAGE.h1,
@@ -50,14 +50,16 @@ const jsonLd = {
   offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
   featureList: INSTANT_PAGE.useCases,
   screenshot: ogImage,
-  breadcrumb: {
-    "@type": "BreadcrumbList",
-    itemListElement: [
-      { "@type": "ListItem", position: 1, name: "Formaty", item: SITE_URL },
-      { "@type": "ListItem", position: 2, name: "Utils", item: `${SITE_URL}/utils` },
-      { "@type": "ListItem", position: 3, name: "Instant", item: canonical },
-    ],
-  },
+};
+
+const breadcrumbJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  itemListElement: [
+    { "@type": "ListItem", position: 1, name: "Formaty", item: SITE_URL },
+    { "@type": "ListItem", position: 2, name: "Utils", item: `${SITE_URL}/utils` },
+    { "@type": "ListItem", position: 3, name: "Instant", item: canonical },
+  ],
 };
 
 /** Single source of truth: the visible FAQ section mirrors the FAQPage JSON-LD. */
@@ -93,7 +95,8 @@ const faqJsonLd = {
 export default function InstantPage() {
   return (
     <>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(webAppJsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }} />
       <Suspense
         fallback={

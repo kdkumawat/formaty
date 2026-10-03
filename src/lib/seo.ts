@@ -3,7 +3,7 @@ export const SITE_NAME = "Formaty";
 
 export const SEO_KEYWORDS: Record<string, string[]> = {
   "json-formatter": ["json formatter", "json beautifier", "format json online", "json validator online"],
-  "json-viewer": ["json viewer", "json editor", "view json online", "json tree view"],
+  "json-viewer": ["json viewer", "json viewer online", "view json online", "json tree view", "json explorer", "json visualizer", "large json viewer"],
   "json-diff": ["json diff", "compare json", "json comparison tool", "diff json online"],
   "json-to-typescript": ["json to typescript", "generate typescript from json", "json to ts", "json type generator"],
   "jsonpath-tester": ["jsonpath tester", "json query tool", "jsonpath online", "jmespath tester"],
@@ -22,7 +22,7 @@ export const SEO_KEYWORDS: Record<string, string[]> = {
   "yaml-formatter": ["yaml formatter", "format yaml online", "yaml beautifier"],
   "toml-formatter": ["toml formatter", "format toml online"],
   "csv-formatter": ["csv formatter", "format csv online"],
-  "compare-lists": ["compare two lists", "list comparison tool", "find missing items", "compare lists online", "find common items", "compare two csv columns"],
+  "compare-lists": ["compare two lists", "compare 2 lists", "list comparison tool", "find missing items", "compare lists online", "find common items", "compare two columns"],
   "sql-in-clause-generator": ["sql in clause generator", "generate sql in", "sql in list", "where id in generator"],
   "json-to-sql": ["json to sql", "convert json to sql", "json to sql insert", "generate sql from json", "json to ddl"],
   "json-to-go": ["json to go", "json to golang", "convert json to go struct", "go struct generator"],
@@ -132,11 +132,11 @@ Use cases: debugging API responses, inspecting webhook payloads, cleaning up con
     route: "json-viewer",
     title: "JSON Viewer | Formaty",
     description:
-      "Explore JSON in tree view. Free online JSON viewer with expandable nodes, search, and copy. Inspect structured data instantly.",
+      "Free online JSON viewer: view, explore and visualize JSON in an expandable tree. Search, copy paths, and handle large files instantly.",
     h1: "JSON Viewer",
-    content: `Large JSON blobs are hard to navigate as raw text. A JSON viewer renders your data as a hierarchical tree-expand and collapse nodes, drill into nested objects, and find values quickly.
+    content: `Large JSON blobs are hard to navigate as raw text. A JSON viewer - also called a JSON explorer or visualizer - renders your data as a hierarchical tree: expand and collapse nodes, drill into nested objects, and find values quickly.
 
-Tree view is ideal for API responses, config files, and log payloads. Click to expand arrays and objects. Copy paths or values with one click. Search across keys and values.
+Tree view is ideal for API responses, config files, log payloads, and big JSON files that are painful to scroll through. Click to expand arrays and objects. Copy paths or values with one click. Search across keys and values.
 
 Use cases: inspecting API responses, exploring configuration, debugging webhook payloads, understanding data schemas. Works entirely in your browser. No upload, no server.`,
     inputExample: '{"users":[{"id":1,"name":"Alice"},{"id":2,"name":"Bob"}]}',
@@ -477,7 +477,7 @@ Use cases: importing spreadsheet data into apps, API payload creation, data pipe
     description:
       "Compare two lists online and find common, missing, and extra items. Free list comparison tool with SQL IN / NOT IN export. Runs locally - no data leaves your browser.",
     h1: "Compare Two Lists",
-    content: `Comparing two lists by eye is slow and error-prone, especially with hundreds of IDs. A list comparison tool computes the set operations for you: common items, items only in the left list, items only in the right list, union, and symmetric difference.
+    content: `Comparing two lists by eye is slow and error-prone, especially with hundreds of IDs. A list comparison tool computes the set operations for you: common items, items only in the left list, items only in the right list, union, and symmetric difference. It works the same for comparing two columns pasted from a spreadsheet or CSV export.
 
 This is the classic database debugging workflow: paste the result of SELECT id FROM table_a on the left and SELECT id FROM table_b on the right, then see exactly which records are missing or extra on each side. Duplicate detection and counts are built in.
 
