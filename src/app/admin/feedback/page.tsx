@@ -1,71 +1,92 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowPathIcon,
-  CheckIcon,
   ClipboardDocumentListIcon,
-  ClockIcon,
   ExclamationTriangleIcon,
   InboxIcon,
-  TrashIcon,
-  XMarkIcon,
 } from "@heroicons/react/24/outline";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Tooltip } from "@/components/workspace/Tooltip";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/components/Toast";
 import {
-  FEEDBACK_CATEGORIES,
-  FEEDBACK_STATUSES,
-  deleteFeedbackItem,
+  FEEDBACK_FETCH_LIMIT,
+  FEEDBACK_UNDO_WINDOW_MS,
+  adminErrorMessage,
+  buildFeedbackFilename,
+  bulkDeleteFeedback,
+  bulkUpdateFeedbackStatus,
+  countByStatus,
+  downloadTextFile,
   feedbackConfigured,
   fetchFeedback,
-  updateFeedbackStatus,
+  filterFeedbackItems,
+  formatFeedbackBullets,
+  formatFeedbackCsv,
   type FeedbackCategory,
   type FeedbackItem,
+  type FeedbackSort,
   type FeedbackStatus,
 } from "@/lib/feedback";
+import { TokenGate } from "./_components/TokenGate";
+import { FeedbackToolbar } from "./_components/FeedbackToolbar";
+import { FeedbackTabs, type FeedbackTab } from "./_components/FeedbackTabs";
+import { FeedbackCard } from "./_components/FeedbackCard";
+import { BulkActionBar } from "./_components/BulkActionBar";
+import { DeleteConfirmDialog } from "./_components/DeleteConfirmDialog";
+import { FeedbackEmptyState, FeedbackErrorCard, FeedbackSkeleton } from "./_components/states";
 
 const TOKEN_STORAGE_KEY = "formaty-feedback-admin-token";
 
-function categoryLabel(id: FeedbackCategory | undefined): string {
-  return FEEDBACK_CATEGORIES.find((c) => c.id === id)?.label ?? "Other";
-}
-
-function timeAgo(ts: number): string {
-  const diff = Math.max(0, Date.now() - ts * 1000);
-  const mins = Math.floor(diff / 60000);
+function timeSince(ts: number | null): string {
+  if (ts === null) return "";
+  const mins = Math.floor((Date.now() - ts) / 60000);
   if (mins < 1) return "just now";
   if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}d ago`;
-  return new Date(ts * 1000).toLocaleDateString();
+  return new Date(ts).toLocaleTimeString();
 }
 
 export default function FeedbackAdminPage() {
   const [token, setToken] = useState<string | null>(null);
-  const [tokenInput, setTokenInput] = useState("");
   const [items, setItems] = useState<FeedbackItem[]>([]);
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<FeedbackStatus | "all">("new");
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<number | null>(null);
+
+  const [activeTab, setActiveTab] = useState<FeedbackTab>("new");
+  const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [category, setCategory] = useState<FeedbackCategory | "all">("all");
+  const [sort, setSort] = useState<FeedbackSort>("newest");
+
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+
+  const [deleteTarget, setDeleteTarget] = useState<FeedbackItem[] | null>(null);
+  const [confirming, setConfirming] = useState(false);
+
+  const searchRef = useRef<HTMLInputElement | null>(null);
+  const pendingDeleteRef = useRef<{ items: FeedbackItem[]; timer: number } | null>(null);
 
   // Read ?token= once and stash it in sessionStorage (never in the URL bar).
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const urlToken = params.get("token");
     if (urlToken) {
-      setToken(urlToken);
-      try {
-        sessionStorage.setItem(TOKEN_STORAGE_KEY, urlToken);
-      } catch {
-        /* ignore */
-      }
+      const clean = urlToken.trim();
       window.history.replaceState({}, "", window.location.pathname);
+      if (clean) {
+        setToken(clean);
+        try {
+          sessionStorage.setItem(TOKEN_STORAGE_KEY, clean);
+        } catch {
+          /* ignore */
+        }
+      }
       return;
     }
     try {
@@ -76,101 +97,283 @@ export default function FeedbackAdminPage() {
     }
   }, []);
 
-  const refresh = useCallback(async () => {
+  // Debounce search input.
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedQuery(query), 200);
+    return () => window.clearTimeout(timer);
+  }, [query]);
+
+  // "/" focuses search when not typing somewhere already.
+  useEffect(() => {
     if (!token) return;
-    setLoading(true);
-    const data = await fetchFeedback(token, { limit: 200 });
-    setLoading(false);
-    if (data === null) {
-      toast({ message: "Could not load feedback - check the token and API URL", type: "error" });
-      return;
-    }
-    setItems(data);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
+      const el = document.activeElement;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT")) return;
+      e.preventDefault();
+      searchRef.current?.focus();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   }, [token]);
 
-  useEffect(() => {
-    if (token) void refresh();
-  }, [token, refresh]);
-
-  const counts = useMemo(() => {
-    const c: Record<FeedbackStatus | "all", number> = {
-      all: items.length,
-      new: 0,
-      in_progress: 0,
-      fixed: 0,
-      ignored: 0,
-    };
-    for (const item of items) c[item.status] += 1;
-    return c;
-  }, [items]);
-
-  const visible = useMemo(
-    () => (activeTab === "all" ? items : items.filter((i) => i.status === activeTab)),
-    [items, activeTab],
+  // Flush a pending (undo-window) delete - fire the real DELETE requests.
+  const flushPendingDelete = useCallback(
+    async (auth: string) => {
+      const pending = pendingDeleteRef.current;
+      pendingDeleteRef.current = null;
+      if (!pending) return;
+      window.clearTimeout(pending.timer);
+      const res = await bulkDeleteFeedback(
+        auth,
+        pending.items.map((i) => i.id),
+      );
+      if (res.failed.length > 0) {
+        const failedIds = new Set(res.failed.map((f) => f.id));
+        setItems((prev) => [...pending.items.filter((i) => failedIds.has(i.id)), ...prev]);
+        toast({
+          message: `Could not delete ${res.failed.length} item${res.failed.length === 1 ? "" : "s"} - restored`,
+          type: "error",
+        });
+      }
+    },
+    [],
   );
 
-  const setStatus = async (item: FeedbackItem, status: FeedbackStatus) => {
-    if (!token) return;
-    setBusyId(item.id);
-    const ok = await updateFeedbackStatus(token, item.id, status);
-    setBusyId(null);
-    if (ok) {
-      setItems((prev) =>
-        prev.map((i) => (i.id === item.id ? { ...i, status, updated_at: Math.floor(Date.now() / 1000) } : i)),
-      );
-      toast({ message: `Marked ${status.replace("_", " ")}`, type: "success", duration: 1500 });
-    } else {
-      toast({ message: "Could not update item", type: "error" });
-    }
-  };
+  const load = useCallback(
+    async (auth: string, background: boolean) => {
+      if (background) setRefreshing(true);
+      else {
+        setLoading(true);
+        setLoadError(null);
+      }
+      const res = await fetchFeedback(auth, { limit: FEEDBACK_FETCH_LIMIT });
+      if (background) setRefreshing(false);
+      else setLoading(false);
+      if (!res.ok) {
+        if (!background) setLoadError(adminErrorMessage(res.error, res.status));
+        else toast({ message: adminErrorMessage(res.error, res.status), type: "error" });
+        return res;
+      }
+      setItems(res.items);
+      setLastUpdated(Date.now());
+      if (!background) setLoadError(null);
+      return res;
+    },
+    [],
+  );
 
-  const remove = async (item: FeedbackItem) => {
-    if (!token) return;
-    setBusyId(item.id);
-    const ok = await deleteFeedbackItem(token, item.id);
-    setBusyId(null);
-    if (ok) {
-      setItems((prev) => prev.filter((i) => i.id !== item.id));
-      toast({ message: "Deleted", type: "success", duration: 1500 });
-    } else {
-      toast({ message: "Could not delete item", type: "error" });
+  // Initial load after token is known (incl. ?token= deep link).
+  useEffect(() => {
+    if (token) void load(token, false);
+  }, [token, load]);
+
+  // Discard pending delete timers on unmount.
+  useEffect(() => {
+    return () => {
+      const pending = pendingDeleteRef.current;
+      if (pending) window.clearTimeout(pending.timer);
+    };
+  }, []);
+
+  const unlock = useCallback(
+    async (candidate: string): Promise<{ ok: true } | { ok: false; message: string }> => {
+      const res = await fetchFeedback(candidate, { limit: 1 });
+      if (!res.ok) return { ok: false, message: adminErrorMessage(res.error, res.status) };
+      setToken(candidate);
+      try {
+        sessionStorage.setItem(TOKEN_STORAGE_KEY, candidate);
+      } catch {
+        /* ignore */
+      }
+      void load(candidate, false);
+      return { ok: true };
+    },
+    [load],
+  );
+
+  const counts = useMemo(() => countByStatus(items), [items]);
+
+  const visible = useMemo(
+    () =>
+      filterFeedbackItems(items, {
+        status: activeTab,
+        query: debouncedQuery,
+        category,
+        sort,
+      }),
+    [items, activeTab, debouncedQuery, category, sort],
+  );
+
+  const visibleIds = useMemo(() => visible.map((i) => i.id), [visible]);
+  const selectedVisible = useMemo(
+    () => visible.filter((i) => selectedIds.has(i.id)),
+    [visible, selectedIds],
+  );
+  const allVisibleSelected = visible.length > 0 && visible.every((i) => selectedIds.has(i.id));
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const toggleSelectAllVisible = useCallback(() => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      const all = visibleIds.every((id) => next.has(id));
+      if (all) for (const id of visibleIds) next.delete(id);
+      else for (const id of visibleIds) next.add(id);
+      return next;
+    });
+  }, [visibleIds]);
+
+  const mutateStatus = useCallback(
+    async (targets: FeedbackItem[], status: FeedbackStatus) => {
+      if (!token || targets.length === 0) return;
+      const ids = new Set(targets.map((i) => i.id));
+      setBusyIds((prev) => new Set([...prev, ...ids]));
+      if (targets.length > 1) setBulkBusy(true);
+      const now = Math.floor(Date.now() / 1000);
+      const previous = new Map(targets.map((i) => [i.id, i.status]));
+      setItems((prev) => prev.map((i) => (ids.has(i.id) ? { ...i, status, updated_at: now } : i)));
+      const res = await bulkUpdateFeedbackStatus(
+        token,
+        targets.map((i) => i.id),
+        status,
+      );
+      setBusyIds((prev) => {
+        const next = new Set(prev);
+        for (const id of ids) next.delete(id);
+        return next;
+      });
+      setBulkBusy(false);
+      if (res.failed.length === 0) {
+        const label = status === "in_progress" ? "in progress" : status;
+        toast({ message: `Marked ${res.succeeded.length} ${label}`, type: "success", duration: 1500 });
+        if (targets.length > 1) setSelectedIds((prev) => {
+          const next = new Set(prev);
+          for (const id of res.succeeded) next.delete(id);
+          return next;
+        });
+      } else {
+        const failedIds = new Set(res.failed.map((f) => f.id));
+        setItems((prev) =>
+          prev.map((i) =>
+            failedIds.has(i.id) ? { ...i, status: previous.get(i.id) ?? i.status } : i,
+          ),
+        );
+        toast({
+          message: `${res.succeeded.length} updated, ${res.failed.length} failed - failed items restored`,
+          type: "error",
+        });
+      }
+    },
+    [token],
+  );
+
+  const copyText = useCallback(async (text: string, success: string) => {
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      toast({ message: success, type: "success" });
+    } catch {
+      toast({ message: "Could not copy to clipboard", type: "error" });
     }
-  };
+  }, []);
+
+  const copyItems = useCallback(
+    (targets: FeedbackItem[], label: string) => {
+      if (targets.length === 0) return;
+      void copyText(
+        formatFeedbackBullets(targets),
+        `Copied ${targets.length} feedback item${targets.length === 1 ? "" : "s"} from ${label} as bullets`,
+      );
+    },
+    [copyText],
+  );
+
+  const exportItems = useCallback(
+    (targets: FeedbackItem[], format: "csv" | "json") => {
+      if (targets.length === 0) return;
+      const text =
+        format === "csv" ? formatFeedbackCsv(targets) : JSON.stringify(targets, null, 2);
+      downloadTextFile(
+        buildFeedbackFilename(activeTab, format),
+        text,
+        format === "csv" ? "text/csv" : "application/json",
+      );
+      toast({ message: `Exported ${targets.length} items as ${format.toUpperCase()}`, type: "success" });
+    },
+    [activeTab],
+  );
+
+  /** Confirm step done - remove from UI now, fire DELETE after the undo window. */
+  const confirmDelete = useCallback(async () => {
+    if (!token || !deleteTarget || deleteTarget.length === 0) return;
+    setConfirming(true);
+    // A second delete flushes the previous pending one first (single undo slot).
+    await flushPendingDelete(token);
+    const snapshot = deleteTarget;
+    const snapshotIds = new Set(snapshot.map((i) => i.id));
+    setDeleteTarget(null);
+    setConfirming(false);
+    setItems((prev) => prev.filter((i) => !snapshotIds.has(i.id)));
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      for (const id of snapshotIds) next.delete(id);
+      return next;
+    });
+    const timer = window.setTimeout(() => {
+      void flushPendingDelete(token);
+    }, FEEDBACK_UNDO_WINDOW_MS);
+    pendingDeleteRef.current = { items: snapshot, timer };
+    toast({
+      message: `Deleted ${snapshot.length} item${snapshot.length === 1 ? "" : "s"}`,
+      type: "success",
+      duration: FEEDBACK_UNDO_WINDOW_MS,
+      action: {
+        label: "Undo",
+        onClick: () => {
+          const pending = pendingDeleteRef.current;
+          if (pending) window.clearTimeout(pending.timer);
+          pendingDeleteRef.current = null;
+          setItems((prev) => [...snapshot, ...prev]);
+          toast({ message: "Delete undone", type: "success", duration: 1500 });
+        },
+      },
+    });
+  }, [token, deleteTarget, flushPendingDelete]);
 
   const logout = () => {
+    const pending = pendingDeleteRef.current;
+    if (pending) window.clearTimeout(pending.timer);
+    pendingDeleteRef.current = null;
     try {
       sessionStorage.removeItem(TOKEN_STORAGE_KEY);
     } catch {
       /* ignore */
     }
     setToken(null);
-    setTokenInput("");
     setItems([]);
+    setSelectedIds(new Set());
+    setLoadError(null);
+    setLastUpdated(null);
   };
 
-  /** Copy items in the currently selected tab as compact bullet points, ready to paste into an AI. */
-  const copyAll = async () => {
-    if (visible.length === 0) return;
-    const lines = visible.map((item) => {
-      const meta: string[] = [];
-      if (item.page) meta.push(`page: ${item.page}`);
-      if (item.email) meta.push(`email: ${item.email}`);
-      meta.push(`status: ${FEEDBACK_STATUSES.find((s) => s.id === item.status)?.label ?? item.status}`);
-      const metaStr = meta.length > 0 ? ` (${meta.join(", ")})` : "";
-      return `- [${categoryLabel(item.category).toLowerCase()}] ${item.message}${metaStr}`;
-    });
-    const text = lines.join("\n");
-    const tabLabel = activeTab === "all" ? "All" : FEEDBACK_STATUSES.find((s) => s.id === activeTab)?.label ?? activeTab;
-    try {
-      await navigator.clipboard.writeText(text);
-      toast({
-        message: `Copied ${visible.length} feedback item${visible.length === 1 ? "" : "s"} from ${tabLabel} as bullets`,
-        type: "success",
-      });
-    } catch {
-      toast({ message: "Could not copy to clipboard", type: "error" });
-    }
-  };
+  const clearFilters = useCallback(() => {
+    setQuery("");
+    setDebouncedQuery("");
+    setCategory("all");
+    setActiveTab("all");
+  }, []);
+
+  const isFiltered = query.trim().length > 0 || category !== "all" || activeTab !== "all";
+  const tabLabel =
+    activeTab === "all" ? "All" : activeTab === "in_progress" ? "In progress" : activeTab;
 
   if (!feedbackConfigured()) {
     return (
@@ -192,56 +395,19 @@ export default function FeedbackAdminPage() {
     );
   }
 
-  if (!token) {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-[var(--workspace-background)] p-6">
-        <div className="w-full max-w-sm rounded-xl border border-[var(--workspace-border)] bg-[var(--workspace-panel)] p-8">
-          <InboxIcon className="h-10 w-10 text-[var(--workspace-text-muted)]" />
-          <h1 className="mt-4 text-lg font-semibold text-[var(--workspace-text)]">Feedback inbox</h1>
-          <p className="mt-2 text-sm text-[var(--workspace-text-muted)]">
-            Enter your admin token to unlock. It is kept in this browser session only.
-          </p>
-          <form
-            className="mt-5 flex flex-col gap-3"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (tokenInput.trim()) {
-                setToken(tokenInput.trim());
-                try {
-                  sessionStorage.setItem(TOKEN_STORAGE_KEY, tokenInput.trim());
-                } catch {
-                  /* ignore */
-                }
-              }
-            }}
-          >
-            <Input
-              type="password"
-              value={tokenInput}
-              onChange={(e) => setTokenInput(e.target.value)}
-              placeholder="Admin token"
-              autoComplete="off"
-              className="h-10"
-            />
-            <Button type="submit" disabled={!tokenInput.trim()}>
-              Unlock inbox
-            </Button>
-          </form>
-        </div>
-      </main>
-    );
-  }
+  if (!token) return <TokenGate onUnlock={unlock} />;
 
   return (
     <main className="min-h-screen bg-[var(--workspace-background)] px-4 py-8">
-      <div className="mx-auto max-w-3xl">
+      <div className="mx-auto max-w-4xl">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <InboxIcon className="h-6 w-6 text-primary" />
             <div>
               <h1 className="text-lg font-semibold text-[var(--workspace-text)]">Feedback inbox</h1>
               <p className="text-xs text-[var(--workspace-text-muted)]">
-                {items.length} item{items.length === 1 ? "" : "s"} total · newest first
+                {items.length} item{items.length === 1 ? "" : "s"} total ·{" "}
+                {lastUpdated ? `updated ${timeSince(lastUpdated)}` : "newest first"}
               </p>
             </div>
           </div>
@@ -250,7 +416,7 @@ export default function FeedbackAdminPage() {
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => void copyAll()}
+              onClick={() => copyItems(visible, tabLabel)}
               disabled={loading || visible.length === 0}
             >
               <ClipboardDocumentListIcon className="h-4 w-4" />
@@ -260,10 +426,10 @@ export default function FeedbackAdminPage() {
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => void refresh()}
-              disabled={loading}
+              onClick={() => load(token, true)}
+              disabled={loading || refreshing}
             >
-              <ArrowPathIcon className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+              <ArrowPathIcon className={`h-4 w-4 ${loading || refreshing ? "animate-spin" : ""}`} />
               Refresh
             </Button>
             <Button type="button" variant="ghost" size="sm" onClick={logout}>
@@ -272,141 +438,98 @@ export default function FeedbackAdminPage() {
           </div>
         </div>
 
-        {/* Status tabs with counts */}
-        <div className="mt-5 flex flex-wrap gap-1.5">
-          {(["all", ...FEEDBACK_STATUSES.map((s) => s.id)] as Array<FeedbackStatus | "all">).map((tab) => {
-            const label = tab === "all" ? "All" : FEEDBACK_STATUSES.find((s) => s.id === tab)?.label ?? tab;
-            const active = activeTab === tab;
-            return (
-              <button
-                key={tab}
-                type="button"
-                onClick={() => setActiveTab(tab)}
-                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
-                  active
-                    ? "border-primary/40 bg-primary/10 text-primary"
-                    : "border-[var(--workspace-border)] text-[var(--workspace-text-muted)] hover:border-primary/30 hover:text-[var(--workspace-text)]"
-                }`}
-              >
-                {label}
-                <span className="tabular-nums opacity-70">{counts[tab]}</span>
-              </button>
-            );
-          })}
-        </div>
+        <FeedbackTabs active={activeTab} counts={counts} onChange={setActiveTab} />
 
-        {/* Items */}
-        {loading && items.length === 0 ? (
-          <p className="mt-10 text-center text-sm text-[var(--workspace-text-muted)]">Loading…</p>
+        <FeedbackToolbar
+          query={query}
+          onQuery={setQuery}
+          category={category}
+          onCategory={setCategory}
+          sort={sort}
+          onSort={setSort}
+          resultCount={visible.length}
+          totalCount={items.length}
+          searchRef={searchRef}
+        />
+
+        {loading ? (
+          <FeedbackSkeleton />
+        ) : loadError && items.length === 0 ? (
+          <FeedbackErrorCard
+            message={loadError}
+            retrying={false}
+            onRetry={() => load(token, false)}
+          />
         ) : visible.length === 0 ? (
-          <div className="mt-10 rounded-xl border border-dashed border-[var(--workspace-border)] p-10 text-center">
-            <CheckIcon className="mx-auto h-8 w-8 text-emerald-500" />
-            <p className="mt-3 text-sm font-medium text-[var(--workspace-text)]">
-              {activeTab === "new" ? "No new feedback - you are all caught up!" : "Nothing here yet."}
-            </p>
-          </div>
+          <FeedbackEmptyState
+            isFiltered={isFiltered}
+            isNewTab={activeTab === "new"}
+            onClearFilters={clearFilters}
+          />
         ) : (
-          <ul className="mt-5 space-y-3">
-            {visible.map((item) => (
-              <li
-                key={item.id}
-                className="rounded-xl border border-[var(--workspace-border)] bg-[var(--workspace-panel)] p-4"
-              >
-                <div className="flex items-start gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
-                        {categoryLabel(item.category)}
-                      </span>
-                      <span className="text-[10px] tabular-nums text-[var(--workspace-text-muted)]">
-                        {timeAgo(item.created_at)}
-                      </span>
-                      {item.email && (
-                        <span className="truncate text-[10px] text-[var(--workspace-text-muted)]">
-                          {item.email}
-                        </span>
-                      )}
-                    </div>
-                    <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed text-[var(--workspace-text)]">
-                      {item.message}
-                    </p>
-                    {(item.page || item.browser) && (
-                      <div className="mt-2.5 space-y-0.5 text-[10px] leading-snug text-[var(--workspace-text-muted)]">
-                        {item.page && (
-                          <p className="truncate font-mono">
-                            <span className="opacity-70">page:</span> {item.page}
-                          </p>
-                        )}
-                        {item.browser && (
-                          <p className="truncate font-mono">
-                            <span className="opacity-70">ua:</span> {item.browser}
-                          </p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex shrink-0 flex-col items-end gap-1.5">
-                    {busyId === item.id ? (
-                      <ArrowPathIcon className="h-4 w-4 animate-spin text-primary" />
-                    ) : (
-                      <div className="flex items-center gap-1">
-                        <Tooltip content="Mark in progress">
-                          <button
-                            type="button"
-                            aria-label="Mark in progress"
-                            className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--workspace-text-muted)] transition-colors hover:bg-[var(--workspace-border)]/40 hover:text-amber-400"
-                            onClick={() => void setStatus(item, "in_progress")}
-                          >
-                            <ClockIcon className="h-3.5 w-3.5" />
-                          </button>
-                        </Tooltip>
-                        <Tooltip content="Mark fixed">
-                          <button
-                            type="button"
-                            aria-label="Mark fixed"
-                            className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--workspace-text-muted)] transition-colors hover:bg-emerald-500/15 hover:text-emerald-500"
-                            onClick={() => void setStatus(item, "fixed")}
-                          >
-                            <CheckIcon className="h-3.5 w-3.5" />
-                          </button>
-                        </Tooltip>
-                        <Tooltip content="Ignore">
-                          <button
-                            type="button"
-                            aria-label="Ignore"
-                            className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--workspace-text-muted)] transition-colors hover:bg-[var(--workspace-border)]/40 hover:text-[var(--workspace-text)]"
-                            onClick={() => void setStatus(item, "ignored")}
-                          >
-                            <XMarkIcon className="h-3.5 w-3.5" />
-                          </button>
-                        </Tooltip>
-                        <Tooltip content="Delete">
-                          <button
-                            type="button"
-                            aria-label="Delete"
-                            className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--workspace-text-muted)] transition-colors hover:bg-red-500/15 hover:text-red-500"
-                            onClick={() => void remove(item)}
-                          >
-                            <TrashIcon className="h-3.5 w-3.5" />
-                          </button>
-                        </Tooltip>
-                      </div>
-                    )}
-                    <span className="rounded-full border border-[var(--workspace-border)] px-2 py-0.5 text-[10px] font-medium text-[var(--workspace-text-muted)]">
-                      {FEEDBACK_STATUSES.find((s) => s.id === item.status)?.label ?? item.status}
-                    </span>
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
+          <>
+            <div className="mt-5 flex items-center gap-2.5 px-1">
+              <Checkbox
+                checked={allVisibleSelected}
+                onCheckedChange={() => toggleSelectAllVisible()}
+                aria-label={allVisibleSelected ? "Deselect all visible" : "Select all visible"}
+              />
+              <span className="text-[11px] text-[var(--workspace-text-muted)]">
+                {selectedIds.size > 0 ? (
+                  <>
+                    <span className="font-semibold text-[var(--workspace-text)] tabular-nums">
+                      {selectedIds.size}
+                    </span>{" "}
+                    selected · {visible.length} visible
+                  </>
+                ) : (
+                  <>{visible.length} visible</>
+                )}
+              </span>
+            </div>
+            <ul className="mt-2 space-y-3">
+              {visible.map((item) => (
+                <FeedbackCard
+                  key={item.id}
+                  item={item}
+                  selected={selectedIds.has(item.id)}
+                  onToggleSelect={() => toggleSelect(item.id)}
+                  busy={busyIds.has(item.id)}
+                  onStatus={(status) => void mutateStatus([item], status)}
+                  onDelete={() => setDeleteTarget([item])}
+                  onCopy={() => copyItems([item], "item")}
+                />
+              ))}
+            </ul>
+          </>
         )}
+
+        <BulkActionBar
+          count={selectedVisible.length}
+          busy={bulkBusy}
+          onStatus={(status) => void mutateStatus(selectedVisible, status)}
+          onDelete={() => setDeleteTarget(selectedVisible)}
+          onCopy={() => copyItems(selectedVisible, "selection")}
+          onExportCsv={() => exportItems(selectedVisible, "csv")}
+          onExportJson={() => exportItems(selectedVisible, "json")}
+          onClear={() => setSelectedIds(new Set())}
+        />
 
         <p className="mt-8 flex items-center gap-1.5 text-[10px] text-[var(--workspace-text-muted)]">
           <ExclamationTriangleIcon className="h-3.5 w-3.5" />
           This page is protected by your admin token and is never indexed. Keep the token secret.
         </p>
       </div>
+
+      <DeleteConfirmDialog
+        open={deleteTarget !== null}
+        count={deleteTarget?.length ?? 0}
+        confirming={confirming}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        onConfirm={() => void confirmDelete()}
+      />
     </main>
   );
 }
