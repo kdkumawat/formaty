@@ -98,7 +98,7 @@ export default async function ToolRoutePage({
   if (!config || !isToolPageConfig(config)) notFound();
   const canonical = getCanonicalUrl(`/${tool}`);
 
-  const jsonLd = {
+  const webAppJsonLd = {
     "@context": "https://schema.org",
     "@type": "WebApplication",
     name: config.h1,
@@ -109,13 +109,15 @@ export default async function ToolRoutePage({
     offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
     featureList: config.useCases,
     screenshot: `${SITE_URL}/og/${tool}.png`,
-    breadcrumb: {
-      "@type": "BreadcrumbList",
-      itemListElement: [
-        { "@type": "ListItem", position: 1, name: "Formaty", item: SITE_URL },
-        { "@type": "ListItem", position: 2, name: config.h1, item: canonical },
-      ],
-    },
+  };
+
+  const breadcrumbJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Formaty", item: SITE_URL },
+      { "@type": "ListItem", position: 2, name: config.h1, item: canonical },
+    ],
   };
 
   const faqJsonLd = {
@@ -153,7 +155,11 @@ export default async function ToolRoutePage({
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(webAppJsonLd) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
       />
       <script
         type="application/ld+json"

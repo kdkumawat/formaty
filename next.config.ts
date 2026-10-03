@@ -36,7 +36,7 @@ const nextConfig: NextConfig = {
   env: {
     FORMATY_API_URL: process.env.FORMATY_API_URL,
     SITE_URL: process.env.SITE_URL,
-    NEXT_PUBLIC_GA_MASUREMENT_ID: process.env.NEXT_PUBLIC_GA_MASUREMENT_ID,
+    NEXT_PUBLIC_GA_MEASUREMENT_ID: process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID,
     NEXT_PUBLIC_BUILD_ID: BUILD_ID,
   },
   turbopack: {},
