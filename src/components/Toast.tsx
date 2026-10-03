@@ -18,6 +18,12 @@ export interface ToastItem {
   type: ToastType;
   url?: string;
   duration: number;
+  action?: ToastAction;
+}
+
+export interface ToastAction {
+  label: string;
+  onClick: () => void;
 }
 
 export interface ToastInput {
@@ -25,6 +31,7 @@ export interface ToastInput {
   type?: ToastType;
   url?: string;
   duration?: number;
+  action?: ToastAction;
 }
 
 /**
@@ -66,6 +73,7 @@ export function toast(input: ToastInput) {
     type,
     url: input.url,
     duration,
+    action: input.action,
   };
   items = [...items, item];
   if (items.length > MAX_TOASTS) {
@@ -124,6 +132,19 @@ function ToastCard({ item, onDismiss }: { item: ToastItem; onDismiss: () => void
           <Tooltip content={item.url} className="mt-0.5 block max-w-full truncate leading-snug text-[var(--workspace-text-muted)]">
             {item.url}
           </Tooltip>
+        )}
+        {item.action && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              item.action?.onClick();
+              onDismiss();
+            }}
+            className="mt-1.5 inline-flex shrink-0 items-center rounded-md border border-primary/40 bg-primary/10 px-2 py-1 text-[11px] font-semibold text-primary transition-colors hover:bg-primary/20"
+          >
+            {item.action.label}
+          </button>
         )}
       </span>
       <Tooltip content="Dismiss">
