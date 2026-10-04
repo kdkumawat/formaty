@@ -1,0 +1,29 @@
+{
+  "name": "formaty-launch-video",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "capture": "node capture/capture.mjs",
+    "studio": "remotion studio src/index.ts",
+    "srt": "bun scripts/srt.ts",
+    "render": "remotion render src/index.ts Launch out/launch-1080p60.mp4 --crf=16",
+    "render:short": "remotion render src/index.ts Launch30 out/launch-30s.mp4 --crf=16",
+    "render:loop": "remotion render src/index.ts Loop out/landing-loop.mp4 --crf=20 --muted",
+    "render:thumb": "remotion render src/index.ts Thumb out/producthunt-thumb.gif --codec=gif",
+    "render:poster": "remotion still src/index.ts Launch out/poster.png --frame=150"
+  },
+  "dependencies": {
+    "@remotion/cli": "^4.0.532",
+    "@remotion/google-fonts": "^4.0.532",
+    "@remotion/media": "4.0.532",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "remotion": "^4.0.532"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "@types/react": "^19.3.0",
+    "playwright": "1.63",
+    "typescript": "^7.0.2"
+  }
+}
