@@ -328,6 +328,7 @@ export function ToolPage({ config }: ToolPageProps) {
         </div>
       </header>
 
+      <main id="main" className="flex-1">
       {/* Hero */}
       <div className="relative overflow-hidden border-b border-[var(--workspace-border)]">
         <div className="hero-grid pointer-events-none absolute inset-0" aria-hidden />
@@ -524,6 +525,7 @@ export function ToolPage({ config }: ToolPageProps) {
           </div>
         </div>
       </div>
+      </main>
 
       <Footer />
     </article>

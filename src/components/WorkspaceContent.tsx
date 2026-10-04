@@ -138,6 +138,7 @@ import {
   type LineDiffStats,
 } from "@/lib/json/diff";
 import { useJsonWorker } from "@/hooks/useJsonWorker";
+import { useDelayedReset } from "@/hooks/useDelayedReset";
 import { detectFormat, FORMAT_LABELS, getInputFormatLabel, parseInput, type FormatKind, type InputFormatKind } from "@/lib/formats";
 import { ALL_TOOL_ROUTES, TOOL_PAGES, TOOL_PRESETS, type ToolRoute } from "@/lib/seo";
 import { executeCurlDetailed, parseCurl, type CurlExecutionResult } from "@/lib/curl/parseCurl";
@@ -620,6 +621,8 @@ export function WorkspaceContent({
   const [typeLanguage, setTypeLanguage] = useState<TypeTargetLanguage>("typescript");
   const [copyState, setCopyState] = useState<"idle" | "done" | "error">("idle");
   const [shareState, setShareState] = useState<"idle" | "done" | "error">("idle");
+  const resetCopySoon = useDelayedReset(() => setCopyState("idle"));
+  const resetShareSoon = useDelayedReset(() => setShareState("idle"));
   const [sharedLinkId, setSharedLinkId] = useState<string | null>(initialSharedLinkId ?? null);
   const [sharedLinkUrl, setSharedLinkUrl] = useState<string | null>(initialSharedLinkUrl ?? null);
   const [isOutputMaximized, setIsOutputMaximized] = useState(false);
@@ -1943,9 +1946,9 @@ export function WorkspaceContent({
       if (state.input || state.diffLeftInput || state.diffRightInput) sessionRestoredRef.current = true;
       return;
     }
-    const raw = localStorage.getItem("formaty-session");
-    if (!raw) return;
     try {
+      const raw = localStorage.getItem("formaty-session");
+      if (!raw) return;
       const data = JSON.parse(raw) as {
         input?: string;
         output?: string;
@@ -2255,14 +2258,14 @@ export function WorkspaceContent({
     const id = setTimeout(() => {
       if (activeOperation === "generateTypes") {
         trackEvent("generate_types", { language: typeLanguage });
-        executeOperation("generateTypes", { typeLanguage });
+        executeOperationRef.current?.("generateTypes", { typeLanguage });
         return;
       }
       if (activeOperation === "format" || activeOperation === "beautify" || OPERATION_ACTIONS.some(([, a]) => a === activeOperation)) {
         if (activeOperation === "format" || activeOperation === "beautify") {
-          runConvert(convertToFormat);
+          runConvertRef.current?.(convertToFormat);
         } else {
-          executeOperation(activeOperation);
+          executeOperationRef.current?.(activeOperation);
         }
       }
     }, 500);
@@ -2279,6 +2282,10 @@ export function WorkspaceContent({
     }
   }, [rightView, parsedOutput, output, input]);
 
+  // Latest-ref: timers below fire after render, so they must call the current
+  // executeOperation / runConvert (declared further down), not a captured one.
+  const executeOperationRef = useRef<typeof executeOperation | null>(null);
+  const runConvertRef = useRef<typeof runConvert | null>(null);
   const validationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const liveTransformTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // One-shot lock: recipes load sample input via setInput, which would trigger the
@@ -2405,11 +2412,11 @@ export function WorkspaceContent({
     const id = setTimeout(() => {
       if (!inputRef.current.trim()) return;
       if (activeOperation === "generateTypes") {
-        executeOperation("generateTypes", { typeLanguage, inputText: inputRef.current });
+        executeOperationRef.current?.("generateTypes", { typeLanguage, inputText: inputRef.current });
       } else if (activeOperation === "schema") {
-        executeOperation("schema", { inputText: inputRef.current });
+        executeOperationRef.current?.("schema", { inputText: inputRef.current });
       } else if (activeOperation === "validate") {
-        executeOperation("validate", { inputText: inputRef.current });
+        executeOperationRef.current?.("validate", { inputText: inputRef.current });
       }
     }, 400);
     return () => clearTimeout(id);
@@ -2804,6 +2811,11 @@ export function WorkspaceContent({
       }
     })();
   }, [getParsedInput, convertJsonToOutput, isDesktopLayout]);
+
+  useEffect(() => {
+    executeOperationRef.current = executeOperation;
+    runConvertRef.current = runConvert;
+  });
 
   const handleDiffLeftChange = useCallback(
     (value: string) => {
@@ -3238,7 +3250,7 @@ export function WorkspaceContent({
         type: "error",
         duration: 5000,
       });
-      window.setTimeout(() => setShareState("idle"), 1400);
+      resetShareSoon();
       return;
     }
     try {
@@ -3252,7 +3264,7 @@ export function WorkspaceContent({
     } catch {
       setShareState("error");
     }
-    window.setTimeout(() => setShareState("idle"), 1400);
+    resetShareSoon();
   };
 
   const copyOutput = async () => {
@@ -3271,7 +3283,7 @@ export function WorkspaceContent({
         setCopyState("error");
         toast({ message: "Copy failed", type: "error" });
       }
-      window.setTimeout(() => setCopyState("idle"), 1400);
+      resetCopySoon();
       return;
     }
     if (!output.trim()) return;
@@ -3284,7 +3296,7 @@ export function WorkspaceContent({
       setCopyState("error");
       toast({ message: "Copy failed", type: "error" });
     }
-    window.setTimeout(() => setCopyState("idle"), 1400);
+    resetCopySoon();
   };
 
   const getActiveOutputText = useCallback((): string => {
@@ -3427,7 +3439,7 @@ export function WorkspaceContent({
         setCopyState("error");
         toast({ message: "Copy failed", type: "error" });
       }
-      window.setTimeout(() => setCopyState("idle"), 1400);
+      resetCopySoon();
     },
     [getActiveOutputText],
   );
@@ -4656,6 +4668,7 @@ export function WorkspaceContent({
 
   return (
     <main
+      id="main"
       className="relative flex flex-col overflow-hidden bg-[var(--workspace-background)] text-[var(--workspace-text)]"
       style={{ height: "100dvh", minHeight: "100dvh", maxHeight: "100dvh" }}
       onDragEnter={handleDragEnter}
@@ -5428,7 +5441,7 @@ export function WorkspaceContent({
                   void navigator.clipboard.writeText(text).then(
                     () => {
                       setCopyState("done");
-                      window.setTimeout(() => setCopyState("idle"), 1400);
+                      resetCopySoon();
                     },
                     () => setCopyState("error"),
                   );
@@ -5444,7 +5457,7 @@ export function WorkspaceContent({
                   () => {
                     setCopyState("done");
                     toast({ message: "Copied" });
-                    window.setTimeout(() => setCopyState("idle"), 1400);
+                    resetCopySoon();
                   },
                   () => setCopyState("error"),
                 );
@@ -5527,7 +5540,7 @@ export function WorkspaceContent({
                           void navigator.clipboard.writeText(text).then(
                             () => {
                               setCopyState("done");
-                              window.setTimeout(() => setCopyState("idle"), 1400);
+                              resetCopySoon();
                             },
                             () => setCopyState("error"),
                           );

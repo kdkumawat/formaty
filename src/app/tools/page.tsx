@@ -75,7 +75,7 @@ export default function ToolsPage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-5xl px-4 py-12">
+      <main id="main" className="mx-auto max-w-5xl px-4 py-12">
         <nav className="mb-5 flex items-center gap-1.5 text-xs text-[var(--workspace-text-muted)]">
           <Link href="/" className="transition-colors hover:text-primary">Home</Link>
           <span>/</span>

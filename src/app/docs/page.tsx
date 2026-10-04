@@ -753,7 +753,7 @@ export default function DocsPage() {
         </aside>
 
         {/* ── Main content ── */}
-        <main ref={mainRef} className="min-w-0 flex-1 px-5 py-10 md:px-10">
+        <main id="main" ref={mainRef} className="min-w-0 flex-1 px-5 py-10 md:px-10">
           {/* Skip link */}
           <a
             href="#docs-content"
