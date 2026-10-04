@@ -527,7 +527,8 @@ export function detectLocalIana(): string {
 export function listIanaZones(): string[] {
   try {
     const supported = Intl.supportedValuesOf?.("timeZone");
-    if (supported?.length) return [...supported];
+    // supportedValuesOf omits "UTC" on some runtimes; it must always be selectable.
+    if (supported?.length) return supported.includes("UTC") ? [...supported] : ["UTC", ...supported];
   } catch {
     /* ignore */
   }

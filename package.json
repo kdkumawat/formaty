@@ -8,6 +8,7 @@
     "build": "bun install --frozen-lockfile && next build && bun scripts/write-version.mjs",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {

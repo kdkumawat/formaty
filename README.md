@@ -73,7 +73,7 @@ Open [http://localhost:3000](http://localhost:3000).
 ## Tech Stack
 
 - Next.js 16, React 19, Tailwind CSS v4, shadcn/ui (Radix UI)
-- Monaco Editor, ReactFlow
+- Monaco Editor, JSON Crack (graph view)
 - Web Workers for heavy processing - data never leaves the device
 
 ## Support
