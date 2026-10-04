@@ -437,7 +437,7 @@ export function Hero() {
           >
             Local-first. Format, convert, compare, query, and generate from JSON, XML, YAML, TOML and CSV - list compare and dev utils included -{" "}
             <br className="hidden sm:inline" />
-            <span className="font-semibold text-[var(--workspace-text)]">in your browser, never on a server</span>.
+            <span className="font-semibold text-[var(--workspace-text)]">in your browser, no signup</span>.
           </motion.p>
 
           {/* CTA row */}

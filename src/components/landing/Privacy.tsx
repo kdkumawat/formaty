@@ -19,8 +19,8 @@ const CLAIMS = [
     desc: "Share links encode your input into the URL itself - nothing is stored on a server until you decide to send it.",
   },
   {
-    title: "No telemetry, no cookies",
-    desc: "Analytics is opt-in and anonymized. No third-party trackers, no fingerprinting, no advertising.",
+    title: "No ads, opt-in analytics",
+    desc: "Analytics cookies are set only if you accept, with anonymized IP. No advertising, no fingerprinting.",
   },
 ];
 
@@ -36,7 +36,7 @@ export function Privacy() {
             Your data stays yours.
           </h2>
           <p className="mx-auto max-w-xl text-sm text-[var(--workspace-text-muted)] md:text-base">
-            Formaty is a local-first developer tool. Beyond the four points below, your data never leaves your device.
+            Formaty is a local-first developer tool. Your data is processed in your browser and reaches a server only when you send it: a share link or a feedback message.
           </p>
         </Reveal>
 
