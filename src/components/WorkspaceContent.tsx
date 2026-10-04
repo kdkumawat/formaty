@@ -4834,6 +4834,7 @@ export function WorkspaceContent({
               type="button"
               className="mt-0.5 flex h-7 w-full items-center justify-center text-[var(--workspace-text-muted)] transition-all duration-100 hover:bg-primary/5 hover:text-primary"
               onClick={addTab}
+              aria-label="New tab"
             >
               <PlusIcon className="h-3.5 w-3.5" />
             </button>
@@ -4846,6 +4847,7 @@ export function WorkspaceContent({
                   type="button"
                   className="flex h-7 w-full items-center justify-center text-[var(--workspace-text-muted)] transition-all duration-100 hover:bg-red-500/10 hover:text-red-500"
                   onClick={closeAllTabs}
+                  aria-label="Close all tabs"
                 >
                   <TrashIcon className="h-3.5 w-3.5" />
                 </button>
@@ -4855,6 +4857,7 @@ export function WorkspaceContent({
                   type="button"
                   className="flex h-6 w-full items-center justify-center text-[var(--workspace-text-muted)] transition-all duration-100 hover:bg-amber-500/10 hover:text-amber-600"
                   onClick={closeOtherTabs}
+                  aria-label="Close other tabs"
                 >
                   <XCircleIcon className="h-3.5 w-3.5" />
                 </button>
@@ -5332,7 +5335,7 @@ export function WorkspaceContent({
                 <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-0.5 overflow-hidden">
                   <div className="flex h-7 shrink-0 overflow-hidden rounded-md bg-muted">
                     <Tooltip content="Previous difference" className="shrink-0">
-                    <button type="button" className="flex h-7 w-7 cursor-pointer items-center justify-center text-[var(--workspace-text-muted)] transition-colors hover:bg-primary/10 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40" disabled={!diffNav.total} onClick={() => diffEditorRef.current?.prevChange()}>
+                    <button type="button" aria-label="Previous change" className="flex h-7 w-7 cursor-pointer items-center justify-center text-[var(--workspace-text-muted)] transition-colors hover:bg-primary/10 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40" disabled={!diffNav.total} onClick={() => diffEditorRef.current?.prevChange()}>
                       <ChevronUpIcon className="h-3.5 w-3.5" />
                     </button>
                     </Tooltip>
@@ -5342,7 +5345,7 @@ export function WorkspaceContent({
                     </span>
                     </Tooltip>
                     <Tooltip content="Next difference" className="shrink-0">
-                    <button type="button" className="flex h-7 w-7 cursor-pointer items-center justify-center text-[var(--workspace-text-muted)] transition-colors hover:bg-primary/10 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40" disabled={!diffNav.total} onClick={() => diffEditorRef.current?.nextChange()}>
+                    <button type="button" aria-label="Next change" className="flex h-7 w-7 cursor-pointer items-center justify-center text-[var(--workspace-text-muted)] transition-colors hover:bg-primary/10 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40" disabled={!diffNav.total} onClick={() => diffEditorRef.current?.nextChange()}>
                       <ChevronDownIcon className="h-3.5 w-3.5" />
                     </button>
                     </Tooltip>
@@ -5647,6 +5650,7 @@ export function WorkspaceContent({
                 type="button"
                 className={`${linkBtnClass} h-6 w-6 shrink-0 !p-0`}
                 title="Dismiss file info"
+                aria-label="Dismiss file info"
                 onClick={() => setDroppedFile(null)}
               >
                 <XMarkIcon className="h-3.5 w-3.5" />
@@ -6607,6 +6611,9 @@ export function WorkspaceContent({
         {showHistoryPanel && (
           <div className="fixed inset-0 z-[200] flex items-stretch justify-end" onClick={() => setShowHistoryPanel(false)}>
             <div
+              role="dialog"
+              aria-modal="true"
+              aria-label="History"
               className={`flex h-full w-full max-w-sm flex-col shadow-2xl shadow-black/20 border-l ${isDark ? "bg-[var(--workspace-panel)]/95 backdrop-blur-xl border-[var(--workspace-border)]/60" : "bg-white/95 backdrop-blur-xl border-black/[0.06]"}`}
               onClick={(e) => e.stopPropagation()}
             >
@@ -6618,7 +6625,7 @@ export function WorkspaceContent({
                 </div>
                 <div className="flex items-center gap-1">
                   <button type="button" className={`${linkBtnClass} h-7 min-h-7 text-[11px] font-medium`} onClick={exportHistory}>Export</button>
-                  <SquareBtn className={`${linkBtnClass} h-7 min-h-7 w-7 [&_svg]:!size-4`} onClick={() => setShowHistoryPanel(false)}><XMarkIcon className="h-4 w-4" /></SquareBtn>
+                  <SquareBtn aria-label="Close history" className={`${linkBtnClass} h-7 min-h-7 w-7 [&_svg]:!size-4`} onClick={() => setShowHistoryPanel(false)}><XMarkIcon className="h-4 w-4" /></SquareBtn>
                 </div>
               </div>
               <div className="flex-1 overflow-y-auto">

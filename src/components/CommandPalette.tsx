@@ -233,6 +233,7 @@ export function CommandPalette({
                 <button
                   type="button"
                   onClick={() => setQuery("")}
+                  aria-label="Clear search"
                   className={`shrink-0 rounded-md p-0.5 transition-colors ${textMuted} hover:text-primary`}
                 >
                   <XMarkIcon className="h-3.5 w-3.5" />
