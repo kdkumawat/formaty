@@ -1,8 +1,5 @@
 "use client";
 
-import { usePathname, useSearchParams } from "next/navigation";
-import { useEffect, useRef } from "react";
-
 const GA_ID = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID;
 const CONSENT_KEY = "formaty-ga-consent";
 
@@ -41,38 +38,11 @@ export function setGaConsent(value: "accepted" | "declined") {
   });
   if (value === "accepted") {
     // Start collecting the current page as a page_view once consent is given.
+    // SPA route changes are covered by GA4 Enhanced Measurement (history events).
     window.gtag?.("config", GA_ID, {
       page_path: `${window.location.pathname}${window.location.search}`,
-      anonymize_ip: true,
     });
   }
-}
-
-/**
- * Fire a GA4 `page_view` on every client-side route change. The very first
- * load is handled by the gtag `config` in layout.tsx, so we skip it here to
- * avoid a double page_view; subsequent SPA navigations fire normally.
- */
-export function Analytics() {
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const firstRun = useRef(true);
-
-  useEffect(() => {
-    if (!GA_ID || typeof window === "undefined") return;
-    if (getGaConsent() !== "accepted") return;
-    if (firstRun.current) {
-      firstRun.current = false;
-      return;
-    }
-    const url = `${pathname}${searchParams?.toString() ? `?${searchParams.toString()}` : ""}`;
-    window.gtag?.("config", GA_ID, {
-      page_path: url,
-      anonymize_ip: true,
-    });
-  }, [pathname, searchParams]);
-
-  return null;
 }
 
 /**

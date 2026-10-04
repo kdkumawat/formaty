@@ -1,7 +1,7 @@
 /* Formaty offline service worker.
    Static export: cache-first for same-origin GET requests, so pages and
    assets already visited work fully offline. Bump CACHE to invalidate. */
-const CACHE = "formaty-v2.2";
+const CACHE = "formaty-v2.3";
 
 self.addEventListener("install", () => {
   self.skipWaiting();
@@ -23,6 +23,20 @@ self.addEventListener("fetch", (event) => {
   event.respondWith(
     (async () => {
       const cached = await caches.match(request);
+      // Pages: network-first so returning visitors always get fresh HTML
+      // (analytics/meta changes); fall back to cache when offline.
+      if (request.mode === "navigate") {
+        try {
+          const response = await fetch(request);
+          if (response.status === 200 && response.type === "basic") {
+            const copy = response.clone();
+            caches.open(CACHE).then((c) => c.put(request, copy));
+          }
+          return response;
+        } catch {
+          return cached || Response.error();
+        }
+      }
       const fetchPromise = fetch(request)
         .then((response) => {
           if (response && response.status === 200 && response.type === "basic") {

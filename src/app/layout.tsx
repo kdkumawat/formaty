@@ -1,9 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import Script from "next/script";
-import { Suspense } from "react";
 import { MotionConfig } from "framer-motion";
 import { Inter, JetBrains_Mono, Space_Grotesk } from "next/font/google";
-import { Analytics } from "@/components/Analytics";
 import { ConsentBanner } from "@/components/ConsentBanner";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 import { UpdateToast } from "@/components/UpdateToast";
@@ -262,7 +260,7 @@ export default function RootLayout({
                 try {
                   if (localStorage.getItem('formaty-ga-consent') === 'accepted') {
                     gtag('consent', 'update', { analytics_storage: 'granted', functionality_storage: 'granted' });
-                    gtag('config', '${process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID}', { anonymize_ip: true });
+                    gtag('config', '${process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID}');
                   }
                 } catch(e) {}
               `}
@@ -271,9 +269,6 @@ export default function RootLayout({
         ) : null}
         <MotionConfig reducedMotion="user">
           {children}
-          <Suspense fallback={null}>
-            <Analytics />
-          </Suspense>
         </MotionConfig>
         <ServiceWorkerRegister />
         <UpdateToast />
