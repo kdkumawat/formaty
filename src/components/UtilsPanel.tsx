@@ -32,8 +32,8 @@ import {
   menuItemClass as sharedMenuItemClass,
   menuCheck as sharedMenuCheck,
 } from "@/components/workspace/menuStyles";
-import { InstantApp } from "@/components/instant/InstantApp";
 import { toast } from "@/components/Toast";
+import dynamic from "next/dynamic";
 import { TreeView } from "@/components/TreeView";
 import type { JsonValue } from "@/lib/json/core";
 import {
@@ -63,6 +63,11 @@ import {
   type UtilToolState,
   type UtilsStateMap,
 } from "@/components/utils/state";
+
+// Pulls in temporal-polyfill (~180 KB); only needed on the Instant tab.
+const InstantApp = dynamic(() => import("@/components/instant/InstantApp").then((m) => m.InstantApp), {
+  ssr: false,
+});
 export type { UtilTab };
 export { applyUtilSample, defaultUtilToolState, type UtilToolState, type UtilsStateMap };
 

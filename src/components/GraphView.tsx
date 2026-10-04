@@ -11,7 +11,6 @@ import {
   type RefAttributes,
 } from "react";
 import dynamic from "next/dynamic";
-import html2canvas from "html2canvas";
 import {
   ArrowPathRoundedSquareIcon,
   ArrowsPointingOutIcon,
@@ -31,7 +30,7 @@ const JSONCrackDynamic = dynamic(
   { ssr: false },
 ) as ComponentType<JSONCrackProps & RefAttributes<JSONCrackRef>>;
 
-interface GraphViewProps {
+export interface GraphViewProps {
   data: JsonValue;
   className?: string;
   isDark?: boolean;
@@ -223,7 +222,8 @@ export const GraphView = forwardRef<GraphViewRef, GraphViewProps>(function Graph
       // Final fallback: html2canvas with onclone to replace lab/oklch colors
       try {
         const fallbackColor = isDark ? "#12121a" : "#ffffff";
-        const canvas = await html2canvas(source, {
+        const { default: html2canvas } = await import("html2canvas");
+      const canvas = await html2canvas(source, {
           backgroundColor: fallbackColor,
           scale: window.devicePixelRatio || 1,
           useCORS: true,

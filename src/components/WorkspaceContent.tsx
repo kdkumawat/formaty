@@ -85,12 +85,32 @@ const JsonDiffEditor = dynamic(
   () => import("@/components/JsonDiffEditor").then((m) => m.JsonDiffEditor),
   { ssr: false },
 ) as ComponentType<JsonDiffEditorProps & RefAttributes<JsonDiffEditorRef>>;
-import { GraphView, type GraphViewRef } from "@/components/GraphView";
+// Secondary views / overlays are only needed once the user switches to them, so keep
+// them (and what they pull in: html2canvas, jsoncrack glue, virtualised table) out of
+// the playground's first load.
+const GraphView = dynamic(() => import("@/components/GraphView").then((m) => m.GraphView), {
+  ssr: false,
+}) as ComponentType<GraphViewProps & RefAttributes<GraphViewRef>>;
+const TreeView = dynamic(() => import("@/components/TreeView").then((m) => m.TreeView), {
+  ssr: false,
+}) as ComponentType<TreeViewProps & RefAttributes<TreeViewRef>>;
+const QueryView = dynamic(() => import("@/components/QueryView").then((m) => m.QueryView), {
+  ssr: false,
+});
+const TableView = dynamic(() => import("@/components/TableView").then((m) => m.TableView), {
+  ssr: false,
+});
+const CommandPalette = dynamic(
+  () => import("@/components/CommandPalette").then((m) => m.CommandPalette),
+  { ssr: false },
+);
+const GuidedTour = dynamic(() => import("@/components/GuidedTour").then((m) => m.GuidedTour), {
+  ssr: false,
+});
+import type { GraphViewRef, GraphViewProps } from "@/components/GraphView";
 import { getInstantActions } from "@/lib/instant/actionBus";
 import { clearAllTabSettings } from "@/lib/instant/persist";
-import { TreeView, type TreeViewRef } from "@/components/TreeView";
-import { QueryView } from "@/components/QueryView";
-import { TableView } from "@/components/TableView";
+import type { TreeViewRef, TreeViewProps } from "@/components/TreeView";
 import { trackEvent } from "@/components/Analytics";
 import {
   Dropdown,
@@ -151,8 +171,7 @@ import { readFileAsTextGuarded } from "@/lib/io/ingest";
 import { savePlayground, updatePlayground, deletePlayground } from "@/lib/playgroundApi";
 import { PRESETS, getPreset, type PresetId } from "@/lib/presets";
 import { themeInlineCss } from "@/lib/utils/themeTokens";
-import { CommandPalette, type Command } from "@/components/CommandPalette";
-import { GuidedTour } from "@/components/GuidedTour";
+import type { Command } from "@/components/CommandPalette";
 import { isEditableTarget } from "@/lib/shortcuts";
 import { Toaster, toast } from "@/components/Toast";
 import type { JsonValue, TypeTargetLanguage } from "@/lib/json/core";

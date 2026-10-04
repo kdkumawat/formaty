@@ -33,6 +33,9 @@ const nextConfig: NextConfig = {
   output: "export",
   transpilePackages: ["jsoncrack-react"],
   generateBuildId: () => BUILD_ID,
+  experimental: {
+    optimizePackageImports: ["@heroicons/react", "lucide-react", "framer-motion"],
+  },
   env: {
     FORMATY_API_URL: process.env.FORMATY_API_URL,
     SITE_URL: process.env.SITE_URL,
