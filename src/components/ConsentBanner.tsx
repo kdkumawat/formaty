@@ -32,7 +32,7 @@ export function ConsentBanner() {
     >
       <p className="text-[12px] leading-relaxed text-[var(--card-foreground)]">
         We use a privacy-friendly analytics cookie (Google Analytics, anonymized IP) to understand which
-        tools are used. Your data never leaves your device - processing is local.
+        tools are used. The data you paste is processed locally in your browser.
       </p>
       <div className="mt-3 flex items-center justify-end gap-2">
         <button
