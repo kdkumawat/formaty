@@ -1006,6 +1006,8 @@ export function WorkspaceContent({
     const ok = (t: string) => {
       const s = t.trim();
       if (!s) return true;
+      // Large text: don't parse in render, sniff the first character instead.
+      if (s.length > LARGE_INPUT_BYTES) return s[0] === "{" || s[0] === "[";
       try {
         parseJsonInput(s);
         return true;
@@ -2065,82 +2067,87 @@ export function WorkspaceContent({
       skipNextPersistRef.current = false;
       return;
     }
-    // Build full tab snapshots for persistence: save current tab state too
-    const allSnapshots: Record<string, unknown> = {};
-    tabSnapshotsRef.current.forEach((snap, id) => { allSnapshots[id] = snap; });
-    const persistOutput = cleanSessionOutput(output);
-    // Overwrite current tab with live state
-    allSnapshots[activeTabId] = {
-      ...captureTabSnapshot(),
-      undoStack: undoStack.slice(-20),
-      undoIndex: Math.min(undoIndex, 19),
-      output: persistOutput,
-      parsedOutput: null,
-      error: null,
-    };
-    // Anything over LARGE_INPUT_BYTES (400 KiB) gets dropped from the
-    // persisted session — localStorage quotas (5-10 MB) cannot hold a
-    // 10+ MB input. Settings, tabs, and snapshots still persist; the
-    // user can reload to recover them, and huge inputs go through the
-    // share URL anyway.
-    const isHeavyInput = input.length > LARGE_INPUT_BYTES;
-    const isHeavyOutput = persistOutput.length > LARGE_INPUT_BYTES;
-    const persistInput = isHeavyInput ? "" : input;
-    const persistOut = isHeavyOutput ? "" : persistOutput;
-    const persistSnapshots: Record<string, unknown> = {};
-    if (isHeavyInput) {
-      // Keep the active tab metadata but strip its text fields.
-      const current = allSnapshots[activeTabId] as Record<string, unknown> | undefined;
-      if (current) {
-        const { input: _i, output: _o, undoStack: _u, ...meta } = current;
-        persistSnapshots[activeTabId] = meta;
+    // Debounced: serializing every tab snapshot + undo history per keystroke is expensive.
+    // The pagehide flush below covers unload within the debounce window.
+    const timer = setTimeout(() => {
+      // Build full tab snapshots for persistence: save current tab state too
+      const allSnapshots: Record<string, unknown> = {};
+      tabSnapshotsRef.current.forEach((snap, id) => { allSnapshots[id] = snap; });
+      const persistOutput = cleanSessionOutput(output);
+      // Overwrite current tab with live state
+      allSnapshots[activeTabId] = {
+        ...captureTabSnapshot(),
+        undoStack: undoStack.slice(-20),
+        undoIndex: Math.min(undoIndex, 19),
+        output: persistOutput,
+        parsedOutput: null,
+        error: null,
+      };
+      // Anything over LARGE_INPUT_BYTES (400 KiB) gets dropped from the
+      // persisted session — localStorage quotas (5-10 MB) cannot hold a
+      // 10+ MB input. Settings, tabs, and snapshots still persist; the
+      // user can reload to recover them, and huge inputs go through the
+      // share URL anyway.
+      const isHeavyInput = input.length > LARGE_INPUT_BYTES;
+      const isHeavyOutput = persistOutput.length > LARGE_INPUT_BYTES;
+      const persistInput = isHeavyInput ? "" : input;
+      const persistOut = isHeavyOutput ? "" : persistOutput;
+      const persistSnapshots: Record<string, unknown> = {};
+      if (isHeavyInput) {
+        // Keep the active tab metadata but strip its text fields.
+        const current = allSnapshots[activeTabId] as Record<string, unknown> | undefined;
+        if (current) {
+          const { input: _i, output: _o, undoStack: _u, ...meta } = current;
+          persistSnapshots[activeTabId] = meta;
+        }
+        // Other tab snapshots are safe to keep only if their text is small;
+        // we already cap them implicitly by skipping the whole block.
+      } else {
+        Object.assign(persistSnapshots, allSnapshots);
       }
-      // Other tab snapshots are safe to keep only if their text is small;
-      // we already cap them implicitly by skipping the whole block.
-    } else {
-      Object.assign(persistSnapshots, allSnapshots);
-    }
-    const payload = {
-      input: persistInput,
-      output: persistOut,
-      split,
-      themeMode,
-      typeLanguage,
-      rightView,
-      formatOptions,
-      convertToFormat,
-      liveTransform,
-      editorFontSize,
-      viewAsMenu,
-      lineWrap,
-      autoFormatOnPaste,
+      const payload = {
+        input: persistInput,
+        output: persistOut,
+        split,
+        themeMode,
+        typeLanguage,
+        rightView,
+        formatOptions,
+        convertToFormat,
+        liveTransform,
+        editorFontSize,
+        viewAsMenu,
+        lineWrap,
+        autoFormatOnPaste,
 
-      mobileShowOutput,
-      activeOperation,
-      pinnedItems: Array.from(pinnedItems),
-      outputActionVisibility,
-      tabs,
-      activeTabId,
-      showTabs,
-      tabCounter: tabCounterRef.current,
-      tabSnapshots: persistSnapshots,
-    };
-    try {
-      localStorage.setItem("formaty-session", JSON.stringify(payload));
-    } catch (e) {
-      // Last-resort: a stale tab snapshot or a transient setItem failure
-      // should never crash the page. Drop the snapshot map and retry; if
-      // even the empty-state payload fails, swallow the error.
-      if (!(e instanceof Error) || e.name !== "QuotaExceededError") return;
+        mobileShowOutput,
+        activeOperation,
+        pinnedItems: Array.from(pinnedItems),
+        outputActionVisibility,
+        tabs,
+        activeTabId,
+        showTabs,
+        tabCounter: tabCounterRef.current,
+        tabSnapshots: persistSnapshots,
+      };
       try {
-        localStorage.setItem(
-          "formaty-session",
-          JSON.stringify({ ...payload, tabSnapshots: {} }),
-        );
-      } catch {
-        // localStorage is unusable (private mode, locked, etc.) — bail.
+        localStorage.setItem("formaty-session", JSON.stringify(payload));
+      } catch (e) {
+        // Last-resort: a stale tab snapshot or a transient setItem failure
+        // should never crash the page. Drop the snapshot map and retry; if
+        // even the empty-state payload fails, swallow the error.
+        if (!(e instanceof Error) || e.name !== "QuotaExceededError") return;
+        try {
+          localStorage.setItem(
+            "formaty-session",
+            JSON.stringify({ ...payload, tabSnapshots: {} }),
+          );
+        } catch {
+          // localStorage is unusable (private mode, locked, etc.) — bail.
+        }
       }
-    }
+    }, 500);
+    return () => clearTimeout(timer);
   }, [input, output, split, themeMode, typeLanguage, rightView, formatOptions, convertToFormat, liveTransform, editorFontSize, viewAsMenu, lineWrap, autoFormatOnPaste, mobileShowOutput, activeOperation, pinnedItems, outputActionVisibility, tabs, activeTabId, showTabs, inputFormatOverride, undoStack, undoIndex, outputExt, outputLanguage, diffLeftInput, diffRightInput, diffKind, isOutputMaximized, utilTab, utilsByTool, captureTabSnapshot]);
 
   // Synchronous safety-net save on tab hide/reload so the new-version
@@ -2173,63 +2180,68 @@ export function WorkspaceContent({
     return () => window.removeEventListener("pagehide", flush);
   }, [input, output, tabs, activeTabId]);
 
-  // Prefer structured parse for views (table/tree/graph/query)
+  // Prefer structured parse for views (table/tree/graph/query).
+  // Debounced: re-parsing the whole document on every keystroke blocks the main thread.
   useEffect(() => {
-    // While Compare/Utils own the main pane, keep transform parsed data intact
-    if (isDiffMode || isUtilsMode) return;
-    if (!output.trim()) {
-      // Fall back to input so Table/Tree still work after Compare if output was empty
-      if (input.trim()) {
-        try {
-          setParsedOutput(parseJsonInput(input));
-          return;
-        } catch {
+    const delay = input.length + output.length > LARGE_INPUT_BYTES ? 600 : 200;
+    const timer = setTimeout(() => {
+      // While Compare/Utils own the main pane, keep transform parsed data intact
+      if (isDiffMode || isUtilsMode) return;
+      if (!output.trim()) {
+        // Fall back to input so Table/Tree still work after Compare if output was empty
+        if (input.trim()) {
           try {
-            const fmt = detectFormat(input);
-            if (fmt !== "curl") {
-              setParsedOutput(parseInput(input, fmt) as JsonValue);
-              return;
-            }
+            setParsedOutput(parseJsonInput(input));
+            return;
           } catch {
-            /* fall through */
+            try {
+              const fmt = detectFormat(input);
+              if (fmt !== "curl") {
+                setParsedOutput(parseInput(input, fmt) as JsonValue);
+                return;
+              }
+            } catch {
+              /* fall through */
+            }
           }
         }
+        setParsedOutput(null);
+        return;
       }
-      setParsedOutput(null);
-      return;
-    }
-    // Purge leftover path-diff notes still sitting in state / session
-    if (isStaleDiffOutput(output)) {
-      setOutput("");
-      setParsedOutput(null);
-      return;
-    }
-    let parsed: JsonValue | null = null;
-    try {
-      parsed = parseJsonInput(output);
-    } catch {
-      try {
-        if (["xml", "yaml", "toml", "csv"].includes(outputLanguage)) {
-          parsed = parseInput(output, outputLanguage as FormatKind) as JsonValue;
-        }
-      } catch {
-        parsed = null;
+      // Purge leftover path-diff notes still sitting in state / session
+      if (isStaleDiffOutput(output)) {
+        setOutput("");
+        setParsedOutput(null);
+        return;
       }
-    }
-    // Last resort: parse input (e.g. after tool switch left output empty)
-    if (parsed == null && input.trim()) {
+      let parsed: JsonValue | null = null;
       try {
-        parsed = parseJsonInput(input);
+        parsed = parseJsonInput(output);
       } catch {
         try {
-          const fmt = detectFormat(input);
-          if (fmt !== "curl") parsed = parseInput(input, fmt) as JsonValue;
+          if (["xml", "yaml", "toml", "csv"].includes(outputLanguage)) {
+            parsed = parseInput(output, outputLanguage as FormatKind) as JsonValue;
+          }
         } catch {
           parsed = null;
         }
       }
-    }
-    setParsedOutput(parsed);
+      // Last resort: parse input (e.g. after tool switch left output empty)
+      if (parsed == null && input.trim()) {
+        try {
+          parsed = parseJsonInput(input);
+        } catch {
+          try {
+            const fmt = detectFormat(input);
+            if (fmt !== "curl") parsed = parseInput(input, fmt) as JsonValue;
+          } catch {
+            parsed = null;
+          }
+        }
+      }
+      setParsedOutput(parsed);
+    }, delay);
+    return () => clearTimeout(timer);
   }, [output, outputLanguage, isDiffMode, isUtilsMode, input]);
 
   // Auto-select Table once when a new array-of-objects lands on default Raw view
@@ -6373,8 +6385,10 @@ export function WorkspaceContent({
                     return null;
                   }
                 };
-                if (data == null && output.trim()) data = tryParse(output);
-                if (data == null && input.trim()) data = tryParse(input);
+                if (!isLargeRight) {
+                  if (data == null && output.trim()) data = tryParse(output);
+                  if (data == null && input.trim()) data = tryParse(input);
+                }
                 if (isLargeRight) {
                   return (
                     <div className={`flex h-full min-h-[200px] flex-col items-center justify-center gap-3 border p-6 text-center text-sm text-[var(--workspace-text-muted)] ${outputPanelClass}`}>
