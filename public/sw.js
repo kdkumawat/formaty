@@ -1,7 +1,9 @@
 /* Formaty offline service worker.
-   Static export: cache-first for same-origin GET requests, so pages and
-   assets already visited work fully offline. Bump CACHE to invalidate. */
-const CACHE = "formaty-v2.3";
+   Static export: navigations are network-first (cached copy when offline) and
+   hashed /_next/static assets are cache-first (their URLs are immutable).
+   Everything else (RSC payloads, version.json, ...) bypasses the cache.
+   Bump CACHE to invalidate. */
+const CACHE = "formaty-v2.4";
 
 self.addEventListener("install", () => {
   self.skipWaiting();
@@ -19,6 +21,11 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   if (request.method !== "GET" || !request.url.startsWith(self.location.origin)) return;
+  const url = new URL(request.url);
+  const isStatic = url.pathname.startsWith("/_next/static/");
+  // Not a page and not an immutable asset: let the browser handle it (no caching),
+  // so update checks like /version.json and ?_rsc= payloads are never stale.
+  if (request.mode !== "navigate" && !isStatic) return;
 
   event.respondWith(
     (async () => {

@@ -28,7 +28,7 @@ interface WorkerResponse<T> {
 }
 
 export interface RunOptions {
-  /** Cancel the in-flight call. */
+  /** Cancel the in-flight call. Aborting restarts the worker (work can't be interrupted otherwise). */
   signal?: AbortSignal;
   /** Transferable objects to move to the worker (zero-copy). */
   transfer?: Transferable[];
@@ -36,27 +36,27 @@ export interface RunOptions {
   onProgress?: (p: { done: number; total: number }) => void;
 }
 
+interface PendingEntry {
+  resolve: (value: unknown) => void;
+  reject: (reason?: unknown) => void;
+  onProgress?: (p: { done: number; total: number }) => void;
+}
+
 export function useJsonWorker() {
   const workerRef = useRef<Worker | null>(null);
-  const pending = useRef(
-    new Map<
-      string,
-      {
-        resolve: (value: unknown) => void;
-        reject: (reason?: unknown) => void;
-        onProgress?: (p: { done: number; total: number }) => void;
-        signal?: AbortSignal;
-      }
-    >(),
-  );
+  const pending = useRef(new Map<string, PendingEntry>());
+  const disposed = useRef(false);
 
-  useEffect(() => {
+  const rejectAll = useCallback((reason: unknown) => {
+    const entries = [...pending.current.values()];
+    pending.current.clear();
+    for (const entry of entries) entry.reject(reason);
+  }, []);
+
+  const spawn = useCallback(() => {
     const worker = new Worker(new URL("../workers/json.worker.ts", import.meta.url), {
       type: "module",
     });
-    const pendingMap = pending.current;
-    workerRef.current = worker;
-
     worker.onmessage = (event: MessageEvent<WorkerResponse<unknown>>) => {
       const { id, ok, result, error, progress } = event.data;
       const current = pending.current.get(id);
@@ -65,17 +65,33 @@ export function useJsonWorker() {
         current.onProgress?.(progress);
         return;
       }
+      pending.current.delete(id);
       if (ok) current.resolve(result);
       else current.reject(new Error(error ?? "Worker failed"));
-      pending.current.delete(id);
     };
-
-    return () => {
+    // Crash (e.g. out of memory): fail everything in flight and start fresh.
+    const onFailure = () => {
+      if (workerRef.current !== worker) return;
       worker.terminate();
       workerRef.current = null;
-      pendingMap.clear();
+      rejectAll(new Error("Worker crashed"));
+      if (!disposed.current) workerRef.current = spawn();
     };
-  }, []);
+    worker.onerror = onFailure;
+    worker.onmessageerror = onFailure;
+    return worker;
+  }, [rejectAll]);
+
+  useEffect(() => {
+    disposed.current = false;
+    workerRef.current = spawn();
+    return () => {
+      disposed.current = true;
+      workerRef.current?.terminate();
+      workerRef.current = null;
+      rejectAll(new DOMException("Worker disposed", "AbortError"));
+    };
+  }, [spawn, rejectAll]);
 
   const run = useCallback(
     <T,>(action: Action, payload: Record<string, unknown>, opts: RunOptions = {}): Promise<T> => {
@@ -83,27 +99,36 @@ export function useJsonWorker() {
       if (!worker) {
         return Promise.reject(new Error("Worker not initialized"));
       }
+      const { signal } = opts;
+      if (signal?.aborted) {
+        return Promise.reject(new DOMException("Aborted", "AbortError"));
+      }
       const id = crypto.randomUUID();
       return new Promise<T>((resolve, reject) => {
-        const entry = {
-          resolve: (value: unknown) => resolve(value as T),
-          reject,
-          onProgress: opts.onProgress,
-          signal: opts.signal,
-        };
-        pending.current.set(id, entry);
-        if (opts.signal) {
-          if (opts.signal.aborted) {
-            pending.current.delete(id);
-            reject(new DOMException("Aborted", "AbortError"));
-            return;
+        const onAbort = () => {
+          if (!pending.current.delete(id)) return;
+          reject(new DOMException("Aborted", "AbortError"));
+          // Worker is busy with this call and can't be interrupted: replace it.
+          // Other in-flight calls on the old worker are lost, so fail them too.
+          if (workerRef.current === worker) {
+            worker.terminate();
+            rejectAll(new DOMException("Worker restarted", "AbortError"));
+            if (!disposed.current) workerRef.current = spawn();
           }
-          const onAbort = () => {
-            pending.current.delete(id);
-            reject(new DOMException("Aborted", "AbortError"));
-          };
-          opts.signal.addEventListener("abort", onAbort, { once: true });
-        }
+        };
+        const cleanup = () => signal?.removeEventListener("abort", onAbort);
+        pending.current.set(id, {
+          resolve: (value) => {
+            cleanup();
+            resolve(value as T);
+          },
+          reject: (reason) => {
+            cleanup();
+            reject(reason);
+          },
+          onProgress: opts.onProgress,
+        });
+        signal?.addEventListener("abort", onAbort, { once: true });
         try {
           worker.postMessage(
             { id, action, payload },
@@ -111,20 +136,13 @@ export function useJsonWorker() {
           );
         } catch (e) {
           pending.current.delete(id);
+          cleanup();
           reject(e);
         }
       });
     },
-    [],
+    [spawn, rejectAll],
   );
 
-  const cancel = useCallback((id: string) => {
-    const worker = workerRef.current;
-    if (!worker) return;
-    if (pending.current.delete(id)) {
-      worker.postMessage({ id, action: "__cancel__" });
-    }
-  }, []);
-
-  return { run, cancel };
+  return { run };
 }

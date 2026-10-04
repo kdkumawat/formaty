@@ -77,7 +77,7 @@ export function FaqSection() {
           })}
         </div>
       </div>
-      {/* JSON-LD mirrors the FAQPage schema in src/app/layout.tsx */}
+      {/* FAQPage JSON-LD for this section */}
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{

@@ -46,7 +46,7 @@ export interface TreeViewRef {
   focusSearch: () => void;
 }
 
-interface TreeViewProps {
+export interface TreeViewProps {
   data: JsonValue;
   className?: string;
   isDark?: boolean;

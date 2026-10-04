@@ -328,6 +328,7 @@ export function ToolPage({ config }: ToolPageProps) {
         </div>
       </header>
 
+      <main id="main" className="flex-1">
       {/* Hero */}
       <div className="relative overflow-hidden border-b border-[var(--workspace-border)]">
         <div className="hero-grid pointer-events-none absolute inset-0" aria-hidden />
@@ -351,9 +352,7 @@ export function ToolPage({ config }: ToolPageProps) {
         <div className="relative mx-auto max-w-6xl px-4 py-14 md:py-20">
           {/* Breadcrumb */}
           <motion.nav
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.35 }}
+            initial={false}
             className="mb-6 flex items-center gap-1.5 text-xs text-[var(--workspace-text-muted)]"
           >
             <Link href="/" className="transition-colors hover:text-primary">
@@ -384,18 +383,14 @@ export function ToolPage({ config }: ToolPageProps) {
               </motion.div>
 
               <motion.h1
-                initial={{ opacity: 0, y: 22 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.55, delay: 0.06 }}
+                initial={false}
                 className="mt-5 text-[2.1rem] font-semibold leading-[1.05] tracking-[-0.03em] text-[var(--workspace-text)] md:text-5xl"
               >
                 {config.h1}
               </motion.h1>
 
               <motion.p
-                initial={{ opacity: 0, y: 18 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: 0.13 }}
+                initial={false}
                 className="mt-4 max-w-lg text-base leading-relaxed text-[var(--workspace-text-muted)]"
               >
                 {config.description}
@@ -524,6 +519,7 @@ export function ToolPage({ config }: ToolPageProps) {
           </div>
         </div>
       </div>
+      </main>
 
       <Footer />
     </article>

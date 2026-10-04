@@ -31,24 +31,26 @@ export function useTheme() {
   // machine is set to. Falls back to "light" if `matchMedia` is unavailable
   // (very old runtimes / non-browser). Once the user picks a mode explicitly
   // the choice persists in localStorage and wins on every reload.
-  const [themeMode, setThemeModeState] = useState<ThemeMode>(() => {
-    if (typeof window === "undefined") return "light";
-    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-  });
+  // Initial state is a fixed value so server HTML and first client render match
+  // (hydration); the OS preference is applied in the mount effect below.
+  const [themeMode, setThemeModeState] = useState<ThemeMode>("light");
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    let stored: ThemeMode | null = null;
     try {
       const raw = localStorage.getItem("formaty-session");
       if (raw) {
         const data = JSON.parse(raw);
         if (data.themeMode === "dark" || data.themeMode === "light" || data.themeMode === "system") {
-          setThemeModeState(data.themeMode);
+          stored = data.themeMode;
         }
       }
     } catch {
       // ignore
     }
+    if (!stored && window.matchMedia?.("(prefers-color-scheme: dark)").matches) stored = "dark";
+    if (stored) setThemeModeState(stored);
     setMounted(true);
   }, []);
 

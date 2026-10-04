@@ -85,12 +85,32 @@ const JsonDiffEditor = dynamic(
   () => import("@/components/JsonDiffEditor").then((m) => m.JsonDiffEditor),
   { ssr: false },
 ) as ComponentType<JsonDiffEditorProps & RefAttributes<JsonDiffEditorRef>>;
-import { GraphView, type GraphViewRef } from "@/components/GraphView";
+// Secondary views / overlays are only needed once the user switches to them, so keep
+// them (and what they pull in: html2canvas, jsoncrack glue, virtualised table) out of
+// the playground's first load.
+const GraphView = dynamic(() => import("@/components/GraphView").then((m) => m.GraphView), {
+  ssr: false,
+}) as ComponentType<GraphViewProps & RefAttributes<GraphViewRef>>;
+const TreeView = dynamic(() => import("@/components/TreeView").then((m) => m.TreeView), {
+  ssr: false,
+}) as ComponentType<TreeViewProps & RefAttributes<TreeViewRef>>;
+const QueryView = dynamic(() => import("@/components/QueryView").then((m) => m.QueryView), {
+  ssr: false,
+});
+const TableView = dynamic(() => import("@/components/TableView").then((m) => m.TableView), {
+  ssr: false,
+});
+const CommandPalette = dynamic(
+  () => import("@/components/CommandPalette").then((m) => m.CommandPalette),
+  { ssr: false },
+);
+const GuidedTour = dynamic(() => import("@/components/GuidedTour").then((m) => m.GuidedTour), {
+  ssr: false,
+});
+import type { GraphViewRef, GraphViewProps } from "@/components/GraphView";
 import { getInstantActions } from "@/lib/instant/actionBus";
 import { clearAllTabSettings } from "@/lib/instant/persist";
-import { TreeView, type TreeViewRef } from "@/components/TreeView";
-import { QueryView } from "@/components/QueryView";
-import { TableView } from "@/components/TableView";
+import type { TreeViewRef, TreeViewProps } from "@/components/TreeView";
 import { trackEvent } from "@/components/Analytics";
 import {
   Dropdown,
@@ -138,6 +158,7 @@ import {
   type LineDiffStats,
 } from "@/lib/json/diff";
 import { useJsonWorker } from "@/hooks/useJsonWorker";
+import { useDelayedReset } from "@/hooks/useDelayedReset";
 import { detectFormat, FORMAT_LABELS, getInputFormatLabel, parseInput, type FormatKind, type InputFormatKind } from "@/lib/formats";
 import { ALL_TOOL_ROUTES, TOOL_PAGES, TOOL_PRESETS, type ToolRoute } from "@/lib/seo";
 import { executeCurlDetailed, parseCurl, type CurlExecutionResult } from "@/lib/curl/parseCurl";
@@ -150,8 +171,7 @@ import { readFileAsTextGuarded } from "@/lib/io/ingest";
 import { savePlayground, updatePlayground, deletePlayground } from "@/lib/playgroundApi";
 import { PRESETS, getPreset, type PresetId } from "@/lib/presets";
 import { themeInlineCss } from "@/lib/utils/themeTokens";
-import { CommandPalette, type Command } from "@/components/CommandPalette";
-import { GuidedTour } from "@/components/GuidedTour";
+import type { Command } from "@/components/CommandPalette";
 import { isEditableTarget } from "@/lib/shortcuts";
 import { Toaster, toast } from "@/components/Toast";
 import type { JsonValue, TypeTargetLanguage } from "@/lib/json/core";
@@ -620,6 +640,8 @@ export function WorkspaceContent({
   const [typeLanguage, setTypeLanguage] = useState<TypeTargetLanguage>("typescript");
   const [copyState, setCopyState] = useState<"idle" | "done" | "error">("idle");
   const [shareState, setShareState] = useState<"idle" | "done" | "error">("idle");
+  const resetCopySoon = useDelayedReset(() => setCopyState("idle"));
+  const resetShareSoon = useDelayedReset(() => setShareState("idle"));
   const [sharedLinkId, setSharedLinkId] = useState<string | null>(initialSharedLinkId ?? null);
   const [sharedLinkUrl, setSharedLinkUrl] = useState<string | null>(initialSharedLinkUrl ?? null);
   const [isOutputMaximized, setIsOutputMaximized] = useState(false);
@@ -1003,6 +1025,8 @@ export function WorkspaceContent({
     const ok = (t: string) => {
       const s = t.trim();
       if (!s) return true;
+      // Large text: don't parse in render, sniff the first character instead.
+      if (s.length > LARGE_INPUT_BYTES) return s[0] === "{" || s[0] === "[";
       try {
         parseJsonInput(s);
         return true;
@@ -1943,9 +1967,9 @@ export function WorkspaceContent({
       if (state.input || state.diffLeftInput || state.diffRightInput) sessionRestoredRef.current = true;
       return;
     }
-    const raw = localStorage.getItem("formaty-session");
-    if (!raw) return;
     try {
+      const raw = localStorage.getItem("formaty-session");
+      if (!raw) return;
       const data = JSON.parse(raw) as {
         input?: string;
         output?: string;
@@ -2062,82 +2086,87 @@ export function WorkspaceContent({
       skipNextPersistRef.current = false;
       return;
     }
-    // Build full tab snapshots for persistence: save current tab state too
-    const allSnapshots: Record<string, unknown> = {};
-    tabSnapshotsRef.current.forEach((snap, id) => { allSnapshots[id] = snap; });
-    const persistOutput = cleanSessionOutput(output);
-    // Overwrite current tab with live state
-    allSnapshots[activeTabId] = {
-      ...captureTabSnapshot(),
-      undoStack: undoStack.slice(-20),
-      undoIndex: Math.min(undoIndex, 19),
-      output: persistOutput,
-      parsedOutput: null,
-      error: null,
-    };
-    // Anything over LARGE_INPUT_BYTES (400 KiB) gets dropped from the
-    // persisted session — localStorage quotas (5-10 MB) cannot hold a
-    // 10+ MB input. Settings, tabs, and snapshots still persist; the
-    // user can reload to recover them, and huge inputs go through the
-    // share URL anyway.
-    const isHeavyInput = input.length > LARGE_INPUT_BYTES;
-    const isHeavyOutput = persistOutput.length > LARGE_INPUT_BYTES;
-    const persistInput = isHeavyInput ? "" : input;
-    const persistOut = isHeavyOutput ? "" : persistOutput;
-    const persistSnapshots: Record<string, unknown> = {};
-    if (isHeavyInput) {
-      // Keep the active tab metadata but strip its text fields.
-      const current = allSnapshots[activeTabId] as Record<string, unknown> | undefined;
-      if (current) {
-        const { input: _i, output: _o, undoStack: _u, ...meta } = current;
-        persistSnapshots[activeTabId] = meta;
+    // Debounced: serializing every tab snapshot + undo history per keystroke is expensive.
+    // The pagehide flush below covers unload within the debounce window.
+    const timer = setTimeout(() => {
+      // Build full tab snapshots for persistence: save current tab state too
+      const allSnapshots: Record<string, unknown> = {};
+      tabSnapshotsRef.current.forEach((snap, id) => { allSnapshots[id] = snap; });
+      const persistOutput = cleanSessionOutput(output);
+      // Overwrite current tab with live state
+      allSnapshots[activeTabId] = {
+        ...captureTabSnapshot(),
+        undoStack: undoStack.slice(-20),
+        undoIndex: Math.min(undoIndex, 19),
+        output: persistOutput,
+        parsedOutput: null,
+        error: null,
+      };
+      // Anything over LARGE_INPUT_BYTES (400 KiB) gets dropped from the
+      // persisted session — localStorage quotas (5-10 MB) cannot hold a
+      // 10+ MB input. Settings, tabs, and snapshots still persist; the
+      // user can reload to recover them, and huge inputs go through the
+      // share URL anyway.
+      const isHeavyInput = input.length > LARGE_INPUT_BYTES;
+      const isHeavyOutput = persistOutput.length > LARGE_INPUT_BYTES;
+      const persistInput = isHeavyInput ? "" : input;
+      const persistOut = isHeavyOutput ? "" : persistOutput;
+      const persistSnapshots: Record<string, unknown> = {};
+      if (isHeavyInput) {
+        // Keep the active tab metadata but strip its text fields.
+        const current = allSnapshots[activeTabId] as Record<string, unknown> | undefined;
+        if (current) {
+          const { input: _i, output: _o, undoStack: _u, ...meta } = current;
+          persistSnapshots[activeTabId] = meta;
+        }
+        // Other tab snapshots are safe to keep only if their text is small;
+        // we already cap them implicitly by skipping the whole block.
+      } else {
+        Object.assign(persistSnapshots, allSnapshots);
       }
-      // Other tab snapshots are safe to keep only if their text is small;
-      // we already cap them implicitly by skipping the whole block.
-    } else {
-      Object.assign(persistSnapshots, allSnapshots);
-    }
-    const payload = {
-      input: persistInput,
-      output: persistOut,
-      split,
-      themeMode,
-      typeLanguage,
-      rightView,
-      formatOptions,
-      convertToFormat,
-      liveTransform,
-      editorFontSize,
-      viewAsMenu,
-      lineWrap,
-      autoFormatOnPaste,
+      const payload = {
+        input: persistInput,
+        output: persistOut,
+        split,
+        themeMode,
+        typeLanguage,
+        rightView,
+        formatOptions,
+        convertToFormat,
+        liveTransform,
+        editorFontSize,
+        viewAsMenu,
+        lineWrap,
+        autoFormatOnPaste,
 
-      mobileShowOutput,
-      activeOperation,
-      pinnedItems: Array.from(pinnedItems),
-      outputActionVisibility,
-      tabs,
-      activeTabId,
-      showTabs,
-      tabCounter: tabCounterRef.current,
-      tabSnapshots: persistSnapshots,
-    };
-    try {
-      localStorage.setItem("formaty-session", JSON.stringify(payload));
-    } catch (e) {
-      // Last-resort: a stale tab snapshot or a transient setItem failure
-      // should never crash the page. Drop the snapshot map and retry; if
-      // even the empty-state payload fails, swallow the error.
-      if (!(e instanceof Error) || e.name !== "QuotaExceededError") return;
+        mobileShowOutput,
+        activeOperation,
+        pinnedItems: Array.from(pinnedItems),
+        outputActionVisibility,
+        tabs,
+        activeTabId,
+        showTabs,
+        tabCounter: tabCounterRef.current,
+        tabSnapshots: persistSnapshots,
+      };
       try {
-        localStorage.setItem(
-          "formaty-session",
-          JSON.stringify({ ...payload, tabSnapshots: {} }),
-        );
-      } catch {
-        // localStorage is unusable (private mode, locked, etc.) — bail.
+        localStorage.setItem("formaty-session", JSON.stringify(payload));
+      } catch (e) {
+        // Last-resort: a stale tab snapshot or a transient setItem failure
+        // should never crash the page. Drop the snapshot map and retry; if
+        // even the empty-state payload fails, swallow the error.
+        if (!(e instanceof Error) || e.name !== "QuotaExceededError") return;
+        try {
+          localStorage.setItem(
+            "formaty-session",
+            JSON.stringify({ ...payload, tabSnapshots: {} }),
+          );
+        } catch {
+          // localStorage is unusable (private mode, locked, etc.) — bail.
+        }
       }
-    }
+    }, 500);
+    return () => clearTimeout(timer);
   }, [input, output, split, themeMode, typeLanguage, rightView, formatOptions, convertToFormat, liveTransform, editorFontSize, viewAsMenu, lineWrap, autoFormatOnPaste, mobileShowOutput, activeOperation, pinnedItems, outputActionVisibility, tabs, activeTabId, showTabs, inputFormatOverride, undoStack, undoIndex, outputExt, outputLanguage, diffLeftInput, diffRightInput, diffKind, isOutputMaximized, utilTab, utilsByTool, captureTabSnapshot]);
 
   // Synchronous safety-net save on tab hide/reload so the new-version
@@ -2170,63 +2199,68 @@ export function WorkspaceContent({
     return () => window.removeEventListener("pagehide", flush);
   }, [input, output, tabs, activeTabId]);
 
-  // Prefer structured parse for views (table/tree/graph/query)
+  // Prefer structured parse for views (table/tree/graph/query).
+  // Debounced: re-parsing the whole document on every keystroke blocks the main thread.
   useEffect(() => {
-    // While Compare/Utils own the main pane, keep transform parsed data intact
-    if (isDiffMode || isUtilsMode) return;
-    if (!output.trim()) {
-      // Fall back to input so Table/Tree still work after Compare if output was empty
-      if (input.trim()) {
-        try {
-          setParsedOutput(parseJsonInput(input));
-          return;
-        } catch {
+    const delay = input.length + output.length > LARGE_INPUT_BYTES ? 600 : 200;
+    const timer = setTimeout(() => {
+      // While Compare/Utils own the main pane, keep transform parsed data intact
+      if (isDiffMode || isUtilsMode) return;
+      if (!output.trim()) {
+        // Fall back to input so Table/Tree still work after Compare if output was empty
+        if (input.trim()) {
           try {
-            const fmt = detectFormat(input);
-            if (fmt !== "curl") {
-              setParsedOutput(parseInput(input, fmt) as JsonValue);
-              return;
-            }
+            setParsedOutput(parseJsonInput(input));
+            return;
           } catch {
-            /* fall through */
+            try {
+              const fmt = detectFormat(input);
+              if (fmt !== "curl") {
+                setParsedOutput(parseInput(input, fmt) as JsonValue);
+                return;
+              }
+            } catch {
+              /* fall through */
+            }
           }
         }
+        setParsedOutput(null);
+        return;
       }
-      setParsedOutput(null);
-      return;
-    }
-    // Purge leftover path-diff notes still sitting in state / session
-    if (isStaleDiffOutput(output)) {
-      setOutput("");
-      setParsedOutput(null);
-      return;
-    }
-    let parsed: JsonValue | null = null;
-    try {
-      parsed = parseJsonInput(output);
-    } catch {
-      try {
-        if (["xml", "yaml", "toml", "csv"].includes(outputLanguage)) {
-          parsed = parseInput(output, outputLanguage as FormatKind) as JsonValue;
-        }
-      } catch {
-        parsed = null;
+      // Purge leftover path-diff notes still sitting in state / session
+      if (isStaleDiffOutput(output)) {
+        setOutput("");
+        setParsedOutput(null);
+        return;
       }
-    }
-    // Last resort: parse input (e.g. after tool switch left output empty)
-    if (parsed == null && input.trim()) {
+      let parsed: JsonValue | null = null;
       try {
-        parsed = parseJsonInput(input);
+        parsed = parseJsonInput(output);
       } catch {
         try {
-          const fmt = detectFormat(input);
-          if (fmt !== "curl") parsed = parseInput(input, fmt) as JsonValue;
+          if (["xml", "yaml", "toml", "csv"].includes(outputLanguage)) {
+            parsed = parseInput(output, outputLanguage as FormatKind) as JsonValue;
+          }
         } catch {
           parsed = null;
         }
       }
-    }
-    setParsedOutput(parsed);
+      // Last resort: parse input (e.g. after tool switch left output empty)
+      if (parsed == null && input.trim()) {
+        try {
+          parsed = parseJsonInput(input);
+        } catch {
+          try {
+            const fmt = detectFormat(input);
+            if (fmt !== "curl") parsed = parseInput(input, fmt) as JsonValue;
+          } catch {
+            parsed = null;
+          }
+        }
+      }
+      setParsedOutput(parsed);
+    }, delay);
+    return () => clearTimeout(timer);
   }, [output, outputLanguage, isDiffMode, isUtilsMode, input]);
 
   // Auto-select Table once when a new array-of-objects lands on default Raw view
@@ -2255,14 +2289,14 @@ export function WorkspaceContent({
     const id = setTimeout(() => {
       if (activeOperation === "generateTypes") {
         trackEvent("generate_types", { language: typeLanguage });
-        executeOperation("generateTypes", { typeLanguage });
+        executeOperationRef.current?.("generateTypes", { typeLanguage });
         return;
       }
       if (activeOperation === "format" || activeOperation === "beautify" || OPERATION_ACTIONS.some(([, a]) => a === activeOperation)) {
         if (activeOperation === "format" || activeOperation === "beautify") {
-          runConvert(convertToFormat);
+          runConvertRef.current?.(convertToFormat);
         } else {
-          executeOperation(activeOperation);
+          executeOperationRef.current?.(activeOperation);
         }
       }
     }, 500);
@@ -2279,6 +2313,10 @@ export function WorkspaceContent({
     }
   }, [rightView, parsedOutput, output, input]);
 
+  // Latest-ref: timers below fire after render, so they must call the current
+  // executeOperation / runConvert (declared further down), not a captured one.
+  const executeOperationRef = useRef<typeof executeOperation | null>(null);
+  const runConvertRef = useRef<typeof runConvert | null>(null);
   const validationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const liveTransformTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // One-shot lock: recipes load sample input via setInput, which would trigger the
@@ -2405,11 +2443,11 @@ export function WorkspaceContent({
     const id = setTimeout(() => {
       if (!inputRef.current.trim()) return;
       if (activeOperation === "generateTypes") {
-        executeOperation("generateTypes", { typeLanguage, inputText: inputRef.current });
+        executeOperationRef.current?.("generateTypes", { typeLanguage, inputText: inputRef.current });
       } else if (activeOperation === "schema") {
-        executeOperation("schema", { inputText: inputRef.current });
+        executeOperationRef.current?.("schema", { inputText: inputRef.current });
       } else if (activeOperation === "validate") {
-        executeOperation("validate", { inputText: inputRef.current });
+        executeOperationRef.current?.("validate", { inputText: inputRef.current });
       }
     }, 400);
     return () => clearTimeout(id);
@@ -2804,6 +2842,11 @@ export function WorkspaceContent({
       }
     })();
   }, [getParsedInput, convertJsonToOutput, isDesktopLayout]);
+
+  useEffect(() => {
+    executeOperationRef.current = executeOperation;
+    runConvertRef.current = runConvert;
+  });
 
   const handleDiffLeftChange = useCallback(
     (value: string) => {
@@ -3238,7 +3281,7 @@ export function WorkspaceContent({
         type: "error",
         duration: 5000,
       });
-      window.setTimeout(() => setShareState("idle"), 1400);
+      resetShareSoon();
       return;
     }
     try {
@@ -3252,7 +3295,7 @@ export function WorkspaceContent({
     } catch {
       setShareState("error");
     }
-    window.setTimeout(() => setShareState("idle"), 1400);
+    resetShareSoon();
   };
 
   const copyOutput = async () => {
@@ -3271,7 +3314,7 @@ export function WorkspaceContent({
         setCopyState("error");
         toast({ message: "Copy failed", type: "error" });
       }
-      window.setTimeout(() => setCopyState("idle"), 1400);
+      resetCopySoon();
       return;
     }
     if (!output.trim()) return;
@@ -3284,7 +3327,7 @@ export function WorkspaceContent({
       setCopyState("error");
       toast({ message: "Copy failed", type: "error" });
     }
-    window.setTimeout(() => setCopyState("idle"), 1400);
+    resetCopySoon();
   };
 
   const getActiveOutputText = useCallback((): string => {
@@ -3427,7 +3470,7 @@ export function WorkspaceContent({
         setCopyState("error");
         toast({ message: "Copy failed", type: "error" });
       }
-      window.setTimeout(() => setCopyState("idle"), 1400);
+      resetCopySoon();
     },
     [getActiveOutputText],
   );
@@ -4656,6 +4699,7 @@ export function WorkspaceContent({
 
   return (
     <main
+      id="main"
       className="relative flex flex-col overflow-hidden bg-[var(--workspace-background)] text-[var(--workspace-text)]"
       style={{ height: "100dvh", minHeight: "100dvh", maxHeight: "100dvh" }}
       onDragEnter={handleDragEnter}
@@ -4790,6 +4834,7 @@ export function WorkspaceContent({
               type="button"
               className="mt-0.5 flex h-7 w-full items-center justify-center text-[var(--workspace-text-muted)] transition-all duration-100 hover:bg-primary/5 hover:text-primary"
               onClick={addTab}
+              aria-label="New tab"
             >
               <PlusIcon className="h-3.5 w-3.5" />
             </button>
@@ -4802,6 +4847,7 @@ export function WorkspaceContent({
                   type="button"
                   className="flex h-7 w-full items-center justify-center text-[var(--workspace-text-muted)] transition-all duration-100 hover:bg-red-500/10 hover:text-red-500"
                   onClick={closeAllTabs}
+                  aria-label="Close all tabs"
                 >
                   <TrashIcon className="h-3.5 w-3.5" />
                 </button>
@@ -4811,6 +4857,7 @@ export function WorkspaceContent({
                   type="button"
                   className="flex h-6 w-full items-center justify-center text-[var(--workspace-text-muted)] transition-all duration-100 hover:bg-amber-500/10 hover:text-amber-600"
                   onClick={closeOtherTabs}
+                  aria-label="Close other tabs"
                 >
                   <XCircleIcon className="h-3.5 w-3.5" />
                 </button>
@@ -5288,7 +5335,7 @@ export function WorkspaceContent({
                 <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-0.5 overflow-hidden">
                   <div className="flex h-7 shrink-0 overflow-hidden rounded-md bg-muted">
                     <Tooltip content="Previous difference" className="shrink-0">
-                    <button type="button" className="flex h-7 w-7 cursor-pointer items-center justify-center text-[var(--workspace-text-muted)] transition-colors hover:bg-primary/10 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40" disabled={!diffNav.total} onClick={() => diffEditorRef.current?.prevChange()}>
+                    <button type="button" aria-label="Previous change" className="flex h-7 w-7 cursor-pointer items-center justify-center text-[var(--workspace-text-muted)] transition-colors hover:bg-primary/10 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40" disabled={!diffNav.total} onClick={() => diffEditorRef.current?.prevChange()}>
                       <ChevronUpIcon className="h-3.5 w-3.5" />
                     </button>
                     </Tooltip>
@@ -5298,7 +5345,7 @@ export function WorkspaceContent({
                     </span>
                     </Tooltip>
                     <Tooltip content="Next difference" className="shrink-0">
-                    <button type="button" className="flex h-7 w-7 cursor-pointer items-center justify-center text-[var(--workspace-text-muted)] transition-colors hover:bg-primary/10 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40" disabled={!diffNav.total} onClick={() => diffEditorRef.current?.nextChange()}>
+                    <button type="button" aria-label="Next change" className="flex h-7 w-7 cursor-pointer items-center justify-center text-[var(--workspace-text-muted)] transition-colors hover:bg-primary/10 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40" disabled={!diffNav.total} onClick={() => diffEditorRef.current?.nextChange()}>
                       <ChevronDownIcon className="h-3.5 w-3.5" />
                     </button>
                     </Tooltip>
@@ -5428,7 +5475,7 @@ export function WorkspaceContent({
                   void navigator.clipboard.writeText(text).then(
                     () => {
                       setCopyState("done");
-                      window.setTimeout(() => setCopyState("idle"), 1400);
+                      resetCopySoon();
                     },
                     () => setCopyState("error"),
                   );
@@ -5444,7 +5491,7 @@ export function WorkspaceContent({
                   () => {
                     setCopyState("done");
                     toast({ message: "Copied" });
-                    window.setTimeout(() => setCopyState("idle"), 1400);
+                    resetCopySoon();
                   },
                   () => setCopyState("error"),
                 );
@@ -5527,7 +5574,7 @@ export function WorkspaceContent({
                           void navigator.clipboard.writeText(text).then(
                             () => {
                               setCopyState("done");
-                              window.setTimeout(() => setCopyState("idle"), 1400);
+                              resetCopySoon();
                             },
                             () => setCopyState("error"),
                           );
@@ -5603,6 +5650,7 @@ export function WorkspaceContent({
                 type="button"
                 className={`${linkBtnClass} h-6 w-6 shrink-0 !p-0`}
                 title="Dismiss file info"
+                aria-label="Dismiss file info"
                 onClick={() => setDroppedFile(null)}
               >
                 <XMarkIcon className="h-3.5 w-3.5" />
@@ -6360,8 +6408,10 @@ export function WorkspaceContent({
                     return null;
                   }
                 };
-                if (data == null && output.trim()) data = tryParse(output);
-                if (data == null && input.trim()) data = tryParse(input);
+                if (!isLargeRight) {
+                  if (data == null && output.trim()) data = tryParse(output);
+                  if (data == null && input.trim()) data = tryParse(input);
+                }
                 if (isLargeRight) {
                   return (
                     <div className={`flex h-full min-h-[200px] flex-col items-center justify-center gap-3 border p-6 text-center text-sm text-[var(--workspace-text-muted)] ${outputPanelClass}`}>
@@ -6561,6 +6611,9 @@ export function WorkspaceContent({
         {showHistoryPanel && (
           <div className="fixed inset-0 z-[200] flex items-stretch justify-end" onClick={() => setShowHistoryPanel(false)}>
             <div
+              role="dialog"
+              aria-modal="true"
+              aria-label="History"
               className={`flex h-full w-full max-w-sm flex-col shadow-2xl shadow-black/20 border-l ${isDark ? "bg-[var(--workspace-panel)]/95 backdrop-blur-xl border-[var(--workspace-border)]/60" : "bg-white/95 backdrop-blur-xl border-black/[0.06]"}`}
               onClick={(e) => e.stopPropagation()}
             >
@@ -6572,7 +6625,7 @@ export function WorkspaceContent({
                 </div>
                 <div className="flex items-center gap-1">
                   <button type="button" className={`${linkBtnClass} h-7 min-h-7 text-[11px] font-medium`} onClick={exportHistory}>Export</button>
-                  <SquareBtn className={`${linkBtnClass} h-7 min-h-7 w-7 [&_svg]:!size-4`} onClick={() => setShowHistoryPanel(false)}><XMarkIcon className="h-4 w-4" /></SquareBtn>
+                  <SquareBtn aria-label="Close history" className={`${linkBtnClass} h-7 min-h-7 w-7 [&_svg]:!size-4`} onClick={() => setShowHistoryPanel(false)}><XMarkIcon className="h-4 w-4" /></SquareBtn>
                 </div>
               </div>
               <div className="flex-1 overflow-y-auto">

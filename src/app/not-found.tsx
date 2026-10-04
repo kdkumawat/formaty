@@ -1,29 +1,10 @@
-"use client";
-
 import Link from "next/link";
-import { useEffect } from "react";
 import { Logo } from "@/components/Logo";
 
 const linkBtnClass =
   "inline-flex items-center justify-center gap-2 h-8 min-h-8 px-2 rounded border-0 bg-transparent text-sm font-medium whitespace-nowrap text-[var(--workspace-text)] hover:bg-[var(--workspace-panel)] hover:underline";
 
-function getInitialTheme(): "light" | "dark" {
-  if (typeof window === "undefined") return "light";
-  try {
-    const s = localStorage.getItem("formaty-session");
-    if (s) {
-      const d = JSON.parse(s);
-      if (d.themeMode === "dark" || d.themeMode === "light") return d.themeMode;
-    }
-  } catch {}
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-}
-
 export default function NotFound() {
-  useEffect(() => {
-    document.documentElement.setAttribute("data-theme", getInitialTheme());
-  }, []);
-
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-[var(--workspace-background)] px-4 py-12">
       <div className="flex flex-col items-center gap-4 text-center">

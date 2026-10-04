@@ -85,7 +85,7 @@ Components: `src/components/instant/InstantApp.tsx` (compact header with primary
 
 ### State management & components
 
-No global store is used — `src/components/WorkspaceContent.tsx` (a large `"use client"` component) owns workspace state via React `useState`/`useRef`. Zustand is a listed dependency but not the state mechanism. Key components:
+No global store is used — `src/components/WorkspaceContent.tsx` (a large `"use client"` component) owns workspace state via React `useState`/`useRef`. Key components:
 
 - `src/components/workspace/` — the workspace shell (EditorPanel, Header, StatusBar, OutputActionBar, panels).
 - `src/components/ui/` — shadcn/ui primitives (Radix-based; `components.json` + Tailwind v4).
@@ -97,4 +97,4 @@ No global store is used — `src/components/WorkspaceContent.tsx` (a large `"use
 - **Path alias** `@/*` → `./src/*` (`tsconfig.json`; replicated in `vitest.config.ts`).
 - **`next.config.ts`**: `output: "export"`, `transpilePackages: ["jsoncrack-react"]`, and env pass-through (`FORMATY_API_URL`, `SITE_URL`, `NEXT_PUBLIC_GA_MEASUREMENT_ID`). Env vars are optional — see `.env.example`. `SITE_URL` defaults to `https://formaty.dev`.
 - **Lint** uses Next.js 16 flat config (`eslint.config.mjs`); several React Compiler `react-hooks/*` rules are intentionally disabled (hand-written memoization, ref access during render). Do not re-enable without reason.
-- React 19, Tailwind CSS v4, Next.js 16, Monaco Editor, ReactFlow.
+- React 19, Tailwind CSS v4, Next.js 16, Monaco Editor, jsoncrack-react (graph view).

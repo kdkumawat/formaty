@@ -763,6 +763,7 @@ export function ListComparePanel({
             <button
               type="button"
               onClick={swap}
+              aria-label="Swap sides"
               className={`${linkBtnClass} h-6 min-h-6 w-6 opacity-0 transition-opacity duration-150 group-hover/swap:opacity-100`}
             >
               <ArrowsRightLeftIcon className="h-3.5 w-3.5" />
