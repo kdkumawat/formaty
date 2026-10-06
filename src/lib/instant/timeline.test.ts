@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   defaultWindow,
+  hourLabelStep,
   hourMarkers,
   instantToX,
   maybePanWindow,
   snapInstant,
-  trackWidthPx,
   xToInstant,
 } from "./timeline";
 
@@ -52,9 +52,11 @@ describe("timeline coordinates", () => {
     expect(marks[0]?.hour).toBeLessThan(24);
   });
 
-  it("uses at least 72px per hour for the scrollable track", () => {
-    expect(trackWidthPx(WINDOW, 200)).toBe(24 * 72);
-    expect(trackWidthPx(WINDOW, 3000)).toBe(3000);
+  it("thins hour labels as the fitted track gets denser", () => {
+    expect(hourLabelStep(41)).toBe(1);
+    expect(hourLabelStep(10)).toBe(3);
+    expect(hourLabelStep(2.9)).toBe(12);
+    expect(hourLabelStep(1)).toBe(24);
   });
 
   it("builds a span-length default window around an instant", () => {
