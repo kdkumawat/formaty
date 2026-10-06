@@ -11,16 +11,30 @@ import {
 } from "@/lib/instant/engine";
 import { coordsForZone, sunGradient } from "@/lib/instant/sun";
 import {
+  hourLabelStep,
   hourMarkers,
   instantToX,
   snapInstant,
-  trackWidthPx,
   xToInstant,
   type TimeWindow,
 } from "@/lib/instant/timeline";
 import type { DayPeriod, Location, TimeFormat, ZonedProjection } from "@/lib/instant/types";
 
 const LABEL_W = 208;
+const LABEL_W_NARROW = 128;
+/** Board width below which the label column tightens to leave room for the track. */
+const NARROW_BOARD_PX = 576;
+
+/** Day label sized to the room its day segment has on the fitted track; null when it can't fit. */
+function dayLabel(ms: number, timeZone: string, dayPx: number): string | null {
+  if (dayPx < 18) return null;
+  if (dayPx >= 120) return formatLocalDate(projectInstant(ms, timeZone)).replace(/,/g, "");
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    day: "numeric",
+    ...(dayPx >= 48 ? { month: "short" } : {}),
+  }).format(new Date(ms));
+}
 
 const PERIOD_TINT: Record<DayPeriod, string> = {
   night: "rgba(148, 163, 196, 0.28)",
@@ -66,7 +80,7 @@ function buildRowCopyText(proj: ZonedProjection, timeFormat: TimeFormat, showSec
 
 /**
  * Format an offset delta in minutes as a compact badge: "+1d", "+3h",
- * "+30m", or "same". Days win when the delta is a clean multiple of 24h —
+ * "-5h30", "+30m", or "same". Days win when the delta is a clean multiple of 24h —
  * it reads better than "+24h" for an Auckland-vs-LA row.
  */
 function formatOffsetDiff(minutes: number): string {
@@ -75,6 +89,7 @@ function formatOffsetDiff(minutes: number): string {
   const abs = Math.abs(minutes);
   if (abs >= 24 * 60 && abs % (24 * 60) === 0) return `${sign}${abs / (24 * 60)}d`;
   if (abs % 60 === 0) return `${sign}${abs / 60}h`;
+  if (abs > 60) return `${sign}${Math.floor(abs / 60)}h${abs % 60}`;
   return `${sign}${abs}m`;
 }
 
@@ -118,8 +133,8 @@ export function TimelineBoard({
   onHoverInstant,
   onCopyRow,
 }: TimelineBoardProps) {
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const [minWidth, setMinWidth] = useState(640);
+  const boardRef = useRef<HTMLDivElement>(null);
+  const [boardW, setBoardW] = useState(848);
   const [dragging, setDragging] = useState<DragKind | null>(null);
   /** Location id whose copy icon is currently in the "copied" animation
    *  state. Cleared by a per-row timeout so successive copies on the same
@@ -140,30 +155,24 @@ export function TimelineBoard({
   }, []);
 
   useEffect(() => {
-    const el = scrollRef.current;
+    const el = boardRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => setMinWidth(Math.max(320, el.clientWidth - LABEL_W)));
+    const ro = new ResizeObserver(() => setBoardW(el.clientWidth));
     ro.observe(el);
-    setMinWidth(Math.max(320, el.clientWidth - LABEL_W));
+    setBoardW(el.clientWidth);
     return () => ro.disconnect();
   }, []);
 
-  const trackW = trackWidthPx(timeWindow, minWidth);
+  // The whole window always fits the board: the track flexes to the space
+  // left of the label column and everything on it is positioned in percent.
+  // The measured width only decides how dense the labels can be.
+  const narrow = boardW < NARROW_BOARD_PX;
+  const labelW = narrow ? LABEL_W_NARROW : LABEL_W;
+  const pxPerHour = Math.max(1, boardW - labelW) / ((timeWindow.end - timeWindow.start) / 3600000);
+  const labelStep = hourLabelStep(pxPerHour);
 
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const onWheel = (e: WheelEvent) => {
-      if (el.scrollWidth <= el.clientWidth + 1) return;
-      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
-      e.preventDefault();
-      el.scrollLeft += e.deltaY;
-    };
-    el.addEventListener("wheel", onWheel, { passive: false });
-    return () => el.removeEventListener("wheel", onWheel);
-  }, []);
-
-  const xAt = useCallback((ms: number) => instantToX(ms, timeWindow, trackW), [timeWindow, trackW]);
+  const xAt = useCallback((ms: number) => instantToX(ms, timeWindow, 100), [timeWindow]);
+  const pct = (ms: number) => `${xAt(ms)}%`;
 
   const clientToInstant = useCallback(
     (clientX: number, strip: HTMLElement) => {
@@ -204,9 +213,10 @@ export function TimelineBoard({
   const resolveKind = (clientX: number, strip: HTMLElement): DragKind => {
     if (mode !== "range" || !range) return "cursor";
     const ms = clientToInstant(clientX, strip);
-    const x = xAt(ms);
-    const xs = xAt(range.start);
-    const xe = xAt(range.end);
+    const w = strip.getBoundingClientRect().width;
+    const x = instantToX(ms, timeWindow, w);
+    const xs = instantToX(range.start, timeWindow, w);
+    const xe = instantToX(range.end, timeWindow, w);
     if (Math.abs(x - xs) <= 12) return "start";
     if (Math.abs(x - xe) <= 12) return "end";
     if (x > Math.min(xs, xe) && x < Math.max(xs, xe)) return "body";
@@ -243,20 +253,17 @@ export function TimelineBoard({
       <>
         <div
           className="pointer-events-none absolute inset-y-0 z-[8] bg-primary/20"
-          style={{
-            left: Math.min(xAt(rangeStart), xAt(rangeEnd)),
-            width: Math.abs(xAt(rangeEnd) - xAt(rangeStart)),
-          }}
+          style={{ left: pct(rangeStart), width: `${xAt(rangeEnd) - xAt(rangeStart)}%` }}
         />
-        <div className="pointer-events-none absolute inset-y-0 z-[11] w-0.5 bg-primary" style={{ left: xAt(rangeStart) }} />
-        <div className="pointer-events-none absolute inset-y-0 z-[11] w-0.5 bg-primary" style={{ left: xAt(rangeEnd) }} />
+        <div className="pointer-events-none absolute inset-y-0 z-[11] w-0.5 bg-primary" style={{ left: pct(rangeStart) }} />
+        <div className="pointer-events-none absolute inset-y-0 z-[11] w-0.5 bg-primary" style={{ left: pct(rangeEnd) }} />
       </>
     ) : null;
 
   return (
     <div className="overflow-hidden rounded-2xl border border-[var(--workspace-border)] bg-[var(--workspace-panel)]">
-      <div ref={scrollRef} className="overflow-x-auto overscroll-x-contain">
-        <div style={{ width: LABEL_W + trackW, minWidth: "100%" }}>
+      <div ref={boardRef}>
+        <div>
           {locations.length === 0 && (
             <div className="px-4 py-8 text-center">
               <p className="font-display text-lg text-[var(--workspace-text)]">Compare time anywhere</p>
@@ -271,7 +278,11 @@ export function TimelineBoard({
             const hoverProj = hoverInstant != null ? projectInstant(hoverInstant, loc.iana) : null;
             const shown = hoverProj ?? proj;
             const midnights = localMidnights(timeWindow.start, timeWindow.end, loc.iana);
-            const marks = hourMarkers(timeWindow.start, timeWindow.end, loc.iana);
+            const marks = hourMarkers(timeWindow.start, timeWindow.end, loc.iana).filter(
+              (m) => m.hour % labelStep === 0,
+            );
+            const selX = xAt(selectedInstant);
+            const nowX = xAt(nowInstant);
             const gradient = stripGradient(timeWindow, loc.iana);
             // Time-zone delta vs the primary row, in minutes. Two rows on the
             // same offset report "+0" so the badge stays stable on hover.
@@ -290,13 +301,13 @@ export function TimelineBoard({
             return (
               <div key={loc.id} className="group/row flex border-b border-[var(--workspace-border)] last:border-b-0">
                 <div
-                  className="sticky left-0 z-20 flex shrink-0 items-center gap-2 border-r border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-3 py-2.5"
-                  style={{ width: LABEL_W }}
+                  className="flex shrink-0 items-center gap-2 border-r border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-3 py-2.5"
+                  style={{ width: labelW }}
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
                       <span className="truncate text-sm font-medium text-[var(--workspace-text)]">{loc.city}</span>
-                      {loc.countryCode && (
+                      {loc.countryCode && !narrow && (
                         <span
                           className="shrink-0 rounded bg-[var(--workspace-background)] px-1 py-px font-mono text-[9px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]"
                           title={loc.country}
@@ -360,8 +371,8 @@ export function TimelineBoard({
                   </div>
                 </div>
                 <div
-                  className="relative min-h-[4.75rem] shrink-0 cursor-crosshair"
-                  style={{ width: trackW, background: gradient }}
+                  className="relative min-h-[4.75rem] min-w-0 flex-1 cursor-crosshair touch-pan-y overflow-hidden"
+                  style={{ background: gradient }}
                   onPointerDown={onStripDown}
                   onPointerMove={onStripMove}
                   onPointerUp={stopDrag}
@@ -371,34 +382,43 @@ export function TimelineBoard({
                   }}
                 >
                   {marks.map((m) => (
-                    <div key={m.instant} className="pointer-events-none absolute inset-y-0" style={{ left: xAt(m.instant) }}>
+                    <div key={m.instant} className="pointer-events-none absolute inset-y-0" style={{ left: pct(m.instant) }}>
                       <div className={`h-full w-px ${m.isMidnight ? "bg-[var(--workspace-text)]/30" : "bg-[var(--workspace-text)]/12"}`} />
-                      <span className="absolute bottom-1 left-1 rounded-sm bg-black/35 px-1 py-px font-mono text-[10px] font-semibold tabular-nums leading-none text-white">
-                        {hourLabel(m.hour, timeFormat)}
-                      </span>
+                      {/* Midnights-only density: the day label above already names the tick. */}
+                      {labelStep < 24 && (
+                        <span className="absolute bottom-1 left-1 rounded-sm bg-black/35 px-1 py-px font-mono text-[10px] font-semibold tabular-nums leading-none text-white">
+                          {hourLabel(m.hour, timeFormat)}
+                        </span>
+                      )}
                     </div>
                   ))}
-                  {midnights.map((ms) => (
-                    <span
-                      key={`d-${ms}`}
-                      className="pointer-events-none absolute top-1 z-[5] text-[9px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]"
-                      style={{ left: xAt(ms) + 6 }}
-                    >
-                      {formatLocalDate(projectInstant(ms, loc.iana)).replace(/,/g, "")}
-                    </span>
-                  ))}
+                  {/* One label per visible day segment, including the partial
+                      day the window opens on, sized to the room it has. */}
+                  {[timeWindow.start, ...midnights].map((ms, d, starts) => {
+                    const segEnd = starts[d + 1] ?? timeWindow.end;
+                    const label = dayLabel(ms, loc.iana, ((segEnd - ms) / 3600000) * pxPerHour);
+                    return label ? (
+                      <span
+                        key={`d-${ms}`}
+                        className="pointer-events-none absolute top-1 z-[5] ml-1 whitespace-nowrap text-[9px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]"
+                        style={{ left: pct(ms) }}
+                      >
+                        {label}
+                      </span>
+                    ) : null;
+                  })}
                   {rangeLayer}
-                  {xAt(nowInstant) >= 0 && xAt(nowInstant) <= trackW && (
-                    <div className="pointer-events-none absolute inset-y-0 z-[6] w-px bg-[var(--workspace-text-muted)]/40" style={{ left: xAt(nowInstant) }} />
+                  {nowX >= 0 && nowX <= 100 && (
+                    <div className="pointer-events-none absolute inset-y-0 z-[6] w-px bg-[var(--workspace-text-muted)]/40" style={{ left: `${nowX}%` }} />
                   )}
                   {hoverInstant != null && !dragging && (
-                    <div className="pointer-events-none absolute inset-y-0 z-[7] w-px bg-primary/35" style={{ left: xAt(hoverInstant) }} />
+                    <div className="pointer-events-none absolute inset-y-0 z-[7] w-px bg-primary/35" style={{ left: pct(hoverInstant) }} />
                   )}
                   {mode === "instant" && (
                     <div
                       className="pointer-events-none absolute inset-y-0 z-10"
                       style={{
-                        left: xAt(selectedInstant),
+                        left: `${selX}%`,
                         transition: reduced.current || dragging ? "none" : "left 80ms linear",
                       }}
                     >
@@ -408,7 +428,11 @@ export function TimelineBoard({
                           the cursor so the moment is readable on every strip,
                           not just the sticky header labels. */}
                       {(!isLive || dragging) && (
-                        <span className="absolute -top-0.5 left-1.5 whitespace-nowrap rounded-sm bg-primary px-1 py-px font-mono text-[9px] font-bold leading-none text-primary-foreground shadow">
+                        <span
+                          className={`absolute top-0.5 whitespace-nowrap rounded-sm bg-primary px-1 py-px font-mono text-[9px] font-bold leading-none text-primary-foreground shadow ${
+                            selX > 80 ? "right-1.5" : "left-1.5"
+                          }`}
+                        >
                           {formatLocalTime(shown, timeFormat, showSeconds)}
                         </span>
                       )}
@@ -421,7 +445,7 @@ export function TimelineBoard({
         </div>
       </div>
       <div className="flex items-center justify-end gap-3 border-t border-[var(--workspace-border)] px-4 py-2 text-[11px] text-[var(--workspace-text-muted)]">
-        <span>Scroll the strip · drag to set {mode === "range" ? "the range" : "the instant"}</span>
+        <span>Click or drag the strip to set {mode === "range" ? "the range" : "the instant"}</span>
       </div>
     </div>
   );

@@ -1,3 +1,5 @@
+import { Temporal } from "temporal-polyfill";
+
 export { searchCountries, countryByCode, countryByIana, COUNTRY_CATALOG } from "./countries";
 export type { CountryEntry } from "./countries";
 
@@ -537,7 +539,9 @@ export function listIanaZones(): string[] {
 
 export function isValidIana(iana: string): boolean {
   try {
-    new Intl.DateTimeFormat("en-US", { timeZone: iana }).format(0);
+    // Validate with Temporal, not Intl.DateTimeFormat: the engine projects
+    // through Temporal, and Intl accepts ids ("IST", "pst") Temporal throws on.
+    Temporal.Instant.fromEpochMilliseconds(0).toZonedDateTimeISO(iana);
     return true;
   } catch {
     return false;

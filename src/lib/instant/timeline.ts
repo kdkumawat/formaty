@@ -7,13 +7,16 @@ export interface TimeWindow {
 
 const HOUR_MS = 3600 * 1000;
 const MINUTE_MS = 60 * 1000;
-export const PX_PER_HOUR = 72;
 export const DAY_MS = 24 * HOUR_MS;
 export const MAX_WINDOW_DAYS = 14;
 
-export function trackWidthPx(window: TimeWindow, minWidth: number): number {
-  const hours = (window.end - window.start) / HOUR_MS;
-  return Math.max(minWidth, Math.round(hours * PX_PER_HOUR));
+/**
+ * The track always fits its container, so hour labels thin out instead of the
+ * strip scrolling. Returns the local-hour interval to label (1 = every hour,
+ * 24 = midnights only) so adjacent labels never collide.
+ */
+export function hourLabelStep(pxPerHour: number, minLabelPx = 30): number {
+  return [1, 2, 3, 4, 6, 12].find((s) => s * pxPerHour >= minLabelPx) ?? 24;
 }
 
 export function defaultWindow(instant: number, spanHours: TimelineSpanHours): TimeWindow {

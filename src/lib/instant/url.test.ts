@@ -146,6 +146,9 @@ describe("IANA zone search", () => {
   it("accepts arbitrary valid IANA identifiers even when not in the curated list", () => {
     // Pacific/Pitcairn is a real zone but isn't in the curated CITY_CATALOG.
     expect(isValidIana("Pacific/Pitcairn")).toBe(true);
+    // Intl.DateTimeFormat accepts these; Temporal (the engine) throws on them.
+    expect(isValidIana("IST")).toBe(false);
+    expect(isValidIana("pst")).toBe(false);
     // The all-zones list (Intl.supportedValuesOf) covers it.
     const zones = listIanaZones();
     if (zones.includes("Pacific/Pitcairn")) {
