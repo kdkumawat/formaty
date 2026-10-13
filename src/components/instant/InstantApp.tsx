@@ -9,25 +9,24 @@ import {
   ComputerDesktopIcon,
   MoonIcon,
   PlusIcon,
+  ShareIcon,
   SunIcon,
   XMarkIcon,
-} from "@heroicons/react/24/outline";
+} from "@heroicons/react/16/solid";
 import { Toaster, toast } from "@/components/Toast";
-import { Tooltip } from "@/components/workspace/Tooltip";
-import { Dropdown } from "@/components/workspace/Dropdown";
+import {
+  Button, Chip, IconButton, Menu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuTrigger, NumberField,
+  ResultActions, Segmented, TextField, Tooltip, type CopyFormat,
+} from "@/components/kit";
 import { useTheme } from "@/hooks/useTheme";
 import { LocationPicker } from "@/components/instant/LocationPicker";
 import { TimelineBoard } from "@/components/instant/TimelineBoard";
-import {
-  OutputActionBar,
-  type OutputActionVisibility,
-} from "@/components/workspace/OutputActionBar";
 import {
   detectLocalIana,
   detectTimeFormat,
   type CatalogCity,
 } from "@/lib/instant/catalog";
-import { copyHuman } from "@/lib/instant/copy";
+import { copyAll, copyHuman, copyIso, copyUnix, copyUnixMs } from "@/lib/instant/copy";
 import {
   formatLocalTime,
   isoUtc,
@@ -43,6 +42,14 @@ import { registerInstantActions } from "@/lib/instant/actionBus";
 import { defaultWindow, maybePanWindow } from "@/lib/instant/timeline";
 import type { Location, TimeFormat, TimelineSpanHours } from "@/lib/instant/types";
 import { parseInstantQuery, serializeInstantQuery } from "@/lib/instant/url";
+
+const COPY_FORMATS: CopyFormat[] = [
+  { id: "human", label: "Summary", group: "Text" },
+  { id: "all", label: "Every zone with IANA id", group: "Text" },
+  { id: "iso", label: "ISO 8601 UTC", group: "Timestamp" },
+  { id: "unix", label: "Unix seconds", group: "Timestamp" },
+  { id: "unixms", label: "Unix milliseconds", group: "Timestamp" },
+];
 
 type DstNotice =
   | { kind: "nonexistent"; message: string; nearestEpochMs: number }
@@ -82,21 +89,7 @@ export function InstantApp({
   // useTheme) and the choice persists in localStorage like the rest of
   // the app.
   const { themeMode, setThemeMode } = useTheme();
-  // Keep the global copy/share/reset/download available on the Instant bar.
-  // Download saves the human-readable conversion as a .txt file; copy covers
-  // the same text via the clipboard. No undo/redo/copy-as/maximize — the
-  // smart input is the only mutation surface and there's nothing to undo.
-  const outputActionVisibility: OutputActionVisibility = {
-    copy: true,
-    share: true,
-    reset: true,
-    download: true,
-    undo: false,
-    redo: false,
-    copyAs: false,
-    useAsInput: false,
-    maximize: false,
-  };
+  const [copyFormat, setCopyFormat] = useState("human");
   const [ready, setReady] = useState(false);
   const [primaryTimezone, setPrimaryTimezone] = useState("UTC");
   const [locations, setLocations] = useState<Location[]>([]);
@@ -115,7 +108,6 @@ export function InstantApp({
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [nowInstant, setNowInstant] = useState(() => Date.now());
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [themeMenuOpen, setThemeMenuOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [searchError, setSearchError] = useState<string | null>(null);
   const [dstNotice, setDstNotice] = useState<DstNotice | null>(null);
@@ -468,6 +460,21 @@ export function InstantApp({
     }
   }, [buildHumanText, selectedInstant]);
 
+  const copyAs = (format?: string) => {
+    switch (format ?? copyFormat) {
+      case "all":
+        return copyAll(selectedInstant, locations, timeFormat, showSeconds);
+      case "iso":
+        return copyIso(selectedInstant);
+      case "unix":
+        return copyUnix(selectedInstant);
+      case "unixms":
+        return copyUnixMs(selectedInstant);
+      default:
+        return buildHumanText();
+    }
+  };
+
   const share = useCallback(async () => {
     const q = serializeInstantQuery({
       at: selectedInstant,
@@ -616,37 +623,34 @@ export function InstantApp({
       className={`${embedded ? "min-h-0" : "min-h-screen"} bg-[var(--workspace-background)] text-[var(--workspace-text)]`}
     >
       {!embedded && <Toaster />}
-      <header className="sticky top-0 z-40 border-b border-[var(--workspace-border)]/80 bg-[var(--workspace-background)]/80 backdrop-blur-xl">
-        <div className={`mx-auto flex h-12 items-center gap-2 px-3 ${embedded ? "" : "max-w-[1400px]"}`}>
+      <section aria-label="Time and display controls" className="sticky top-0 z-40 border-b border-[var(--workspace-border)] bg-[var(--workspace-background)]">
+        <div className={`mx-auto flex flex-wrap items-center gap-x-2 gap-y-1.5 px-3 py-1.5 ${embedded ? "" : "max-w-[1400px]"}`}>
           <form
-            className="w-96 shrink-0"
+            className="flex min-w-0 flex-1 basis-72 items-center gap-1 min-[901px]:max-w-md"
             onSubmit={(e) => {
               e.preventDefault();
               submitSearch();
             }}
           >
-            <div className="relative">
-              <input
-                ref={searchRef}
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setSearchError(null);
-                }}
-                placeholder="10:30 Asia/Kolkata · 1710000000 · 2024-03-09T14:00Z"
-                className="h-7 w-full rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-panel)] pl-2 pr-7 font-mono text-[11px] leading-none text-[var(--workspace-text)] outline-none placeholder:text-[10px] placeholder:text-[var(--workspace-text-muted)] focus:border-primary/40"
-                aria-label="Convert a moment"
-              />
-              <button
-                type="button"
-                onClick={openDatePicker}
-                title="Pick a date and time"
-                aria-label="Pick a date and time"
-                className="absolute right-0.5 top-0.5 inline-flex h-6 w-6 items-center justify-center rounded text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)] hover:text-primary"
-              >
-                <CalendarIcon className="h-3 w-3" />
-              </button>
-            </div>
+            <TextField
+              ref={searchRef}
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setSearchError(null);
+              }}
+              placeholder="10:30 Asia/Kolkata, 1710000000, 2024-03-09T14:00Z"
+              aria-label="Convert a moment"
+              className="font-mono"
+              wrapperClassName="min-w-0 flex-1"
+              onClear={() => {
+                setSearch("");
+                setSearchError(null);
+              }}
+            />
+            <IconButton label="Pick a date and time" type="button" onClick={openDatePicker}>
+              <CalendarIcon />
+            </IconButton>
             {/* Off-screen but focusable so .showPicker() works. Value is
                 always the primary zone's wall time so the picker feels
                 consistent regardless of the user's browser timezone. */}
@@ -660,246 +664,126 @@ export function InstantApp({
               className="sr-only"
             />
           </form>
-          {/* Display cluster: days / 12h-24h / seconds. Three independent
-              toggles, visually grouped. Same wiring in embedded + standalone.
-              ml-auto pushes the right-side group flush to the bar's end while
-              the input stays anchored to the left. */}
-          <div className="ml-auto flex h-7 shrink-0 items-center gap-1">
-            <div className="flex h-7 items-stretch overflow-hidden rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-panel)]">
-              <button
-                type="button"
-                onClick={() => setSpanHours((h) => Math.max(24, h - 24) as TimelineSpanHours)}
-                className="px-1.5 text-[11px] font-medium text-[var(--workspace-text-muted)] hover:bg-primary/5 hover:text-[var(--workspace-text)]"
-                title="Fewer days"
-                aria-label="Fewer days"
-              >
-                −
-              </button>
-              <span className="inline-flex items-center px-1 text-[11px] font-mono tabular-nums text-[var(--workspace-text)]">
-                {spanHours / 24}d
-              </span>
-              <button
-                type="button"
-                onClick={() => setSpanHours((h) => Math.min(14 * 24, h + 24) as TimelineSpanHours)}
-                className="px-1.5 text-[11px] font-medium text-[var(--workspace-text-muted)] hover:bg-primary/5 hover:text-[var(--workspace-text)]"
-                title="More days"
-                aria-label="More days"
-              >
-                +
-              </button>
+          <div className="flex flex-wrap items-center gap-2 min-[901px]:ml-auto">
+            <NumberField
+              label="Days"
+              min={1}
+              max={14}
+              value={spanHours / 24}
+              onChange={(n) => setSpanHours((n * 24) as TimelineSpanHours)}
+            />
+            <Segmented<TimeFormat>
+              aria-label="Clock format"
+              value={timeFormat}
+              onChange={setTimeFormat}
+              options={[
+                { value: "12h", label: "12h" },
+                { value: "24h", label: "24h" },
+              ]}
+            />
+            <Chip on={showSeconds} onClick={() => setShowSeconds((s) => !s)}>
+              Seconds
+            </Chip>
+            <Tooltip content="Snap to the current moment" shortcut="N">
+              <Button variant={isLive ? "selected" : "secondary"} onClick={goNow} aria-label="Snap to the current moment">
+                <span aria-hidden className={`size-1.5 rounded-full bg-current ${isLive ? "animate-pulse" : "opacity-60"}`} />
+                {isLive ? "Live" : "Now"}
+              </Button>
+            </Tooltip>
+            <div className="flex items-center gap-0.5">
+              <Tooltip content="Back 1 day" shortcut="⇧←">
+                <Button aria-label="Step back 1 day" icon={<ChevronLeftIcon />} onClick={() => commitInstant(selectedInstant - 24 * 3600 * 1000)}>
+                  1d
+                </Button>
+              </Tooltip>
+              <Tooltip content="Back 1 hour" shortcut="←">
+                <Button aria-label="Step back 1 hour" icon={<ChevronLeftIcon />} onClick={() => commitInstant(selectedInstant - 3600 * 1000)}>
+                  1h
+                </Button>
+              </Tooltip>
+              <Tooltip content="Forward 1 hour" shortcut="→">
+                <Button aria-label="Step forward 1 hour" iconRight={<ChevronRightIcon />} onClick={() => commitInstant(selectedInstant + 3600 * 1000)}>
+                  1h
+                </Button>
+              </Tooltip>
+              <Tooltip content="Forward 1 day" shortcut="⇧→">
+                <Button aria-label="Step forward 1 day" iconRight={<ChevronRightIcon />} onClick={() => commitInstant(selectedInstant + 24 * 3600 * 1000)}>
+                  1d
+                </Button>
+              </Tooltip>
             </div>
-            <div className="flex h-7 items-stretch overflow-hidden rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-panel)]">
-              {(["12h", "24h"] as TimeFormat[]).map((f) => (
-                <button
-                  key={f}
-                  type="button"
-                  onClick={() => setTimeFormat(f)}
-                  aria-pressed={timeFormat === f}
-                  className={`px-1.5 text-[11px] font-medium transition-colors ${
-                    timeFormat === f
-                      ? "bg-primary/15 text-primary"
-                      : "text-[var(--workspace-text-muted)] hover:bg-primary/5 hover:text-[var(--workspace-text)]"
-                  }`}
-                >
-                  {f}
-                </button>
-              ))}
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowSeconds((s) => !s)}
-              aria-pressed={showSeconds}
-              className={`inline-flex h-7 items-center gap-1 rounded-md border px-1.5 text-[11px] font-medium transition-colors ${
-                showSeconds
-                  ? "border-primary/40 bg-primary/10 text-primary"
-                  : "border-[var(--workspace-border)] bg-[var(--workspace-panel)] text-[var(--workspace-text-muted)] hover:text-[var(--workspace-text)]"
-              }`}
-              title="Show seconds"
-            >
-              <span
-                className={`h-1.5 w-1.5 rounded-full ${
-                  showSeconds ? "bg-primary" : "bg-[var(--workspace-text-muted)]/40"
-                }`}
-              />
-              Sec
-            </button>
+            {!embedded && (
+              <>
+                {/* Standalone theme switch: embedded mode inherits the workspace header's toggle. */}
+                <Menu>
+                  <MenuTrigger asChild>
+                    <IconButton label="Theme">
+                      {themeMode === "system" ? <ComputerDesktopIcon /> : themeMode === "dark" ? <MoonIcon /> : <SunIcon />}
+                    </IconButton>
+                  </MenuTrigger>
+                  <MenuContent align="end">
+                    <MenuRadioGroup value={themeMode} onValueChange={(v) => setThemeMode(v as typeof themeMode)}>
+                      <MenuRadioItem value="system" icon={<ComputerDesktopIcon />}>System</MenuRadioItem>
+                      <MenuRadioItem value="light" icon={<SunIcon />}>Light</MenuRadioItem>
+                      <MenuRadioItem value="dark" icon={<MoonIcon />}>Dark</MenuRadioItem>
+                    </MenuRadioGroup>
+                  </MenuContent>
+                </Menu>
+                <IconButton label="Share link" onClick={() => void share()}>
+                  <ShareIcon />
+                </IconButton>
+                <Tooltip content="Reset to your timezone and UTC">
+                  <Button variant="ghost" onClick={resetAll}>
+                    Reset
+                  </Button>
+                </Tooltip>
+                <ResultActions
+                  onDownload={downloadText}
+                  copy={{
+                    getText: copyAs,
+                    formats: COPY_FORMATS,
+                    format: copyFormat,
+                    onFormatChange: setCopyFormat,
+                  }}
+                />
+              </>
+            )}
           </div>
-          <button
-            type="button"
-            onClick={goNow}
-            className={`inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-[11px] font-medium transition-colors ${
-              isLive
-                ? "border-primary/40 bg-primary/10 text-primary"
-                : "border-[var(--workspace-border)] text-[var(--workspace-text-muted)] hover:text-[var(--workspace-text)]"
-            }`}
-            title="Snap to the current moment (N)"
-            aria-label="Snap to the current moment"
-          >
-            <span className={`h-1.5 w-1.5 rounded-full ${isLive ? "bg-primary animate-pulse" : "bg-[var(--workspace-text-muted)]"}`} />
-            {isLive ? "Live" : "Now"}
-          </button>
-          {/* Compact stepper. Two pairs (day / hour) each with a clear
-              minus/plus. Uses ASCII +/- so the glyphs stay consistent across
-              fonts; tooltips spell out the unit. */}
-          <div className="flex h-7 shrink-0 items-stretch overflow-hidden rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-panel)]">
-            <button
-              type="button"
-              onClick={() => commitInstant(selectedInstant - 24 * 3600 * 1000)}
-              aria-label="Step back 1 day"
-              title="Back 1 day (Shift+Left)"
-              className="inline-flex items-center gap-0.5 px-1.5 text-[11px] font-medium text-[var(--workspace-text-muted)] hover:bg-primary/5 hover:text-[var(--workspace-text)]"
-            >
-              <ChevronLeftIcon className="h-3 w-3" />
-              <span>1d</span>
-            </button>
-            <span className="w-px bg-[var(--workspace-border)]" aria-hidden="true" />
-            <button
-              type="button"
-              onClick={() => commitInstant(selectedInstant - 3600 * 1000)}
-              aria-label="Step back 1 hour"
-              title="Back 1 hour (Left)"
-              className="inline-flex items-center gap-0.5 px-1.5 text-[11px] font-medium text-[var(--workspace-text-muted)] hover:bg-primary/5 hover:text-[var(--workspace-text)]"
-            >
-              <ChevronLeftIcon className="h-3 w-3" />
-              <span>1h</span>
-            </button>
-            <span className="w-px bg-[var(--workspace-border)]" aria-hidden="true" />
-            <button
-              type="button"
-              onClick={() => commitInstant(selectedInstant + 3600 * 1000)}
-              aria-label="Step forward 1 hour"
-              title="Forward 1 hour (Right)"
-              className="inline-flex items-center gap-0.5 px-1.5 text-[11px] font-medium text-[var(--workspace-text-muted)] hover:bg-primary/5 hover:text-[var(--workspace-text)]"
-            >
-              <span>1h</span>
-              <ChevronRightIcon className="h-3 w-3" />
-            </button>
-            <span className="w-px bg-[var(--workspace-border)]" aria-hidden="true" />
-            <button
-              type="button"
-              onClick={() => commitInstant(selectedInstant + 24 * 3600 * 1000)}
-              aria-label="Step forward 1 day"
-              title="Forward 1 day (Shift+Right)"
-              className="inline-flex items-center gap-0.5 px-1.5 text-[11px] font-medium text-[var(--workspace-text-muted)] hover:bg-primary/5 hover:text-[var(--workspace-text)]"
-            >
-              <span>1d</span>
-              <ChevronRightIcon className="h-3 w-3" />
-            </button>
-          </div>
-          {!embedded && (
-            <>
-              {/* Standalone theme switch — embedded mode inherits the
-                  workspace header's theme toggle. System follows the OS
-                  preference until the user picks explicitly. */}
-              <Dropdown
-                open={themeMenuOpen}
-                onOpenChange={setThemeMenuOpen}
-                side="bottom"
-                align="end"
-                contentClassName="w-32"
-                trigger={
-                  <Tooltip content="Theme">
-                    <button
-                      type="button"
-                      aria-label="Theme"
-                      className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--workspace-text-muted)] transition-colors hover:bg-primary/10 hover:text-primary"
-                    >
-                      {themeMode === "system" ? (
-                        <ComputerDesktopIcon className="h-3.5 w-3.5" />
-                      ) : themeMode === "dark" ? (
-                        <MoonIcon className="h-3.5 w-3.5" />
-                      ) : (
-                        <SunIcon className="h-3.5 w-3.5" />
-                      )}
-                    </button>
-                  </Tooltip>
-                }
-              >
-                <div className="flex flex-col" onClick={(e) => e.stopPropagation()}>
-                  {(
-                    [
-                      { mode: "system", label: "System", Icon: ComputerDesktopIcon },
-                      { mode: "light", label: "Light", Icon: SunIcon },
-                      { mode: "dark", label: "Dark", Icon: MoonIcon },
-                    ] as const
-                  ).map(({ mode, label, Icon }) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      onClick={() => {
-                        setThemeMode(mode);
-                        setThemeMenuOpen(false);
-                      }}
-                      className={`inline-flex items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12px] transition-colors ${
-                        themeMode === mode
-                          ? "bg-primary/12 text-primary"
-                          : "text-[var(--workspace-text)] hover:bg-primary/5"
-                      }`}
-                    >
-                      <Icon className="h-3.5 w-3.5" />
-                      <span>{label}</span>
-                    </button>
-                  ))}
-                </div>
-              </Dropdown>
-              <OutputActionBar
-                canCopy
-                canShare
-                visibility={outputActionVisibility}
-                downloadMenuOpen={false}
-                onDownloadMenuOpenChange={() => {}}
-                onShare={() => void share()}
-                onCopy={() => void copySelected()}
-                onDownload={downloadText}
-                onReset={resetAll}
-                resetLabel="Reset to your timezone + UTC"
-                className="ml-0.5"
-              />
-            </>
-          )}
         </div>
-      </header>
+      </section>
 
-      <main className={`px-4 py-5 ${embedded ? "" : "mx-auto max-w-[1400px]"}`}>
+      <main id={embedded ? undefined : "main"} className={`px-4 py-5 ${embedded ? "" : "mx-auto max-w-[1400px]"}`}>
         {onboard && (
-          <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-sunk px-3 py-2 text-[13px]">
             <p>Move the line. Every timezone follows the same instant.</p>
-            <button
-              type="button"
-              className="text-xs text-primary"
+            <Button
               onClick={() => {
                 saveOnboarded();
                 setOnboard(false);
               }}
             >
               Got it
-            </button>
+            </Button>
           </div>
         )}
 
         {searchError && (
-          <p className="mb-3 text-sm text-destructive" role="alert">
+          <p className="mb-3 text-[13px] text-bad" role="alert">
             {searchError}
           </p>
         )}
 
         {dstNotice?.kind === "nonexistent" && (
-          <div className="mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm">
+          <div className="mb-3 flex flex-wrap items-center gap-3 rounded-lg bg-bad-bg px-3 py-2 text-[13px] text-bad">
             <p>{dstNotice.message}</p>
-            <button type="button" className="text-primary" onClick={() => commitInstant(dstNotice.nearestEpochMs)}>
-              Use nearest valid time
-            </button>
+            <Button onClick={() => commitInstant(dstNotice.nearestEpochMs)}>Use nearest valid time</Button>
           </div>
         )}
         {dstNotice?.kind === "ambiguous" && (
-          <div className="mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 text-sm">
+          <div className="mb-3 flex flex-wrap items-center gap-3 rounded-lg bg-sunk px-3 py-2 text-[13px]">
             <p>This local time occurs twice. Choose one:</p>
-            <button type="button" className="text-primary" onClick={() => commitInstant(dstNotice.earlierEpochMs)}>
-              {dstNotice.earlierAbbreviation} (earlier)
-            </button>
-            <button type="button" className="text-primary" onClick={() => commitInstant(dstNotice.laterEpochMs)}>
-              {dstNotice.laterAbbreviation} (later)
-            </button>
+            <Button onClick={() => commitInstant(dstNotice.earlierEpochMs)}>{dstNotice.earlierAbbreviation} (earlier)</Button>
+            <Button onClick={() => commitInstant(dstNotice.laterEpochMs)}>{dstNotice.laterAbbreviation} (later)</Button>
           </div>
         )}
 
@@ -908,222 +792,129 @@ export function InstantApp({
             <p className="font-display text-3xl font-medium leading-none tracking-tight tabular-nums sm:text-4xl">
               {formatLocalTime(primaryProj, timeFormat, showSeconds)}
             </p>
-            <p className="mt-1 text-[10px] font-medium uppercase tracking-wider text-[var(--workspace-text-muted)]">
+            <p className="mt-1 text-[12px] tabular-nums text-[var(--workspace-text-muted)]">
               UTC{primaryProj.offsetLabel} · {primaryProj.abbreviation}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex overflow-hidden rounded-lg border border-[var(--workspace-border)]">
-              <button
-                type="button"
-                className={`h-8 px-3 text-xs font-medium ${
-                  mode === "instant" ? "bg-primary/15 text-primary" : "text-[var(--workspace-text-muted)]"
-                }`}
-                onClick={() => {
+            <Segmented<"instant" | "range">
+              aria-label="Mode"
+              value={mode}
+              onChange={(m) => {
+                if (m === "instant") {
                   setMode("instant");
                   setRange(null);
-                }}
-              >
-                Instant
-              </button>
-              <button
-                type="button"
-                className={`h-8 px-3 text-xs font-medium ${
-                  mode === "range" ? "bg-primary/15 text-primary" : "text-[var(--workspace-text-muted)]"
-                }`}
-                onClick={() => {
+                } else {
                   setMode("range");
                   commitRange(selectedInstant, selectedInstant + 2 * 3600 * 1000);
-                }}
-              >
-                Range
-              </button>
-            </div>
-            <div className="flex items-center rounded-lg border border-[var(--workspace-border)] bg-[var(--workspace-panel)]">
-              <button
-                type="button"
-                className="px-2 py-1.5 text-[var(--workspace-text-muted)] hover:text-[var(--workspace-text)]"
-                aria-label="Previous day"
-                title="Previous day"
-                onClick={() => commitInstant(shiftLocalDate(selectedInstant, primaryTimezone, -1))}
-              >
-                <ChevronLeftIcon className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                className={`px-3 py-1.5 text-xs ${
-                  isToday
-                    ? "font-semibold text-primary"
-                    : "text-[var(--workspace-text-muted)] hover:text-[var(--workspace-text)]"
-                }`}
-                title="Snap to the current moment"
-                aria-pressed={isToday}
-                onClick={() => {
-                  // "Today" = right now, not the previously-selected hour. Going
-                  // live keeps the timeline tick at the present.
-                  goNow();
-                }}
-              >
+                }
+              }}
+              options={[
+                { value: "instant", label: "Instant" },
+                { value: "range", label: "Range" },
+              ]}
+            />
+            <div className="flex items-center gap-0.5">
+              <IconButton label="Previous day" variant="secondary" onClick={() => commitInstant(shiftLocalDate(selectedInstant, primaryTimezone, -1))}>
+                <ChevronLeftIcon />
+              </IconButton>
+              <Button variant={isToday ? "selected" : "secondary"} aria-pressed={isToday} onClick={goNow}>
                 {isToday ? "Today" : "Go to today"}
-              </button>
-              <button
-                type="button"
-                className="px-2 py-1.5 text-[var(--workspace-text-muted)] hover:text-[var(--workspace-text)]"
-                aria-label="Next day"
-                title="Next day"
-                onClick={() => commitInstant(shiftLocalDate(selectedInstant, primaryTimezone, 1))}
-              >
-                <ChevronRightIcon className="h-4 w-4" />
-              </button>
+              </Button>
+              <IconButton label="Next day" variant="secondary" onClick={() => commitInstant(shiftLocalDate(selectedInstant, primaryTimezone, 1))}>
+                <ChevronRightIcon />
+              </IconButton>
             </div>
           </div>
         </div>
 
-        {/* Location chips + add chip. Pill style — click body to set
-            primary. Drag the chip to reorder. The "+ Location" pill sits
-            last in the strip so adding a new location reads as the natural
-            next step, and the popover anchors to it without crowding the
-            top bar. */}
+        {/* Location chips + add button. Click a chip to make it primary; drag to reorder. */}
         <div className="mb-3 flex flex-wrap items-center gap-1.5">
-            {locations.map((loc) => {
-              const proj = projections.find((p) => p.timeZone === loc.iana);
-              if (!proj) return null;
-              const isPrimary = loc.iana === primaryTimezone;
-              const diffMin = primaryProj.offsetMinutes - proj.offsetMinutes;
-              const diffHours = Math.round(diffMin / 60);
-              const diffLabel =
-                isPrimary
-                  ? "you"
-                  : diffHours === 0
-                    ? "same"
-                    : diffHours > 0
-                      ? `+${diffHours}h`
-                      : `${diffHours}h`;
-              const rowTime = formatLocalTime(proj, timeFormat, showSeconds);
-              const setPrimary = () => {
-                if (isPrimary) return;
-                setPrimaryTimezone(loc.iana);
-                setLocations((prev) => {
-                  const next = prev.map((l) => ({ ...l, isPrimary: l.iana === loc.iana }));
-                  return [
-                    ...next.filter((l) => l.isPrimary),
-                    ...next.filter((l) => !l.isPrimary),
-                  ];
-                });
-              };
-              const isDragging = dragSrcId === loc.id;
-              const isDragOver = dragOverId === loc.id && dragSrcId !== loc.id;
-              return (
-                <div
-                  key={loc.id}
-                  draggable
-                  onDragStart={(e) => {
-                    setDragSrcId(loc.id);
-                    setDragOverId(loc.id);
-                    // Plain text payload so the browser shows a generic
-                    // drag image (we render our own visual feedback in
-                    // place, no need for a custom drag image).
-                    e.dataTransfer.effectAllowed = "move";
-                    e.dataTransfer.setData("text/plain", loc.id);
-                  }}
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    e.dataTransfer.dropEffect = "move";
-                    if (dragOverId !== loc.id) setDragOverId(loc.id);
-                  }}
-                  onDragLeave={() => {
-                    if (dragOverId === loc.id) setDragOverId(null);
-                  }}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    const srcId = e.dataTransfer.getData("text/plain") || dragSrcId;
-                    if (!srcId || srcId === loc.id) {
-                      setDragSrcId(null);
-                      setDragOverId(null);
-                      return;
-                    }
-                    setLocations((prev) => {
-                      const fromIdx = prev.findIndex((l) => l.id === srcId);
-                      const toIdx = prev.findIndex((l) => l.id === loc.id);
-                      if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return prev;
-                      const next = [...prev];
-                      const [moved] = next.splice(fromIdx, 1);
-                      next.splice(toIdx, 0, moved);
-                      return next;
-                    });
+          {locations.map((loc) => {
+            const proj = projections.find((p) => p.timeZone === loc.iana);
+            if (!proj) return null;
+            const isPrimary = loc.iana === primaryTimezone;
+            const diffMin = primaryProj.offsetMinutes - proj.offsetMinutes;
+            const diffHours = Math.round(diffMin / 60);
+            const diffLabel = isPrimary ? "you" : diffHours === 0 ? "same" : diffHours > 0 ? `+${diffHours}h` : `${diffHours}h`;
+            const rowTime = formatLocalTime(proj, timeFormat, showSeconds);
+            const setPrimary = () => {
+              if (isPrimary) return;
+              setPrimaryTimezone(loc.iana);
+              setLocations((prev) => {
+                const next = prev.map((l) => ({ ...l, isPrimary: l.iana === loc.iana }));
+                return [...next.filter((l) => l.isPrimary), ...next.filter((l) => !l.isPrimary)];
+              });
+            };
+            const isDragging = dragSrcId === loc.id;
+            const isDragOver = dragOverId === loc.id && dragSrcId !== loc.id;
+            return (
+              <div
+                key={loc.id}
+                draggable
+                onDragStart={(e) => {
+                  setDragSrcId(loc.id);
+                  setDragOverId(loc.id);
+                  e.dataTransfer.effectAllowed = "move";
+                  e.dataTransfer.setData("text/plain", loc.id);
+                }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "move";
+                  if (dragOverId !== loc.id) setDragOverId(loc.id);
+                }}
+                onDragLeave={() => {
+                  if (dragOverId === loc.id) setDragOverId(null);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const srcId = e.dataTransfer.getData("text/plain") || dragSrcId;
+                  if (!srcId || srcId === loc.id) {
                     setDragSrcId(null);
                     setDragOverId(null);
-                  }}
-                  onDragEnd={() => {
-                    setDragSrcId(null);
-                    setDragOverId(null);
-                  }}
-                  className={`group inline-flex cursor-grab items-center rounded-full border text-[11px] transition-all active:cursor-grabbing ${
-                    isDragging
-                      ? "border-primary/40 bg-primary/10 text-primary opacity-50"
-                      : isDragOver
-                        ? "border-primary bg-primary/10 text-[var(--workspace-text)]"
-                        : isPrimary
-                          ? "border-primary/40 bg-primary/10 text-primary"
-                          : "border-[var(--workspace-border)] bg-[var(--workspace-panel)] text-[var(--workspace-text-muted)] hover:border-primary/30"
-                  }`}
-                >
-                  <button
-                    type="button"
-                    onClick={setPrimary}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1"
-                    aria-label={isPrimary ? `Primary: ${loc.city}` : `Set ${loc.city} as primary`}
-                    aria-pressed={isPrimary}
+                    return;
+                  }
+                  setLocations((prev) => {
+                    const fromIdx = prev.findIndex((l) => l.id === srcId);
+                    const toIdx = prev.findIndex((l) => l.id === loc.id);
+                    if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return prev;
+                    const next = [...prev];
+                    const [moved] = next.splice(fromIdx, 1);
+                    next.splice(toIdx, 0, moved);
+                    return next;
+                  });
+                  setDragSrcId(null);
+                  setDragOverId(null);
+                }}
+                onDragEnd={() => {
+                  setDragSrcId(null);
+                  setDragOverId(null);
+                }}
+                className={`inline-flex cursor-grab items-center gap-0.5 rounded-md active:cursor-grabbing ${isDragging ? "opacity-50" : ""} ${
+                  isDragOver ? "ring-2 ring-[var(--focus)]" : ""
+                }`}
+              >
+                <Chip on={isPrimary} onClick={setPrimary} aria-label={isPrimary ? `Primary: ${loc.city}` : `Set ${loc.city} as primary`}>
+                  <span>{loc.city}</span>
+                  <span className="text-[12px] font-normal opacity-80">{diffLabel}</span>
+                  <span className="font-mono tabular-nums">{rowTime}</span>
+                </Chip>
+                {!isPrimary && locations.length > 1 && (
+                  <IconButton
+                    label={`Remove ${loc.city}`}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={() => setLocations((prev) => prev.filter((l) => l.id !== loc.id || l.isPrimary))}
                   >
-                    <span className="font-medium">{loc.city}</span>
-                    <span
-                      className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-medium ${
-                        isPrimary
-                          ? "bg-primary/20 text-primary"
-                          : "bg-[var(--workspace-background)] text-[var(--workspace-text-muted)]"
-                      }`}
-                    >
-                      {diffLabel}
-                    </span>
-                    <span className="font-mono tabular-nums">{rowTime}</span>
-                  </button>
-                  {!isPrimary && locations.length > 1 && (
-                    <Tooltip content="Remove" side="bottom">
-                      <button
-                        type="button"
-                        aria-label={`Remove ${loc.city}`}
-                        // Stop the chip drag from starting when the user
-                        // clicks the remove button.
-                        onPointerDown={(e) => e.stopPropagation()}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setLocations((prev) => prev.filter((l) => l.id !== loc.id || l.isPrimary));
-                        }}
-                        className="mr-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)] hover:text-destructive"
-                      >
-                        <XMarkIcon className="h-3 w-3" />
-                      </button>
-                    </Tooltip>
-                  )}
-                </div>
-              );
-            })}
-          <Tooltip content={`Add a location (A)`} side="bottom">
-            <button
-              ref={locationButtonRef}
-              type="button"
-              onClick={() => setPickerOpen(true)}
-              aria-label="Add a location"
-              aria-expanded={pickerOpen}
-              className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-dashed px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                pickerOpen
-                  ? "border-primary/40 bg-primary/10 text-primary"
-                  : "border-[var(--workspace-border)] bg-transparent text-[var(--workspace-text-muted)] hover:border-primary/30 hover:text-[var(--workspace-text)]"
-              }`}
-            >
-              <PlusIcon className="h-3 w-3" />
-              <span>Location</span>
-            </button>
+                    <XMarkIcon />
+                  </IconButton>
+                )}
+              </div>
+            );
+          })}
+          <Tooltip content="Add a location" shortcut="A" side="bottom">
+            <Button ref={locationButtonRef} variant="ghost" icon={<PlusIcon />} onClick={() => setPickerOpen(true)} aria-expanded={pickerOpen}>
+              Location
+            </Button>
           </Tooltip>
         </div>
 
@@ -1132,7 +923,7 @@ export function InstantApp({
             the standalone page. */}
 
         {mode === "range" && range ? (
-          <p className="mb-3 text-[10px] tabular-nums text-[var(--workspace-text-muted)]">
+          <p className="mb-3 text-[12px] tabular-nums text-[var(--workspace-text-muted)]">
             {Math.max(1, Math.round((range.end - range.start) / 60000))}m range
           </p>
         ) : null}

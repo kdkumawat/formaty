@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CheckIcon, ClipboardDocumentIcon } from "@heroicons/react/24/outline";
-import { Tooltip } from "@/components/workspace/Tooltip";
+import { CheckIcon, ClipboardDocumentIcon } from "@heroicons/react/16/solid";
+import { IconButton, Tooltip } from "@/components/kit";
 import {
   formatLocalDate,
   formatLocalTime,
@@ -252,11 +252,11 @@ export function TimelineBoard({
     mode === "range" && rangeStart != null && rangeEnd != null ? (
       <>
         <div
-          className="pointer-events-none absolute inset-y-0 z-[8] bg-primary/20"
+          className="pointer-events-none absolute inset-y-0 z-[8] bg-brand/20"
           style={{ left: pct(rangeStart), width: `${xAt(rangeEnd) - xAt(rangeStart)}%` }}
         />
-        <div className="pointer-events-none absolute inset-y-0 z-[11] w-0.5 bg-primary" style={{ left: pct(rangeStart) }} />
-        <div className="pointer-events-none absolute inset-y-0 z-[11] w-0.5 bg-primary" style={{ left: pct(rangeEnd) }} />
+        <div className="pointer-events-none absolute inset-y-0 z-[11] w-0.5 bg-brand" style={{ left: pct(rangeStart) }} />
+        <div className="pointer-events-none absolute inset-y-0 z-[11] w-0.5 bg-brand" style={{ left: pct(rangeEnd) }} />
       </>
     ) : null;
 
@@ -308,64 +308,41 @@ export function TimelineBoard({
                     <div className="flex items-center gap-1.5">
                       <span className="truncate text-sm font-medium text-[var(--workspace-text)]">{loc.city}</span>
                       {loc.countryCode && !narrow && (
-                        <span
-                          className="shrink-0 rounded bg-[var(--workspace-background)] px-1 py-px font-mono text-[9px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]"
-                          title={loc.country}
-                        >
-                          {loc.countryCode}
-                        </span>
+                        <Tooltip content={loc.country || loc.countryCode}>
+                          <span className="shrink-0 rounded bg-[var(--workspace-background)] px-1 py-px font-mono text-[12px] font-semibold text-[var(--workspace-text-muted)]">
+                            {loc.countryCode}
+                          </span>
+                        </Tooltip>
                       )}
                       {loc.isPrimary && (
-                        <span className="rounded px-1 py-px text-[9px] font-semibold uppercase tracking-wider text-primary">
+                        <span className="rounded px-1 py-px text-[12px] font-semibold text-[var(--workspace-text)]">
                           You
                         </span>
                       )}
                       {!loc.isPrimary && diffLabel && (
-                        <span
-                          className={`shrink-0 rounded px-1 py-px font-mono text-[10px] tabular-nums ${
-                            diffMin === 0
-                              ? "text-[var(--workspace-text-muted)]"
-                              : "bg-primary/10 text-primary"
-                          }`}
-                          title={`${Math.abs(diffMin / 60).toFixed(1)}h ${diffMin > 0 ? "ahead of" : "behind"} primary`}
-                        >
-                          {diffLabel}
-                        </span>
+                        <Tooltip content={`${Math.abs(diffMin / 60).toFixed(1)}h ${diffMin > 0 ? "ahead of" : "behind"} primary`}>
+                          <span
+                            className={`shrink-0 rounded px-1 py-px font-mono text-[12px] tabular-nums ${
+                              diffMin === 0 ? "text-[var(--workspace-text-muted)]" : "bg-control text-[var(--workspace-text)]"
+                            }`}
+                          >
+                            {diffLabel}
+                          </span>
+                        </Tooltip>
                       )}
-                      <Tooltip
-                        content={justCopied ? "Copied" : `Copy ${loc.city} time`}
-                        side="bottom"
+                      <IconButton
+                        label={justCopied ? "Copied" : `Copy ${loc.city} time`}
+                        onClick={handleCopy}
+                        tooltipSide="bottom"
+                        className="ml-auto size-6 opacity-0 transition-opacity focus-visible:opacity-100 group-hover/row:opacity-100 max-[900px]:opacity-100"
                       >
-                        <button
-                          type="button"
-                          onClick={handleCopy}
-                          aria-label={`Copy ${loc.city} time`}
-                          className="ml-auto inline-flex h-5 w-5 items-center justify-center rounded text-[var(--workspace-text-muted)] opacity-0 transition-opacity hover:bg-[var(--workspace-background)] hover:text-[var(--workspace-text)] group-hover/row:opacity-100"
-                        >
-                          {/* Icon swap driven by `justCopied`. The key change
-                              forces a remount so the scale-in animation
-                              plays on each fresh copy, not just the first. */}
-                          <ClipboardDocumentIcon
-                            className={`h-3.5 w-3.5 transition-all duration-200 ${
-                              justCopied
-                                ? "scale-0 opacity-0"
-                                : "scale-100 opacity-100"
-                            }`}
-                          />
-                          <CheckIcon
-                            className={`-ml-3.5 h-3.5 w-3.5 text-primary transition-all duration-200 ${
-                              justCopied
-                                ? "scale-100 opacity-100"
-                                : "scale-0 opacity-0"
-                            }`}
-                          />
-                        </button>
-                      </Tooltip>
+                        {justCopied ? <CheckIcon /> : <ClipboardDocumentIcon />}
+                      </IconButton>
                     </div>
                     <div className="mt-0.5 font-mono text-[15px] font-semibold tabular-nums tracking-tight text-[var(--workspace-text)]">
                       {formatLocalTime(shown, timeFormat, showSeconds)}
                     </div>
-                    <div className="truncate text-[11px] text-[var(--workspace-text-muted)]">
+                    <div className="truncate text-[12px] text-[var(--workspace-text-muted)]">
                       UTC{shown.offsetLabel} · {shown.abbreviation}
                     </div>
                   </div>
@@ -386,7 +363,7 @@ export function TimelineBoard({
                       <div className={`h-full w-px ${m.isMidnight ? "bg-[var(--workspace-text)]/30" : "bg-[var(--workspace-text)]/12"}`} />
                       {/* Midnights-only density: the day label above already names the tick. */}
                       {labelStep < 24 && (
-                        <span className="absolute bottom-1 left-1 rounded-sm bg-black/35 px-1 py-px font-mono text-[10px] font-semibold tabular-nums leading-none text-white">
+                        <span className="absolute bottom-1 left-1 rounded-sm bg-black/35 px-1 py-px font-mono text-[12px] font-semibold tabular-nums leading-none text-white">
                           {hourLabel(m.hour, timeFormat)}
                         </span>
                       )}
@@ -400,7 +377,7 @@ export function TimelineBoard({
                     return label ? (
                       <span
                         key={`d-${ms}`}
-                        className="pointer-events-none absolute top-1 z-[5] ml-1 whitespace-nowrap text-[9px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]"
+                        className="pointer-events-none absolute top-1 z-[5] ml-1 whitespace-nowrap text-[12px] font-semibold text-[var(--workspace-text-muted)]"
                         style={{ left: pct(ms) }}
                       >
                         {label}
@@ -412,7 +389,7 @@ export function TimelineBoard({
                     <div className="pointer-events-none absolute inset-y-0 z-[6] w-px bg-[var(--workspace-text-muted)]/40" style={{ left: `${nowX}%` }} />
                   )}
                   {hoverInstant != null && !dragging && (
-                    <div className="pointer-events-none absolute inset-y-0 z-[7] w-px bg-primary/35" style={{ left: pct(hoverInstant) }} />
+                    <div className="pointer-events-none absolute inset-y-0 z-[7] w-px bg-brand/35" style={{ left: pct(hoverInstant) }} />
                   )}
                   {mode === "instant" && (
                     <div
@@ -422,14 +399,14 @@ export function TimelineBoard({
                         transition: reduced.current || dragging ? "none" : "left 80ms linear",
                       }}
                     >
-                      <div className={`h-full w-px ${dragging || isLive ? "bg-primary" : "bg-primary/80"}`} />
-                      <div className="absolute top-1/2 left-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary shadow-[0_0_12px_var(--glow-color)]" />
+                      <div className={`h-full w-px ${dragging || isLive ? "bg-brand" : "bg-brand/80"}`} />
+                      <div className="absolute top-1/2 left-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-brand shadow-[0_0_12px_var(--glow-color)]" />
                       {/* Selected-time indicator: shows this row's wall time at
                           the cursor so the moment is readable on every strip,
                           not just the sticky header labels. */}
                       {(!isLive || dragging) && (
                         <span
-                          className={`absolute top-0.5 whitespace-nowrap rounded-sm bg-primary px-1 py-px font-mono text-[9px] font-bold leading-none text-primary-foreground shadow ${
+                          className={`absolute top-0.5 whitespace-nowrap rounded-sm bg-brand px-1 py-px font-mono text-[12px] font-bold leading-none text-brand-foreground shadow ${
                             selX > 80 ? "right-1.5" : "left-1.5"
                           }`}
                         >
@@ -444,7 +421,7 @@ export function TimelineBoard({
           })}
         </div>
       </div>
-      <div className="flex items-center justify-end gap-3 border-t border-[var(--workspace-border)] px-4 py-2 text-[11px] text-[var(--workspace-text-muted)]">
+      <div className="flex items-center justify-end gap-3 border-t border-[var(--workspace-border)] px-4 py-2 text-[12px] text-[var(--workspace-text-muted)]">
         <span>Click or drag the strip to set {mode === "range" ? "the range" : "the instant"}</span>
       </div>
     </div>

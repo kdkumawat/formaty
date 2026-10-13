@@ -41,6 +41,8 @@ export type ListBucket =
   | "changed"
   | "summary";
 
+export type ResolvedListDelimiter = Exclude<ListDelimiter, "auto">;
+
 export interface ListParseOptions {
   delimiter: ListDelimiter;
   trim: boolean;
@@ -94,8 +96,11 @@ export interface ListCompareResult {
 }
 
 export interface SingleListAnalysis {
-  /** Unique items (first-seen order), each with occurrence count. */
+  /** Distinct items (first-seen order), each with occurrence count. */
   unique: ListItem[];
+  /** Distinct items that appear exactly once (first-seen order). */
+  once: ListItem[];
+  onceCount: number;
   /** Items that appear more than once. */
   duplicates: ListItem[];
   /** All unique items sorted by count (desc) then value. */
@@ -110,48 +115,112 @@ export interface SingleListAnalysis {
 }
 
 /**
- * Default parse options preserve exact values: nothing is trimmed or
- * quote-stripped unless the user opts in via the Compare settings.
+ * Default parse options trim spaces and strip one layer of quotes, so pasted
+ * `a, b, a` and `'x', 'y'` lists count correctly. Matching stays case-sensitive.
  */
 export const DEFAULT_LIST_PARSE_OPTIONS: ListParseOptions = {
   delimiter: "auto",
-  trim: false,
+  trim: true,
   ignoreEmpty: true,
   caseInsensitive: false,
-  stripQuotes: false,
+  stripQuotes: true,
   numericNormalize: false,
   autoClean: false,
 };
 
 const EXPORT_LABELS: Record<ListExportFormat, string> = {
-  "sql-in-single": "SQL IN ('…')",
-  "sql-not-in": "SQL NOT IN ('…')",
-  "sql-in-double": 'SQL IN ("…")',
-  "sql-in-unquoted": "SQL IN (numbers)",
-  "sql-values": "SQL VALUES rows",
-  "sql-array": "PostgreSQL ARRAY[...]",
-  "json-array": "JSON array (strings)",
-  "json-array-numbers": "JSON array (numbers if possible)",
-  newline: "Newline separated",
-  comma: "Comma separated",
-  "comma-space": "Comma + space",
-  "comma-double-quotes": "Comma + double quotes",
+  "sql-in-single": "IN list",
+  "sql-not-in": "NOT IN list",
+  "sql-in-double": "IN list, double quotes",
+  "sql-in-unquoted": "Numbers, unquoted",
+  "sql-values": "VALUES rows",
+  "sql-array": "PostgreSQL ARRAY",
+  "json-array": "JSON array",
+  "json-array-numbers": "JSON array, numbers if possible",
+  newline: "One per line",
+  comma: "Comma, no space",
+  "comma-space": "Comma separated",
+  "comma-double-quotes": "Comma, double quotes",
   pipe: "Pipe separated",
   tsv: "Tab separated",
   "csv-quoted": "CSV quoted",
   "yaml-list": "YAML list",
   "regex-alt": "Regex alternation",
-  "js-array-single": "JS/TS array (single quotes)",
-  "js-array-double": "JS/TS array (double quotes)",
+  "js-array-single": "JavaScript array",
+  "js-array-double": "JavaScript array, double quotes",
   "python-list": "Python list",
   "go-slice": "Go slice",
   "markdown-table": "Markdown table",
   "html-table": "HTML table",
-  raw: "Raw (one per line)",
+  raw: "One per line",
+};
+
+const EXPORT_EXAMPLES: Record<ListExportFormat, string> = {
+  "sql-in-single": "IN ('a', 'b')",
+  "sql-not-in": "NOT IN ('a', 'b')",
+  "sql-in-double": 'IN ("a", "b")',
+  "sql-in-unquoted": "IN (1, 2)",
+  "sql-values": "('a'), ('b')",
+  "sql-array": "ARRAY['a', 'b']",
+  "json-array": '["a", "b"]',
+  "json-array-numbers": '["a", 1]',
+  newline: "a ⏎ b",
+  comma: "a,b",
+  "comma-space": "a, b",
+  "comma-double-quotes": '"a", "b"',
+  pipe: "a|b",
+  tsv: "a ⇥ b",
+  "csv-quoted": '"a","b"',
+  "yaml-list": "- a - b",
+  "regex-alt": "a|b",
+  "js-array-single": "['a', 'b']",
+  "js-array-double": '["a", "b"]',
+  "python-list": '["a", "b"]',
+  "go-slice": '[]string{"a", "b"}',
+  "markdown-table": "| value |",
+  "html-table": "<table>…</table>",
+  raw: "a ⏎ b",
+};
+
+const EXPORT_EXTENSIONS: Record<ListExportFormat, string> = {
+  "sql-in-single": "sql",
+  "sql-not-in": "sql",
+  "sql-in-double": "sql",
+  "sql-in-unquoted": "sql",
+  "sql-values": "sql",
+  "sql-array": "sql",
+  "json-array": "json",
+  "json-array-numbers": "json",
+  newline: "txt",
+  comma: "txt",
+  "comma-space": "txt",
+  "comma-double-quotes": "txt",
+  pipe: "txt",
+  tsv: "tsv",
+  "csv-quoted": "csv",
+  "yaml-list": "yaml",
+  "regex-alt": "txt",
+  "js-array-single": "js",
+  "js-array-double": "js",
+  "python-list": "py",
+  "go-slice": "go",
+  "markdown-table": "md",
+  "html-table": "html",
+  raw: "txt",
 };
 
 export function listExportFormatLabel(fmt: ListExportFormat): string {
   return EXPORT_LABELS[fmt];
+}
+
+/** Short example of the shape a format produces, for menus. */
+export function listExportExample(format: ListExportFormat): string {
+  return EXPORT_EXAMPLES[format];
+}
+
+/** File extension without the dot for a copy format. */
+export function listExportExtension(format: ListExportFormat): string {
+  return EXPORT_EXTENSIONS[format];
 }
 
 export const LIST_EXPORT_FORMATS = Object.keys(EXPORT_LABELS) as ListExportFormat[];
@@ -167,15 +236,19 @@ function stripOuterQuotes(s: string): string {
   return s;
 }
 
-function detectDelimiter(text: string): Exclude<ListDelimiter, "auto" | "json"> {
+/** What "auto" resolves to for this text. Returns "newline" for empty text. */
+export function detectListDelimiter(text: string): ResolvedListDelimiter {
   const t = text.trim();
   if (!t) return "newline";
-  // JSON array?
-  if ((t.startsWith("[") && t.endsWith("]")) || (t.startsWith("{") && t.endsWith("}"))) {
-    // caller may try json first
+  if (tryParseJsonArray(t)) return "json";
+  if (t.includes("\n")) {
+    // One item per line with a trailing separator ('a',\n'b',\n'a'): split on that separator,
+    // which also breaks on the line ends. The last line may leave it off.
+    const lines = t.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(0, -1);
+    if (lines.length && lines.every((l) => l.endsWith(","))) return "comma";
+    if (lines.length && lines.every((l) => l.endsWith(";"))) return "semicolon";
+    return "newline";
   }
-  const newlines = (t.match(/\r?\n/g) ?? []).length;
-  if (newlines >= 1) return "newline";
   const semis = (t.match(/;/g) ?? []).length;
   const pipes = (t.match(/\|/g) ?? []).length;
   const commas = (t.match(/,/g) ?? []).length;
@@ -206,7 +279,7 @@ function tryParseJsonArray(text: string): string[] | null {
   }
 }
 
-function splitByDelimiter(text: string, delimiter: Exclude<ListDelimiter, "auto" | "json">): string[] {
+function splitByDelimiter(text: string, delimiter: Exclude<ResolvedListDelimiter, "json">): string[] {
   switch (delimiter) {
     case "newline":
       return text.split(/\r?\n/);
@@ -268,9 +341,8 @@ export function parseListText(text: string, options: ListParseOptions): string[]
   if (options.delimiter === "json") {
     raw = tryParseJsonArray(t) ?? [];
   } else if (options.delimiter === "auto") {
-    const asJson = tryParseJsonArray(t);
-    if (asJson) raw = asJson;
-    else raw = splitByDelimiter(t, detectDelimiter(t));
+    const d = detectListDelimiter(t);
+    raw = d === "json" ? (tryParseJsonArray(t) ?? []) : splitByDelimiter(t, d);
   } else {
     raw = splitByDelimiter(t, options.delimiter);
   }
@@ -299,6 +371,9 @@ export function normalizeListKey(value: string, options: ListParseOptions): stri
   }
   return v;
 }
+
+// Collator is much faster than String.localeCompare in big sorts, same default ordering.
+const byValue = new Intl.Collator();
 
 function buildSide(values: string[], options: ListParseOptions): ListSideResult {
   const map = new Map<string, ListItem>();
@@ -443,14 +518,20 @@ export function analyzeSingleList(
 ): SingleListAnalysis {
   const values = parseListText(text, options);
   const side = buildSide(values, options);
-  const counts = side.items
-    .slice()
-    .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value));
+  let counts: ListItem[] | undefined;
   const duplicates = side.items.filter((i) => i.count > 1);
+  const once = side.items.filter((i) => i.count === 1);
   return {
     unique: side.items,
+    once,
+    onceCount: once.length,
     duplicates,
-    counts,
+    // Lazy: sorting 100k+ items is the slowest step and the workspace never reads it.
+    get counts() {
+      return (counts ??= side.items
+        .slice()
+        .sort((a, b) => b.count - a.count || byValue.compare(a.value, b.value)));
+    },
     rawCount: side.rawCount,
     uniqueCount: side.uniqueCount,
     duplicateKeys: duplicates.length,
@@ -482,7 +563,7 @@ export function sortListItems(items: ListItem[], mode: ListSortMode): ListItem[]
     case "numeric-desc":
       return copy.sort((a, b) => compareNumeric(b.value, a.value));
     case "frequency":
-      return copy.sort((a, b) => b.count - a.count || a.value.localeCompare(b.value));
+      return copy.sort((a, b) => b.count - a.count || byValue.compare(a.value, b.value));
     default:
       return copy;
   }
@@ -592,27 +673,47 @@ export function formatListItems(
 
   // For very large lists, render in chunks to keep peak memory bounded.
   if (chunkSize > 0 && values.length > chunkSize) {
-    const chunks = chunkItems(values, chunkSize);
-    return chunks.map((c) => formatValues(c, format)).join(formatJoiner(format));
+    const chunks = chunkItems(values, chunkSize).map((c) => formatValues(c, format));
+    const wrap = WRAPPERS[format];
+    if (wrap) {
+      // One valid list: strip each chunk's wrapper, join the chunks inside a single one.
+      const inner = chunks.map((c) => c.slice(wrap[0].length, c.length - wrap[1].length));
+      return wrap[0] + inner.join(",\n") + wrap[1];
+    }
+    return chunks.join(formatJoiner(format));
   }
 
   return formatValues(values, format);
 }
 
+/** Formats whose output is `open + comma list + close`; chunking must not repeat the wrapper. */
+const WRAPPERS: Partial<Record<ListExportFormat, [string, string]>> = {
+  "sql-in-single": ["IN (", ")"],
+  "sql-not-in": ["NOT IN (", ")"],
+  "sql-in-double": ["IN (", ")"],
+  "sql-in-unquoted": ["IN (", ")"],
+  "sql-array": ["ARRAY[", "]"],
+  "go-slice": ["[]string{", "}"],
+  "js-array-single": ["[", "]"],
+  "js-array-double": ["[", "]"],
+  "python-list": ["[", "]"],
+};
+
 function formatValues(values: string[], format: ListExportFormat): string {
   switch (format) {
     case "sql-in-single":
+      return `IN (${values.map((v) => `'${escapeSqlSingle(v)}'`).join(", ")})`;
     case "sql-not-in":
-      return values.map((v) => `'${escapeSqlSingle(v)}'`).join(", ");
+      return `NOT IN (${values.map((v) => `'${escapeSqlSingle(v)}'`).join(", ")})`;
     case "sql-in-double":
-      return values.map((v) => `"${escapeSqlDouble(v)}"`).join(", ");
+      return `IN (${values.map((v) => `"${escapeSqlDouble(v)}"`).join(", ")})`;
     case "sql-in-unquoted":
-      return values
+      return `IN (${values
         .map((v) => {
           const n = tryAsNumber(v);
           return n !== null ? String(n) : `'${escapeSqlSingle(v)}'`;
         })
-        .join(", ");
+        .join(", ")})`;
     case "sql-values":
       return values.map((v) => `('${escapeSqlSingle(v)}')`).join(",\n");
     case "sql-array":
@@ -726,13 +827,13 @@ export function formatSqlInClause(
 }
 
 export const BUCKET_LABELS: Record<ListBucket, string> = {
-  common: "Common",
-  leftOnly: "Left",
-  rightOnly: "Right",
-  union: "Union",
-  symmetric: "Symmetric diff",
-  leftDupes: "Left duplicates",
-  rightDupes: "Right duplicates",
+  common: "In both",
+  leftOnly: "Only in A",
+  rightOnly: "Only in B",
+  union: "All merged",
+  symmetric: "In one only",
+  leftDupes: "Repeated in A",
+  rightDupes: "Repeated in B",
   changed: "Changed",
   summary: "Summary",
 };
@@ -749,10 +850,12 @@ export interface ListSummarySection {
   label: string;
   count: number;
   items: ListItem[];
+  /** One entry per item, in the same order: the value on a single line, plus a short note such as "×2 in A, ×1 in B". */
+  rows: Array<{ value: string; note: string }>;
 }
 
 export interface ListSummary {
-  /** Non-empty sections in render order (Common, Left, Right, dupes, Changed). */
+  /** Non-empty sections in render order (In both, Only in A, Only in B, Repeated in A or B, Changed). */
   sections: ListSummarySection[];
   /** Plain-text report - exactly what Copy / Download produce. */
   text: string;
@@ -764,7 +867,7 @@ export interface ListSummary {
  * Build the Summary report for a list compare result: grouped counts + items
  * for what is in the left list, the right list, and what they share. Sections
  * with no items are omitted; the Common section annotates keys whose
- * occurrence count differs between the sides (e.g. "A ×2 left, ×1 right").
+ * occurrence count differs between the sides (e.g. "A ×2 in A, ×1 in B").
  */
 export function buildListSummary(
   result: ListCompareResult,
@@ -775,7 +878,7 @@ export function buildListSummary(
   const countDeltas = showCountDeltas ? computeCountDeltas(result) : [];
   const deltaByKey = new Map(countDeltas.map((d) => [d.key, d]));
 
-  const all: ListSummarySection[] = [
+  const all: Array<Omit<ListSummarySection, "rows">> = [
     { bucket: "common", label: BUCKET_LABELS.common, count: result.common.length, items: result.common },
     { bucket: "leftOnly", label: BUCKET_LABELS.leftOnly, count: result.leftOnly.length, items: result.leftOnly },
     { bucket: "rightOnly", label: BUCKET_LABELS.rightOnly, count: result.rightOnly.length, items: result.rightOnly },
@@ -789,18 +892,21 @@ export function buildListSummary(
       ? [{ bucket: "changed" as const, label: BUCKET_LABELS.changed, count: result.changed.length, items: result.changed }]
       : []),
   ];
-  const sections = all.filter((s) => s.count > 0);
-
-  const text = sections
-    .map((s) => {
-      const lines = s.items.map((item) => {
+  const sections: ListSummarySection[] = all
+    .filter((s) => s.count > 0)
+    .map((s) => ({
+      ...s,
+      rows: s.items.map((item) => {
         const d = deltaByKey.get(item.key);
         const note =
-          s.bucket === "common" && d ? ` ×${d.left} left, ×${d.right} right` : "";
-        return `  ${item.value}${note}`;
-      });
-      return `${s.label} (${s.count})\n${lines.join("\n")}`;
-    })
+          s.bucket === "common" && d ? `×${d.left} in A, ×${d.right} in B` : s.bucket === "leftDupes" || s.bucket === "rightDupes" ? `×${item.count}` : "";
+        // One item per line, always: a value holding a line break would break the indent.
+        return { value: item.value.replace(/\s*\r?\n\s*/g, " "), note };
+      }),
+    }));
+
+  const text = sections
+    .map((s) => `${s.label} (${s.count})\n${s.rows.map((r) => `  ${r.value}${r.note && ` ${r.note}`}`).join("\n")}`)
     .join("\n\n");
 
   return { sections, text, countDeltas };
@@ -880,17 +986,68 @@ export function cleanListInput(text: string): string {
   if (!input) return "";
 
   // Strip JSON array [ ] or parenthesized ( ) wrappers
-  if (/^[\[\(]\s*/.test(input) && /\s*[\]\)]$/.test(input)) {
-    input = input.replace(/^[\[\(]\s*/, "").replace(/\s*[\]\)]$/, "");
+  if (input.length >= 2 && "[(".includes(input[0]!) && "])".includes(input[input.length - 1]!)) {
+    input = input.slice(1, -1).trim();
   }
 
-  // Split on commas (respecting quoted strings)
-  // then also split each result on newlines
-  const items = input
-    .split(/\s*,\s*(?=(?:[^"]*"[^"]*")*[^"]*$)(?=(?:[^']*'[^']*')*[^']*$)/)
-    .flatMap((part) => part.split(/\r?\n/))
-    .map((s) => s.trim().replace(/^["'\[\(\]\)]+|["'\[\(\]\)]+$/g, "").replace(/\s+/g, " ").trim())
-    .filter((s) => s.length > 0);
-
+  // Split on commas (respecting quoted strings), then also on newlines.
+  const items: string[] = [];
+  for (const part of splitCommasOutsideQuotes(input)) {
+    for (const line of part.split(/\r?\n/)) {
+      const s = cleanListItem(line);
+      if (s) items.push(s);
+    }
+  }
   return items.join("\n");
+}
+
+const EDGE_JUNK = /^["'[\]()]+|["'[\]()]+$/g;
+
+function cleanListItem(s: string): string {
+  return s.trim().replace(EDGE_JUNK, "").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Split on a comma when an even number of " and of ' follow it (the rule the
+ * old lookahead regex expressed), in one pass using parity of the quotes seen.
+ */
+function splitCommasOutsideQuotes(text: string): string[] {
+  let dqTotal = 0;
+  let sqTotal = 0;
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    if (c === 34) dqTotal++;
+    else if (c === 39) sqTotal++;
+  }
+  const parts: string[] = [];
+  let start = 0;
+  let dq = 0;
+  let sq = 0;
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    if (c === 34) dq++;
+    else if (c === 39) sq++;
+    else if (c === 44 && (dq & 1) === (dqTotal & 1) && (sq & 1) === (sqTotal & 1)) {
+      parts.push(text.slice(start, i));
+      start = i + 1;
+    }
+  }
+  parts.push(text.slice(start));
+  return parts;
+}
+
+/** True when cleanListInput(text) would change text. Early-exits per line; no joined output. */
+export function needsListTidy(text: string): boolean {
+  if (!text) return false;
+  // Commas or a bracket wrapper change structure across lines: use the full clean (still linear).
+  if (text.includes(",") || "[(".includes(text[0]!)) return cleanListInput(text) !== text;
+  let start = 0;
+  for (;;) {
+    let end = text.indexOf("\n", start);
+    if (end === -1) end = text.length;
+    const line = text.slice(start, end);
+    if (line === "" || cleanListItem(line) !== line) return true; // blank lines are dropped
+    if (end === text.length) return false;
+    start = end + 1;
+  }
 }

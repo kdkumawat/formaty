@@ -311,13 +311,13 @@ Use cases: debugging redirects, inspecting API call URLs, parsing OAuth callback
     description:
       "Convert between HEX, RGB, HSL, and CMYK instantly. Free online color converter with CSS color name support. Runs locally.",
     h1: "Color Converter",
-    content: `Colors live in many notations: #6d6df4 hex in code, rgb() in CSS, hsl() in design tools, cmyk() in print. Converting between them by hand is tedious.
+    content: `Colors live in many notations: #F2B544 hex in code, rgb() in CSS, hsl() in design tools, cmyk() in print. Converting between them by hand is tedious.
 
 Paste any color - hex with 3, 6, or 8 digits, rgb()/rgba(), hsl()/hsla(), cmyk(), or a CSS color name - and get every representation plus a live preview swatch.
 
 Use cases: porting design tokens to code, matching print colors to screen, building theme palettes, and debugging CSS values. All conversion is local.`,
-    inputExample: "#6d6df4",
-    outputExample: "rgb(109, 109, 244) · hsl(240 90% 69%) · cmyk(...) · preview swatch",
+    inputExample: "#F2B544",
+    outputExample: "rgb(242, 181, 68)\nhsl(39, 87%, 61%)\ncmyk(0%, 25%, 72%, 5%)",
     useCases: [
       "Port design tokens to code",
       "Match print colors to screen",

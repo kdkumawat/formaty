@@ -1,7 +1,6 @@
-import Link from "next/link";
 import type { Metadata } from "next";
-import { Logo } from "@/components/Logo";
-import { getCanonicalUrl, SITE_URL } from "@/lib/seo";
+import { Footer, PageHero, PROSE, WRAP } from "@/components/landing";
+import { SITE_URL } from "@/lib/seo";
 
 export const metadata: Metadata = {
   title: "Changelog - What's New in Formaty",
@@ -102,49 +101,35 @@ const ENTRIES = [
 
 export default function ChangelogPage() {
   return (
-    <div className="min-h-screen bg-[var(--workspace-background)]">
-      <header className="sticky top-0 z-50 border-b border-[var(--workspace-border)] bg-[var(--workspace-background)]/80 backdrop-blur-xl">
-        <div className="mx-auto flex h-14 max-w-3xl items-center justify-between px-4">
-          <Link href="/" aria-label="Formaty home" className="flex items-center gap-0.5 text-[var(--workspace-text)] transition-opacity hover:opacity-85">
-            <Logo size={22} />
-          </Link>
-          <nav className="flex items-center gap-2">
-            <Link href="/docs" className="rounded-lg px-3 py-1.5 text-sm text-[var(--workspace-text-muted)] transition-colors hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)]">
-              Docs
-            </Link>
-            <Link href="/playground" className="rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground transition-all hover:scale-[1.03]">
-              Playground
-            </Link>
-          </nav>
-        </div>
-      </header>
-
-      <main id="main" className="mx-auto max-w-3xl px-4 py-12">
-        <h1 className="text-3xl font-bold tracking-tight text-[var(--workspace-text)]">Changelog</h1>
-        <p className="mt-2 text-base text-[var(--workspace-text-muted)]">
-          What&apos;s new in Formaty. Everything ships free and local-first.
-        </p>
-
-        <div className="mt-10 space-y-10">
-          {ENTRIES.map((entry) => (
-            <section key={entry.version} className="border-l border-[var(--workspace-border)] pl-6">
-              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                <h2 className="font-mono text-sm font-bold text-primary">{entry.version}</h2>
-                <span className="text-xs text-[var(--workspace-text-muted)]">{entry.date}</span>
-              </div>
-              <h3 className="mt-2 text-lg font-semibold text-[var(--workspace-text)]">{entry.title}</h3>
-              <ul className="mt-3 space-y-2">
+    <div className="min-h-screen bg-[var(--workspace-background)] text-[var(--workspace-text)]">
+      <PageHero
+        small
+        crumbs={[{ label: "Formaty", href: "/" }, { label: "Changelog" }]}
+        title="Changelog"
+        intro="What is new in Formaty. Everything ships free and local-first."
+      />
+      <main id="main" className={`${WRAP} flex flex-col py-[clamp(32px,5vw,64px)]`}>
+        {ENTRIES.map((entry) => (
+          <section
+            key={entry.version}
+            className="grid gap-x-12 gap-y-3 border-b border-[var(--workspace-border)] py-7 first:pt-0 lg:grid-cols-[minmax(0,1fr)_minmax(0,2.4fr)]"
+          >
+            <div>
+              <h2 className="font-display text-[22px] font-extrabold tracking-[-0.03em]">{entry.version}</h2>
+              <p className="text-[15px] text-[var(--workspace-text-muted)]">{entry.date}</p>
+            </div>
+            <div>
+              <h3 className="font-display text-[18px] font-extrabold tracking-[-0.02em]">{entry.title}</h3>
+              <ul className="mt-3 list-disc space-y-2 pl-5 marker:text-[var(--workspace-text-muted)]">
                 {entry.items.map((item) => (
-                  <li key={item} className="flex items-start gap-2 text-sm leading-relaxed text-[var(--workspace-text-muted)]">
-                    <span className="mt-[0.55em] h-1 w-1 shrink-0 rounded-full bg-primary" />
-                    {item}
-                  </li>
+                  <li key={item} className={PROSE}>{item}</li>
                 ))}
               </ul>
-            </section>
-          ))}
-        </div>
+            </div>
+          </section>
+        ))}
       </main>
+      <Footer />
     </div>
   );
 }

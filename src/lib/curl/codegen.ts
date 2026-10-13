@@ -44,6 +44,11 @@ function prettyJson(s: string): string {
   }
 }
 
+/** Pretty JSON for use inside generated code: lines after the first are indented by `pad` to sit under the property that holds them. */
+function nestedJson(s: string, pad: string): string {
+  return prettyJson(s).split("\n").join(`\n${pad}`);
+}
+
 function headerLines(headers: Record<string, string>): string[] {
   return Object.entries(headers).map(([k, v]) => `${k}: ${v}`);
 }
@@ -85,7 +90,7 @@ export function generateCurlCode(parsed: CurlParsed, target: CurlTargetId): stri
         }
         if (hasBody) {
           if (looksLikeJson(body)) {
-            lines.push(`    body: JSON.stringify(${prettyJson(body)}),`);
+            lines.push(`    body: JSON.stringify(${nestedJson(body, "    ")}),`);
           } else {
             lines.push(`    body: ${JSON.stringify(body)},`);
           }
@@ -113,7 +118,7 @@ export function generateCurlCode(parsed: CurlParsed, target: CurlTargetId): stri
       }
       if (hasBody) {
         if (looksLikeJson(body)) {
-          lines.push(`  data: ${prettyJson(body)},`);
+          lines.push(`  data: ${nestedJson(body, "  ")},`);
         } else {
           lines.push(`  data: ${JSON.stringify(body)},`);
         }

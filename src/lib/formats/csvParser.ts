@@ -17,17 +17,17 @@ export const csvAdapter: FormatAdapter = {
       header: true,
       skipEmptyLines: true,
       dynamicTyping: false,
-      step: (result, _parser) => {
-        if (firstError === null && result.errors.length > 0) {
-          const err = result.errors[0] as Papa.ParseError | undefined;
-          if (err) firstError = err;
-        }
+      step: (result) => {
+        // A single column has no delimiter to detect: that is fine, not an error.
+        const err = result.errors.find((e) => e.code !== "UndetectableDelimiter");
+        if (firstError === null && err) firstError = err;
         if (result.data) rows.push(result.data);
       },
     });
     if (firstError) {
-      const msg = (firstError as { message?: string }).message ?? "CSV parse error";
-      throw new Error(msg);
+      const { message, row } = firstError as Papa.ParseError;
+      // `row` counts data rows from zero; the header is line 1 (quoted line breaks can shift this).
+      throw new Error(typeof row === "number" ? `${message} (line ${row + 2})` : message);
     }
     return rows as JsonValue;
   },

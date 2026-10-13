@@ -92,6 +92,12 @@ export interface UtilToolState {
   /** Which side is being edited for codec tools (left = plain, right = encoded). */
   editSide: "left" | "right";
   touched: boolean;
+  /** Optional additions: older snapshots lack them, so always merge over defaults. */
+  dir?: "encode" | "decode";
+  genFmt?: "lines" | "comma" | "json" | "sql";
+  uuidUpper?: boolean;
+  uuidPlain?: boolean;
+  regexReplace?: string;
   // World Clock (per-tab)
 
 }
@@ -99,7 +105,6 @@ export interface UtilToolState {
 export type UtilsStateMap = Partial<Record<UtilTab, UtilToolState>>;
 
 export function defaultUtilToolState(tab: UtilTab): UtilToolState {
-  const now = Date.now();
   return {
     input: UTIL_SAMPLES[tab] ?? "",
     output: "",
@@ -234,8 +239,8 @@ export function selectFieldAll(e: ReactKeyboardEvent<HTMLTextAreaElement | HTMLP
 }
 
 export const UUID_VARIANT_LABELS: Array<{ id: UuidVariant; label: string; title: string }> = [
-  { id: "v4", label: "v4", title: "Random (most common)" },
-  { id: "v1", label: "v1", title: "Time-based" },
-  { id: "v7", label: "v7", title: "Timestamp + random (RFC 9562)" },
-  { id: "v5", label: "v5", title: "SHA-1 of namespace + name" },
+  { id: "v4", label: "v4", title: "Random (v4)" },
+  { id: "v1", label: "v1", title: "Time-based (v1)" },
+  { id: "v7", label: "v7", title: "Time-ordered (v7)" },
+  { id: "v5", label: "v5", title: "Name-based (v5)" },
 ];

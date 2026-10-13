@@ -1,17 +1,16 @@
 import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 import { MotionConfig } from "framer-motion";
-import { Inter, JetBrains_Mono, Space_Grotesk } from "next/font/google";
+import { Bricolage_Grotesque, Geist, JetBrains_Mono } from "next/font/google";
 import { ConsentBanner } from "@/components/ConsentBanner";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 import { UpdateToast } from "@/components/UpdateToast";
 import "./globals.css";
 
-const inter = Inter({
+const geist = Geist({
   subsets: ["latin"],
-  variable: "--font-inter",
+  variable: "--font-geist",
   display: "swap",
-  axes: ["opsz"],
 });
 
 const jetbrainsMono = JetBrains_Mono({
@@ -22,9 +21,9 @@ const jetbrainsMono = JetBrains_Mono({
   preload: false, // only the editor/code blocks use it
 });
 
-const spaceGrotesk = Space_Grotesk({
+const bricolage = Bricolage_Grotesque({
   subsets: ["latin"],
-  variable: "--font-space-grotesk",
+  variable: "--font-bricolage",
   display: "swap",
 });
 
@@ -35,8 +34,8 @@ export const viewport: Viewport = {
   viewportFit: "cover",
   colorScheme: "dark light",
   themeColor: [
-    { media: "(prefers-color-scheme: dark)", color: "#0a0a10" },
-    { media: "(prefers-color-scheme: light)", color: "#f7f7fa" },
+    { media: "(prefers-color-scheme: dark)", color: "#0C0B0A" },
+    { media: "(prefers-color-scheme: light)", color: "#F5F4F2" },
   ],
 };
 
@@ -214,12 +213,12 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${inter.variable} ${jetbrainsMono.variable} ${spaceGrotesk.variable}`}
+      className={`${geist.variable} ${jetbrainsMono.variable} ${bricolage.variable}`}
     >
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){var t=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";try{var s=localStorage.getItem("formaty-session");if(s){var d=JSON.parse(s);if(d.themeMode==="dark"||d.themeMode==="light")t=d.themeMode;else if(d.themeMode==="system")t=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"}}catch(e){}document.documentElement.setAttribute("data-theme",t);var e=document.createElement("style");e.id="formaty-theme-inline";e.textContent=t==="dark"?"html,body{--background:#0a0a10;--foreground:#ececf1;--card:#12121a;--card-foreground:#ececf1;--popover:#171721;--popover-foreground:#ececf1;--border:#23232e;--input:#2f2f3c;--muted:#191924;--muted-foreground:#9a9aa5;--accent:#1e1e2b;--accent-foreground:#ececf1;--secondary:#1c1c27;--secondary-foreground:#ececf1;--primary:oklch(0.72 0.19 280);--ring:oklch(0.72 0.19 280);--destructive:oklch(0.64 0.2 25);--workspace-background:#0a0a10;--workspace-panel:#12121a;--workspace-border:#23232e;--workspace-text:#ececf1;--workspace-text-muted:#9a9aa5}":"html,body{--background:#f7f7fa;--foreground:#181820;--card:#ffffff;--card-foreground:#181820;--popover:#ffffff;--popover-foreground:#181820;--border:#e7e7ef;--input:#d8d8e2;--muted:#eceef3;--muted-foreground:#5f5f6b;--accent:#eef0f5;--accent-foreground:#181820;--secondary:#eef0f5;--secondary-foreground:#181820;--primary:oklch(0.56 0.22 278);--ring:oklch(0.56 0.22 278);--destructive:oklch(0.58 0.23 25);--workspace-background:#f7f7fa;--workspace-panel:#ffffff;--workspace-border:#e7e7ef;--workspace-text:#181820;--workspace-text-muted:#5f5f6b}";document.head.appendChild(e)})();`,
+            __html: `(function(){var t=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";try{var s=localStorage.getItem("formaty-session");if(s){var d=JSON.parse(s);if(d.themeMode==="dark"||d.themeMode==="light")t=d.themeMode;else if(d.themeMode==="system")t=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"}}catch(e){}document.documentElement.setAttribute("data-theme",t);var e=document.createElement("style");e.id="formaty-theme-inline";e.textContent=t==="dark"?"html,body{--background:#0C0B0A;--foreground:#F2F0ED;--card:#141312;--card-foreground:#F2F0ED;--popover:#1A1917;--popover-foreground:#F2F0ED;--border:#2A2826;--input:#3D3A36;--muted:#0F0E0D;--muted-foreground:#A8A39C;--accent:#242220;--accent-foreground:#F2F0ED;--secondary:#1E1C1A;--secondary-foreground:#F2F0ED;--primary:#F2F0ED;--ring:#F2F0ED;--destructive:oklch(0.64 0.2 25);--workspace-background:#0C0B0A;--workspace-panel:#141312;--workspace-border:#2A2826;--workspace-text:#F2F0ED;--workspace-text-muted:#A8A39C}":"html,body{--background:#F5F4F2;--foreground:#1A1816;--card:#ffffff;--card-foreground:#1A1816;--popover:#ffffff;--popover-foreground:#1A1816;--border:#E7E5E1;--input:#D2CFC9;--muted:#F8F7F5;--muted-foreground:#5E5A55;--accent:#EDEBE7;--accent-foreground:#1A1816;--secondary:#F8F7F5;--secondary-foreground:#1A1816;--primary:#1A1816;--ring:#1A1816;--destructive:oklch(0.58 0.23 25);--workspace-background:#F5F4F2;--workspace-panel:#ffffff;--workspace-border:#E7E5E1;--workspace-text:#1A1816;--workspace-text-muted:#5E5A55}";document.head.appendChild(e)})();`,
           }}
         />
       </head>

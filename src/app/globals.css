@@ -6,9 +6,9 @@
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *, :root:not([data-theme]) *));
 
 @theme inline {
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-sans: var(--font-geist), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;
-  --font-display: var(--font-space-grotesk), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-display: var(--font-bricolage), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 
   /* shadcn/ui color utilities */
   --color-background: var(--background);
@@ -29,6 +29,23 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  /* Brand roles: ink = selected, amber = the brand mark and the one primary action per view */
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
+  --color-action: #F2B544;
+  --color-action-foreground: #1A1816;
+  --color-sunk: var(--sunk);
+  /* 3:1 boundary for unchecked switches and checkboxes */
+  --color-edge: var(--edge);
+  /* Resting and hover fill for buttons, chips and menu triggers that sit on a panel */
+  --color-control: var(--control);
+  --color-control-hover: var(--control-hover);
+  --shadow-menu: var(--menu-shadow);
+  --color-ok: var(--ok);
+  --color-bad: var(--bad);
+  --color-bad-bg: var(--bad-bg);
+  --color-side-a: var(--side-a);
+  --color-side-b: var(--side-b);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -39,64 +56,91 @@
 [data-theme="dark"],
 html:not([data-theme]) {
   color-scheme: dark;
-  /* Layered surfaces: canvas → panel → popover */
-  --background: #0a0a10;
-  --foreground: #ececf1;
-  --card: #12121a;
-  --card-foreground: #ececf1;
-  --popover: #171721;
-  --popover-foreground: #ececf1;
-  --primary: oklch(0.72 0.19 280);
-  --primary-foreground: #0b0b12;
-  --secondary: #1c1c27;
-  --secondary-foreground: #ececf1;
-  --muted: #191924;
-  --muted-foreground: #9a9aa5;
-  --accent: #1e1e2b;
-  --accent-foreground: #ececf1;
+  /* Layered surfaces: canvas, panel, popover. Warm graphite neutrals; ink marks what is selected, amber is the brand and the one primary action. */
+  --background: #0C0B0A;
+  --foreground: #F2F0ED;
+  --card: #141312;
+  --card-foreground: #F2F0ED;
+  --popover: #1A1917;
+  --popover-foreground: #F2F0ED;
+  --primary: #F2F0ED;
+  --primary-foreground: #1A1816;
+  --secondary: #1E1C1A;
+  --secondary-foreground: #F2F0ED;
+  --muted: #0F0E0D;
+  --muted-foreground: #A8A39C;
+  --accent: #242220;
+  --accent-foreground: #F2F0ED;
   --destructive: oklch(0.64 0.2 25);
-  --border: #23232e;
-  --input: #2f2f3c;
-  --ring: oklch(0.72 0.19 280);
+  --border: #2A2826;
+  --input: #3D3A36;
+  --ring: #F2F0ED;
   --radius: 0.6rem;
 
-  --workspace-background: #0a0a10;
-  --workspace-panel: #12121a;
-  --workspace-border: #23232e;
-  --workspace-text: #ececf1;
-  --workspace-text-muted: #9a9aa5;
-  --glow-color: rgba(109, 109, 244, 0.28);
+  --workspace-background: #0C0B0A;
+  --workspace-panel: #141312;
+  --workspace-border: #2A2826;
+  --workspace-text: #F2F0ED;
+  --workspace-text-muted: #A8A39C;
+  --glow-color: rgba(242, 181, 68, 0.18);
+  --sunk: #0F0E0D;
+  --control: #1E1C1A;
+  --control-hover: #292725;
+  --menu-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 1px 2px rgba(0, 0, 0, 0.5), 0 16px 40px -8px rgba(0, 0, 0, 0.7);
+  --ok: #7BD39A;
+  --bad: #F7A58E;
+  --bad-bg: #33191A;
+  --focus: #F2B544;
+  --edge: #77726B;
+  --brand: #F2F0ED;
+  --brand-foreground: #1A1816;
+  --side-a: #A995FF;
+  --side-b: #3CCFBE;
 }
 
 /* ── Light ─────────────────────────────────────────────── */
 [data-theme="light"] {
   color-scheme: light;
-  --background: #f7f7fa;
-  --foreground: #181820;
+  /* Layered surfaces: canvas, panel, popover. Warm graphite neutrals; ink marks what is selected, amber is the brand and the one primary action. */
+  --background: #F5F4F2;
+  --foreground: #1A1816;
   --card: #ffffff;
-  --card-foreground: #181820;
+  --card-foreground: #1A1816;
   --popover: #ffffff;
-  --popover-foreground: #181820;
-  --primary: oklch(0.56 0.22 278);
+  --popover-foreground: #1A1816;
+  --primary: #1A1816;
   --primary-foreground: #ffffff;
-  --secondary: #eef0f5;
-  --secondary-foreground: #181820;
-  --muted: #eceef3;
-  --muted-foreground: #5f5f6b;
-  --accent: #eef0f5;
-  --accent-foreground: #181820;
+  --secondary: #F8F7F5;
+  --secondary-foreground: #1A1816;
+  --muted: #F8F7F5;
+  --muted-foreground: #5E5A55;
+  --accent: #EDEBE7;
+  --accent-foreground: #1A1816;
   --destructive: oklch(0.58 0.23 25);
-  --border: #e7e7ef;
-  --input: #d8d8e2;
-  --ring: oklch(0.56 0.22 278);
+  --border: #E7E5E1;
+  --input: #D2CFC9;
+  --ring: #1A1816;
   --radius: 0.6rem;
 
-  --workspace-background: #f7f7fa;
+  --workspace-background: #F5F4F2;
   --workspace-panel: #ffffff;
-  --workspace-border: #e7e7ef;
-  --workspace-text: #181820;
-  --workspace-text-muted: #5f5f6b;
-  --glow-color: rgba(91, 91, 214, 0.22);
+  --workspace-border: #E7E5E1;
+  --workspace-text: #1A1816;
+  --workspace-text-muted: #5E5A55;
+  --glow-color: rgba(242, 181, 68, 0.22);
+  --sunk: #F8F7F5;
+  --control: #F1F0ED;
+  --control-hover: #E7E5E1;
+  --menu-shadow: 0 0 0 1px rgba(26, 24, 22, 0.08), 0 1px 2px rgba(26, 24, 22, 0.06), 0 16px 40px -8px rgba(26, 24, 22, 0.22);
+  --ok: #17703A;
+  --bad: #B3331A;
+  --bad-bg: #FBEAE6;
+  --focus: #B45309;
+  --edge: #8A857E;
+  --brand: #1A1816;
+  --brand-foreground: #ffffff;
+  --side-a: #7357E0;
+  --side-b: #0B8377;
 }
 
 html {
@@ -114,26 +158,27 @@ body {
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  /* Inter: disambiguated glyphs, tabular-friendly alternates */
-  font-feature-settings: "cv05", "cv08", "cv11", "ss01";
   text-rendering: optimizeLegibility;
   background-color: var(--background);
 }
 
 /* ── Global typography ─────────────────────────────────── */
 
-/* Headings: display font, tighter tracking, balanced lines */
-h1, h2, h3, h4, h5, h6 {
-  font-family: var(--font-display);
-  letter-spacing: -0.025em;
-  line-height: 1.22;
-  text-wrap: balance;
-}
+/* In the base layer so a utility on the element (leading-*, tracking-*, font-*) wins. */
+@layer base {
+  /* Headings: display font, tighter tracking, balanced lines */
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+    letter-spacing: -0.025em;
+    line-height: 1.22;
+    text-wrap: balance;
+  }
 
-/* Long-form paragraphs read better with a touch more leading */
-p {
-  line-height: 1.65;
-  text-wrap: pretty;
+  /* Long-form paragraphs read better with a touch more leading */
+  p {
+    line-height: 1.65;
+    text-wrap: pretty;
+  }
 }
 
 /* Code & mono: JetBrains Mono ligatures + comfortable sizing */
@@ -145,10 +190,13 @@ samp,
   font-feature-settings: "liga", "calt", "zero";
 }
 
-code,
-pre {
-  font-size: 0.9375em;
-  line-height: 1.6;
+/* In the base layer so a size utility on the element (text-[13px]) wins; unlayered, this rule beat every utility. */
+@layer base {
+  code,
+  pre {
+    font-size: 0.9375em;
+    line-height: 1.6;
+  }
 }
 
 kbd {
@@ -162,121 +210,116 @@ input[type="number"] {
   font-variant-numeric: tabular-nums;
 }
 
-/* Selection: indigo-violet in both themes */
+/* Selection: warm amber tint, readable in both themes (ink text on light, cream text on dark) */
 ::selection {
-  background: rgba(109, 109, 244, 0.3);
+  background: rgba(242, 181, 68, 0.38);
   color: inherit;
 }
-
-/* ── Animations ─────────────────────────────────────────── */
-
-@keyframes drift-a {
-  0%,100% { transform: translate(0, 0) scale(1); }
-  35%     { transform: translate(40px, -35px) scale(1.06); }
-  70%     { transform: translate(-22px, 20px) scale(0.95); }
-}
-
-@keyframes drift-b {
-  0%,100% { transform: translate(0, 0) scale(1); }
-  40%     { transform: translate(-50px, 30px) scale(0.94); }
-  75%     { transform: translate(28px, -22px) scale(1.05); }
-}
-
-.blob-drift-a { animation: drift-a 16s ease-in-out infinite; }
-.blob-drift-b { animation: drift-b 20s ease-in-out infinite; }
-
-@keyframes shimmer {
-  0%   { background-position: 200% center; }
-  100% { background-position: -200% center; }
-}
-
-@keyframes float {
-  0%, 100% { transform: translateY(0px); }
-  50%       { transform: translateY(-8px); }
-}
-
-@keyframes marquee {
-  0%   { transform: translateX(0); }
-  100% { transform: translateX(-50%); }
-}
-
-@keyframes fade-up {
-  from { opacity: 0; transform: translateY(16px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-/* ── Utility classes ─────────────────────────────────────── */
-
-.gradient-text {
-  background: linear-gradient(110deg, #f59e0b 0%, #ec4899 28%, #a855f7 58%, #6d6df4 100%);
-  background-size: 300% auto;
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  animation: shimmer 10s linear infinite;
-}
-
-.dot-grid {
-  background-image: radial-gradient(circle, currentColor 1px, transparent 1px);
-  background-size: 24px 24px;
-}
-
-/* Fine line grid for hero sections */
-.hero-grid {
-  background-image:
-    linear-gradient(rgba(128,128,128,0.055) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(128,128,128,0.055) 1px, transparent 1px);
-  background-size: 40px 40px;
-}
-
-/* Marquee – infinite horizontal scroll */
-.marquee-track {
-  display: flex;
-  flex-shrink: 0;
-  width: max-content;
-  animation: marquee 28s linear infinite;
-}
-.marquee-track:hover {
-  animation-play-state: paused;
-}
-
-/* ── Hover-glow tracking card (Linear-style) ───────────── */
-.glow-card {
-  position: relative;
-}
-.glow-card::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  padding: 1px;
-  background: radial-gradient(
-    320px circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
-    rgba(109, 109, 244, 0.55),
-    transparent 45%
-  );
-  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  opacity: 0;
-  transition: opacity 0.3s ease;
-  pointer-events: none;
-}
-.glow-card:hover::before {
-  opacity: 1;
+[data-theme="dark"] ::selection,
+html:not([data-theme]) ::selection {
+  background: rgba(242, 181, 68, 0.3);
 }
 
 /* ── Monaco editor ───────────────────────────────────────── */
 .monaco-editor .monaco-scrollable-element > .scrollbar.vertical  { width: 10px; }
 .monaco-editor .monaco-scrollable-element > .scrollbar.horizontal { height: 10px; }
 
-/* ── Custom scrollbar (Webkit) ───────────────────────────── */
-::-webkit-scrollbar { width: 5px; height: 5px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #c8c8c8; border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
-[data-theme="dark"] ::-webkit-scrollbar-thumb { background: #35353f; }
-[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: #4a4a58; }
+/* ── Scrollbars: thin, theme-aware, shared by panes, menus and Monaco ── */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--workspace-text) 22%, transparent);
+  background-clip: content-box;
+  border: 3px solid transparent;
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--workspace-text) 40%, transparent); background-clip: content-box; }
+::-webkit-scrollbar-thumb:active { background: color-mix(in srgb, var(--workspace-text) 55%, transparent); background-clip: content-box; }
+/* Firefox has no pseudo-elements; browsers that support them keep the rules above. */
+@supports not selector(::-webkit-scrollbar) {
+  * { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--workspace-text) 28%, transparent) transparent; }
+}
+
+/* ── Physical keys (level 1 depth): amber primary, ink selected, raised tile, keycap ── */
+/* A control that can be interacted with: not disabled, not aria-disabled. */
+@custom-variant live (&:not(:disabled, [aria-disabled="true"]));
+
+@utility key-action {
+  background-color: var(--color-action);
+  color: var(--color-action-foreground);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.5), inset 0 -1px 0 rgb(122 70 0 / 0.4), 0 1px 1px rgb(26 24 22 / 0.12);
+  &:where(:not(:disabled, [aria-disabled="true"])):hover { background-color: color-mix(in srgb, var(--color-action) 86%, white); }
+  &:where(:not(:disabled, [aria-disabled="true"])):active {
+    background-color: color-mix(in srgb, var(--color-action) 88%, #7a4600);
+    box-shadow: inset 0 1px 2px rgb(122 70 0 / 0.45), inset 0 -1px 0 rgb(255 255 255 / 0.18);
+  }
+}
+
+@utility key-ink {
+  background-color: var(--brand);
+  color: var(--brand-foreground);
+  --ink-hi: rgb(255 255 255 / 0.16);
+  --ink-lo: rgb(0 0 0 / 0.5);
+  --ink-hover: color-mix(in srgb, var(--brand) 84%, white);
+  --ink-press: color-mix(in srgb, var(--brand) 70%, black);
+  box-shadow: inset 0 1px 0 var(--ink-hi), inset 0 -1px 0 var(--ink-lo), 0 1px 1px rgb(26 24 22 / 0.18);
+  &:where(:not(:disabled, [aria-disabled="true"])):hover { background-color: var(--ink-hover); }
+  &:where(:not(:disabled, [aria-disabled="true"])):active { background-color: var(--ink-press); box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.4); }
+  :where([data-theme="dark"], html:not([data-theme])) & {
+    --ink-hi: rgb(255 255 255 / 0.9);
+    --ink-lo: rgb(26 24 22 / 0.28);
+    --ink-hover: color-mix(in srgb, var(--brand) 88%, black);
+    --ink-press: color-mix(in srgb, var(--brand) 76%, black);
+    box-shadow: inset 0 1px 0 var(--ink-hi), inset 0 -1px 0 var(--ink-lo), 0 1px 1px rgb(0 0 0 / 0.5);
+  }
+}
+
+/* Raised tile for the neutral Segmented (chosen segment) */
+@utility key-tile {
+  background-color: var(--workspace-panel);
+  color: var(--workspace-text);
+  box-shadow: 0 0 0 1px var(--workspace-border), 0 1px 2px rgb(26 24 22 / 0.12), inset 0 1px 0 rgb(255 255 255 / 0.9);
+  :where([data-theme="dark"], html:not([data-theme])) & {
+    background-color: var(--control-hover);
+    box-shadow: 0 0 0 1px rgb(255 255 255 / 0.06), 0 1px 2px rgb(0 0 0 / 0.5), inset 0 1px 0 rgb(255 255 255 / 0.08);
+  }
+}
+
+/* Small flat key (stepper buttons): control fill with a top highlight */
+@utility key-flat {
+  background-color: var(--control);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.6);
+  &:where(:not(:disabled, [aria-disabled="true"])):hover { background-color: var(--control-hover); }
+  &:where(:not(:disabled, [aria-disabled="true"])):active { background-color: color-mix(in srgb, var(--control-hover), var(--workspace-text) 8%); }
+  :where([data-theme="dark"], html:not([data-theme])) & { box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.05); }
+}
+
+/* Keycap: 1px top highlight, 1px bottom edge, hairline ring. "inverse" sits on ink or inverted surfaces. */
+@utility keycap {
+  background-color: var(--control);
+  color: var(--workspace-text-muted);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--workspace-text) 9%, transparent), inset 0 1px 0 rgb(255 255 255 / 0.85), inset 0 -1px 0 color-mix(in srgb, var(--workspace-text) 16%, transparent);
+  :where([data-theme="dark"], html:not([data-theme])) & {
+    background-color: var(--control-hover);
+    box-shadow: 0 0 0 1px rgb(255 255 255 / 0.05), inset 0 1px 0 rgb(255 255 255 / 0.1), inset 0 -1px 0 rgb(0 0 0 / 0.45);
+  }
+}
+@utility keycap-inverse {
+  background-color: color-mix(in srgb, var(--workspace-panel) 16%, transparent);
+  color: color-mix(in srgb, var(--workspace-panel) 88%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--workspace-panel) 14%, transparent), inset 0 1px 0 color-mix(in srgb, var(--workspace-panel) 22%, transparent), inset 0 -1px 0 rgb(0 0 0 / 0.2);
+}
+
+/* Status colours for glyphs on the inverted toast/tooltip surface (ink in light, cream in dark): the opposite theme's values. */
+[data-theme="light"] { --ok-inverse: #7BD39A; --bad-inverse: #FF9C8A; }
+[data-theme="dark"], html:not([data-theme]) { --ok-inverse: #17703A; --bad-inverse: #B3331A; }
+
+@keyframes kit-pop {
+  0% { transform: scale(0.5); opacity: 0; }
+  60% { transform: scale(1.12); opacity: 1; }
+  100% { transform: scale(1); }
+}
 
 /* Clickable controls always show pointer */
 button:not(:disabled),
@@ -308,7 +351,7 @@ button:disabled,
 
 /* ── Focus ring ──────────────────────────────────────────── */
 :focus-visible {
-  outline: 2px solid rgba(109, 109, 244, 0.6);
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
 input:focus-visible,
@@ -328,34 +371,120 @@ html { scroll-behavior: smooth; }
   body, html { background: #fff !important; color: #000 !important; }
 }
 
-/* ── Logo mark: braces draw in, conversion arrows swap ───── */
-.logo-brace {
-  stroke-dasharray: 1;
-  animation: logo-draw 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+/* ═══ MARKETING (landing, tool pages, docs): the ink stage ═══════════════════════════════════
+   Presentation for src/components/landing/** only. This is the one place the stage's own colours live:
+   .mk-ink re-points the workspace tokens at the dark values, so anything inside (header, headline,
+   links, focus ring) is themed through the usual tokens. The demo window is never a child of .mk-ink,
+   so it keeps the page theme. */
+:root {
+  --mk-header: 56px;
+  --mk-overlap: clamp(64px, 11vw, 168px);
 }
-.logo-arrows {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: logo-arrows-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.15s both;
-}
-a:hover .logo-arrows,
-.logo-mark:hover .logo-arrows {
-  animation: logo-arrows-swap 0.5s cubic-bezier(0.22, 1, 0.36, 1);
-}
-@keyframes logo-draw {
-  from { stroke-dashoffset: 1; }
-  to   { stroke-dashoffset: 0; }
-}
-@keyframes logo-arrows-in {
-  from { transform: rotate(-180deg) scale(0.4); opacity: 0; }
-  to   { transform: none; opacity: 1; }
-}
-@keyframes logo-arrows-swap {
-  to { transform: rotate(180deg); }
+@media (min-width: 768px) {
+  :root { --mk-header: 64px; }
 }
 
-/* ── Toolbar active state ────────────────────────────────── */
-@keyframes toolbar-pop {
-  0%   { transform: scale(0.92); opacity: 0.7; }
-  100% { transform: scale(1);    opacity: 1; }
+.mk-ink {
+  color-scheme: dark;
+  --workspace-background: #0C0B0A;
+  --workspace-panel: #141312;
+  --workspace-border: #2A2826;
+  --workspace-text: #F2F0ED;
+  --workspace-text-muted: #A8A39C;
+  --input: #3D3A36;
+  --edge: #77726B;
+  --focus: #F2B544;
+  --sunk: #0F0E0D;
+  --control: #1E1C1A;
+  --control-hover: #292725;
+  --brand: #F2F0ED;
+  --brand-foreground: #1A1816;
+  color: var(--workspace-text);
 }
+.mk-ink ::selection { background: rgb(242 181 68 / 0.38); color: inherit; }
+
+/* The stage floor: flat ink and a hairline where it ends. No grid, no lift: the product window is the only light on it. */
+.mk-stage-bg {
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  background: var(--workspace-background);
+  border-bottom: 1px solid var(--workspace-border);
+  pointer-events: none;
+}
+
+/* The demo window on the stage: hairline ring, 1px top highlight, three-layer shadow. */
+.mk-window {
+  background: var(--workspace-background);
+  box-shadow:
+    0 0 0 1px rgb(26 24 22 / 0.12),
+    inset 0 1px 0 rgb(255 255 255 / 0.9),
+    0 1px 2px rgb(0 0 0 / 0.14),
+    0 12px 24px -8px rgb(0 0 0 / 0.22),
+    0 40px 80px -24px rgb(0 0 0 / 0.45);
+}
+[data-theme="dark"] .mk-window,
+html:not([data-theme]) .mk-window {
+  background: var(--sunk);
+  box-shadow:
+    0 0 0 1px rgb(255 255 255 / 0.1),
+    inset 0 1px 0 rgb(255 255 255 / 0.08),
+    0 1px 2px rgb(0 0 0 / 0.5),
+    0 16px 32px -8px rgb(0 0 0 / 0.6),
+    0 48px 96px -24px rgb(0 0 0 / 0.8);
+}
+
+/* A specimen: a piece of the product laid flat on the page (level 1). Panel fill, hairline ring, one soft contact shadow. */
+.mk-plate {
+  background: var(--workspace-panel);
+  box-shadow: 0 0 0 1px var(--workspace-border), 0 1px 2px rgb(26 24 22 / 0.05);
+}
+
+/* Display type: tight, balanced, punctuation hangs. Size and leading come from utilities on the element. */
+.mk-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.04em;
+  text-wrap: balance;
+  hanging-punctuation: first;
+  font-optical-sizing: auto;
+}
+
+/* The one orchestrated moment: the window rises and the output prints line by line, once. Nothing moves under reduced motion. */
+@keyframes mk-rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes mk-resolve {
+  from { clip-path: inset(0 0 100% 0); }
+  to { clip-path: inset(0 0 0 0); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .mk-rise { animation: mk-rise 780ms cubic-bezier(0.2, 0.7, 0.2, 1) 80ms both; }
+  .mk-rise .mk-resolve { animation: mk-resolve 900ms steps(12, end) 620ms both; }
+}
+
+/* Marketing header: fixed, blurred over whatever is under it. Over an ink surface it carries .mk-ink (ink tokens);
+   over the page it drops the class and takes the page theme plus a hairline. */
+.mk-header {
+  background: color-mix(in srgb, var(--workspace-background) 80%, transparent);
+  -webkit-backdrop-filter: saturate(1.4) blur(14px);
+  backdrop-filter: saturate(1.4) blur(14px);
+  border-bottom: 1px solid transparent;
+  color: var(--workspace-text);
+  transition: background-color 140ms ease-out, border-color 140ms ease-out;
+}
+.mk-header[data-past] { border-bottom-color: var(--workspace-border); }
+/* One amber key per view: while a page's own key is on screen, the header's playground link is plain text. */
+.mk-header[data-quiet] .mk-play {
+  background: transparent;
+  box-shadow: none;
+  color: var(--workspace-text);
+}
+.mk-header[data-quiet] .mk-play:hover { background: var(--control); }
+
+/* Generator outputs that are not the chosen one. A noscript rule in GeneratorSwitch shows them all when the switch cannot run. */
+.mk-gen [data-off] { display: none; }
+
+/* In-page anchors land below the fixed header. */
+html:has(.mk-header) { scroll-padding-top: calc(var(--mk-header) + 16px); }
+/* ═══ end MARKETING ═══ */

@@ -55,14 +55,18 @@ export async function generateUuidV5(namespace: string, name: string): Promise<s
     .reduce((acc, b, i) => acc + (i === 4 || i === 6 || i === 8 || i === 10 ? "-" : "") + b.toString(16).padStart(2, "0"), "");
 }
 
-/** UUID v7 - timestamp + random. */
+/** UUID v7 (RFC 9562): 48-bit unix ms timestamp, version 7, variant bits, rest random. */
 export function generateUuidV7(): string {
-  const ms = BigInt(Date.now());
-  const rand = crypto.getRandomValues(new Uint8Array(10));
-  const time = ms.toString(16).padStart(12, "0");
-  const variant = ((rand[0] & 0x3f) | 0x80).toString(16).padStart(2, "0");
-  const rest = Array.from(rand.slice(1), (b) => b.toString(16).padStart(2, "0")).join("");
-  return `${time.slice(0, 8)}-${time.slice(8, 12)}-7${time.slice(12)}-${variant}-${rest.slice(0, 12)}`;
+  const b = crypto.getRandomValues(new Uint8Array(16));
+  let ms = Date.now();
+  for (let i = 5; i >= 0; i--) {
+    b[i] = ms % 256;
+    ms = Math.floor(ms / 256);
+  }
+  b[6] = (b[6] & 0x0f) | 0x70;
+  b[8] = (b[8] & 0x3f) | 0x80;
+  const h = Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 }
 
 export type UuidVariant = "v4" | "v1" | "v7" | "v5";
@@ -113,6 +117,13 @@ export function urlDecode(text: string): string {
 export async function sha256Hex(text: string): Promise<string> {
   const data = new TextEncoder().encode(text);
   const hash = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(hash))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+export async function shaHex(algo: "SHA-384" | "SHA-512", text: string): Promise<string> {
+  const hash = await crypto.subtle.digest(algo, new TextEncoder().encode(text));
   return Array.from(new Uint8Array(hash))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
@@ -309,6 +320,7 @@ export function jsonUnescape(text: string): string {
  *  - smart/curly quotes → straight quotes
  *  - single-quoted strings → double-quoted (JSON-aware, not blind)
  *  - escaped "\"\"...\"\"" wrappers and stray leading/trailing quotes
+ *  - line and block comments → removed
  *  - unquoted keys → quoted
  *  - trailing commas → removed
  *  - Python literals: True/False/None → true/false/null
@@ -343,9 +355,35 @@ export function cleanJson(text: string): string {
       }
       return t;
     },
-    // Pass 3: quote unquoted object keys ({a: 1} → {"a": 1}).
+    // Pass 3: drop // line and /* block */ comments. Text inside double quotes is left alone, and a comment
+    // must start the input or follow whitespace or a structural character, so the // in http://x survives
+    // inside a single-quoted string too.
+    // ponytail: single-quoted strings are not tracked (their apostrophes are ambiguous); a " //" with a space
+    // before it inside one is read as a comment. Track them here if that ever shows up in real input.
+    (s) => {
+      let out = "";
+      let inDouble = false;
+      for (let i = 0; i < s.length; i++) {
+        const ch = s[i]!;
+        if (inDouble) {
+          out += ch;
+          if (ch === "\\") out += s[++i] ?? "";
+          else if (ch === '"') inDouble = false;
+        } else if (ch === '"') {
+          inDouble = true;
+          out += ch;
+        } else if (ch === "/" && (s[i + 1] === "/" || s[i + 1] === "*") && (i === 0 || /[\s,{}[\]]/.test(s[i - 1]!))) {
+          // Jump to the last character of the comment: the line break after // stays, the closing */ goes.
+          const end = s[i + 1] === "/" ? s.indexOf("\n", i) - 1 : s.indexOf("*/", i + 2) + 1;
+          if (end <= i) break; // the comment runs to the end of the input
+          i = end;
+        } else out += ch;
+      }
+      return out;
+    },
+    // Pass 4: quote unquoted object keys ({a: 1} → {"a": 1}).
     (s) => s.replace(/([{,]\s*)([A-Za-z_$][\w$]*)(\s*:)/g, '$1"$2"$3'),
-    // Pass 4: single-quoted strings → double quotes, JSON-aware. A
+    // Pass 5: single-quoted strings → double quotes, JSON-aware. A
     // single-quote opens a string only at value/key positions (after
     // { [ , : or at the start); it closes when the next non-space char is
     // a structural char (, } ] :) or end of input. Apostrophes elsewhere
@@ -402,7 +440,7 @@ export function cleanJson(text: string): string {
       }
       return out;
     },
-    // Pass 5: remove trailing commas before } or ].
+    // Pass 6: remove trailing commas before } or ].
     (s) => s.replace(/,\s*([}\]])/g, "$1"),
   ];
 
@@ -452,6 +490,20 @@ const PASS_CHARS = {
   digits: "0123456789",
   symbols: "!@#$%^&*()-_=+[]{};:,.<>?",
 };
+
+/** Entropy in bits of a random password drawn from the selected character sets. */
+export function passwordBits(
+  length: number,
+  opts: { lower?: boolean; upper?: boolean; digits?: boolean; symbols?: boolean } = {},
+): number {
+  const { lower = true, upper = true, digits = true, symbols = true } = opts;
+  const pool =
+    (lower ? PASS_CHARS.lower.length : 0) +
+    (upper ? PASS_CHARS.upper.length : 0) +
+    (digits ? PASS_CHARS.digits.length : 0) +
+    (symbols ? PASS_CHARS.symbols.length : 0);
+  return pool > 1 ? Math.round(length * Math.log2(pool)) : 0;
+}
 
 export function generatePassword(
   length = 16,
@@ -740,6 +792,7 @@ export function parseUrl(input: string): UrlParts {
 /* ── Sample inputs per util ── */
 
 export type UtilTab =
+  | "auto"
   | "uuid"
   | "base64"
   | "jwt"
@@ -760,30 +813,32 @@ export type UtilTab =
   | "clean"
   | "instant";
 
+/** Single source of display names for every tool (panel, menus, palette, status bar, tab titles). Ordered as the Utils list shows them. */
 export const UTIL_TABS: { id: UtilTab; label: string; short?: string }[] = [
-  // Ordered by typical usage - most-used tools at the top.
-  { id: "instant", label: "Instant" },
-  { id: "uuid", label: "UUID" },
-  { id: "base64", label: "Base64" },
-  { id: "jwt", label: "JWT" },
-  { id: "regex", label: "Regex" },
-  { id: "hash", label: "Hash" },
-  { id: "password", label: "Password" },
-  { id: "url", label: "URL Encode" },
-  { id: "case", label: "Case" },
-  { id: "escape", label: "Escape" },
-  { id: "html", label: "HTML" },
-  { id: "hex", label: "Hex" },
-  { id: "number", label: "Number" },
-  { id: "urlparse", label: "URL Parse" },
-  { id: "clean", label: "Clean JSON" },
-  { id: "color", label: "Color" },
-  { id: "cron", label: "Cron" },
-  { id: "lorem", label: "Lorem" },
-  { id: "stats", label: "Stats" },
+  { id: "auto", label: "Detect anything" },
+  { id: "uuid", label: "UUID generator" },
+  { id: "password", label: "Password generator" },
+  { id: "lorem", label: "Lorem ipsum generator" },
+  { id: "hash", label: "Hash generator" },
+  { id: "instant", label: "Time zone converter" },
+  { id: "cron", label: "Cron explainer" },
+  { id: "regex", label: "Regex tester" },
+  { id: "case", label: "Text case converter" },
+  { id: "stats", label: "Word counter" },
+  { id: "clean", label: "JSON fixer" },
+  { id: "base64", label: "Base64 encode/decode" },
+  { id: "url", label: "URL encode/decode" },
+  { id: "hex", label: "Hex encode/decode" },
+  { id: "html", label: "HTML escape/unescape" },
+  { id: "escape", label: "JSON escape/unescape" },
+  { id: "jwt", label: "JWT decoder" },
+  { id: "urlparse", label: "URL parser" },
+  { id: "number", label: "Number base converter" },
+  { id: "color", label: "Color converter" },
 ];
 
 export const UTIL_SAMPLES: Record<UtilTab, string> = {
+  auto: "",
   uuid: "",
   base64: "Hello, Formaty!",
   jwt: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkZvcm1hdHkiLCJpYXQiOjE1MTYyMzkwMjJ9.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
@@ -798,7 +853,7 @@ export const UTIL_SAMPLES: Record<UtilTab, string> = {
   escape: 'Line 1\nLine 2\t"quoted"',
   html: '<div class="x">A & B</div>',
   regex: "The quick brown fox jumps over the lazy dog. The fox is quick.",
-  color: "#6d6df4",
+  color: "#F2B544",
   cron: "*/15 * * * *",
   lorem: "",
   password: "",
@@ -807,12 +862,14 @@ export const UTIL_SAMPLES: Record<UtilTab, string> = {
 
 export function utilPlaceholder(tab: UtilTab): string {
   switch (tab) {
+    case "auto":
+      return "Paste a token, timestamp, color, cron line, URL, Base64 or plain text";
     case "jwt":
       return "Paste JWT (header.payload.signature)…";
     case "instant":
       return "";
     case "hash":
-      return "Text to hash (SHA-256 / SHA-1)…";
+      return "Text to hash…";
     case "url":
       return "URL or percent-encoded string…";
     case "urlparse":
@@ -834,7 +891,7 @@ export function utilPlaceholder(tab: UtilTab): string {
     case "regex":
       return "Test text - matches are listed on the right…";
     case "color":
-      return "#6d6df4, rgb(109,109,244), hsl(240 90% 69%), or a CSS color name…";
+      return "#F2B544, rgb(242, 181, 68), hsl(39, 87%, 61%), or a CSS color name…";
     case "cron":
       return "5 or 6 field cron expression (e.g. */15 * * * *)…";
     case "lorem":

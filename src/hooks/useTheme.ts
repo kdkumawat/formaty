@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { trackEvent } from "@/components/Analytics";
+import { themeInlineCss } from "@/lib/utils/themeTokens";
 
 export type ThemeMode = "system" | "dark" | "light";
 
@@ -18,12 +19,7 @@ function applyTheme(mode: ThemeMode) {
   const resolved = getResolvedTheme(mode);
   document.documentElement.setAttribute("data-theme", resolved);
   const style = document.getElementById("formaty-theme-inline");
-  if (style) {
-    style.textContent =
-      resolved === "dark"
-        ? "html,body{--workspace-background:#0a0a10;--workspace-panel:#12121a;--workspace-border:#23232e;--workspace-text:#ececf1;--workspace-text-muted:#9a9aa5}"
-        : "html,body{--workspace-background:#f7f7fa;--workspace-panel:#ffffff;--workspace-border:#e7e7ef;--workspace-text:#181820;--workspace-text-muted:#5f5f6b}";
-  }
+  if (style) style.textContent = themeInlineCss(resolved);
 }
 
 export function useTheme() {

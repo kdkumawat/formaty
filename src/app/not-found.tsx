@@ -1,60 +1,23 @@
 import Link from "next/link";
-import { Logo } from "@/components/Logo";
-
-const linkBtnClass =
-  "inline-flex items-center justify-center gap-2 h-8 min-h-8 px-2 rounded border-0 bg-transparent text-sm font-medium whitespace-nowrap text-[var(--workspace-text)] hover:bg-[var(--workspace-panel)] hover:underline";
+import { Footer, H1, KeyLink, LINK, SiteHeader, Stage, WRAP } from "@/components/landing";
 
 export default function NotFound() {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-[var(--workspace-background)] px-4 py-12">
-      <div className="flex flex-col items-center gap-4 text-center">
-        <Logo size={48} className="shrink-0 text-primary" />
-        <h1 className="text-xl font-bold text-[var(--workspace-text)]">Page not found</h1>
-        <p className="max-w-sm text-sm text-[var(--workspace-text-muted)]">
-          The page you&apos;re looking for doesn&apos;t exist or has been moved.
-        </p>
-      </div>
-      <div className="flex w-full max-w-md flex-col gap-5 rounded-xl border border-[var(--workspace-border)] bg-[var(--workspace-panel)] p-6">
-        <div>
-          <p className="mb-3 text-sm font-medium text-[var(--workspace-text)]">
-            Your data stays in your browser only - formaty runs locally
+    <div className="flex min-h-screen flex-col bg-[var(--workspace-background)] text-[var(--workspace-text)]">
+      <SiteHeader quiet />
+      <Stage>
+        <main id="main" className={`${WRAP} flex min-h-[calc(72vh-var(--mk-header))] flex-col justify-center gap-5 py-[clamp(48px,8vw,112px)]`}>
+          <h1 className={`${H1} max-w-[14ch]`}>This page does not exist.</h1>
+          <p className="max-w-[34em] text-[16px] text-[var(--workspace-text-muted)] sm:text-[17px]">
+            It may have moved or never been here. Your data is safe: Formaty runs in your browser tab.
           </p>
-          <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs text-[var(--workspace-text-muted)]">
-            <span>• Format & convert JSON, XML, YAML, TOML, CSV</span>
-            <span>• Tree, graph & table views</span>
-            <span>• JSONPath & JMESPath query</span>
-            <span>• cURL → fetch API</span>
-            <span>• Schema validation & type generation</span>
-            <span>• Diff, beautify, minify</span>
+          <div className="flex flex-wrap items-center gap-x-7 gap-y-2 pt-2">
+            <KeyLink href="/playground">Open the playground</KeyLink>
+            <Link href="/tools" className={LINK}>Browse all tools</Link>
           </div>
-        </div>
-        <Link href="/" className={`${linkBtnClass} w-full justify-center py-2 text-primary`}>
-          Go to formaty
-        </Link>
-      </div>
-
-      <div className="flex w-full max-w-md flex-col gap-5 rounded-xl border border-[var(--workspace-border)] bg-[var(--workspace-panel)] p-6">
-        <p className="text-sm font-medium text-[var(--workspace-text)]">Popular tools</p>
-        <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs text-[var(--workspace-text-muted)]">
-          {[
-            ["Compare Lists", "/compare-lists"],
-            ["JSON Formatter", "/json-formatter"],
-            ["JSON Diff", "/json-diff"],
-            ["JSONPath Tester", "/jsonpath-tester"],
-            ["SQL IN Generator", "/sql-in-clause-generator"],
-            ["JSON to TypeScript", "/json-to-typescript"],
-            ["JSON to SQL", "/json-to-sql"],
-            ["UUID Generator", "/utils/uuid-generator"],
-          ].map(([label, href]) => (
-            <Link key={href} href={href} className="transition-colors hover:text-primary">
-              {label}
-            </Link>
-          ))}
-        </div>
-        <Link href="/tools" className={`${linkBtnClass} w-full justify-center py-2`}>
-          Browse all tools
-        </Link>
-      </div>
+        </main>
+      </Stage>
+      <Footer />
     </div>
   );
 }

@@ -53,6 +53,8 @@ describe("curl codegen", () => {
     expect(code).toContain('"X-Key": "123"');
     expect(code).toContain("method: \"POST\"");
     expect(code).toContain("JSON.stringify(");
+    // A JSON body sits under the property that holds it, not at column 0.
+    expect(code).toContain('    body: JSON.stringify({\n      "name": "A"\n    }),');
     expect(code).toContain('"name": "A"');
   });
 

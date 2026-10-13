@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decodeState, encodeState, MAX_SHARE_HASH_CHARS, SHARE_TOO_LARGE } from "./shareState";
+import { decodeState, encodeState, LIST_OPTIONS_VERSION, MAX_SHARE_HASH_CHARS, SHARE_TOO_LARGE, upgradeListOptions } from "./shareState";
 
 describe("shareState encode/decode", () => {
   it("roundtrips a simple state", () => {
@@ -74,5 +74,15 @@ describe("shareState encode/decode", () => {
 
   it("exposes MAX_SHARE_HASH_CHARS as 32_000", () => {
     expect(MAX_SHARE_HASH_CHARS).toBe(32_000);
+  });
+});
+
+describe("upgradeListOptions", () => {
+  const old = { listCompareOptions: { trim: false, stripQuotes: false, caseInsensitive: true } };
+  it("turns trim and stripQuotes on for state saved before the marker", () => {
+    expect(upgradeListOptions(old, undefined).listCompareOptions).toEqual({ trim: true, stripQuotes: true, caseInsensitive: true });
+  });
+  it("keeps the user's choice for state saved at the current version", () => {
+    expect(upgradeListOptions(old, LIST_OPTIONS_VERSION)).toBe(old);
   });
 });

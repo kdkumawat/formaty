@@ -1,170 +1,63 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { CheckCircleIcon, QuestionMarkCircleIcon, SparklesIcon, XCircleIcon } from "@heroicons/react/24/outline";
-import { ArrowPathIcon, NoSymbolIcon } from "@heroicons/react/24/solid";
-import { Tooltip } from "./Tooltip";
+import Link from "next/link";
+import { LockClosedIcon } from "@heroicons/react/16/solid";
 import { FeedbackDialog } from "@/components/FeedbackDialog";
+import { Tooltip } from "@/components/kit";
 
 interface StatusBarProps {
-  valid: boolean | null;
-  errorMessage: string | null;
-  lineCount: number;
-  sizeFormatted: string;
-  liveTransform?: boolean;
-  onLiveTransformToggle?: () => void;
-  inputFormatDropdown?: ReactNode;
-  rightActions?: ReactNode;
-  cursorPosition?: string;
-  indentSize?: number;
-  encoding?: string;
-  sharedLink?: ReactNode;
-  /** Hide the bar entirely (embed mode). */
-  hide?: boolean;
+  /** Left-hand details for the active tab kind. */
+  details: ReactNode;
+  liveTransform: boolean;
+  onLiveTransform: (v: boolean) => void;
+  indent: number;
+  onCycleIndent: () => void;
+  onShortcuts: () => void;
 }
 
-export function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
+const sep = <span className="select-none text-[var(--workspace-border)] max-sm:hidden" aria-hidden>·</span>;
+// Plain text buttons: the 24px row is too short for a 28px kit Button.
+const textBtn =
+  "inline-flex h-5 cursor-pointer items-center rounded px-1.5 transition-colors hover:bg-control hover:text-[var(--workspace-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]";
 
-export function StatusBar({
-  valid,
-  errorMessage,
-  lineCount,
-  sizeFormatted,
-  liveTransform,
-  onLiveTransformToggle,
-  inputFormatDropdown,
-  rightActions,
-  cursorPosition,
-  indentSize,
-  encoding = "UTF-8",
-  sharedLink,
-  hide = false,
-}: StatusBarProps) {
-  if (hide) return null;
-  const validInvalidEl = errorMessage ? (
-    <Tooltip content={errorMessage} className="flex min-w-0 max-w-full shrink items-center gap-1 text-red-400">
-      <XCircleIcon className="h-3 w-3 shrink-0" aria-hidden />
-      <span className="min-w-0 truncate">{errorMessage}</span>
-    </Tooltip>
-  ) : valid === true ? (
-    <span className="flex items-center gap-1 font-medium text-emerald-500">
-      <CheckCircleIcon className="h-3 w-3 shrink-0" aria-hidden />
-      Valid
-    </span>
-  ) : valid === false ? (
-    <span className="flex items-center gap-1 text-red-400">
-      <XCircleIcon className="h-3 w-3 shrink-0" aria-hidden />
-      Invalid
-    </span>
-  ) : (
-    <span className="opacity-30">-</span>
-  );
-
+/** Single 24px row at the bottom of the window. Below 640px it keeps the privacy note, validity and Live. */
+export function StatusBar({ details, liveTransform, onLiveTransform, indent, onCycleIndent, onShortcuts }: StatusBarProps) {
   return (
     <div
       data-tour="status-bar"
-      className="flex flex-shrink-0 items-center justify-between gap-1 overflow-x-auto overflow-y-hidden border-t border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-2 text-xs text-[var(--workspace-text-muted)]"
-      style={{ minHeight: "24px", height: "24px", paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
+      className="flex h-6 shrink-0 items-center justify-between gap-3 overflow-hidden whitespace-nowrap border-t border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-3 text-[12px] text-[var(--workspace-text-muted)]"
     >
-      <div className="flex min-w-0 flex-1 items-center gap-0 overflow-x-auto" style={{ height: "24px" }}>
-        <span className="shrink-0 px-2">{sizeFormatted}</span>
-        <span className="shrink-0 select-none text-[var(--workspace-border)]">·</span>
-        {cursorPosition ? (
-          <span className="shrink-0 tabular-nums px-2">{cursorPosition}</span>
-        ) : (
-          <span className="shrink-0 tabular-nums px-2">{lineCount} lines</span>
-        )}
-        {encoding && (
-          <>
-            <span className="shrink-0 select-none text-[var(--workspace-border)]">·</span>
-            <span className="shrink-0 tabular-nums px-2">{encoding}</span>
-          </>
-        )}
-        {typeof indentSize === "number" && (
-          <>
-            <span className="shrink-0 select-none text-[var(--workspace-border)]">·</span>
-            <span className="shrink-0 tabular-nums px-2">Indent {indentSize}</span>
-          </>
-        )}
-        {inputFormatDropdown && (
-          <>
-            <span className="shrink-0 select-none text-[var(--workspace-border)]">·</span>
-            {inputFormatDropdown}
-          </>
-        )}
-        {onLiveTransformToggle && (
-          <>
-            <span className="shrink-0 select-none text-[var(--workspace-border)]">·</span>
-            <Tooltip content={liveTransform ? "Live transform on" : "Live transform off"} className="shrink-0">
-            <button
-              type="button"
-              className={`inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 transition-all hover:bg-[var(--workspace-border)]/40 ${
-                liveTransform
-                  ? "text-primary"
-                  : "opacity-50 hover:opacity-100 hover:text-[var(--workspace-text)]"
-              }`}
-              onClick={onLiveTransformToggle}
-            >
-              {liveTransform ? (
-                <ArrowPathIcon className="h-3.5 w-3.5 shrink-0" />
-              ) : (
-                <NoSymbolIcon className="h-3.5 w-3.5 shrink-0" />
-              )}
-              <span className="min-w-[5.5rem]">Live Transform</span>
-            </button>
-            </Tooltip>
-          </>
-        )}
-        <>
-          <span className="shrink-0 select-none text-[var(--workspace-border)]">·</span>
-          {validInvalidEl && <span className="shrink-0 px-2">{validInvalidEl}</span>}
-        </>
-        {sharedLink ? (
-          <>
-            <span className="shrink-0 select-none text-[var(--workspace-border)]">·</span>
-            <span className="shrink-0 px-2">{sharedLink}</span>
-          </>
-        ) : null}
-        <span className="flex-1" />
+      <div className="flex min-w-0 items-center gap-2">
+        <Link href="/docs#privacy" className="inline-flex shrink-0 items-center gap-1 hover:text-[var(--workspace-text)]">
+          <LockClosedIcon className="size-3.5" aria-hidden />
+          <span className="max-[420px]:hidden">Nothing leaves this device</span>
+          <span className="hidden max-[420px]:inline">Private</span>
+        </Link>
+        {details && sep}
+        {details}
       </div>
-      <div className="flex shrink-0 flex-nowrap items-center gap-0.5 pr-1">
-        <FeedbackDialog trigger="link" label="Feedback" />
-        <Tooltip content="Take the tour">
-          <button
-            type="button"
-            aria-label="Take the tour"
-            className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-[var(--workspace-text-muted)] transition-colors hover:bg-[var(--workspace-border)]/40 hover:text-[var(--workspace-text)]"
-            onClick={() => window.dispatchEvent(new Event("formaty:replay-tour"))}
-          >
-            <SparklesIcon className="h-3.5 w-3.5 shrink-0" />
+      <div className="flex shrink-0 items-center gap-0.5">
+        <Tooltip content={liveTransform ? "Live transform is on. Click to turn it off" : "Live transform is off. Click to turn it on"} shortcut="⌘⇧L" side="top">
+          <button type="button" role="switch" aria-checked={liveTransform} className={textBtn} onClick={() => onLiveTransform(!liveTransform)}>
+            <span className={`mr-1.5 size-1.5 rounded-full ${liveTransform ? "bg-ok" : "bg-[var(--workspace-text-muted)] opacity-50"}`} aria-hidden />
+            Live
           </button>
         </Tooltip>
-        <Tooltip content="Keyboard shortcuts" shortcut="? · ⌘/">
-          <button
-            type="button"
-            aria-label="Keyboard shortcuts"
-            className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-[var(--workspace-text-muted)] transition-colors hover:bg-[var(--workspace-border)]/40 hover:text-[var(--workspace-text)]"
-            onClick={() => window.dispatchEvent(new Event("formaty:open-shortcuts"))}
-          >
-            <QuestionMarkCircleIcon className="h-3.5 w-3.5 shrink-0" />
+        <Tooltip content="Indent width. Click to switch between 2 and 4 spaces" side="top">
+          <button type="button" className={`${textBtn} max-sm:hidden`} onClick={onCycleIndent}>
+            {indent === 0 ? "No indent" : `${indent} spaces`}
           </button>
         </Tooltip>
+        <Tooltip content="Keyboard shortcuts" shortcut="⌘/" side="top">
+          <button type="button" className={`${textBtn} max-sm:hidden`} onClick={onShortcuts}>
+            Shortcuts
+          </button>
+        </Tooltip>
+        <span className="max-sm:hidden">
+          <FeedbackDialog trigger="link" label="Feedback" className={`${textBtn} !text-[12px]`} />
+        </span>
       </div>
-      {rightActions ? (
-        <>
-          <span className="shrink-0 select-none text-[var(--workspace-border)]">·</span>
-        <div className="flex shrink-0 flex-nowrap items-center gap-1 overflow-x-auto pr-1">{rightActions}</div>
-        </>
-      ) : null}
     </div>
   );
-}
-
-export function getSizeFormatted(text: string): string {
-  if (!text.trim()) return "0 B";
-  return formatSize(new Blob([text]).size);
 }

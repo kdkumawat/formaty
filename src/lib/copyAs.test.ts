@@ -4,8 +4,6 @@ import {
   listCopyFormatLabel,
   loadListCopyPref,
   saveListCopyPref,
-  type QuoteStyle,
-  type LayoutStyle,
 } from "./copyAs";
 
 const SAMPLE_ITEMS = ["1001", "1002", "1003"];

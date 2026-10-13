@@ -8,7 +8,6 @@ import {
   UTIL_REDIRECTS,
   UTIL_ROUTES,
   getPageConfig,
-  isUtilPageConfig,
 } from "@/lib/seoUtils";
 
 export async function generateStaticParams() {

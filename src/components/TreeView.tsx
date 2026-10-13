@@ -9,17 +9,10 @@ import {
   useRef,
   useState,
 } from "react";
-import {
-  ChevronDownIcon,
-  ChevronRightIcon,
-  ClipboardDocumentIcon,
-  ChevronUpIcon,
-  XMarkIcon,
-} from "@heroicons/react/24/outline";
-import { AnimatedMagnifierIcon, useIconAnimation } from "@/components/icons";
+import { ChevronDownIcon, ChevronRightIcon, ChevronUpIcon, MagnifyingGlassIcon } from "@heroicons/react/16/solid";
+import { Button, IconButton, Segmented, TextField, Tooltip } from "@/components/kit";
 import type { JsonValue } from "@/lib/json/core";
 import { searchJson, type SearchMatch } from "@/lib/json/core";
-import { Tooltip } from "@/components/workspace/Tooltip";
 import { HUGE_INPUT_BYTES } from "@/lib/io/size";
 import { ReadOnlyTextViewer } from "@/components/editor/ReadOnlyTextViewer";
 
@@ -176,8 +169,7 @@ function Node({
   );
 
   const branchClass = "border-[var(--workspace-border)]";
-  const keyClass = "font-medium text-primary";
-  const muted = "text-[var(--workspace-text-muted)]";
+  const keyClass = "font-medium text-[var(--workspace-text)]";
   const text = "text-[var(--workspace-text)]";
 
   const children: { key: string; val: JsonValue; isIndex: boolean }[] = [];
@@ -222,20 +214,20 @@ function Node({
         {canExpand ? (
           <button
             type="button"
-            className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-[var(--workspace-text-muted)] hover:bg-primary/10 hover:text-primary ${largeFile && depth > 4 ? "opacity-70" : ""}`}
+            className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-[var(--workspace-text-muted)] hover:bg-control hover:text-[var(--workspace-text)] ${largeFile && depth > 4 ? "opacity-70" : ""}`}
             onClick={() => setOpen((s) => !s)}
             aria-label={open ? "Collapse" : "Expand"}
           >
             {open ? (
-              <ChevronDownIcon className="h-3.5 w-3.5" />
+              <ChevronDownIcon className="size-4" />
             ) : (
-              <ChevronRightIcon className="h-3.5 w-3.5" />
+              <ChevronRightIcon className="size-4" />
             )}
           </button>
         ) : (
           <span className="inline-block h-5 w-5 shrink-0" />
         )}
-        <Tooltip content={path}>
+        <Tooltip content={`Copy path ${path}`}>
         <button
           type="button"
           className={`${keyClass} hover:underline`}
@@ -246,9 +238,7 @@ function Node({
         </Tooltip>
         {showTypeBadges ? (
           <span
-            className={`shrink-0 rounded px-1 py-px text-[10px] font-medium ${
-              isDark ? "bg-white/10 text-white/80" : "bg-black/5 text-black/65"
-            }`}
+            className="shrink-0 rounded bg-control-hover px-1 py-px text-[12px] font-medium text-[var(--workspace-text-muted)]"
           >
             {valueType(value)}
             {canExpand ? ` · ${childCount}` : ""}
@@ -258,36 +248,13 @@ function Node({
           <Tooltip content="Copy value">
           <button
             type="button"
-            className={`min-w-0 truncate font-mono ${text} hover:text-primary`}
+            className={`min-w-0 truncate font-mono ${text} hover:text-[var(--workspace-text)]`}
             onClick={() => void copy("value")}
           >
             {prettyValue(value)}
           </button>
           </Tooltip>
         ) : null}
-        {/* Copy path / value - visible on hover, right next to the node */}
-        <span className="ml-1 hidden shrink-0 items-center gap-0.5 group-hover:flex">
-          <Tooltip content="Copy path">
-          <button
-            type="button"
-            className={`inline-flex h-5 items-center gap-0.5 rounded px-1 text-[10px] ${muted} hover:bg-primary/10 hover:text-primary`}
-            onClick={() => void copy("path")}
-          >
-            <ClipboardDocumentIcon className="h-3 w-3" />
-            path
-          </button>
-          </Tooltip>
-          <Tooltip content="Copy value">
-          <button
-            type="button"
-            className={`inline-flex h-5 items-center gap-0.5 rounded px-1 text-[10px] ${muted} hover:bg-primary/10 hover:text-primary`}
-            onClick={() => void copy("value")}
-          >
-            <ClipboardDocumentIcon className="h-3 w-3" />
-            value
-          </button>
-          </Tooltip>
-        </span>
       </div>
       {open && canExpand ? (
         <div>
@@ -309,13 +276,9 @@ function Node({
             />
           ))}
           {truncated ? (
-            <button
-              type="button"
-              className={`ml-8 py-1 text-[11px] text-primary hover:underline`}
-              onClick={() => setShowAll(true)}
-            >
-              Show all {childCount} items…
-            </button>
+            <Button variant="ghost" className="ml-8" onClick={() => setShowAll(true)}>
+              Show all {childCount} items
+            </Button>
           ) : null}
         </div>
       ) : null}
@@ -373,7 +336,6 @@ export const TreeView = forwardRef<TreeViewRef, TreeViewProps>(function TreeView
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   /** Search magnifier nudges when the box is hovered or focused. */
-  const searchIcon = useIconAnimation();
 
   const matches = useMemo((): SearchMatch[] => {
     if (!query.trim()) return [];
@@ -429,13 +391,6 @@ export const TreeView = forwardRef<TreeViewRef, TreeViewProps>(function TreeView
     focusSearch: () => searchInputRef.current?.focus(),
   }));
 
-  const chip = (active: boolean) =>
-    `inline-flex h-6 cursor-pointer items-center rounded-md px-2 text-[10px] font-semibold transition-colors ${
-      active
-        ? "bg-primary/15 text-primary"
-        : "text-[var(--workspace-text-muted)] hover:bg-primary/10 hover:text-[var(--workspace-text)]"
-    }`;
-
   const hugePreview = useMemo<string>(() => {
     if (!isHuge) return "";
     try {
@@ -458,7 +413,7 @@ export const TreeView = forwardRef<TreeViewRef, TreeViewProps>(function TreeView
       <div
         className={`flex h-full min-h-0 flex-col overflow-hidden border border-[var(--workspace-border)] bg-[var(--workspace-panel)] ${className ?? ""}`}
       >
-        <div className="shrink-0 border-b border-[var(--workspace-border)] px-3 py-1.5 text-[11px] text-[var(--workspace-text-muted)]">
+        <div className="shrink-0 border-b border-[var(--workspace-border)] px-3 py-1.5 text-[12px] text-[var(--workspace-text-muted)]">
           Huge input — tree view disabled. Showing the first 200 items.
         </div>
         <ReadOnlyTextViewer value={hugePreview} language="json" className="flex-1" />
@@ -470,103 +425,79 @@ export const TreeView = forwardRef<TreeViewRef, TreeViewProps>(function TreeView
     <div
       className={`flex h-full min-h-0 flex-col overflow-hidden border border-[var(--workspace-border)] bg-[var(--workspace-panel)] ${className ?? ""}`}
     >
-      <div className="flex shrink-0 flex-wrap items-center gap-1 border-b border-[var(--workspace-border)] px-2 py-1">
-        <button
-          type="button"
-          className="rounded-md px-2 py-1 text-[11px] font-medium text-[var(--workspace-text-muted)] hover:bg-primary/10 hover:text-primary"
+      <div className="flex min-h-9 shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-[var(--workspace-border)] px-3 py-1">
+        <Button
+          variant="ghost"
           onClick={() => {
             setExpandAll(true);
             setCollapseGen((g) => g + 1);
           }}
         >
           Expand all
-        </button>
-        <button
-          type="button"
-          className="rounded-md px-2 py-1 text-[11px] font-medium text-[var(--workspace-text-muted)] hover:bg-primary/10 hover:text-primary"
+        </Button>
+        <Button
+          variant="ghost"
           onClick={() => {
             setExpandAll(false);
             setCollapseGen((g) => g + 1);
           }}
         >
           Collapse all
-        </button>
-        {largeFile && (
-          <span className="ml-auto hidden text-[10px] text-amber-600 dark:text-amber-400 sm:inline">
-            Large file - expand carefully
-          </span>
-        )}
-        <div className="ml-auto flex min-w-0 flex-1 items-center gap-1 sm:max-w-[22rem] sm:ml-2">
-          <div className="flex min-w-0 flex-1 items-center gap-1 rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-1.5 py-0.5" {...searchIcon.bind}>
-            <AnimatedMagnifierIcon ref={searchIcon.ref} className="h-3 w-3 shrink-0 text-[var(--workspace-text-muted)]" />
-            <input
-              ref={searchInputRef}
-              type="text"
-              value={query}
-              onChange={(e) => {
-                setQuery(e.target.value);
-                setCurrentIdx(0);
-              }}
-              onFocus={searchIcon.bind.onFocus}
-              onBlur={searchIcon.bind.onBlur}
-              placeholder={`Search ${mode === "key" ? "keys" : "values"}…`}
-              aria-label="Search JSON tree"
-              spellCheck={false}
-              className="min-w-0 flex-1 bg-transparent text-[11px] text-[var(--workspace-text)] outline-none placeholder:text-[var(--workspace-text-muted)]/60"
-            />
-            {query && (
-              <button
-                type="button"
-                aria-label="Clear search"
-                className="shrink-0 rounded p-0.5 text-[var(--workspace-text-muted)] hover:text-[var(--workspace-text)]"
-                onClick={clearSearch}
-              >
-                <XMarkIcon className="h-3 w-3" />
-              </button>
-            )}
-          </div>
-          <button type="button" className={chip(mode === "key")} onClick={() => { setMode("key"); setCurrentIdx(0); }} title="Search keys">
-            Keys
-          </button>
-          <button type="button" className={chip(mode === "value")} onClick={() => { setMode("value"); setCurrentIdx(0); }} title="Search values">
-            Values
-          </button>
-          <button
-            type="button"
-            className={chip(caseSensitive)}
+        </Button>
+        {largeFile && <span className="hidden text-[12px] text-[var(--workspace-text-muted)] sm:inline">Large file: expand carefully</span>}
+        <div className="ml-auto flex min-w-0 flex-1 flex-wrap items-center justify-end gap-1 sm:max-w-[30rem]">
+          <TextField
+            ref={searchInputRef}
+            aria-label="Search JSON tree"
+            icon={<MagnifyingGlassIcon />}
+            placeholder={`Search ${mode === "key" ? "keys" : "values"}`}
+            spellCheck={false}
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setCurrentIdx(0);
+            }}
+            onClear={clearSearch}
+            wrapperClassName="min-w-[8rem] flex-1"
+          />
+          <Segmented
+            aria-label="Search in"
+            value={mode}
+            onChange={(m) => {
+              setMode(m);
+              setCurrentIdx(0);
+            }}
+            options={[
+              { value: "key", label: "Keys" },
+              { value: "value", label: "Values" },
+            ]}
+          />
+          <IconButton
+            label={caseSensitive ? "Case-sensitive" : "Case-insensitive"}
+            variant={caseSensitive ? "selected" : "ghost"}
+            aria-pressed={caseSensitive}
             onClick={() => setCaseSensitive((v) => !v)}
-            title={caseSensitive ? "Case-sensitive" : "Case-insensitive"}
           >
-            Aa
-          </button>
+            <span className="text-[12px] font-semibold">Aa</span>
+          </IconButton>
           {matches.length > 0 && (
             <>
-              <span className="shrink-0 text-[10px] font-medium tabular-nums text-[var(--workspace-text-muted)]">
+              <span className="shrink-0 text-[12px] font-medium tabular-nums text-[var(--workspace-text-muted)]">
                 {Math.min(currentIdx + 1, matches.length)}/{matches.length}
               </span>
-              <button
-                type="button"
-                aria-label="Previous match"
-                className="shrink-0 rounded p-0.5 text-[var(--workspace-text-muted)] hover:bg-primary/10 hover:text-primary"
-                onClick={() => goTo(-1)}
-              >
-                <ChevronUpIcon className="h-3.5 w-3.5" />
-              </button>
-              <button
-                type="button"
-                aria-label="Next match"
-                className="shrink-0 rounded p-0.5 text-[var(--workspace-text-muted)] hover:bg-primary/10 hover:text-primary"
-                onClick={() => goTo(1)}
-              >
-                <ChevronDownIcon className="h-3.5 w-3.5" />
-              </button>
+              <IconButton label="Previous match" onClick={() => goTo(-1)}>
+                <ChevronUpIcon />
+              </IconButton>
+              <IconButton label="Next match" onClick={() => goTo(1)}>
+                <ChevronDownIcon />
+              </IconButton>
             </>
           )}
         </div>
       </div>
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto p-3" style={{ fontSize }}>
         {query.trim() && matches.length === 0 ? (
-          <p className="px-2 py-2 text-[11px] text-[var(--workspace-text-muted)]">
+          <p className="px-2 py-2 text-[12px] text-[var(--workspace-text-muted)]">
             No matches for “{query}”.
           </p>
         ) : null}

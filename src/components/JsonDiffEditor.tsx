@@ -133,15 +133,19 @@ export const JsonDiffEditor = forwardRef<JsonDiffEditorRef, JsonDiffEditorProps>
   const huge = !disableLargeMode && (isHugeInput(original) || isHugeInput(modified));
   // See JsonEditor for the cast rationale.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const hugeOptions: Record<string, any> = huge
-    ? {
-        largeFileOptimizations: true,
-        bracketPairColorization: { enabled: false },
-        guides: { indentation: false, bracketPairs: false, highlightActiveIndentation: false },
-        codeLens: false,
-        lightbulb: { enabled: "off" },
-      }
-    : {};
+  const hugeOptions = useMemo<Record<string, any>>(
+    () =>
+      huge
+        ? {
+            largeFileOptimizations: true,
+            bracketPairColorization: { enabled: false },
+            guides: { indentation: false, bracketPairs: false, highlightActiveIndentation: false },
+            codeLens: false,
+            lightbulb: { enabled: "off" },
+          }
+        : {},
+    [huge],
+  );
   const onOriginalChangeRef = useRef(onOriginalChange);
   const onModifiedChangeRef = useRef(onModifiedChange);
   const onLineStatsChangeRef = useRef(onLineStatsChange);
@@ -241,6 +245,7 @@ export const JsonDiffEditor = forwardRef<JsonDiffEditorRef, JsonDiffEditorProps>
       stickyScroll: { enabled: false },
       renderSideBySide,
       minimap: { enabled: false },
+      hideCursorInOverviewRuler: true,
       fontFamily: "var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
       wordWrap,
       fontSize,
@@ -254,7 +259,7 @@ export const JsonDiffEditor = forwardRef<JsonDiffEditorRef, JsonDiffEditorProps>
       enableSplitViewResizing: true,
       ...hugeOptions,
     }),
-    [originalEditable, modifiedEditable, renderSideBySide, fontSize, ignoreTrimWhitespace, huge, wordWrap],
+    [originalEditable, modifiedEditable, renderSideBySide, fontSize, ignoreTrimWhitespace, hugeOptions, wordWrap],
   );
 
   useEffect(() => {
