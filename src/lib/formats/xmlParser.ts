@@ -30,6 +30,7 @@ function unwrapRoot(obj: Record<string, unknown>): JsonValue {
 export const xmlAdapter: FormatAdapter = {
   kind: "xml",
   parse(input: string): JsonValue {
+    if (!input.includes("<")) throw new Error("No XML elements found");
     const parsed = parser.parse(input);
     if (!parsed || typeof parsed !== "object") return parsed as JsonValue;
     return unwrapRoot(parsed) as JsonValue;

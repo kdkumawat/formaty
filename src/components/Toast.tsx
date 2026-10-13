@@ -1,14 +1,8 @@
 "use client";
 
-import { useCallback, useSyncExternalStore } from "react";
-import { AnimatePresence, motion } from "framer-motion";
-import {
-  CheckCircleIcon,
-  ExclamationTriangleIcon,
-  InformationCircleIcon,
-  XMarkIcon,
-} from "@heroicons/react/24/outline";
-import { Tooltip } from "@/components/workspace/Tooltip";
+import { useSyncExternalStore } from "react";
+import { CheckCircleIcon, XCircleIcon, XMarkIcon } from "@heroicons/react/16/solid";
+import { IconButton } from "@/components/kit/Button";
 
 export type ToastType = "success" | "error" | "info";
 
@@ -48,6 +42,8 @@ const DEFAULT_DURATION: Record<ToastType, number> = {
 let items: ToastItem[] = [];
 const listeners = new Set<() => void>();
 const timers = new Map<number, number>();
+// Remaining ms per toast while paused (hover or focus).
+const remaining = new Map<number, { left: number; started: number }>();
 let nextId = 0;
 
 function emit() {
@@ -55,24 +51,39 @@ function emit() {
 }
 
 function removeToast(id: number) {
-  const timer = timers.get(id);
-  if (timer) {
-    window.clearTimeout(timer);
-    timers.delete(id);
-  }
+  window.clearTimeout(timers.get(id));
+  timers.delete(id);
+  remaining.delete(id);
   items = items.filter((t) => t.id !== id);
   emit();
 }
 
+function schedule(id: number, ms: number) {
+  remaining.set(id, { left: ms, started: Date.now() });
+  timers.set(id, window.setTimeout(() => removeToast(id), ms));
+}
+
+function pause(id: number) {
+  const r = remaining.get(id);
+  if (!r || !timers.has(id)) return;
+  window.clearTimeout(timers.get(id));
+  timers.delete(id);
+  remaining.set(id, { left: Math.max(r.left - (Date.now() - r.started), 400), started: 0 });
+}
+
+function resume(id: number) {
+  const r = remaining.get(id);
+  if (r && !timers.has(id)) schedule(id, r.left);
+}
+
 export function toast(input: ToastInput) {
   const type = input.type ?? "info";
-  const duration = input.duration ?? DEFAULT_DURATION[type];
   const item: ToastItem = {
     id: ++nextId,
     message: input.message,
     type,
     url: input.url,
-    duration,
+    duration: input.duration ?? DEFAULT_DURATION[type],
     action: input.action,
   };
   items = [...items, item];
@@ -81,7 +92,7 @@ export function toast(input: ToastInput) {
     if (evicted) removeToast(evicted.id);
   }
   emit();
-  timers.set(item.id, window.setTimeout(() => removeToast(item.id), duration));
+  schedule(item.id, item.duration);
 }
 
 function subscribe(listener: () => void) {
@@ -100,75 +111,60 @@ function getServerSnapshot() {
   return EMPTY_TOASTS;
 }
 
-const typeStyles: Record<ToastType, { icon: typeof CheckCircleIcon; accent: string }> = {
-  success: { icon: CheckCircleIcon, accent: "text-emerald-500" },
-  info: { icon: InformationCircleIcon, accent: "text-primary" },
-  error: { icon: ExclamationTriangleIcon, accent: "text-red-500" },
-};
-
-function ToastCard({ item, onDismiss }: { item: ToastItem; onDismiss: () => void }) {
-  const { icon: Icon, accent } = typeStyles[item.type];
+function ToastCard({ item }: { item: ToastItem }) {
+  const error = item.type === "error";
   return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, x: 28, scale: 0.96 }}
-      animate={{ opacity: 1, x: 0, scale: 1 }}
-      exit={{ opacity: 0, x: 28, scale: 0.96 }}
-      transition={{ type: "spring", stiffness: 420, damping: 34 }}
-      role={item.type === "error" ? "alert" : "status"}
-      onClick={onDismiss}
-      className="pointer-events-auto flex cursor-pointer items-start gap-2.5 rounded-lg border border-[var(--workspace-border)]/60 bg-[var(--workspace-panel)]/95 px-3 py-2.5 text-xs shadow-xl backdrop-blur-md transition-colors hover:border-primary/30"
+    <div
+      role={error ? "alert" : "status"}
+      aria-live={error ? "assertive" : "polite"}
+      onMouseEnter={() => pause(item.id)}
+      onMouseLeave={() => resume(item.id)}
+      onFocus={() => pause(item.id)}
+      onBlur={() => resume(item.id)}
+      className="pointer-events-auto flex min-h-9 max-w-[420px] items-center gap-2 rounded-[10px] bg-[var(--workspace-text)] py-1 pl-3 pr-1 text-[13px] leading-snug text-[var(--workspace-panel)] shadow-menu transition-[opacity,translate] duration-[140ms] ease-out starting:translate-y-1 starting:opacity-0"
     >
-      <Icon className={`mt-px h-4 w-4 shrink-0 ${accent}`} aria-hidden />
-      <span className="min-w-0 flex-1">
-        <p
-          className={`font-medium leading-snug ${
-            item.type === "error" ? "text-error" : "text-[var(--workspace-text)]"
-          }`}
-        >
-          {item.message}
-        </p>
-        {item.url && (
-          <Tooltip content={item.url} className="mt-0.5 block max-w-full truncate leading-snug text-[var(--workspace-text-muted)]">
-            {item.url}
-          </Tooltip>
-        )}
-        {item.action && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              item.action?.onClick();
-              onDismiss();
-            }}
-            className="mt-1.5 inline-flex shrink-0 items-center rounded-md border border-primary/40 bg-primary/10 px-2 py-1 text-[11px] font-semibold text-primary transition-colors hover:bg-primary/20"
-          >
-            {item.action.label}
-          </button>
-        )}
+      {item.type === "success" && <CheckCircleIcon aria-hidden className="size-4 shrink-0 text-[var(--ok-inverse)]" />}
+      {error && <XCircleIcon aria-hidden className="size-4 shrink-0 text-[var(--bad-inverse)]" />}
+      <span className="line-clamp-2 min-w-0 break-words font-medium">
+        {item.message}
+        {item.url && <span className="ml-2 font-normal opacity-70">{item.url}</span>}
       </span>
-      <Tooltip content="Dismiss">
-        <XMarkIcon className="mt-0.5 h-3 w-3 shrink-0 cursor-pointer text-[var(--workspace-text-muted)]/70" aria-hidden />
-      </Tooltip>
-    </motion.div>
+      {item.action && (
+        <button
+          type="button"
+          onClick={() => {
+            item.action?.onClick();
+            removeToast(item.id);
+          }}
+          className="shrink-0 rounded px-1 font-semibold underline underline-offset-2 outline-none hover:opacity-80 focus-visible:ring-2 focus-visible:ring-[var(--focus)]"
+        >
+          {item.action.label}
+        </button>
+      )}
+      <IconButton
+        label="Dismiss"
+        onClick={() => removeToast(item.id)}
+        tooltipSide="top"
+        className="h-7 w-7 shrink-0 text-current hover:bg-[color-mix(in_srgb,var(--workspace-panel)_20%,transparent)] max-[900px]:h-7 max-[900px]:w-7"
+      >
+        <XMarkIcon />
+      </IconButton>
+    </div>
   );
 }
 
-/** Mount once (e.g. at the workspace root). Renders stacked toasts bottom-right. */
+/** Mount once (e.g. at the workspace root). Renders stacked toasts bottom-centre, newest at the bottom. */
 export function Toaster() {
   const toasts = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
-  const dismiss = useCallback((id: number) => removeToast(id), []);
   return (
     <div
-      className="pointer-events-none fixed bottom-4 right-4 z-[100] flex w-[min(15rem,calc(100vw-2rem))] flex-col items-stretch gap-2"
-      aria-live="polite"
+      role="region"
       aria-label="Notifications"
+      className="pointer-events-none fixed inset-x-0 bottom-10 z-[300] flex flex-col items-center gap-1.5 px-3"
     >
-      <AnimatePresence initial={false}>
-        {toasts.map((t) => (
-          <ToastCard key={t.id} item={t} onDismiss={() => dismiss(t.id)} />
-        ))}
-      </AnimatePresence>
+      {toasts.map((t) => (
+        <ToastCard key={t.id} item={t} />
+      ))}
     </div>
   );
 }

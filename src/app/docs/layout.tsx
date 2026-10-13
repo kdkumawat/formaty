@@ -6,7 +6,7 @@ const SITE_URL = process.env.SITE_URL || "https://formaty.dev";
 export const metadata: Metadata = {
   title: "Documentation",
   description:
-    "Formaty feature guide: JSON, XML, YAML, TOML, CSV converter, multi-tab workspace, command palette, diff, history, query playground, cURL import, type generation, schema validation, and 18+ developer utils.",
+    "Formaty feature guide: JSON, XML, YAML, TOML, CSV converter, typed tabs, search every tool, compare lists and documents, query, cURL import, type generation, schema validation, sharing, and developer utils.",
   keywords: [
     "Formaty docs",
     "JSON formatter guide",
@@ -22,7 +22,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Documentation",
     description:
-      "Formaty feature guide: format, convert, compare, query, and 18+ developer utils - everything runs locally in your browser.",
+      "Formaty feature guide: format, convert, compare, query, and developer utils - everything runs locally in your browser.",
     url: `${SITE_URL}/docs`,
     siteName: "Formaty",
     type: "website",
@@ -32,7 +32,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Documentation",
     description:
-      "Formaty feature guide: format, convert, compare, query, and 18+ developer utils - everything runs locally in your browser.",
+      "Formaty feature guide: format, convert, compare, query, and developer utils - everything runs locally in your browser.",
     images: [`${SITE_URL}/og.png`],
   },
 };

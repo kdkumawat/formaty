@@ -1,151 +1,276 @@
 "use client";
 
-import Link from "next/link";
+import { useEffect, useState, type ReactNode } from "react";
 import {
-  Cog6ToothIcon,
-  SunIcon,
-  MoonIcon,
-  ComputerDesktopIcon,
-} from "@heroicons/react/24/outline";
-import { AnimatedMagnifierIcon, useIconAnimation } from "@/components/icons";
-import type { ReactNode } from "react";
+  AdjustmentsHorizontalIcon,
+  BookOpenIcon,
+  CodeBracketIcon,
+  EllipsisHorizontalIcon,
+  KeyIcon,
+  MagnifyingGlassIcon,
+  PlayCircleIcon,
+  QuestionMarkCircleIcon,
+  ShareIcon,
+  XMarkIcon,
+} from "@heroicons/react/16/solid";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Logo } from "@/components/Logo";
-import { Button } from "@/components/ui/button";
-import { GitHubStars } from "@/components/GitHubStars";
-import { Dropdown } from "./Dropdown";
-import { Tooltip } from "./Tooltip";
+import {
+  Button,
+  IconButton,
+  Kbd,
+  Menu,
+  MenuContent,
+  MenuItem,
+  MenuSeparator,
+  MenuTrigger,
+  SidePanel,
+  TruncatedText,
+} from "@/components/kit";
+import { cn } from "@/lib/utils";
+import { InlineRename } from "./InlineRename";
+import { NewTabMenu, type NewTabSpec } from "./NewTabMenu";
 
-type ThemeMode = "system" | "dark" | "light";
-
-interface HeaderProps {
-  themeMode: ThemeMode;
-  onThemeChange: (mode: ThemeMode) => void;
-  onOpenCommandPalette?: () => void;
-  /** Full workspace settings panel (opens from gear in the top-right). */
-  settingsContent?: ReactNode;
-  settingsOpen?: boolean;
-  onSettingsOpenChange?: (open: boolean) => void;
+export interface ChromeTab {
+  id: string;
+  /** Name shown on the tab (custom or automatic). */
+  name: string;
+  /** True when the user renamed this tab. */
+  custom: boolean;
 }
 
-/** Command palette search - the magnifier gives a subtle searching nudge on hover/focus. */
-function CommandPaletteTrigger({ onOpen }: { onOpen: () => void }) {
-  const icon = useIconAnimation();
+interface HeaderProps {
+  tabs: ChromeTab[];
+  activeTabId: string;
+  onSwitchTab: (id: string) => void;
+  onCloseTab: (id: string) => void;
+  /** Called with a new, non-empty name. An empty name or Escape leaves the tab as it was. */
+  onRenameTab: (id: string, name: string) => void;
+  onNewTab: (spec: NewTabSpec) => void;
+  onReopenTab: () => void;
+  closedTabName: string | null;
+  onOpenCommandPalette: () => void;
+  onOpenTour: () => void;
+  /** Share panel body (opens attached under the Share button). */
+  shareContent: ReactNode;
+  shareOpen: boolean;
+  onShareOpenChange: (open: boolean) => void;
+  /** Full workspace settings panel (opens from the gear). */
+  settingsContent: ReactNode;
+  settingsOpen: boolean;
+  onSettingsOpenChange: (open: boolean) => void;
+}
+
+function TabButton({
+  tab,
+  active,
+  onSwitch,
+  onClose,
+  onRename,
+}: {
+  tab: ChromeTab;
+  active: boolean;
+  onSwitch: () => void;
+  onClose: () => void;
+  onRename: (name: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+
+  useEffect(() => {
+    if (active) document.getElementById(`tab-${tab.id}`)?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [active, tab.id]);
+
   return (
-    <div className="absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 md:block">
-      <Tooltip content="Command palette" shortcut="⌘K">
-        <Button
-          variant="ghost"
-          data-tour="command-palette"
-          onClick={onOpen}
-          className="h-auto min-h-0 w-[220px] items-center gap-2 rounded-lg border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-3 py-1.5 text-left text-[12px] text-[var(--workspace-text-muted)] transition-all hover:border-primary/30 hover:text-[var(--workspace-text)] hover:shadow-sm sm:w-[280px] [&_svg]:!size-3.5"
-          {...icon.bind}
+    <div
+      id={`tab-${tab.id}`}
+      className={cn(
+        "group relative flex h-[30px] min-w-0 max-w-[180px] shrink-0 items-center rounded-t-md text-[13px] font-medium transition-colors max-[900px]:h-9",
+        // Renaming keeps the tab's exact size; an inset ring inside its own edge is the only cue.
+        editing
+          ? "bg-[var(--workspace-panel)] text-[var(--workspace-text)] ring-[1.5px] ring-inset ring-[var(--focus)]"
+          : active
+          ? "bg-[var(--workspace-panel)] text-[var(--workspace-text)]"
+          : "text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)]/60 hover:text-[var(--workspace-text)]",
+      )}
+      onMouseDown={(e) => {
+        if (e.button === 1) {
+          e.preventDefault();
+          onClose();
+        }
+      }}
+    >
+      {editing ? (
+        <div className="grid min-w-0 flex-1 py-1 pl-2.5 pr-1">
+          <InlineRename
+            initial={tab.name}
+            label="Rename tab"
+            onDone={(value) => {
+              setEditing(false);
+              // Empty or unchanged keeps the current name.
+              if (value && value !== tab.name) onRename(value);
+            }}
+          />
+        </div>
+      ) : (
+        <button
+          type="button"
+          role="tab"
+          aria-selected={active}
+          onClick={onSwitch}
+          onDoubleClick={() => setEditing(true)}
+          onKeyDown={(e) => {
+            if (e.key === "F2") setEditing(true);
+          }}
+          className="min-w-0 flex-1 rounded-t-md py-1 pl-2.5 pr-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]"
         >
-          <AnimatedMagnifierIcon ref={icon.ref} className="h-3.5 w-3.5 shrink-0" />
-          <span className="flex-1 text-left">Search commands…</span>
-          <kbd className="hidden rounded border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-1.5 py-0.5 font-mono text-[10px] sm:flex">⌘K</kbd>
-        </Button>
-      </Tooltip>
+          <TruncatedText>{tab.name}</TruncatedText>
+        </button>
+      )}
+      {/* Stays in the layout while renaming (just hidden) so the tab keeps its width. */}
+      <IconButton
+        label="Close tab"
+        shortcut="⌥W"
+        onClick={onClose}
+        className={cn(
+          "mr-1 !size-6 min-w-0",
+          editing && "invisible",
+          !active && "opacity-0 focus-visible:opacity-100 group-hover:opacity-100 max-[900px]:opacity-100",
+        )}
+      >
+        <XMarkIcon />
+      </IconButton>
     </div>
   );
 }
 
-const themeOptions: { mode: ThemeMode; label: string; Icon: typeof SunIcon }[] = [
-  { mode: "system", label: "System", Icon: ComputerDesktopIcon },
-  { mode: "light", label: "Light", Icon: SunIcon },
-  { mode: "dark", label: "Dark", Icon: MoonIcon },
-];
-
-export function Header({
-  themeMode,
-  onThemeChange,
-  onOpenCommandPalette,
-  settingsContent,
-  settingsOpen = false,
-  onSettingsOpenChange,
-}: HeaderProps) {
+export function Header(props: HeaderProps) {
   return (
-    <header
-      className="relative flex shrink-0 flex-nowrap items-center justify-between gap-3 border-b border-[var(--workspace-border)] bg-[var(--workspace-background)] px-3"
-      style={{ height: "42px", minHeight: "42px" }}
-    >
-      {/* Brand */}
-      <div className="flex min-w-0 shrink-0 items-center gap-2.5">
-        <Link href="/" aria-label="Formaty home" className="flex shrink-0 items-center gap-0.5 transition-opacity hover:opacity-80">
-          <Logo size={18} />
-        </Link>
-        <span className="hidden h-3.5 w-px bg-[var(--workspace-border)] sm:block" aria-hidden />
-        <span className="hidden select-none truncate text-[10px] tracking-wide text-[var(--workspace-text-muted)] sm:inline">
-          The Developer Data Workspace
-        </span>
+    <header className="flex h-9 shrink-0 items-end gap-1 px-3 max-[900px]:h-11">
+      <Link href="/" aria-label="Formaty home" className="mb-1 mr-1 flex h-7 shrink-0 items-center transition-opacity hover:opacity-80">
+        <Logo size={20} />
+      </Link>
+
+      <div
+        role="tablist"
+        aria-label="Open tabs"
+        data-tour="tab-bar"
+        className="flex min-w-0 items-end gap-0.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        {props.tabs.map((tab) => (
+          <TabButton
+            key={tab.id}
+            tab={tab}
+            active={tab.id === props.activeTabId}
+            onSwitch={() => props.onSwitchTab(tab.id)}
+            onClose={() => props.onCloseTab(tab.id)}
+            onRename={(name) => props.onRenameTab(tab.id, name)}
+          />
+        ))}
+      </div>
+      <div className="mb-px shrink-0">
+        <NewTabMenu onOpen={props.onNewTab} onReopen={props.onReopenTab} closedName={props.closedTabName} />
       </div>
 
-      {/* Command palette trigger - centered absolutely (hidden on narrow screens so it never overlaps the brand/actions) */}
-      {onOpenCommandPalette && <CommandPaletteTrigger onOpen={onOpenCommandPalette} />}
+      <span className="flex-1" />
 
-      {/* Actions */}
-      <div className="flex shrink-0 items-center gap-1">
-        <Link
-          href="/docs"
-          className="hidden rounded-md px-2 py-1 text-xs font-medium text-[var(--workspace-text-muted)] transition-colors hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] sm:inline-flex"
-          aria-label="Documentation"
+      <div className="mb-px flex shrink-0 items-center gap-1">
+        {/* Desktop cluster. Below 640px these triggers are hidden and the overflow menu drives the same panels. */}
+        <div className="flex items-center gap-1 max-sm:hidden">
+          <Button
+            variant="secondary"
+            data-tour="command-palette"
+            aria-label="Search every tool"
+            icon={<MagnifyingGlassIcon />}
+            className="w-[200px] justify-start max-[1000px]:w-9 max-[1000px]:px-0 max-[1000px]:[&>:not(:first-child)]:hidden"
+            onClick={props.onOpenCommandPalette}
+          >
+            <span className="min-w-0 flex-1 truncate text-left font-normal text-[var(--workspace-text-muted)]">Search every tool</span>
+            <Kbd keys="⌘K" />
+          </Button>
+        </div>
+        <SidePanel
+          title="Share"
+          open={props.shareOpen}
+          onOpenChange={props.onShareOpenChange}
+          trigger={
+            <Button variant="ghost" icon={<ShareIcon />} className="max-sm:hidden">
+              Share
+            </Button>
+          }
         >
-          Docs
-        </Link>
-        <GitHubStars variant="plain" />
-        {/* Theme segment control */}
-        <div className="ml-0.5 flex items-center gap-px rounded-lg border border-[var(--workspace-border)] bg-[var(--workspace-panel)] p-0.5">
-          {themeOptions.map(({ mode, label, Icon }) => (
-            <Tooltip content={label} shortcut={mode === "dark" ? "⌥T" : undefined} key={mode}>
-              <Button
-                type="button"
-                variant="ghost"
-                aria-label={`${label} theme`}
-                onClick={() => onThemeChange(mode)}
-                className={`h-auto min-h-0 !p-1 rounded transition-all duration-150 [&_svg]:!size-3.5 ${
-                  themeMode === mode
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)] hover:text-[var(--workspace-text)]"
-                }`}
-              >
-                <Icon className="h-3.5 w-3.5" aria-hidden />
-              </Button>
-            </Tooltip>
-          ))}
+          {props.shareContent}
+        </SidePanel>
+
+        <div className="max-sm:hidden">
+          <Menu>
+            <MenuTrigger asChild>
+              <IconButton label="Help">
+                <QuestionMarkCircleIcon />
+              </IconButton>
+            </MenuTrigger>
+            <MenuContent align="end">
+              <HelpItems onOpenTour={props.onOpenTour} />
+            </MenuContent>
+          </Menu>
         </div>
 
-        {/* Settings gear - opens the full workspace settings panel */}
-        {settingsContent && (
-          <Dropdown
-            open={settingsOpen}
-            onOpenChange={(open) => onSettingsOpenChange?.(open)}
-            side="bottom"
-            align="end"
-            preferScreenRight
-            edgePadding={10}
-            contentClassName="w-[min(21.5rem,calc(100vw-1.25rem))] max-h-[min(78vh,42rem)] overflow-y-auto"
-            trigger={
-              <Tooltip content="Settings">
-                <button
-                  type="button"
-                  aria-label="Settings"
-                  data-tour="settings-gear"
-                  className={`inline-flex h-auto min-h-0 items-center justify-center rounded-lg border border-[var(--workspace-border)] bg-[var(--workspace-panel)] p-1.5 transition-all duration-150 [&_svg]:!size-3.5 ${
-                    settingsOpen
-                      ? "border-primary/40 bg-primary/10 text-primary"
-                      : "text-[var(--workspace-text-muted)] hover:border-primary/30 hover:text-[var(--workspace-text)]"
-                  }`}
-                >
-                  <Cog6ToothIcon className="h-3.5 w-3.5" aria-hidden />
-                </button>
-              </Tooltip>
-            }
-          >
-            <div className="p-2.5 text-xs" onClick={(e) => e.stopPropagation()}>
-              {settingsContent}
-            </div>
-          </Dropdown>
-        )}
+        <SidePanel
+          title="Settings"
+          open={props.settingsOpen}
+          onOpenChange={props.onSettingsOpenChange}
+          trigger={
+            <IconButton label="Settings" data-tour="settings-gear" className="max-sm:hidden">
+              <AdjustmentsHorizontalIcon />
+            </IconButton>
+          }
+        >
+          {props.settingsContent}
+        </SidePanel>
+
+        <div className="sm:hidden">
+          <Menu>
+            <MenuTrigger asChild>
+              <IconButton label="More">
+                <EllipsisHorizontalIcon />
+              </IconButton>
+            </MenuTrigger>
+            <MenuContent align="end">
+              <MenuItem icon={<MagnifyingGlassIcon />} onSelect={props.onOpenCommandPalette}>
+                Search every tool
+              </MenuItem>
+              <MenuItem icon={<ShareIcon />} onSelect={() => props.onShareOpenChange(true)}>
+                Share
+              </MenuItem>
+              <MenuItem icon={<AdjustmentsHorizontalIcon />} onSelect={() => props.onSettingsOpenChange(true)}>
+                Settings
+              </MenuItem>
+              <MenuSeparator />
+              <HelpItems onOpenTour={props.onOpenTour} />
+            </MenuContent>
+          </Menu>
+        </div>
       </div>
     </header>
+  );
+}
+
+function HelpItems({ onOpenTour }: { onOpenTour: () => void }) {
+  const router = useRouter();
+  return (
+    <>
+      <MenuItem icon={<KeyIcon />} shortcut="⌘/" onSelect={() => window.dispatchEvent(new Event("formaty:open-shortcuts"))}>
+        Keyboard shortcuts
+      </MenuItem>
+      <MenuItem icon={<PlayCircleIcon />} onSelect={onOpenTour}>
+        Take the tour
+      </MenuItem>
+      <MenuItem icon={<BookOpenIcon />} onSelect={() => router.push("/docs")}>
+        Documentation
+      </MenuItem>
+      <MenuItem icon={<CodeBracketIcon />} onSelect={() => window.open("https://github.com/kdkumawat/formaty", "_blank", "noopener,noreferrer")}>
+        GitHub
+      </MenuItem>
+    </>
   );
 }

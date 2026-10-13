@@ -1,65 +1,31 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { motion } from "framer-motion";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import {
-  ArrowPathIcon,
-  ArrowsRightLeftIcon,
-  ChevronDownIcon,
-  ChevronUpIcon,
-  ClipboardDocumentIcon,
+  ArrowDownTrayIcon,
+  ArrowLeftCircleIcon,
+  ChevronRightIcon,
   ClockIcon,
   DocumentArrowDownIcon,
-  ListBulletIcon,
-  MinusIcon,
-  PlusIcon,
-  StarIcon,
-  ArrowLeftCircleIcon,
-  ArrowRightCircleIcon,
   XMarkIcon,
-  XCircleIcon,
-  TrashIcon,
-  LinkSlashIcon,
-  Cog6ToothIcon,
-  BoltIcon,
-  CodeBracketIcon,
-  EyeIcon,
-  Squares2X2Icon,
-  DocumentTextIcon,
-  QueueListIcon,
-  ShareIcon,
-  TableCellsIcon,
-  ArrowsPointingInIcon,
-  ArrowsPointingOutIcon,
-  RectangleStackIcon,
-  CheckBadgeIcon,
-  EqualsIcon,
-  SparklesIcon,
-} from "@heroicons/react/24/outline";
-import { StarIcon as StarSolidIcon } from "@heroicons/react/24/solid";
+} from "@heroicons/react/16/solid";
 import {
-  AnimatedBracesIcon,
-  AnimatedCodeIcon,
-  AnimatedCopyIcon,
-  AnimatedMagnifierIcon,
-  AnimatedSparklesIcon,
-  AnimatedUploadIcon,
-  useIconAnimation,
-  type AnimatedIconHandle,
-} from "@/components/icons";
+  Button,
+  StatusText,
+  IconButton,
+  KitTooltipProvider,
+  Tooltip,
+  Segmented,
+  type CopyButtonProps,
+  type CopyFormat,
+} from "@/components/kit";
 import dynamic from "next/dynamic";
 import type { ComponentType, RefAttributes } from "react";
 import type { DiffNavState, JsonDiffEditorProps, JsonDiffEditorRef } from "@/components/JsonDiffEditor";
 import { ListComparePanel, type ListCompareExport } from "@/components/ListComparePanel";
 import { SingleListPanel } from "@/components/SingleListPanel";
 import { DEFAULT_LIST_PARSE_OPTIONS, type ListBucket, type ListParseOptions } from "@/lib/json/listCompare";
-import {
-  menuItemClass as sharedMenuItemClass,
-  menuItemActiveClass as sharedMenuItemActiveClass,
-  menuSectionLabel as sharedMenuSectionLabel,
-  menuCheck as sharedMenuCheck,
-} from "@/components/workspace/menuStyles";
 import {
   UtilsPanel,
   defaultUtilToolState,
@@ -113,42 +79,24 @@ import { clearAllTabSettings } from "@/lib/instant/persist";
 import type { TreeViewRef, TreeViewProps } from "@/components/TreeView";
 import { trackEvent } from "@/components/Analytics";
 import {
-  Dropdown,
   getSizeFormatted,
-  formatSize,
   Header as WorkspaceHeader,
-  StatusBar,
-  Tooltip,
+  type ChromeTab,
 } from "@/components/workspace";
 import {
-  OutputActionBar,
-  ACTION_LABELS,
   loadVisibility,
-  saveVisibility,
   formatCopyAsText,
   formatCopyItemsAsText,
   DEFAULT_COPY_AS_OPTIONS,
-  LIST_COPY_AS_OPTIONS,
-  SUMMARY_COPY_AS_OPTIONS,
-  UUID_COPY_AS_OPTIONS,
-  BATCH_COPY_AS_OPTIONS,
   TABLE_COPY_AS_OPTIONS,
   type CopyAsFormat,
   type GraphCopyFormat,
-  type OutputActionId,
   type OutputActionVisibility,
 } from "@/components/workspace/OutputActionBar";
 import {
   formatListCopyAsText,
   loadListCopyPref,
-  saveListCopyPref,
-  type CopyPref,
 } from "@/lib/copyAs";
-import {
-  FormatPopoverContent,
-  getFormatShortLabel,
-  type EncodeOption,
-} from "@/components/workspace/FormatPopover";
 import { Logo } from "@/components/Logo";
 import {
   emptyDiffSummary,
@@ -159,14 +107,15 @@ import {
 } from "@/lib/json/diff";
 import { useJsonWorker } from "@/hooks/useJsonWorker";
 import { useDelayedReset } from "@/hooks/useDelayedReset";
+import { explainProblem } from "@/lib/formats/explain";
 import { detectFormat, FORMAT_LABELS, getInputFormatLabel, parseInput, type FormatKind, type InputFormatKind } from "@/lib/formats";
 import { ALL_TOOL_ROUTES, TOOL_PAGES, TOOL_PRESETS, type ToolRoute } from "@/lib/seo";
 import { executeCurlDetailed, parseCurl, type CurlExecutionResult } from "@/lib/curl/parseCurl";
 import { CURL_TARGETS, generateCurlCode, getCurlTarget, type CurlTargetId } from "@/lib/curl/codegen";
 import type { SqlDialect } from "@/lib/json/core";
 import { formatJson } from "@/lib/json/core";
-import { decodeState, encodeState, SHARE_TOO_LARGE, type WorkspaceState } from "@/lib/shareState";
-import { HUGE_INPUT_BYTES, InputTooLargeError, LARGE_INPUT_BYTES, WORKER_INPUT_CAP_BYTES } from "@/lib/io/size";
+import { decodeState, encodeState, LIST_OPTIONS_VERSION, upgradeListOptions, type WorkspaceState } from "@/lib/shareState";
+import { HUGE_INPUT_BYTES, LARGE_INPUT_BYTES, WORKER_INPUT_CAP_BYTES } from "@/lib/io/size";
 import { readFileAsTextGuarded } from "@/lib/io/ingest";
 import { savePlayground, updatePlayground, deletePlayground } from "@/lib/playgroundApi";
 import { PRESETS, getPreset, type PresetId } from "@/lib/presets";
@@ -176,300 +125,46 @@ import { isEditableTarget } from "@/lib/shortcuts";
 import { Toaster, toast } from "@/components/Toast";
 import type { JsonValue, TypeTargetLanguage } from "@/lib/json/core";
 
-const SAMPLE_JSON = `{
-  "id": 42,
-  "name": "formaty",
-  "tags": ["json", "tooling", "productivity"],
-  "owner": {
-    "team": "platform",
-    "active": true,
-    "priority": null
-  },
-  "metrics": [
-    { "day": "mon", "count": 1023 },
-    { "day": "tue", "count": 1290 }
-  ]
-}`;
-
-/** Array of objects - best starting point for Table view */
-const SAMPLE_JSON_TABLE = `[
-  { "id": 1, "name": "Alice", "role": "admin", "active": true, "score": 98 },
-  { "id": 2, "name": "Bob", "role": "dev", "active": true, "score": 87 },
-  { "id": 3, "name": "Carol", "role": "viewer", "active": false, "score": 72 },
-  { "id": 4, "name": "Dave", "role": "dev", "active": true, "score": 91 }
-]`;
-
-const SAMPLE_XML = `<?xml version="1.0" encoding="UTF-8"?>
-<root>
-  <id>42</id>
-  <name>formaty</name>
-  <tags>
-    <item>json</item>
-    <item>tooling</item>
-  </tags>
-  <owner team="platform" active="true"/>
-</root>`;
-
-const SAMPLE_YAML = `id: 42
-name: formaty
-tags:
-  - json
-  - tooling
-  - productivity
-owner:
-  team: platform
-  active: true
-  priority: null
-metrics:
-  - day: mon
-    count: 1023
-  - day: tue
-    count: 1290`;
-
-const SAMPLE_CSV = `id,name,tags
-42,formaty,"json,tooling"
-1,example,"a,b,c"`;
-
-const SAMPLE_TOML = `id = 42
-name = "formaty"
-tags = ["json", "tooling"]
-
-[owner]
-team = "platform"
-active = true`;
-
-const SAMPLE_CURL = `curl -X GET "https://www.cloudflarestatus.com/api/v2/status.json"`;
-
-const EXAMPLE_GITHUB = `{
-  "id": 460078,
-  "name": "next.js",
-  "full_name": "vercel/next.js",
-  "private": false,
-  "owner": {
-    "login": "vercel",
-    "id": 14985020,
-    "avatar_url": "https://avatars.githubusercontent.com/u/14985020?v=4",
-    "type": "Organization"
-  },
-  "description": "The React Framework",
-  "fork": false,
-  "created_at": "2016-01-17T00:55:59Z",
-  "updated_at": "2025-03-16T12:00:00Z",
-  "stargazers_count": 120000,
-  "language": "TypeScript",
-  "license": { "key": "mit", "name": "MIT License" }
-}`;
-
-const EXAMPLE_STRIPE = `{
-  "id": "evt_1ABC123",
-  "object": "event",
-  "api_version": "2023-10-16",
-  "created": 1699000000,
-  "type": "payment_intent.succeeded",
-  "data": {
-    "object": {
-      "id": "pi_1ABC123",
-      "object": "payment_intent",
-      "amount": 2000,
-      "currency": "usd",
-      "status": "succeeded",
-      "metadata": { "order_id": "ord_123" }
-    }
-  }
-}`;
-
-const EXAMPLE_K8S = `{
-  "apiVersion": "apps/v1",
-  "kind": "Deployment",
-  "metadata": {
-    "name": "nginx-deployment",
-    "labels": { "app": "nginx" }
-  },
-  "spec": {
-    "replicas": 3,
-    "selector": { "matchLabels": { "app": "nginx" } },
-    "template": {
-      "metadata": { "labels": { "app": "nginx" } },
-      "spec": {
-        "containers": [{
-          "name": "nginx",
-          "image": "nginx:1.14.2",
-          "ports": [{ "containerPort": 80 }]
-        }]
-      }
-    }
-  }
-}`;
-
-const EXAMPLE_OPENAPI = `{
-  "openapi": "3.0.0",
-  "info": {
-    "title": "Sample API",
-    "version": "1.0.0",
-    "description": "A sample OpenAPI specification"
-  },
-  "paths": {
-    "/users": {
-      "get": {
-        "summary": "List users",
-        "responses": { "200": { "description": "Success" } }
-      },
-      "post": {
-        "summary": "Create user",
-        "responses": { "201": { "description": "Created" } }
-      }
-    }
-  }
-}`;
-
-const EXAMPLES = [
-  { id: "github", label: "GitHub API", data: EXAMPLE_GITHUB },
-  { id: "stripe", label: "Stripe webhook", data: EXAMPLE_STRIPE },
-  { id: "k8s", label: "Kubernetes manifest", data: EXAMPLE_K8S },
-  { id: "openapi", label: "OpenAPI schema", data: EXAMPLE_OPENAPI },
-] as const;
-
-const SAMPLES: Record<FormatKind, string> = {
-  json: SAMPLE_JSON,
-  xml: SAMPLE_XML,
-  yaml: SAMPLE_YAML,
-  toml: SAMPLE_TOML,
-  csv: SAMPLE_CSV,
-};
-
-/** Rotating quick tips shown in the first-run hint and empty state. */
-const QUICK_TIPS = [
-  "Press Ctrl+K (⌘K) to run any action from the command palette.",
-  "Press ? (or ⌘/) for a full list of keyboard shortcuts.",
-  "⌘1–⌘5 switch between Raw, Tree, Graph, Query, and Table views.",
-  "Copy the output from any view with ⌘C / Ctrl+C.",
-  "⌥↑ / ⌥↓ step through your input history like a shell.",
-  "Everything runs locally - your data never leaves the browser.",
-  "Share is the only action that can leave your device - use it on purpose.",
-  "Pin favorites to the toolbar from Settings ⚙ for one-click access.",
-  "Live Transform refreshes the output as you type.",
-  "Compare does document diff AND list compare (SQL IN lists, etc.).",
-  "Copy as… encodes output as base64, URI, escaped, or SQL IN.",
-  "Maximize the output pane (top-right) for a distraction-free view.",
-  "Input format is auto-detected - JSON, XML, YAML, TOML, CSV, cURL.",
-  "Copy the output and paste it back into the input to chain transforms.",
-  "The status bar shows line count, size, validity, and cursor position.",
-  "Tabs keep separate sessions - share them all from the Share menu.",
-];
-
-/** Transform actions only - Compare is a separate workspace tool (not nested here). */
-const OPERATION_ACTIONS = [
-  ["Beautify", "beautify"],
-  ["Minify", "minify"],
-  ["Flatten", "flatten"],
-  ["Unflatten", "unflatten"],
-  ["Schema", "schema"],
-  ["OpenAPI spec", "openapi"],
-  ["Validate", "validate"],
-] as const;
-
-const OPERATION_ACTION_LABELS = Object.fromEntries(
-  OPERATION_ACTIONS.map(([label, id]) => [id, label]),
-) as Record<string, string>;
-
-/** Icons shown next to the selected value in the View / Actions triggers. */
-const VIEW_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
-  raw: DocumentTextIcon,
-  tree: QueueListIcon,
-  graph: ShareIcon,
-  /** High-value interactive icon - animates on hover/focus. */
-  query: AnimatedMagnifierIcon,
-  table: TableCellsIcon,
-};
-
-const ACTION_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
-  /** Main action - sparkles twinkle once on hover/focus. */
-  beautify: AnimatedSparklesIcon,
-  minify: MinusIcon,
-  flatten: ArrowsPointingInIcon,
-  unflatten: ArrowsPointingOutIcon,
-  schema: RectangleStackIcon,
-  openapi: CodeBracketIcon,
-  validate: CheckBadgeIcon,
-};
-
-/** Per-format icons shown in the Format trigger: JSON {}, XML <>, CSV table… */
-const FORMAT_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
-  /** JSON braces spread on hover/focus (Formaty's own glyph, itsHover motion). */
-  json: AnimatedBracesIcon,
-  /** XML angle brackets spread on hover/focus. */
-  xml: AnimatedCodeIcon,
-  yaml: QueueListIcon,
-  toml: EqualsIcon,
-  csv: TableCellsIcon,
-};
-
-const FORMAT_KINDS: FormatKind[] = ["json", "xml", "yaml", "toml", "csv"];
-
-const TYPE_LANGUAGES: Array<{ id: TypeTargetLanguage; label: string; ext: string }> = [
-  { id: "typescript", label: "TypeScript", ext: "ts" },
-  { id: "zod", label: "Zod", ext: "ts" },
-  { id: "java", label: "Java", ext: "java" },
-  { id: "csharp", label: "C#", ext: "cs" },
-  { id: "python", label: "Python", ext: "py" },
-  { id: "pydantic", label: "Pydantic", ext: "py" },
-  { id: "go", label: "Go", ext: "go" },
-  { id: "protobuf", label: "Protobuf", ext: "proto" },
-  { id: "kotlin", label: "Kotlin", ext: "kt" },
-  { id: "swift", label: "Swift", ext: "swift" },
-  { id: "rust", label: "Rust", ext: "rs" },
-  { id: "sql", label: "SQL", ext: "sql" },
-];
+import {
+  DEFAULT_FORMAT_OPTIONS,
+  EXAMPLES,
+  EXT_BY_FORMAT,
+  FORMAT_KINDS,
+  LANGUAGE_BY_TYPE_TARGET,
+  OPERATION_ACTIONS,
+  QUICK_TIPS,
+  SAMPLES,
+  SAMPLE_CURL,
+  SAMPLE_JSON,
+  SAMPLE_JSON_TABLE,
+  TYPE_LANGUAGES,
+  DEFAULT_LEARNED_CHIPS,
+  FIXED_OUTPUT_CHIPS,
+  MORE_OPERATIONS,
+  type OutputId,
+  type FormatOptions,
+  type ModalKind,
+  type OperationAction,
+  type OutputLanguage,
+  type QuoteStyle,
+  type RightView,
+  type Tab,
+  type ThemeMode,
+} from "@/components/workspace/constants";
+import { autoTabName, numberDuplicates } from "@/components/workspace/tabNames";
+import { loadLastUsed, saveLastUsed, type NewTabSpec } from "@/components/workspace/NewTabMenu";
+import { INPUT_SAMPLES, CurlSendStrip, EmptyInput, InputErrorStrip, InputHeader, OutputHeader } from "@/components/workspace/PaneHeaders";
+import { ActionRow, CompareBar } from "@/components/workspace/CompareBar";
+import { StatusBar } from "@/components/workspace/StatusBar";
+import { InlineRename } from "@/components/workspace/InlineRename";
+import { commandIcon } from "@/components/workspace/commandIcons";
+import { GRAPH_COPY_OPTIONS } from "@/components/workspace/OutputActionBar";
+import { DocumentHeader, FieldTable } from "@/components/workspace/DocumentCompare";
+import { SettingsPanel } from "@/components/workspace/SettingsPanel";
+import { SharePanel } from "@/components/workspace/SharePanel";
 
 
-/** Includes "diff" / "utils" for first-class tools (not transform OPERATION_ACTIONS menus). */
-type OperationAction =
-  | (typeof OPERATION_ACTIONS)[number][1]
-  | "format"
-  | "beautify"
-  | "sort"
-  | "sortArrays"
-  | "dedup"
-  | "removeEmpty"
-  | "generateTypes"
-  | "diff"
-  | "utils";
-type OutputLanguage =
-  | "json"
-  | "yaml"
-  | "xml"
-  | "toml"
-  | "csv"
-  | "sql"
-  | "typescript"
-  | "javascript"
-  | "python"
-  | "java"
-  | "csharp"
-  | "go"
-  | "kotlin"
-  | "swift"
-  | "rust"
-  | "plaintext";
-type ThemeMode = "system" | "dark" | "light";
-type ModalKind = "validate" | "diff" | null;
-type RightView = "raw" | "tree" | "graph" | "query" | "table";
-type QuoteStyle = "double" | "single";
-type Tab = {
-  id: string;
-  label: string;
-  num: number;
-  renamed?: boolean;
-  /** Per-tab custom names for the Left/Right list panes. */
-  leftLabel?: string;
-  rightLabel?: string;
-};
-type FormatOptions = {
-  indentation: number;
-  quoteStyle: QuoteStyle;
-  sortKeys: boolean;
-  removeEmpty: boolean;
-};
+
 
 /**
  * Detect leftover internal path-diff payloads that used to be written into the main
@@ -506,36 +201,9 @@ function cleanSessionOutput(text: string | null | undefined): string {
   return isStaleDiffOutput(text) ? "" : text;
 }
 
-const EXT_BY_FORMAT: Record<FormatKind, string> = {
-  json: "json",
-  xml: "xml",
-  yaml: "yaml",
-  toml: "toml",
-  csv: "csv",
-};
 
-const LANGUAGE_BY_TYPE_TARGET: Record<TypeTargetLanguage, OutputLanguage> = {
-  typescript: "typescript",
-  zod: "typescript",
-  sql: "sql",
-  java: "java",
-  csharp: "csharp",
-  python: "python",
-  pydantic: "python",
-  go: "go",
-  protobuf: "plaintext",
-  kotlin: "kotlin",
-  swift: "swift",
-  rust: "rust",
-};
-
-const DEFAULT_FORMAT_OPTIONS: FormatOptions = {
-  indentation: 2,
-  quoteStyle: "double",
-  sortKeys: false,
-  removeEmpty: false,
-};
-
+/** Outputs that stay selected when the input changes: they re-run instead of falling back to a plain format. */
+const STICKY_OPS: OperationAction[] = ["generateTypes", "schema", "openapi", "validate", "flatten", "unflatten", "minify"];
 
 export interface WorkspaceContentProps {
   initialState?: import("@/lib/shareState").WorkspaceState;
@@ -545,10 +213,6 @@ export interface WorkspaceContentProps {
   embed?: boolean;
 }
 
-import type { ButtonHTMLAttributes } from "react";
-import { Button as UiButton } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -558,15 +222,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  PinButton,
-  PinChipRow,
-  SettingsRow,
-  SettingsRule,
-  SettingsStepper,
-  SquareBtn,
-} from "@/components/workspace/settings";
-import { PinnedToolbarButton, TriggerIcon, TypeBadge } from "@/components/workspace/toolbar";
 
 export function WorkspaceContent({
   initialState,
@@ -595,11 +250,15 @@ export function WorkspaceContent({
   const [utilsUndoIdx, setUtilsUndoIdx] = useState(0);
   const utilsHistoryLock = useRef(false);
   const utilsUndoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [shareAllTabs, setShareAllTabs] = useState(false);
   const [listToolbarHost, setListToolbarHost] = useState<HTMLElement | null>(null);
   /** Active list-compare result for shared OutputActionBar copy/download */
   const [listCompareExport, setListCompareExport] = useState<ListCompareExport | null>(null);
   const [listCompareOptions, setListCompareOptions] = useState<ListParseOptions>(DEFAULT_LIST_PARSE_OPTIONS);
+  /** Parsed item counts of the open list(s), reported by the list panels for the status bar. */
+  const [listCounts, setListCounts] = useState({ left: 0, right: 0 });
+  // Stable identities: the panels report counts from an effect keyed on these, so an inline arrow would loop.
+  const reportListCounts = useCallback((l: number, r: number) => setListCounts((c) => (c.left === l && c.right === r ? c : { left: l, right: r })), []);
+  const reportListCount = useCallback((n: number) => reportListCounts(n, 0), [reportListCounts]);
   /** CSV key column for compare-by-column (persisted in share links). */
   const [csvColumn, setCsvColumn] = useState<string | null>(null);
   /** Query-view text, lifted for share links. */
@@ -609,13 +268,14 @@ export function WorkspaceContent({
   /** Ref into TreeView search box (Cmd/Ctrl+F). */
   const treeViewRef = useRef<TreeViewRef | null>(null);
   /** Info about the last file dropped/imported (shown as a chip, cleared on demand). */
-  const [droppedFile, setDroppedFile] = useState<{ name: string; size: number; format: string } | null>(null);
+  const [, setDroppedFile] = useState<{ name: string; size: number; format: string } | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const dragDepthRef = useRef(0);
   const [themeMode, setThemeMode] = useState<ThemeMode>("system");
   const [systemDark, setSystemDark] = useState(false);
   const [themeSynced, setThemeSynced] = useState(false);
-  const [split, setSplit] = useState(20);
+  const [split, setSplit] = useState(38);
+  const startResize = useCallback(() => setIsResizing(true), []);
   const [isResizing, setIsResizing] = useState(false);
   const [schemaInput, setSchemaInput] = useState("");
   const [diffLeftInput, setDiffLeftInput] = useState("");
@@ -625,8 +285,6 @@ export function WorkspaceContent({
   /** Clipboard-read permission prompt - shown when ⌘V paste is blocked by the browser. */
   const [showPastePrompt, setShowPastePrompt] = useState(false);
   const [pastePromptError, setPastePromptError] = useState(false);
-  /** Two-step confirm for the settings "Clear cache" button. */
-  const [confirmClearCache, setConfirmClearCache] = useState(false);
   /** True while a "Clear cache & reload" wipe is in flight — blocks the
    *  pagehide flush from resurrecting the session after localStorage.clear(). */
   const suppressSessionFlushRef = useRef(false);
@@ -638,36 +296,27 @@ export function WorkspaceContent({
   /** Last graph copy format (PNG / JPG / SVG / JSON) - preserved per tab. */
   const [graphCopyFormat, setGraphCopyFormat] = useState<GraphCopyFormat>("png");
   const [typeLanguage, setTypeLanguage] = useState<TypeTargetLanguage>("typescript");
-  const [copyState, setCopyState] = useState<"idle" | "done" | "error">("idle");
-  const [shareState, setShareState] = useState<"idle" | "done" | "error">("idle");
+  /** Root type name for generated types and table name for SQL (empty = automatic). */
+  const [typeName, setTypeName] = useState("");
+  const [sqlTable, setSqlTable] = useState("");
+  const [learnedChips, setLearnedChips] = useState<OutputId[]>(DEFAULT_LEARNED_CHIPS);
+  const [, setCopyState] = useState<"idle" | "done" | "error">("idle");
   const resetCopySoon = useDelayedReset(() => setCopyState("idle"));
-  const resetShareSoon = useDelayedReset(() => setShareState("idle"));
   const [sharedLinkId, setSharedLinkId] = useState<string | null>(initialSharedLinkId ?? null);
   const [sharedLinkUrl, setSharedLinkUrl] = useState<string | null>(initialSharedLinkUrl ?? null);
   const [isOutputMaximized, setIsOutputMaximized] = useState(false);
   const [isDesktopLayout, setIsDesktopLayout] = useState(true);
+  /** Viewport shorter than ~700px: stacked panes switch between Input and Output instead of scrolling. */
+  const [isShortViewport, setIsShortViewport] = useState(false);
   const [focusedPane, setFocusedPane] = useState<"input" | "output">("input");
   const [formatOptions, setFormatOptions] = useState<FormatOptions>(DEFAULT_FORMAT_OPTIONS);
   const [convertToFormat, setConvertToFormat] = useState<FormatKind>("json");
   const [inputFormatOverride, setInputFormatOverride] = useState<InputFormatKind | null>(null);
   const [transformConfigOpen, setTransformConfigOpen] = useState(false);
-  /** Which settings-panel tab is open (General / Compare / Utils). */
-  const [settingsTab, setSettingsTab] = useState<"general" | "compare" | "utils">("general");
-  /** Menu-first chrome by default - cleaner for new users; uncheck in settings for pinned toolbar. */
-  const [viewAsMenu, setViewAsMenu] = useState(true);
 
-  const [formatMenuOpen, setFormatMenuOpen] = useState(false);
-  const [viewMenuOpen, setViewMenuOpen] = useState(false);
-  const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
-  const [typesMenuOpen, setTypesMenuOpen] = useState(false);
-  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
-  const [curlCodeOpen, setCurlCodeOpen] = useState(false);
   const [curlTarget, setCurlTarget] = useState<CurlTargetId | null>(null);
-  const [pinnedItems, setPinnedItems] = useState<Set<string>>(
-    () => new Set(["fmt:json", "view:raw", "view:query", "action:beautify", "action:minify", "type:typescript", "type:zod"])
-  );
   const [outputActionVisibility, setOutputActionVisibility] = useState<OutputActionVisibility>(() => loadVisibility());
-  const [shareConfirmOpen, setShareConfirmOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [showFirstRunHint, setShowFirstRunHint] = useState(false);
   /** Guided product tour - auto-starts for first-time users, replayable anytime. */
   const [tourOpen, setTourOpen] = useState(false);
@@ -683,8 +332,9 @@ export function WorkspaceContent({
   // Defaults off so an accidental 200 MB paste lands on the hardened editor +
   // lazy views instead of locking the page.
   const [forceFullEditor, setForceFullEditor] = useState(false);
-  const [diffIgnoreOrder, setDiffIgnoreOrder] = useState(false);
+  const [diffIgnoreOrder] = useState(false);
   const [diffShowPaths, setDiffShowPaths] = useState(false);
+  const [docCopyFormat, setDocCopyFormat] = useState("report");
   /** cURL response metadata (status / headers / size / timing) shown for curl input. */
   const [curlMeta, setCurlMeta] = useState<CurlExecutionResult | null>(null);
   /** True while a cURL request is in flight (cache miss) - drives the skeleton. */
@@ -693,7 +343,7 @@ export function WorkspaceContent({
   const [lastExecutedCurlInput, setLastExecutedCurlInput] = useState("");
   /** SQL dialect used by the JSON → SQL type generator. */
   const [sqlDialect, setSqlDialect] = useState<SqlDialect>("sqlite");
-  const [diffPathFilter, setDiffPathFilter] = useState<"all" | "added" | "removed" | "changed">("all");
+  const [, setDiffPathFilter] = useState<"all" | "added" | "removed" | "changed">("all");
   const [diffLineStats, setDiffLineStats] = useState<LineDiffStats | null>(null);
   const [diffNav, setDiffNav] = useState<DiffNavState>({ current: 0, total: 0 });
   /** Document = Monaco text/JSON diff; List = set/list compare; Single = one-list analysis. */
@@ -705,24 +355,20 @@ export function WorkspaceContent({
   // Multiple tabs
   const [tabs, setTabs] = useState<Tab[]>([{ id: "t1", label: "T1", num: 1 }]);
   const [activeTabId, setActiveTabId] = useState("t1");
-  const [showTabs, setShowTabs] = useState(true);
+  // Tabs are always on; older saved sessions may carry showTabs: false, which is ignored.
+  const showTabs = true;
+  /** Latest openNewTab, for the global key handler (declared before openNewTab exists). */
+  const openNewTabRef = useRef<(spec: NewTabSpec) => void>(() => {});
   const tabCounterRef = useRef(1);
-  /** Inline tab-rename editor state (floating input next to the rail). */
-  const [renamingTabId, setRenamingTabId] = useState<string | null>(null);
-  const [renameValue, setRenameValue] = useState("");
-  const [renameRect, setRenameRect] = useState<{ top: number; left: number } | null>(null);
+  /** Recently closed tabs, newest last, for "Reopen closed tab". In memory only. */
+  const closedTabsRef = useRef<Array<{ tab: Tab; snap: TabSnapshot; name: string }>>([]);
+  const [closedTabName, setClosedTabName] = useState<string | null>(null);
   /** Inline list-pane rename editor (floating input next to the Left/Right/List header). */
   type RenameSide = "left" | "right" | "list";
   const [renamingListSide, setRenamingListSide] = useState<RenameSide | null>(null);
   const [listRenameValue, setListRenameValue] = useState("");
-  const [listRenameRect, setListRenameRect] = useState<{ top: number; left: number; width: number } | null>(null);
+  const [listRenameRect, setListRenameRect] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
   // Recent command palette actions
-  const [recentActions, setRecentActions] = useState<string[]>([]);
-  // Split input
-  const [splitInputOpen, setSplitInputOpen] = useState(false);
-  const [splitInput2, setSplitInput2] = useState("");
-  const [splitRatio, setSplitRatio] = useState(50);
-  const [isSplitResizing, setIsSplitResizing] = useState(false);
   // Auto-format on paste
   const [autoFormatOnPaste, setAutoFormatOnPaste] = useState(true);
   /** Randomized quick tip (set after mount to avoid hydration mismatch). */
@@ -749,8 +395,7 @@ export function WorkspaceContent({
   const [validationError, setValidationError] = useState<string | null>(null);
   const [undoStack, setUndoStack] = useState<string[]>([""]);
   const [undoIndex, setUndoIndex] = useState(0);
-  const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
-  const [actionBounce, setActionBounce] = useState<"share" | "copy" | null>(null);
+  const [, setActionBounce] = useState<"share" | "copy" | null>(null);
   const [mobileShowOutput, setMobileShowOutput] = useState(true);
 
   // Auto-hide the first-run quick tip after a few seconds (dismissal marks it seen).
@@ -786,7 +431,6 @@ export function WorkspaceContent({
   const inputEditorApiRef = useRef<{ find(): void; focus(): void; collapseAll(): void; expandAll(): void; goToLine(line: number, column?: number): void } | null>(null);
   /** Latest input-editor cursor - restored after undo/redo rewrites the value. */
   const cursorPositionRef = useRef<{ line: number; column: number } | null>(null);
-  const splitInput2ApiRef = useRef<{ find(): void; focus(): void; collapseAll(): void; expandAll(): void; goToLine(line: number, column?: number): void } | null>(null);
   type TabSnapshot = {
     input: string;
     inputFormatOverride: InputFormatKind | null;
@@ -844,7 +488,7 @@ export function WorkspaceContent({
     diffLeftInput: "",
     diffRightInput: "",
     diffKind: "document",
-    listCompareOptions: {},
+    listCompareOptions: { ...DEFAULT_LIST_PARSE_OPTIONS },
     csvColumn: null,
     queryText: "",
     compareActiveBucket: undefined,
@@ -909,9 +553,8 @@ export function WorkspaceContent({
     setDiffLeftInput(snap.diffLeftInput ?? "");
     setDiffRightInput(snap.diffRightInput ?? "");
     setDiffKind(snap.diffKind ?? "document");
-    if (snap.listCompareOptions) {
-      setListCompareOptions((prev) => ({ ...prev, ...snap.listCompareOptions }));
-    }
+    // Parse options belong to the tab: a tab without saved options starts from the defaults.
+    setListCompareOptions({ ...DEFAULT_LIST_PARSE_OPTIONS, ...snap.listCompareOptions });
     if (snap.csvColumn) setCsvColumn(snap.csvColumn);
     if (snap.queryText) setQueryText(snap.queryText);
     if (snap.compareActiveBucket) setActiveBucket(snap.compareActiveBucket);
@@ -919,8 +562,7 @@ export function WorkspaceContent({
     setDiffIgnoreWhitespace(snap.diffIgnoreWhitespace ?? false);
     setDiffShowPaths(snap.diffShowPaths ?? false);
     setIsOutputMaximized(
-      Boolean(snap.isOutputMaximized) ||
-        snap.activeOperation === "diff" ||
+      snap.activeOperation === "diff" ||
         snap.activeOperation === "utils",
     );
     setUtilTab(snap.utilTab ?? "uuid");
@@ -951,9 +593,10 @@ export function WorkspaceContent({
     }
   };
   const tabSnapshotsRef = useRef<Map<string, TabSnapshot>>(new Map());
-  const splitContainerInputRef = useRef<HTMLDivElement | null>(null);
   const diffDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sessionRestoredRef = useRef(false);
+  const persistSessionRef = useRef<() => void>(() => {});
+  const sessionLoadedRef = useRef(false);
   const skipNextPersistRef = useRef(true);
   const curlCacheRef = useRef<{ input: string; result: string; meta: CurlExecutionResult | null } | null>(null);
   /** Output snapshot before the last transform action - "Actions → None" restores it. */
@@ -996,20 +639,18 @@ export function WorkspaceContent({
   const isDark = resolvedTheme === "dark";
   const monacoTheme = isDark ? "vs-dark" : "vs";
   const outputPanelClass = "border-[var(--workspace-border)] bg-[var(--workspace-panel)]";
-  const inputEditorBgClass = "border border-[var(--workspace-border)] border-t-0 bg-[var(--workspace-panel)]";
   const canUndo = undoIndex > 0;
   const canRedo = undoIndex < undoStack.length - 1;
   /** Diff mode always uses full-width left/right panes (no main input panel). */
   const isDiffMode = activeOperation === "diff";
   const isUtilsMode = activeOperation === "utils";
-  const hideInputPanel = isOutputMaximized || isDiffMode || isUtilsMode;
-
-  // Opening settings auto-selects the tab matching the current workspace tool.
-  useEffect(() => {
-    if (transformConfigOpen) {
-      setSettingsTab(isDiffMode ? "compare" : isUtilsMode ? "utils" : "general");
-    }
-  }, [transformConfigOpen, isDiffMode, isUtilsMode]);
+  const hideInputPanel = isDiffMode || isUtilsMode;
+  /** Input folded into a rail so the output gets the full width (persisted per tab as isOutputMaximized). */
+  const inputCollapsed = isDesktopLayout && !hideInputPanel && isOutputMaximized;
+  /** Short and narrow: one pane at a time behind an Input / Output switch. */
+  const stackSwitch = !isDesktopLayout && isShortViewport && !hideInputPanel;
+  const showInputPane = !hideInputPanel && !inputCollapsed && !(stackSwitch && mobileShowOutput);
+  const showOutputPane = !(stackSwitch && !mobileShowOutput);
 
   const structuralDiff = useMemo((): DiffSummary | null => {
     if (!isDiffMode) return null;
@@ -1045,17 +686,10 @@ export function WorkspaceContent({
     }
   }, [isDiffMode, diffKind, diffShowPaths]);
 
-  const filteredDiffRows = useMemo(() => {
-    if (!structuralDiff) return [];
-    if (diffPathFilter === "all") return structuralDiff.rows;
-    return structuralDiff.rows.filter((r) => r.change === diffPathFilter);
-  }, [structuralDiff, diffPathFilter]);
 
   const flashDiffAction = useCallback((msg: string) => {
     toast({ message: msg, type: /failed|needs valid JSON/i.test(msg) ? "error" : "success" });
   }, []);
-  const copyLabel = copyState === "done" ? "Copied" : copyState === "error" ? "Failed" : "Copy";
-  const shareLabel = shareState === "done" ? "Copied" : shareState === "error" ? "Failed" : "Share";
   const inputLineCount = input.split("\n").length;
   const inputSizeFormatted = getSizeFormatted(input);
   const inputByteSize = useMemo(() => (input ? new Blob([input]).size : 0), [input]);
@@ -1073,40 +707,7 @@ export function WorkspaceContent({
   // 1.8 MB file does not hang the renderer. The banner shows the same
   // "first 200 rows" preview as the tree view.
   const isLargeRight = effectiveRightByteSize >= LARGE_INPUT_BYTES;
-  const selectedTypeLanguageLabel =
-    TYPE_LANGUAGES.find((item) => item.id === typeLanguage)?.label ?? "Language";
 
-  const settingsBtnGroupClass =
-    "inline-flex w-fit max-w-full items-center overflow-hidden rounded-lg border border-[var(--workspace-border)]/50 bg-muted/50 divide-x divide-[var(--workspace-border)]/40";
-  /** Stepper for the pinned toolbar row (matches h-7 pill buttons). */
-  const pinnedStepBtnClass =
-    "flex h-7 w-7 shrink-0 items-center justify-center p-1 text-[var(--workspace-text-muted)] transition-colors duration-100 hover:bg-primary/10 hover:text-primary active:bg-primary/15";
-  const toolbarSep = (
-    <span className="mx-1 h-4 w-px shrink-0 self-center bg-[var(--workspace-border)]" role="separator" aria-hidden />
-  );
-  const linkBtnClass =
-    "inline-flex items-center justify-center gap-1 cursor-pointer rounded-lg border-0 bg-transparent px-1.5 py-1 text-xs font-medium whitespace-nowrap text-[var(--workspace-text-muted)] hover:bg-primary/10 hover:text-primary transition-all duration-100";
-  /* Select-style trigger for toolbar dropdowns (Format / View / Actions / Types) - greyed squarish, no border */
-  const selectBtnClass =
-    "inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-md bg-muted px-2 text-xs font-medium text-[var(--workspace-text)] transition-colors hover:bg-primary/10 hover:text-primary";
-  const selectBtnOpenClass = "!bg-primary/12 !text-primary";
-  /** Hover/focus drivers for the animated toolbar trigger icons (Format / View / Actions). */
-  const formatIcon = useIconAnimation();
-  const viewIcon = useIconAnimation();
-  const actionsIcon = useIconAnimation();
-  const uploadIcon = useIconAnimation();
-  const copyLinkIcon = useIconAnimation();
-  /* Pinned toolbar shortcut (non-compact mode) - same greyed squarish language as select triggers */
-  const pinnedBtnClass =
-    "inline-flex h-7 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-md bg-muted px-2 text-xs font-medium text-[var(--workspace-text)] transition-colors hover:bg-primary/10 hover:text-primary disabled:opacity-40";
-  /* Compare-document toolbar buttons - match the standard toolbar button design */
-  const diffToolBtn =
-    "inline-flex h-7 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-md bg-muted px-2 text-xs font-medium text-[var(--workspace-text)] transition-colors hover:bg-primary/10 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40";
-  /* Dropdown menu row - shared design (see menuStyles) */
-  const menuItemClass = sharedMenuItemClass;
-  const menuItemActiveClass = sharedMenuItemActiveClass;
-  const menuSectionLabel = sharedMenuSectionLabel;
-  const tbActiveClass = "!bg-primary/12 !text-primary font-semibold";
   const inputEmpty = !input.trim();
   useEffect(() => {
     if (inputEmpty) setCursorPosition(null);
@@ -1237,11 +838,12 @@ export function WorkspaceContent({
     downloadOutput: () => void;
     copyOutput: () => void;
     moveHistory: (delta: number) => void;
+    moveUtilsHistory: (delta: number) => void;
     newTab: () => void;
     closeTab: () => void;
     reset: () => void;
     busy: boolean;
-  }>({ runOperation: () => {}, downloadOutput: () => {}, copyOutput: () => {}, moveHistory: () => {}, newTab: () => {}, closeTab: () => {}, reset: () => {}, busy: false });
+  }>({ runOperation: () => {}, downloadOutput: () => {}, copyOutput: () => {}, moveHistory: () => {}, moveUtilsHistory: () => {}, newTab: () => {}, closeTab: () => {}, reset: () => {}, busy: false });
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -1341,22 +943,22 @@ export function WorkspaceContent({
         return;
       }
 
-      // ⌘⇧D / ⌘⇧U — toggle Compare / Utils modes (work even while one is open).
+      // ⌘⇧D / ⌘⇧U — open a new Compare / Utils tab on the kind used last (tabs are typed, so no in-place mode switch).
       if (mod && event.shiftKey && event.key.toLowerCase() === "d") {
         event.preventDefault();
-        shortcutActionsRef.current.runOperation("diff");
+        openNewTabRef.current({ kind: "compare", compare: loadLastUsed().compare });
         return;
       }
       if (mod && event.shiftKey && event.key.toLowerCase() === "u") {
         event.preventDefault();
-        shortcutActionsRef.current.runOperation("utils");
+        openNewTabRef.current({ kind: "utils", tool: loadLastUsed().utils });
         return;
       }
 
       // ⌘⇧E — open the share dialog (works in any mode).
       if (mod && event.shiftKey && event.key.toLowerCase() === "e") {
         event.preventDefault();
-        setShareConfirmOpen(true);
+        setShareOpen(true);
         return;
       }
 
@@ -1433,7 +1035,7 @@ export function WorkspaceContent({
       }
       if (mod && event.key === "0") {
         event.preventDefault();
-        setEditorFontSize(14);
+        setEditorFontSize(13);
         return;
       }
 
@@ -1447,14 +1049,14 @@ export function WorkspaceContent({
       // ⌘Y — redo input history (⌘⇧Z is handled in the core handler below).
       if (mod && !event.shiftKey && event.key.toLowerCase() === "y") {
         event.preventDefault();
-        if (isUtilsMode) moveUtilsHistory(1);
+        if (isUtilsMode) shortcutActionsRef.current.moveUtilsHistory(1);
         else shortcutActionsRef.current.moveHistory(1);
         return;
       }
     };
     window.addEventListener("keydown", onKeyDown, { capture: true });
     return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
-  }, [modalKind, inputEmpty, output, parsedOutput, focusedPane, activeOperation, showTabs, tabs.length, rightView]);
+  }, [modalKind, inputEmpty, output, parsedOutput, focusedPane, activeOperation, isUtilsMode, showTabs, tabs.length, rightView]);
 
   // Refresh the ref with fresh closures for functions declared later in this component,
   // so the shortcut handler above never calls a stale version.
@@ -1464,7 +1066,8 @@ export function WorkspaceContent({
       downloadOutput,
       copyOutput,
       moveHistory,
-      newTab: addTab,
+      moveUtilsHistory,
+      newTab: () => addTab(),
       closeTab: () => closeTab(activeTabId),
       reset: handleWorkspaceReset,
       busy: showBusy,
@@ -1483,8 +1086,9 @@ export function WorkspaceContent({
     setTimeout(() => { historyLock.current = false; }, 0);
   };
 
-  const addTab = () => {
+  const addTab = (overrides?: Partial<TabSnapshot>) => {
     trackEvent("tab_add");
+    setSplit(38);
     tabSnapshotsRef.current.set(activeTabId, captureTabSnapshot());
     tabCounterRef.current += 1;
     const newId = `t${tabCounterRef.current}`;
@@ -1502,9 +1106,11 @@ export function WorkspaceContent({
       error: null,
       diffLeftInput: "",
       diffRightInput: "",
+      listCompareOptions: { ...DEFAULT_LIST_PARSE_OPTIONS },
       utilsByTool: {},
       copyAsMemory: {},
       isOutputMaximized: false,
+      ...overrides,
     });
     setUtilsRegenKey((k) => k + 1);
     prevBeforeDiffRef.current = null;
@@ -1515,6 +1121,12 @@ export function WorkspaceContent({
     if (tabs.length <= 1) return;
     trackEvent("tab_close");
     const tabIdx = tabs.findIndex((t) => t.id === tabId);
+    const closedSnap = tabId === activeTabId ? captureTabSnapshot() : tabSnapshotsRef.current.get(tabId);
+    if (closedSnap) {
+      const name = chromeTabs[tabIdx]?.name ?? "tab";
+      closedTabsRef.current = [...closedTabsRef.current.slice(-9), { tab: tabs[tabIdx], snap: closedSnap, name }];
+      setClosedTabName(name);
+    }
     tabSnapshotsRef.current.delete(tabId);
     const newTabs = tabs.filter((t) => t.id !== tabId);
     if (tabId === activeTabId) {
@@ -1545,6 +1157,9 @@ export function WorkspaceContent({
     prevBeforeDiffRef.current = null;
     setTimeout(() => { historyLock.current = false; }, 0);
     toast({ message: "Closed all tabs" });
+    // emptyTabSnapshot and applyTabSnapshot are plain functions recreated every render. They read no state
+    // (a blank snapshot, then setters), so the copies captured here stay correct.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabs.length]);
 
   const closeOtherTabs = useCallback(() => {
@@ -1562,48 +1177,68 @@ export function WorkspaceContent({
     toast({ message: "Closed other tabs" });
   }, [tabs, activeTabId, captureTabSnapshot]);
 
-  /** Short context label letter: T (Transform), C (Compare), U (Utils). */
-  const letterForTab = useCallback(
-    (tabId: string): string => {
-      const op =
-        tabId === activeTabId
-          ? activeOperation
-          : (tabSnapshotsRef.current.get(tabId)?.activeOperation ?? null);
-      return op === "diff" ? "C" : op === "utils" ? "U" : "T";
-    },
-    [activeTabId, activeOperation],
-  );
+  /** Tabs as the chrome row shows them: automatic names from what each tab does, numbered when repeated. */
+  const chromeTabs = useMemo<ChromeTab[]>(() => {
+    const auto = tabs.map((t) => {
+      if (t.id === activeTabId) {
+        return autoTabName({ operation: activeOperation, convertToFormat, typeLanguage, diffKind, utilTab, inputFormat: inputFormatOverride ?? detectedInputFormat });
+      }
+      const snap = tabSnapshotsRef.current.get(t.id);
+      if (!snap) return "Format JSON";
+      return autoTabName({
+        operation: snap.activeOperation ?? null,
+        convertToFormat: snap.convertToFormat,
+        typeLanguage: snap.typeLanguage,
+        diffKind: snap.diffKind ?? "document",
+        utilTab: snap.utilTab ?? "uuid",
+        // ponytail: sniff only the head of background tabs so naming stays cheap on huge inputs
+        inputFormat: snap.inputFormatOverride ?? detectFormat(snap.input.slice(0, 4000)),
+      });
+    });
+    const numbered = numberDuplicates(auto);
+    return tabs.map((t, i) => ({ id: t.id, name: t.renamed && t.label ? t.label : numbered[i], custom: Boolean(t.renamed && t.label) }));
+  }, [tabs, activeTabId, activeOperation, convertToFormat, typeLanguage, diffKind, utilTab, inputFormatOverride, detectedInputFormat]);
 
-  /** Keep the live rename target in a ref so blur-after-Escape never commits. */
-  const renamingTabIdRef = useRef<string | null>(null);
-
-  const startRename = useCallback(
-    (tab: Tab, el: HTMLElement | null) => {
-      if (!el) return;
-      const r = el.getBoundingClientRect();
-      renamingTabIdRef.current = tab.id;
-      setRenameRect({ top: r.top, left: r.right + 6 });
-      setRenamingTabId(tab.id);
-      setRenameValue(tab.renamed ? tab.label : `${letterForTab(tab.id)}${tab.num}`);
-    },
-    [letterForTab],
-  );
-
-  const commitRename = useCallback(() => {
-    const id = renamingTabIdRef.current;
-    const v = renameValue.trim();
-    renamingTabIdRef.current = null;
-    setRenamingTabId(null);
-    setRenameRect(null);
-    if (!id || !v) return;
-    setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, label: v, renamed: true } : t)));
-  }, [renameValue]);
-
-  const cancelRename = useCallback(() => {
-    renamingTabIdRef.current = null;
-    setRenamingTabId(null);
-    setRenameRect(null);
+  /** Empty name returns the tab to its automatic name. */
+  const renameTab = useCallback((id: string, name: string) => {
+    setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, label: name || t.label, renamed: Boolean(name) } : t)));
   }, []);
+
+  const openNewTab = (spec: NewTabSpec) => {
+    if (spec.kind === "compare") {
+      saveLastUsed({ compare: spec.compare });
+      addTab({ activeOperation: "diff", diffKind: spec.compare, isOutputMaximized: true });
+    } else if (spec.kind === "utils") {
+      saveLastUsed({ utils: spec.tool });
+      addTab({ activeOperation: "utils", utilTab: spec.tool as UtilTab, isOutputMaximized: true });
+    } else {
+      saveLastUsed({ transform: spec.output });
+      const [group, value] = spec.output.split(":");
+      if (group === "fmt") addTab({ activeOperation: null, convertToFormat: value as FormatKind, rightView: "raw" });
+      else if (group === "type") addTab({ activeOperation: "generateTypes", typeLanguage: value as TypeTargetLanguage, rightView: "raw" });
+      else {
+        addTab({ activeOperation: value as OperationAction, rightView: "raw" });
+        if (value === "validate") setModalKind("validate");
+      }
+    }
+  };
+
+  openNewTabRef.current = openNewTab;
+
+  const reopenTab = () => {
+    const closed = closedTabsRef.current.pop();
+    setClosedTabName(closedTabsRef.current.at(-1)?.name ?? null);
+    if (!closed) return;
+    tabSnapshotsRef.current.set(activeTabId, captureTabSnapshot());
+    tabCounterRef.current += 1;
+    const id = `t${tabCounterRef.current}`;
+    setTabs((prev) => [...prev, { ...closed.tab, id, num: tabCounterRef.current }]);
+    setActiveTabId(id);
+    historyLock.current = true;
+    applyTabSnapshot(closed.snap);
+    prevBeforeDiffRef.current = null;
+    setTimeout(() => { historyLock.current = false; }, 0);
+  };
 
   /** Refs/handlers for the Left/Right/List header rename editor. */
   const renamingListSideRef = useRef<RenameSide | null>(null);
@@ -1612,37 +1247,24 @@ export function WorkspaceContent({
       if (!el) return;
       const r = el.getBoundingClientRect();
       renamingListSideRef.current = side;
-      setListRenameRect({ top: r.top, left: r.left, width: r.width });
+      setListRenameRect({ top: r.top, left: r.left, width: r.width, height: r.height });
       setRenamingListSide(side);
       const current = tabs.find((t) => t.id === activeTabId);
-      const existing = side === "left" ? current?.leftLabel : current?.rightLabel;
-      setListRenameValue(existing ?? (side === "left" ? "Left" : side === "right" ? "Right" : "List"));
+      const existing = side === "right" ? current?.rightLabel : current?.leftLabel;
+      setListRenameValue(existing ?? (diffKind === "document" ? (side === "left" ? "Document A" : "Document B") : side === "left" ? "Left" : side === "right" ? "Right" : "List"));
     },
-    [tabs, activeTabId],
+    [tabs, activeTabId, diffKind],
   );
-  const commitListRename = useCallback(() => {
+  /** Same rename behaviour as tabs: empty or Escape keeps the old name. A single list stores its name under "left". */
+  const commitListRename = useCallback((name: string | null) => {
     const side = renamingListSideRef.current;
-    const v = listRenameValue.trim();
     renamingListSideRef.current = null;
     setRenamingListSide(null);
     setListRenameRect(null);
-    if (!side) return;
-    if (!v) {
-      // Empty = clear custom label
-      setTabs((prev) => prev.map((t) => (t.id === activeTabId
-        ? { ...t, leftLabel: side === "left" ? undefined : t.leftLabel, rightLabel: side === "right" ? undefined : t.rightLabel }
-        : t)));
-      return;
-    }
-    setTabs((prev) => prev.map((t) => (t.id === activeTabId
-      ? { ...t, leftLabel: side === "left" ? v : t.leftLabel, rightLabel: side === "right" ? v : t.rightLabel }
-      : t)));
-  }, [listRenameValue, activeTabId]);
-  const cancelListRename = useCallback(() => {
-    renamingListSideRef.current = null;
-    setRenamingListSide(null);
-    setListRenameRect(null);
-  }, []);
+    if (!side || !name) return;
+    const key = side === "right" ? "rightLabel" : "leftLabel";
+    setTabs((prev) => prev.map((t) => (t.id === activeTabId ? { ...t, [key]: name } : t)));
+  }, [activeTabId]);
 
   useEffect(() => {
     try {
@@ -1653,12 +1275,17 @@ export function WorkspaceContent({
       }
     } catch {}
     try {
+      const learned = JSON.parse(localStorage.getItem("formaty-learned-chips") ?? "null") as OutputId[] | null;
+      if (Array.isArray(learned) && learned.length > 0) setLearnedChips(learned.slice(0, 2));
+    } catch {}
+    try {
       if (localStorage.getItem("formaty-onboarded") !== "1") {
         setShowFirstRunHint(true);
       }
     } catch {}
     setSystemDark(window.matchMedia("(prefers-color-scheme: dark)").matches);
-    setIsDesktopLayout(window.matchMedia("(min-width: 1280px)").matches);
+    setIsDesktopLayout(window.matchMedia("(min-width: 900px)").matches);
+    setIsShortViewport(window.matchMedia("(max-height: 699px)").matches);
     setThemeSynced(true);
   }, []);
 
@@ -1679,16 +1306,25 @@ export function WorkspaceContent({
   }, [resolvedTheme, themeSynced]);
 
   useEffect(() => {
-    const media = window.matchMedia("(min-width: 1280px)");
+    const media = window.matchMedia("(min-width: 900px)");
     const onChange = (event: MediaQueryListEvent) => setIsDesktopLayout(event.matches);
     media.addEventListener("change", onChange);
     return () => media.removeEventListener("change", onChange);
   }, []);
 
   useEffect(() => {
+    const media = window.matchMedia("(max-height: 699px)");
+    const onChange = (event: MediaQueryListEvent) => setIsShortViewport(event.matches);
+    media.addEventListener("change", onChange);
+    return () => media.removeEventListener("change", onChange);
+  }, []);
+
+  // Layout effect: the saved session must be in state before the first paint (and before any
+  // click can run against the default tab), not whenever React gets to passive effects.
+  useLayoutEffect(() => {
     if (initialState) {
       isViewingSharedRef.current = true;
-      const s = initialState as WorkspaceState & {
+      const s = upgradeListOptions(initialState, initialState.listOptionsVersion) as WorkspaceState & {
         tabs?: Tab[];
         activeTabId?: string;
         showTabs?: boolean;
@@ -1705,11 +1341,10 @@ export function WorkspaceContent({
         tabCounterRef.current = Math.max(0, ...migrated.map((t: Tab) => t.num));
         const activeId = s.activeTabId && migrated.some((t: Tab) => t.id === s.activeTabId) ? s.activeTabId : migrated[0].id;
         setActiveTabId(activeId);
-        if (typeof s.showTabs === "boolean") setShowTabs(s.showTabs);
         const map = new Map<string, TabSnapshot>();
         for (const [k, v] of Object.entries(s.tabSnapshots)) {
           if (v && typeof v === "object") {
-            const snap = { ...(v as object) } as { output?: string };
+            const snap = upgradeListOptions({ ...(v as object) } as { output?: string; listCompareOptions?: Partial<ListParseOptions> }, s.listOptionsVersion);
             if (isStaleDiffOutput(snap.output)) snap.output = "";
             map.set(k, snap as TabSnapshot);
           }
@@ -1734,7 +1369,7 @@ export function WorkspaceContent({
         if (s.queryText) setQueryText(s.queryText);
         if (s.compareActiveBucket) setActiveBucket(s.compareActiveBucket);
         if (s.utilTab) setUtilTab(s.utilTab as UtilTab);
-        if (typeof s.split === "number") setSplit(Math.max(20, Math.min(80, s.split)));
+        if (typeof s.split === "number") setSplit(Math.max(25, Math.min(60, s.split)));
         const urlId = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("id") : null;
         if (urlId) {
           setSharedLinkId(urlId);
@@ -1785,11 +1420,11 @@ export function WorkspaceContent({
       if (initialState.typeLanguage) setTypeLanguage(initialState.typeLanguage);
       if (initialState.viewMode) setRightView(initialState.viewMode);
       setActiveOperation((initialState.activeOperation as OperationAction) ?? "format");
-      if (typeof initialState.split === "number") setSplit(Math.max(20, Math.min(80, initialState.split)));
+      if (typeof initialState.split === "number") setSplit(Math.max(25, Math.min(60, initialState.split)));
       if (initialState.diffKind) setDiffKind(initialState.diffKind as "document" | "list" | "single");
       if (initialState.diffLeftInput) setDiffLeftInput(initialState.diffLeftInput);
       if (initialState.diffRightInput) setDiffRightInput(initialState.diffRightInput);
-      if (initialState.listCompareOptions) setListCompareOptions((prev) => ({ ...prev, ...initialState.listCompareOptions }));
+      if (initialState.listCompareOptions) setListCompareOptions((prev) => ({ ...prev, ...upgradeListOptions(initialState, initialState.listOptionsVersion).listCompareOptions }));
       if (initialState.csvColumn) setCsvColumn(initialState.csvColumn);
       if (initialState.queryText) setQueryText(initialState.queryText);
       if (initialState.compareActiveBucket) setActiveBucket(initialState.compareActiveBucket);
@@ -1866,7 +1501,7 @@ export function WorkspaceContent({
     const state = hash ? decodeState(hash) : null;
     if (state) {
       if (shared) isViewingSharedRef.current = true;
-      const hs = state as WorkspaceState & { tabs?: Tab[]; activeTabId?: string; showTabs?: boolean; tabSnapshots?: Record<string, TabSnapshot> };
+      const hs = upgradeListOptions(state, state.listOptionsVersion) as WorkspaceState & { tabs?: Tab[]; activeTabId?: string; showTabs?: boolean; tabSnapshots?: Record<string, TabSnapshot> };
       if (Array.isArray(hs.tabs) && hs.tabs.length > 0 && hs.tabSnapshots && typeof hs.tabSnapshots === "object") {
         const migrated: Tab[] = hs.tabs.map((t: Tab, i: number) => ({
           ...t,
@@ -1877,11 +1512,10 @@ export function WorkspaceContent({
         tabCounterRef.current = Math.max(0, ...migrated.map((t: Tab) => t.num));
         const activeId = hs.activeTabId && migrated.some((t: Tab) => t.id === hs.activeTabId) ? hs.activeTabId : migrated[0].id;
         setActiveTabId(activeId);
-        if (typeof hs.showTabs === "boolean") setShowTabs(hs.showTabs);
         const map = new Map<string, TabSnapshot>();
         for (const [k, v] of Object.entries(hs.tabSnapshots)) {
           if (v && typeof v === "object") {
-            const snap = { ...(v as object) } as { output?: string };
+            const snap = upgradeListOptions({ ...(v as object) } as { output?: string; listCompareOptions?: Partial<ListParseOptions> }, hs.listOptionsVersion);
             if (isStaleDiffOutput(snap.output)) snap.output = "";
             map.set(k, snap as TabSnapshot);
           }
@@ -1904,7 +1538,7 @@ export function WorkspaceContent({
         if (hs.queryText) setQueryText(hs.queryText);
         if (hs.compareActiveBucket) setActiveBucket(hs.compareActiveBucket);
         if (hs.utilTab) setUtilTab(hs.utilTab as UtilTab);
-        if (typeof hs.split === "number") setSplit(Math.max(20, Math.min(80, hs.split)));
+        if (typeof hs.split === "number") setSplit(Math.max(25, Math.min(60, hs.split)));
         sessionRestoredRef.current = true;
         return;
       }
@@ -1948,11 +1582,11 @@ export function WorkspaceContent({
       }
       if (state.typeLanguage) setTypeLanguage(state.typeLanguage);
       if (state.viewMode) setRightView(state.viewMode);
-      if (typeof state.split === "number") setSplit(Math.max(20, Math.min(80, state.split)));
+      if (typeof state.split === "number") setSplit(Math.max(25, Math.min(60, state.split)));
       if (state.diffKind) setDiffKind(state.diffKind as "document" | "list" | "single");
       if (state.diffLeftInput) setDiffLeftInput(state.diffLeftInput);
       if (state.diffRightInput) setDiffRightInput(state.diffRightInput);
-      if (state.listCompareOptions) setListCompareOptions((prev) => ({ ...prev, ...state.listCompareOptions }));
+      if (state.listCompareOptions) setListCompareOptions((prev) => ({ ...prev, ...upgradeListOptions(state, state.listOptionsVersion).listCompareOptions }));
       if (state.csvColumn) setCsvColumn(state.csvColumn);
       if (state.queryText) setQueryText(state.queryText);
       if (state.compareActiveBucket) setActiveBucket(state.compareActiveBucket);
@@ -1967,10 +1601,15 @@ export function WorkspaceContent({
       if (state.input || state.diffLeftInput || state.diffRightInput) sessionRestoredRef.current = true;
       return;
     }
+    // The saved session loads once. Re-running (Fast Refresh, search-param change) would put
+    // the last debounced save over live tabs and replace the in-memory snapshot map.
+    if (sessionLoadedRef.current) return;
+    sessionLoadedRef.current = true;
     try {
       const raw = localStorage.getItem("formaty-session");
       if (!raw) return;
       const data = JSON.parse(raw) as {
+        listOptionsVersion?: number;
         input?: string;
         output?: string;
         split?: number;
@@ -1981,12 +1620,10 @@ export function WorkspaceContent({
         convertToFormat?: FormatKind;
         editorFontSize?: number;
         liveTransform?: boolean;
-        viewAsMenu?: boolean;
         lineWrap?: boolean;
         autoFormatOnPaste?: boolean;
         mobileShowOutput?: boolean;
         activeOperation?: OperationAction;
-        pinnedItems?: string[];
         tabs?: Tab[];
         activeTabId?: string;
         tabCounter?: number;
@@ -1996,20 +1633,17 @@ export function WorkspaceContent({
       };
     if (data.input) setInput(data.input);
     if (data.output) setOutput(cleanSessionOutput(data.output));
-    if (typeof data.split === "number") setSplit(data.split);
+    if (typeof data.split === "number") setSplit(Math.max(25, Math.min(60, data.split)));
     if (data.themeMode) setThemeMode(data.themeMode);
     if (data.typeLanguage) setTypeLanguage(data.typeLanguage);
     if (data.rightView) setRightView(data.rightView);
     if (data.convertToFormat) setConvertToFormat(data.convertToFormat);
     if (typeof data.editorFontSize === "number") setEditorFontSize(data.editorFontSize);
       if (typeof data.liveTransform === "boolean") setLiveTransform(data.liveTransform);
-      if (typeof data.viewAsMenu === "boolean") setViewAsMenu(data.viewAsMenu);
       if (typeof data.lineWrap === "boolean") setLineWrap(data.lineWrap);
       if (typeof data.autoFormatOnPaste === "boolean") setAutoFormatOnPaste(data.autoFormatOnPaste);
       if (typeof data.mobileShowOutput === "boolean") setMobileShowOutput(data.mobileShowOutput);
-      if (typeof data.showTabs === "boolean") setShowTabs(data.showTabs);
       if (data.activeOperation) setActiveOperation(data.activeOperation);
-      if (Array.isArray(data.pinnedItems)) setPinnedItems(new Set(data.pinnedItems));
       // Restore tabs
       if (Array.isArray(data.tabs) && data.tabs.length > 0) {
         // Migrate tabs saved by older sessions (no num/renamed) and reset the
@@ -2020,19 +1654,20 @@ export function WorkspaceContent({
           renamed: Boolean((t as Partial<Tab>).renamed),
         }));
         setTabs(migrated);
-        tabCounterRef.current = Math.max(0, ...migrated.map((t) => t.num));
+        // Never reuse the id of a tab closed before the reload.
+        tabCounterRef.current = Math.max(typeof data.tabCounter === "number" ? data.tabCounter : 0, ...migrated.map((t) => t.num));
         if (data.activeTabId && migrated.some((t: Tab) => t.id === data.activeTabId)) {
           setActiveTabId(data.activeTabId);
         } else {
           setActiveTabId(data.tabs[0].id);
         }
         if (data.tabSnapshots && typeof data.tabSnapshots === "object") {
-          const map = new Map<string, typeof tabSnapshotsRef extends React.MutableRefObject<Map<string, infer V>> ? V : never>();
+          const map = new Map<string, TabSnapshot>();
           for (const [k, v] of Object.entries(data.tabSnapshots)) {
             if (v && typeof v === "object") {
-              const snap = { ...(v as object) } as { output?: string };
+              const snap = upgradeListOptions({ ...(v as object) } as { output?: string; listCompareOptions?: Partial<ListParseOptions> }, data.listOptionsVersion);
               if (isStaleDiffOutput(snap.output)) snap.output = "";
-              map.set(k, snap as typeof map extends Map<string, infer V> ? V : never);
+              map.set(k, snap as TabSnapshot);
             }
           }
           tabSnapshotsRef.current = map;
@@ -2040,23 +1675,14 @@ export function WorkspaceContent({
             data.activeTabId && data.tabs.some((t: Tab) => t.id === data.activeTabId)
               ? data.activeTabId
               : data.tabs[0].id;
-           const activeSnap = map.get(activeId) as TabSnapshot | undefined;
-           if (activeSnap) {
-             if (activeSnap.utilTab) setUtilTab(activeSnap.utilTab);
-             if (activeSnap.utilsByTool) setUtilsByTool(activeSnap.utilsByTool);
-             if (activeSnap.diffKind) setDiffKind(activeSnap.diffKind);
-             if (activeSnap.listCompareOptions) setListCompareOptions((prev) => ({ ...prev, ...activeSnap.listCompareOptions }));
-             if (activeSnap.csvColumn) setCsvColumn(activeSnap.csvColumn);
-             if (activeSnap.queryText) setQueryText(activeSnap.queryText);
-             if (activeSnap.compareActiveBucket) setActiveBucket(activeSnap.compareActiveBucket);
-             if (typeof activeSnap.diffLeftInput === "string") setDiffLeftInput(activeSnap.diffLeftInput);
-             if (typeof activeSnap.diffRightInput === "string") setDiffRightInput(activeSnap.diffRightInput);
-             if (typeof activeSnap.diffSideBySide === "boolean") setDiffSideBySide(activeSnap.diffSideBySide);
-             if (typeof activeSnap.diffIgnoreWhitespace === "boolean") setDiffIgnoreWhitespace(activeSnap.diffIgnoreWhitespace);
-             if (typeof activeSnap.diffShowPaths === "boolean") setDiffShowPaths(activeSnap.diffShowPaths);
-             if (activeSnap.copyAsMemory && typeof activeSnap.copyAsMemory === "object") setCopyAsMemory(activeSnap.copyAsMemory);
-             if (activeSnap.graphCopyFormat) setGraphCopyFormat(activeSnap.graphCopyFormat);
-           }
+          const activeSnap = map.get(activeId);
+          if (activeSnap) {
+            // The tab's own snapshot is the single source for everything per-tab (operation,
+            // compare kind, inputs, options); the top-level copies above are only a fallback.
+            historyLock.current = true;
+            applyTabSnapshot({ ...emptyTabSnapshot(), ...activeSnap });
+            setTimeout(() => { historyLock.current = false; }, 0);
+          }
         }
       }
       sessionRestoredRef.current = true;
@@ -2088,7 +1714,8 @@ export function WorkspaceContent({
     }
     // Debounced: serializing every tab snapshot + undo history per keystroke is expensive.
     // The pagehide flush below covers unload within the debounce window.
-    const timer = setTimeout(() => {
+    const write = () => {
+      if (suppressSessionFlushRef.current) return;
       // Build full tab snapshots for persistence: save current tab state too
       const allSnapshots: Record<string, unknown> = {};
       tabSnapshotsRef.current.forEach((snap, id) => { allSnapshots[id] = snap; });
@@ -2116,7 +1743,10 @@ export function WorkspaceContent({
         // Keep the active tab metadata but strip its text fields.
         const current = allSnapshots[activeTabId] as Record<string, unknown> | undefined;
         if (current) {
-          const { input: _i, output: _o, undoStack: _u, ...meta } = current;
+          const meta = { ...current };
+          delete meta.input;
+          delete meta.output;
+          delete meta.undoStack;
           persistSnapshots[activeTabId] = meta;
         }
         // Other tab snapshots are safe to keep only if their text is small;
@@ -2135,18 +1765,17 @@ export function WorkspaceContent({
         convertToFormat,
         liveTransform,
         editorFontSize,
-        viewAsMenu,
         lineWrap,
         autoFormatOnPaste,
 
         mobileShowOutput,
         activeOperation,
-        pinnedItems: Array.from(pinnedItems),
         outputActionVisibility,
         tabs,
         activeTabId,
         showTabs,
         tabCounter: tabCounterRef.current,
+        listOptionsVersion: LIST_OPTIONS_VERSION,
         tabSnapshots: persistSnapshots,
       };
       try {
@@ -2165,39 +1794,22 @@ export function WorkspaceContent({
           // localStorage is unusable (private mode, locked, etc.) — bail.
         }
       }
-    }, 500);
+    };
+    // pagehide writes through the same function, so a reload mid-debounce saves one
+    // consistent render (tabs, active id, snapshots, active operation) instead of a mix.
+    persistSessionRef.current = write;
+    const timer = setTimeout(write, 500);
     return () => clearTimeout(timer);
-  }, [input, output, split, themeMode, typeLanguage, rightView, formatOptions, convertToFormat, liveTransform, editorFontSize, viewAsMenu, lineWrap, autoFormatOnPaste, mobileShowOutput, activeOperation, pinnedItems, outputActionVisibility, tabs, activeTabId, showTabs, inputFormatOverride, undoStack, undoIndex, outputExt, outputLanguage, diffLeftInput, diffRightInput, diffKind, isOutputMaximized, utilTab, utilsByTool, captureTabSnapshot]);
+  }, [input, output, split, themeMode, typeLanguage, rightView, formatOptions, convertToFormat, liveTransform, editorFontSize, lineWrap, autoFormatOnPaste, mobileShowOutput, activeOperation, outputActionVisibility, tabs, activeTabId, showTabs, inputFormatOverride, undoStack, undoIndex, outputExt, outputLanguage, diffLeftInput, diffRightInput, diffKind, isOutputMaximized, utilTab, utilsByTool, captureTabSnapshot]);
 
   // Synchronous safety-net save on tab hide/reload so the new-version
   // toast's `location.reload()` never loses an in-flight edit between the
   // last render commit and the unload.
   useEffect(() => {
-    const flush = () => {
-      // A wipe-all is in flight: leave localStorage empty so the reload
-      // actually boots fresh instead of restoring the old session.
-      if (suppressSessionFlushRef.current) return;
-      try {
-        const raw = localStorage.getItem("formaty-session");
-        const prev = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
-        localStorage.setItem(
-          "formaty-session",
-          JSON.stringify({
-            ...prev,
-            input,
-            output: cleanSessionOutput(output),
-            tabs,
-            activeTabId,
-            tabCounter: tabCounterRef.current,
-          }),
-        );
-      } catch {
-        /* localStorage unavailable - skip */
-      }
-    };
+    const flush = () => persistSessionRef.current();
     window.addEventListener("pagehide", flush);
     return () => window.removeEventListener("pagehide", flush);
-  }, [input, output, tabs, activeTabId]);
+  }, []);
 
   // Prefer structured parse for views (table/tree/graph/query).
   // Debounced: re-parsing the whole document on every keystroke blocks the main thread.
@@ -2303,7 +1915,6 @@ export function WorkspaceContent({
     return () => clearTimeout(id);
     // One-shot restore timer guarded by sessionRestoredRef. executeOperation / runConvert
     // are declared later in the component and intentionally not in deps.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [input, output, activeOperation, convertToFormat, typeLanguage]);
 
   useEffect(() => {
@@ -2346,9 +1957,9 @@ export function WorkspaceContent({
         parseCurl(input);
         setInputValid(true);
         setValidationError(null);
-      } catch {
+      } catch (e) {
         setInputValid(false);
-        setValidationError("Invalid cURL command");
+        setValidationError(e instanceof Error ? e.message : "Not a curl command");
       }
       return;
     }
@@ -2379,9 +1990,7 @@ export function WorkspaceContent({
     // Don't clobber a user-driven output mode (Types/Schema/Validate/Compare/Utils)
     // with a Transform cycle just because the input was edited.
     if (
-      activeOperation === "generateTypes" ||
-      activeOperation === "schema" ||
-      activeOperation === "validate" ||
+      (activeOperation && STICKY_OPS.includes(activeOperation)) ||
       activeOperation === "diff" ||
       activeOperation === "utils"
     ) return;
@@ -2402,10 +2011,10 @@ export function WorkspaceContent({
           setOutputLanguage(convertToFormat);
           setParsedOutput(json);
           // Keep Transform mode and the user's chosen output view (don't clobber Compare/Utils,
-          // and don't clobber Types/Schema modes when the user picks "Load sample" on a tab
+          // and don't clobber Types/Schema modes when the user picks Sample on a tab
           // that inherited those settings from another tab).
           setActiveOperation((op) => {
-            if (op === "diff" || op === "utils" || op === "generateTypes" || op === "schema" || op === "validate") return op;
+            if (op === "diff" || op === "utils" || (op && STICKY_OPS.includes(op))) return op;
             return null;
           });
           if (
@@ -2435,24 +2044,16 @@ export function WorkspaceContent({
   // debounce).
   useEffect(() => {
     if (!input.trim()) return;
-    if (
-      activeOperation !== "generateTypes" &&
-      activeOperation !== "schema" &&
-      activeOperation !== "validate"
-    ) return;
+    if (!activeOperation || !STICKY_OPS.includes(activeOperation)) return;
     const id = setTimeout(() => {
       if (!inputRef.current.trim()) return;
-      if (activeOperation === "generateTypes") {
-        executeOperationRef.current?.("generateTypes", { typeLanguage, inputText: inputRef.current });
-      } else if (activeOperation === "schema") {
-        executeOperationRef.current?.("schema", { inputText: inputRef.current });
-      } else if (activeOperation === "validate") {
-        executeOperationRef.current?.("validate", { inputText: inputRef.current });
-      }
+      executeOperationRef.current?.(activeOperation, {
+        inputText: inputRef.current,
+        ...(activeOperation === "generateTypes" ? { typeLanguage } : {}),
+      });
     }, 400);
     return () => clearTimeout(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [input, activeOperation, typeLanguage]);
+  }, [input, activeOperation, typeLanguage, typeName, sqlTable]);
 
 
 
@@ -2464,7 +2065,7 @@ export function WorkspaceContent({
       if (!section) return;
       const rect = section.getBoundingClientRect();
       const nextSplit = ((event.clientX - rect.left) / rect.width) * 100;
-      setSplit(Math.max(20, Math.min(80, Math.round(nextSplit))));
+      setSplit(Math.max(25, Math.min(60, Math.round(nextSplit))));
     };
 
     const onMouseUp = () => setIsResizing(false);
@@ -2480,28 +2081,6 @@ export function WorkspaceContent({
       window.removeEventListener("mouseup", onMouseUp);
     };
   }, [isResizing]);
-
-  useEffect(() => {
-    if (!isSplitResizing) return;
-    const onMouseMove = (event: MouseEvent) => {
-      const container = splitContainerInputRef.current;
-      if (!container) return;
-      const rect = container.getBoundingClientRect();
-      const next = ((event.clientX - rect.left) / rect.width) * 100;
-      setSplitRatio(Math.max(20, Math.min(80, Math.round(next))));
-    };
-    const onMouseUp = () => setIsSplitResizing(false);
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
-    return () => {
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
-    };
-  }, [isSplitResizing]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -2621,6 +2200,15 @@ export function WorkspaceContent({
           if (!isDesktopLayout) setMobileShowOutput(true);
           return;
         }
+        if (activeOperation && STICKY_OPS.includes(activeOperation)) {
+          // Keep the chosen output (types, schema, ...) and refresh it for the new input.
+          setParsedOutput(json);
+          executeOperationRef.current?.(activeOperation, {
+            inputText: text,
+            ...(activeOperation === "generateTypes" ? { typeLanguage } : {}),
+          });
+          return;
+        }
         const result = await convertJsonToOutput(json);
         setOutputData(result, "parse");
         setParsedOutput(json);
@@ -2632,7 +2220,7 @@ export function WorkspaceContent({
         setBusy(false);
       }
     })();
-  }, [input, resolvedInputFormat, run, convertJsonToOutput, setOutputData, isDesktopLayout]);
+  }, [input, resolvedInputFormat, run, convertJsonToOutput, setOutputData, isDesktopLayout, activeOperation, typeLanguage]);
 
   /** Open the guided tour (auto-start or explicit replay). Never double-opens. */
   const openTour = useCallback((source: "auto" | "settings" | "palette" | "statusbar") => {
@@ -2682,7 +2270,7 @@ export function WorkspaceContent({
     return () => window.clearTimeout(id);
   }, [embed, initialState, loadedToolPreset, searchParams, openTour]);
 
-  // Load sample data when the tour starts so the output-pane steps show real content.
+  // Fill the input with sample data when the tour starts so the output-pane steps show real content.
   const tourSampleLoadedRef = useRef(false);
   useEffect(() => {
     if (!tourOpen) return;
@@ -2749,7 +2337,8 @@ export function WorkspaceContent({
           const result = await run<string>("generateTypes", {
             json: left,
             language: targetLanguage,
-            sqlOptions: targetLanguage === "sql" ? { dialect: sqlDialect } : undefined,
+            rootName: typeName.trim() || undefined,
+            sqlOptions: targetLanguage === "sql" ? { dialect: sqlDialect, tableName: sqlTable.trim() || undefined } : undefined,
           });
           setTypeLanguage(targetLanguage);
           setOutputData(result, action, undefined, targetLanguage);
@@ -2815,15 +2404,13 @@ export function WorkspaceContent({
         setBusy(false);
       }
     })();
-  }, [getParsedInput, parseSchemaToObject, run, convertJsonToOutput, setOutputData, schemaInput, typeLanguage, formatOptions, convertToFormat, sqlDialect, output, parsedOutput]);
+  }, [getParsedInput, parseSchemaToObject, run, convertJsonToOutput, setOutputData, schemaInput, typeLanguage, formatOptions, convertToFormat, sqlDialect, typeName, sqlTable, output, parsedOutput]);
 
   const runConvert = useCallback((toFormat: FormatKind, inputText?: string) => {
     trackEvent("convert", { to_format: toFormat, mode: "transform" });
     setConvertToFormat(toFormat);
     setFocusedPane("output");
     if (!isDesktopLayout) setMobileShowOutput(true);
-    // Auto-switch to raw when converting format from a visual view
-    if (!isDiffMode && !isUtilsMode && rightView !== "raw") setRightView("raw");
     setBusy(true);
     setError(null);
     void (async () => {
@@ -2883,20 +2470,20 @@ export function WorkspaceContent({
   }, [diffLeftInput, diffRightInput, executeOperation, flashDiffAction]);
 
   const beautifyDiffSides = useCallback(
-    (side: "left" | "right" | "both") => {
+    (side: "left" | "right" | "both", sortKeys = false) => {
       let left = diffEditorRef.current?.getOriginalValue() ?? diffLeftInput;
       let right = diffEditorRef.current?.getModifiedValue() ?? diffRightInput;
       let ok = false;
       try {
         if (side === "left" || side === "both") {
           if (left.trim()) {
-            left = formatJson(JSON.parse(left) as JsonValue, { indentation: formatOptions.indentation });
+            left = formatJson(JSON.parse(left) as JsonValue, { indentation: formatOptions.indentation, sortKeys });
             ok = true;
           }
         }
         if (side === "right" || side === "both") {
           if (right.trim()) {
-            right = formatJson(JSON.parse(right) as JsonValue, { indentation: formatOptions.indentation });
+            right = formatJson(JSON.parse(right) as JsonValue, { indentation: formatOptions.indentation, sortKeys });
             ok = true;
           }
         }
@@ -2985,18 +2572,6 @@ export function WorkspaceContent({
     if (diffDebounceRef.current) clearTimeout(diffDebounceRef.current);
   }, []);
 
-  /** Actions → None: restore the output that existed before the last transform action. */
-  const restorePreviousActionOutput = useCallback(() => {
-    const prev = prevActionStateRef.current;
-    prevActionStateRef.current = null;
-    if (prev) {
-      setOutput(prev.output);
-      setParsedOutput(prev.parsedOutput);
-      if (prev.outputLanguage) setOutputLanguage(prev.outputLanguage);
-      if (prev.outputExt) setOutputExt(prev.outputExt);
-    }
-    setActiveOperation(null);
-  }, []);
 
   const runOperation = (action: OperationAction, inputText?: string) => {
     trackEvent("operation", { action, mode: isUtilsMode ? "utils" : isDiffMode ? "compare" : "transform" });
@@ -3164,7 +2739,6 @@ export function WorkspaceContent({
           toast({ message: "Download failed", type: "error" });
         }
       })();
-      setDownloadMenuOpen(false);
       return;
     }
     // Query view: download the query result, not the raw output.
@@ -3177,7 +2751,6 @@ export function WorkspaceContent({
       a.click();
       URL.revokeObjectURL(url);
       toast({ message: "Downloaded" });
-      setDownloadMenuOpen(false);
       return;
     }
     if (!output.trim()) return;
@@ -3189,22 +2762,15 @@ export function WorkspaceContent({
     a.click();
     URL.revokeObjectURL(url);
     toast({ message: "Downloaded" });
-    setDownloadMenuOpen(false);
   };
 
-  const requestShare = () => {
-    // Updating an existing share still re-uploads payload - always confirm once per open.
-    setShareConfirmOpen(true);
-  };
+  const requestShare = () => setShareOpen(true);
 
-  const shareWorkspace = async () => {
-    trackEvent("share", { all_tabs: shareAllTabs && showTabs && tabs.length > 1 });
-    setShareConfirmOpen(false);
-    setActionBounce("share");
-    setTimeout(() => setActionBounce(null), 300);
+  /** Package the workspace for sharing. Builds state only; nothing is sent. */
+  const buildShareState = (allTabs: boolean) => {
     // Flush active tab into snapshot map before packaging multi-tab share
     tabSnapshotsRef.current.set(activeTabId, captureTabSnapshot());
-    const includeAllTabs = shareAllTabs && showTabs && tabs.length > 1;
+    const includeAllTabs = allTabs && tabs.length > 1;
     const workspaceState: import("@/lib/shareState").WorkspaceState & {
       tabs?: Tab[];
       activeTabId?: string;
@@ -3215,6 +2781,7 @@ export function WorkspaceContent({
       diffKind?: "document" | "list" | "single";
       utilTab?: UtilTab;
     } = {
+      listOptionsVersion: LIST_OPTIONS_VERSION,
       input,
       convertToFormat,
       liveTransform,
@@ -3253,49 +2820,29 @@ export function WorkspaceContent({
       workspaceState.showTabs = true;
       workspaceState.tabSnapshots = all;
     }
+    return workspaceState;
+  };
+
+  /** The only path that uploads workspace data. Called from the Share dialog's explicit button. */
+  const uploadShare = async (allTabs: boolean): Promise<string | null> => {
+    trackEvent("share", { all_tabs: allTabs && tabs.length > 1 });
+    const workspaceState = buildShareState(allTabs);
     let id: string | null = null;
-    if (sharedLinkId) {
-      const ok = await updatePlayground(sharedLinkId, workspaceState);
-      if (ok) id = sharedLinkId;
-    }
-    if (!id) {
-      const apiResult = await savePlayground(workspaceState);
-      id = apiResult?.id ?? null;
-    }
-    const encodedHash = encodeState(workspaceState);
-    const hashTooLarge = encodedHash === SHARE_TOO_LARGE;
-    const url =
-      id && typeof window !== "undefined"
-        ? `${window.location.origin}/playground?id=${id}`
-        : hashTooLarge
-          ? ""
-          : `${typeof window !== "undefined" ? window.location.origin + window.location.pathname : ""}#${encodedHash}`;
-    if (id) {
-      setSharedLinkId(id);
-      setSharedLinkUrl(url);
-    }
-    if (hashTooLarge) {
-      setShareState("error");
-      toast({
-        message: "Workspace is too large to share as a link. Try removing large inputs from tabs.",
-        type: "error",
-        duration: 5000,
-      });
-      resetShareSoon();
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(url);
-      setShareState("done");
-      toast({
-        message: includeAllTabs ? `Link copied (${tabs.length} tabs)` : "Link copied",
-        url,
-        duration: 4000,
-      });
-    } catch {
-      setShareState("error");
-    }
-    resetShareSoon();
+    if (sharedLinkId && (await updatePlayground(sharedLinkId, workspaceState))) id = sharedLinkId;
+    if (!id) id = (await savePlayground(workspaceState))?.id ?? null;
+    if (!id) return null;
+    const url = `${window.location.origin}/playground?id=${id}`;
+    setSharedLinkId(id);
+    setSharedLinkUrl(url);
+    return url;
+  };
+
+  const deleteShared = async () => {
+    const idToDelete = sharedLinkId;
+    setSharedLinkId(null);
+    setSharedLinkUrl(null);
+    isViewingSharedRef.current = false;
+    if (idToDelete) await deletePlayground(idToDelete);
   };
 
   const copyOutput = async () => {
@@ -3371,11 +2918,10 @@ export function WorkspaceContent({
     output,
   ]);
 
-  const copyOutputAs = async (format: CopyAsFormat) => {
+  /** Text for a Copy as format. Throws when it cannot be built. */
+  const resolveCopyText = (format: CopyAsFormat): string => {
     const raw = getActiveOutputText();
-    if (!raw.trim()) return;
-    trackEvent("copy", { format, mode: isUtilsMode ? "utils" : isDiffMode ? "compare" : "transform" });
-    try {
+    {
       let text: string;
       // Regex tab: extract match values from JSON for text-based formats.
       if (isUtilsMode && utilTab === "regex") {
@@ -3438,7 +2984,14 @@ export function WorkspaceContent({
       } else {
         text = formatCopyAsText(raw, format);
       }
-      await navigator.clipboard.writeText(text);
+      return text;
+    }
+  };
+  const copyOutputAs = async (format: CopyAsFormat) => {
+    if (!getActiveOutputText().trim()) return;
+    trackEvent("copy", { format, mode: isUtilsMode ? "utils" : isDiffMode ? "compare" : "transform" });
+    try {
+      await navigator.clipboard.writeText(resolveCopyText(format));
       const label = activeCopyAsOptions.find((o) => o.id === format)?.label ?? format;
       toast({ message: `Copied as ${label}` });
     } catch {
@@ -3446,34 +2999,6 @@ export function WorkspaceContent({
     }
   };
 
-  /** Graph view image/data copy - PNG / JPG / SVG blobs or raw JSON text. */
-  const graphCopy = useCallback(
-    async (format: GraphCopyFormat) => {
-      trackEvent("graph_copy", { format });
-      setActionBounce("copy");
-      setTimeout(() => setActionBounce(null), 300);
-      try {
-        if (format === "json") {
-          const text = getActiveOutputText();
-          if (!text.trim()) return;
-          await navigator.clipboard.writeText(text);
-          toast({ message: "JSON copied" });
-        } else {
-          if (!graphViewRef.current) throw new Error("Graph export is not ready yet.");
-          if (format === "svg") await graphViewRef.current.copySvgToClipboard();
-          else if (format === "jpg") await graphViewRef.current.copyJpgToClipboard();
-          else await graphViewRef.current.copyPngToClipboard();
-          toast({ message: format.toUpperCase() + " copied" });
-        }
-        setCopyState("done");
-      } catch {
-        setCopyState("error");
-        toast({ message: "Copy failed", type: "error" });
-      }
-      resetCopySoon();
-    },
-    [getActiveOutputText],
-  );
 
   const handleWorkspaceReset = useCallback(() => {
     trackEvent("reset", { mode: isUtilsMode ? "utils" : isDiffMode ? "compare" : "transform" });
@@ -3537,12 +3062,6 @@ export function WorkspaceContent({
     router,
   ]);
 
-  /** Stable per-tool key used for the per-tab 'last copy as' memory. */
-  const copyMemoryKey = isUtilsMode
-    ? `utils:${utilTab}`
-    : isDiffMode
-      ? `diff:${diffKind}`
-      : `transform:${rightView}`;
 
   /** Determine the copy mode for the FormatPopover. */
   const copyMode = useMemo(() => {
@@ -3551,21 +3070,9 @@ export function WorkspaceContent({
     if (isUtilsMode && utilTab === "uuid") return "uuid";
     if (isUtilsMode && utilTab === "password") return "password";
     if (isUtilsMode && utilTab === "regex") return "regex";
-    if (isUtilsMode) return `utils-${utilTab}`;    return "transform";
+    if (isUtilsMode) return `utils-${utilTab}`;
+    return "transform";
   }, [isDiffMode, diffKind, isUtilsMode, utilTab]);
-
-  /** Copy format preference for list modes (quote + layout). */
-  const [copyPref, setCopyPref] = useState<CopyPref>(() => loadListCopyPref(copyMode));
-
-  // Re-sync pref when mode changes (different tab/mode may have different prefs).
-  useEffect(() => {
-    setCopyPref(loadListCopyPref(copyMode));
-  }, [copyMode]);
-
-  const handleCopyPrefChange = useCallback((next: CopyPref) => {
-    setCopyPref(next);
-    saveListCopyPref(copyMode, next);
-  }, [copyMode]);
 
   /** Whether this mode uses the FormatPopover (list of items). */
   const isListCopyMode = useMemo(() => {
@@ -3597,7 +3104,7 @@ export function WorkspaceContent({
       }
     }
     return [];
-  }, [isDiffMode, diffKind, isUtilsMode, utilTab, listCompareExport, utilsByTool]);
+  }, [isDiffMode, diffKind, isUtilsMode, utilTab, listCompareExport, utilsByTool, getActiveOutputText]);
 
   /**
    * Copy-as options: encode-only for transform/JSON modes.
@@ -3757,7 +3264,7 @@ export function WorkspaceContent({
   const readFileAsText = async (file: File): Promise<string> => {
     const result = await readFileAsTextGuarded(file, WORKER_INPUT_CAP_BYTES);
     if (result.truncated) {
-      toast({ message: `File truncated: exceeds ${WORKER_INPUT_CAP_BYTES} bytes`, type: "error" });
+      toast({ message: `That file is over the ${WORKER_INPUT_CAP_BYTES / (1024 * 1024)} MB limit and was not loaded. Split it and try again.`, type: "error" });
     }
     return result.text;
   };
@@ -3798,7 +3305,7 @@ export function WorkspaceContent({
       if (!isDesktopLayout) setMobileShowOutput(true);
       toast({ message: `Loaded ${file.name}` });
     } catch {
-      toast({ message: "Could not read that file", type: "error" });
+      toast({ message: "Could not read that file. Check that it is a text file and try again.", type: "error" });
     }
   };
 
@@ -3900,7 +3407,7 @@ export function WorkspaceContent({
           setError(null);
           setValidationError(null);
         } catch {
-          toast({ message: "Recipe needs valid JSON input", type: "error" });
+          toast({ message: "This recipe needs valid JSON in the input. Fix the input and run it again.", type: "error" });
           return;
         }
         break;
@@ -3973,14 +3480,10 @@ export function WorkspaceContent({
     setFormatOptions(DEFAULT_FORMAT_OPTIONS);
     setConvertToFormat("json");
     setRightView("raw");
-    setEditorFontSize(14);
-    setViewAsMenu(true);
+    setEditorFontSize(13);
     setLineWrap(true);
     setAutoFormatOnPaste(true);
     setSqlDialect("sqlite");
-    setPinnedItems(
-      new Set(["fmt:json", "view:raw", "view:query", "action:beautify", "action:minify", "type:typescript", "type:zod"]),
-    );
     const perTabDefaults: Partial<TabSnapshot> = {
       convertToFormat: "json",
       rightView: "raw",
@@ -4043,661 +3546,633 @@ export function WorkspaceContent({
     window.location.reload();
   };
 
-  const commandPaletteCommands = useMemo((): Command[] => [
-    // Operations / Actions
-    { id: "op-beautify",   label: "Beautify",              category: "Actions", keywords: ["format", "pretty", "indent"], disabled: inputEmpty || showBusy, action: () => runOperation("beautify") },
-    { id: "op-minify",    label: "Minify",               category: "Actions", keywords: ["compress", "compact"], disabled: inputEmpty || showBusy, action: () => runOperation("minify") },
-    { id: "op-flatten",   label: "Flatten",              category: "Actions", keywords: ["dot", "nested"], disabled: inputEmpty || showBusy, action: () => runOperation("flatten") },
-    { id: "op-unflatten", label: "Unflatten",            category: "Actions", keywords: ["nested", "expand"], disabled: inputEmpty || showBusy, action: () => runOperation("unflatten") },
-    { id: "op-schema",    label: "Generate JSON Schema", category: "Actions", keywords: ["schema", "types", "infer"], disabled: inputEmpty || showBusy, action: () => runOperation("schema") },
-    { id: "op-validate",  label: "Validate against Schema", category: "Actions", keywords: ["validate", "check"], disabled: inputEmpty || showBusy, action: () => runOperation("validate") },
-    { id: "tool-transform", label: "Tool: Transform", category: "Workspace", keywords: ["format", "convert", "tool"], badge: !isDiffMode && !isUtilsMode ? "active" : undefined, action: () => { if (isDiffMode) runOperation("diff"); else if (isUtilsMode) runOperation("utils"); } },
-    { id: "tool-compare",   label: isDiffMode ? "Tool: Compare (active)" : "Tool: Compare", category: "Workspace", keywords: ["diff", "compare", "list", "document", "tool"], badge: isDiffMode ? "active" : undefined, action: () => { if (!isDiffMode) runOperation("diff"); } },
-    { id: "tool-utils",     label: isUtilsMode ? "Tool: Utils (active)" : "Tool: Utils", category: "Workspace", keywords: ["uuid", "base64", "jwt", "hash", "generator", "util", "password", "hex"], badge: isUtilsMode ? "active" : undefined, action: () => { if (!isUtilsMode) runOperation("utils"); } },
-    ...UTIL_TABS.map((t) => ({
-      id: `util-${t.id}`,
-      label: `Utils: ${t.label}`,
-      category: "Utils" as const,
-      keywords: [t.id, t.label.toLowerCase(), "utils", "devtools"],
-      badge: isUtilsMode && utilTab === t.id ? "active" : undefined,
-      action: () => {
-        if (!isUtilsMode) runOperation("utils");
-        setUtilTab(t.id);
-      },
-    })),
-    { id: "op-diff",        label: isDiffMode ? "Exit Compare mode" : "Open Compare", category: "Workspace", keywords: ["diff", "compare", "delta"], disabled: showBusy, action: () => runOperation("diff") },
-    // Convert to
-    { id: "fmt-json",  label: "Convert to JSON",  category: "Convert to", keywords: ["json"],  badge: convertToFormat === "json"  ? "active" : undefined, disabled: inputEmpty, action: () => { setFocusedPane("output"); runConvert("json");  } },
-    { id: "fmt-yaml",  label: "Convert to YAML",  category: "Convert to", keywords: ["yaml"],  badge: convertToFormat === "yaml"  ? "active" : undefined, disabled: inputEmpty, action: () => { setFocusedPane("output"); runConvert("yaml");  } },
-    { id: "fmt-xml",   label: "Convert to XML",   category: "Convert to", keywords: ["xml"],   badge: convertToFormat === "xml"   ? "active" : undefined, disabled: inputEmpty, action: () => { setFocusedPane("output"); runConvert("xml");   } },
-    { id: "fmt-toml",  label: "Convert to TOML",  category: "Convert to", keywords: ["toml"],  badge: convertToFormat === "toml"  ? "active" : undefined, disabled: inputEmpty, action: () => { setFocusedPane("output"); runConvert("toml");  } },
-    { id: "fmt-csv",   label: "Convert to CSV",   category: "Convert to", keywords: ["csv"],   badge: convertToFormat === "csv"   ? "active" : undefined, disabled: inputEmpty, action: () => { setFocusedPane("output"); runConvert("csv");   } },
-    // View as
-    { id: "view-raw",   label: "View: Raw",   category: "View as", badge: rightView === "raw"   ? "active" : undefined, disabled: false, action: () => { setRightView("raw");   setFocusedPane("output"); } },
-    { id: "view-tree",  label: "View: Tree",  category: "View as", badge: rightView === "tree"  ? "active" : undefined, disabled: !parsedOutput, action: () => { setRightView("tree");  setFocusedPane("output"); } },
-    { id: "view-graph", label: "View: Graph", category: "View as", badge: rightView === "graph" ? "active" : undefined, disabled: !parsedOutput, action: () => { setRightView("graph"); setFocusedPane("output"); } },
-    { id: "view-query", label: "View: Query (JSONPath / JMESPath)", category: "View as", keywords: ["query", "jsonpath", "jmespath", "filter"], badge: rightView === "query" ? "active" : undefined, disabled: !parsedOutput, action: () => { setRightView("query"); setFocusedPane("output"); } },
-    { id: "view-table", label: "View: Table", category: "View as", keywords: ["table", "grid", "rows"], badge: rightView === "table" ? "active" : undefined, disabled: !parsedOutput, action: () => { setRightView("table"); setFocusedPane("output"); } },
-    // Generate Types
-    ...TYPE_LANGUAGES.map((t) => ({
-      id: `type-${t.id}`,
-      label: `Generate ${t.label} types`,
-      category: "Generate Types",
-      keywords: [t.id, t.label, "types", "interface", "struct"],
-      badge: activeOperation === "generateTypes" && typeLanguage === t.id ? "active" : undefined,
-      disabled: inputEmpty,
-      action: () => { trackEvent("generate_types", { language: t.id, source: "palette" }); setFocusedPane("output"); setActiveOperation("generateTypes"); executeOperation("generateTypes", { typeLanguage: t.id }); },
-    })),
-    // Recipes (presets compose existing actions)
-    ...PRESETS.map((p) => ({
-      id: `recipe-${p.id}`,
-      label: p.label,
-      category: "Recipes" as const,
-      keywords: p.keywords,
-      action: () => runPreset(p.id),
-    })),
-    // Samples
-    ...FORMAT_KINDS.map((fmt) => ({
-      id: `sample-${fmt}`,
-      label: `Load ${FORMAT_LABELS[fmt]} sample`,
-      category: "Samples",
-      keywords: [fmt, "sample", "example", "demo"],
-      disabled: false,
-      action: () => {
-        const sample = SAMPLES[fmt];
-        setInput(sample);
-        pushHistory(sample);
-        setInputFormatOverride(null);
-        setError(null);
-        setValidationError(null);
-        parseOnly(sample, fmt);
-        setFocusedPane("output");
-        if (!isDesktopLayout) setMobileShowOutput(true);
-      },
-    })),
-    {
-      id: "sample-table",
-      label: "Load Table sample (array of objects)",
-      category: "Samples",
-      keywords: ["table", "array", "rows", "sample", "grid"],
-      disabled: false,
-      action: () => {
-        setInput(SAMPLE_JSON_TABLE);
-        pushHistory(SAMPLE_JSON_TABLE);
-        setInputFormatOverride(null);
-        setError(null);
-        setValidationError(null);
-        parseOnly(SAMPLE_JSON_TABLE, "json");
-        setRightView("table");
-        setFocusedPane("output");
-        if (!isDesktopLayout) setMobileShowOutput(true);
-      },
-    },
-    ...EXAMPLES.map((ex) => ({
-      id: `example-${ex.id}`,
-      label: `Load example: ${ex.label}`,
-      category: "Samples",
-      keywords: [ex.id, ex.label.toLowerCase(), "example", "demo"],
-      disabled: false,
-      action: () => {
-        setInput(ex.data);
-        pushHistory(ex.data);
-        setInputFormatOverride(null);
-        setError(null);
-        setValidationError(null);
-        parseOnly(ex.data, "json");
-        setConvertToFormat("json");
-        setRightView("raw");
-        setFocusedPane("output");
-        if (!isDesktopLayout) setMobileShowOutput(true);
-      },
-    })),
-    // Workspace
-    { id: "ws-paste",    label: "Paste from clipboard",  category: "Workspace", shortcut: "⌘V", disabled: false, action: pasteFromClipboard },
-    { id: "ws-import",   label: "Import file",           category: "Workspace", keywords: ["upload", "open", "file"], disabled: false, action: () => document.getElementById("import-json-file")?.click() },
-    { id: "ws-copy",     label: "Copy output",           category: "Workspace", shortcut: "⌘C", keywords: ["clipboard"], disabled: !output.trim(), action: copyOutput },
-    { id: "ws-copy-b64", label: "Copy as Base64",        category: "Workspace", keywords: ["base64", "encode", "clipboard"], disabled: !output.trim(), action: () => copyOutputAs("base64") },
-    { id: "ws-copy-esc", label: "Copy as Escaped string", category: "Workspace", keywords: ["escaped", "string", "json string"], disabled: !output.trim(), action: () => copyOutputAs("escaped") },
-    { id: "ws-copy-uri", label: "Copy as URL-encoded",   category: "Workspace", keywords: ["url", "encoded", "percent", "uri"], disabled: !output.trim(), action: () => copyOutputAs("uri") },
-    { id: "ws-copy-dat", label: "Copy as Data URI",      category: "Workspace", keywords: ["data", "uri", "base64"], disabled: !output.trim(), action: () => copyOutputAs("datauri") },
-    { id: "ws-download", label: "Download output",       category: "Workspace", keywords: ["save", "export"], disabled: !output.trim(), action: () => downloadOutput() },
-    { id: "ws-share",    label: "Share workspace link",  category: "Workspace", keywords: ["link", "url"], disabled: !output.trim(), action: requestShare },
-
-    ...(sharedLinkUrl ? [{ id: "ws-embed", label: "Copy embed / iframe URL", category: "Workspace" as const, keywords: ["embed", "iframe", "share"], disabled: false, action: async () => { await navigator.clipboard.writeText(`${sharedLinkUrl}&embed=1`); toast({ message: "Embed URL copied" }); } }] : []),
-    { id: "ws-clear",    label: "Reset input & output",  category: "Workspace", shortcut: "⌘⌥R", keywords: ["reset", "clear", "new", "empty"], action: handleWorkspaceReset },
-    { id: "ws-clear-cache", label: "Clear cache & reload app", category: "Settings", keywords: ["clear", "cache", "wipe", "localstorage", "fresh", "reset all"], action: () => void clearAllCache() },
-    { id: "ws-reload",   label: "Reload app",              category: "Settings", keywords: ["reload", "refresh", "restart"], action: () => window.location.reload() },
-    { id: "tour-replay", label: "Take the tour",           category: "Settings", keywords: ["tour", "walkthrough", "guide", "intro", "onboarding", "help", "replay"], action: () => { setCommandPaletteOpen(false); openTour("palette"); } },
-    { id: "nav-changelog", label: "Open changelog",          category: "Navigation", keywords: ["changelog", "what's new", "release", "version", "updates"], action: () => router.push("/changelog") },
-    // Focus
-    { id: "focus-input",  label: "Focus input pane",  category: "Workspace", keywords: ["focus", "input", "left", "editor"], action: () => { setFocusedPane("input"); inputEditorApiRef.current?.focus(); } },
-    { id: "focus-output", label: "Focus output pane", category: "Workspace", keywords: ["focus", "output", "right", "editor"], action: () => { setFocusedPane("output"); outputEditorApiRef.current?.focus(); } },
-    { id: "search-output", label: "Find in output",   category: "Workspace", keywords: ["find", "search", "output", "ctrl+f"], disabled: !output.trim(), action: () => { setFocusedPane("output"); setTimeout(() => outputEditorApiRef.current?.find(), 50); } },
-    // History
-    { id: "hist-undo",   label: "Undo input",    category: "Workspace", shortcut: "⌘Z", keywords: ["undo", "history", "back"], disabled: !canUndo, action: () => moveHistory(-1) },
-    { id: "hist-redo",   label: "Redo input",    category: "Workspace", shortcut: "⌘⇧Z", keywords: ["redo", "history", "forward"], disabled: !canRedo, action: () => moveHistory(1) },
-    { id: "hist-browse", label: "Browse input history", category: "Workspace", keywords: ["history", "undo", "stack", "timeline"], action: () => setShowHistoryPanel(true) },
-    { id: "hist-export", label: "Export history",       category: "Workspace", keywords: ["history", "export", "download", "all"], disabled: undoStack.length <= 1, action: exportHistory },
-    // Zoom / font size
-    { id: "zoom-in",    label: `Zoom in (font ${Math.min(24, editorFontSize + 1)}px)`,  category: "Workspace", keywords: ["zoom", "font", "size", "bigger", "larger"],  disabled: editorFontSize >= 24, action: () => setEditorFontSize((s) => Math.min(24, s + 1)) },
-    { id: "zoom-out",   label: `Zoom out (font ${Math.max(10, editorFontSize - 1)}px)`, category: "Workspace", keywords: ["zoom", "font", "size", "smaller"],              disabled: editorFontSize <= 10, action: () => setEditorFontSize((s) => Math.max(10, s - 1)) },
-    { id: "zoom-reset", label: "Reset zoom (14px)",                                     category: "Workspace", keywords: ["zoom", "font", "size", "reset"],              disabled: editorFontSize === 14, action: () => setEditorFontSize(14) },
-    { id: "line-wrap",  label: lineWrap ? "Line wrap: On (turn off)" : "Line wrap: Off (turn on)", category: "Workspace", keywords: ["wrap", "line", "long", "scroll"], badge: lineWrap ? "on" : undefined, action: () => setLineWrap((v) => !v) },
-    { id: "fullscreen",        label: isOutputMaximized ? "Restore output pane" : "Maximize output pane",    category: "Workspace", keywords: ["maximize", "expand", "output", "pane"],                          action: () => setIsOutputMaximized((v) => !v) },
-    { id: "window-fullscreen", label: isWindowFullscreen ? "Exit fullscreen" : "Enter fullscreen",          category: "Workspace", keywords: ["fullscreen", "full screen", "window", "expand", "maximize"], action: toggleWindowFullscreen },
-    // Diff
-    { id: "diff-prev",      label: "Previous difference",    category: "Workspace", keywords: ["diff", "prev", "previous", "change", "navigate"], disabled: activeOperation !== "diff", action: () => diffEditorRef.current?.prevChange() },
-    { id: "diff-next",      label: "Next difference",        category: "Workspace", keywords: ["diff", "next", "change", "navigate"], disabled: activeOperation !== "diff", action: () => diffEditorRef.current?.nextChange() },
-    { id: "diff-layout",    label: diffSideBySide ? "Diff: Switch to inline view" : "Diff: Switch to side-by-side view", category: "Workspace", keywords: ["diff", "inline", "side by side", "layout"], disabled: activeOperation !== "diff", action: () => setDiffSideBySide((v) => !v) },
-    { id: "diff-swap",      label: "Diff: Swap left and right", category: "Workspace", keywords: ["diff", "swap", "exchange", "sides"], disabled: activeOperation !== "diff", action: swapDiffSides },
-    { id: "diff-ws",        label: diffIgnoreWhitespace ? "Diff: Respect whitespace" : "Diff: Ignore trim whitespace", category: "Workspace", keywords: ["diff", "whitespace", "trim", "ignore"], disabled: activeOperation !== "diff", action: () => setDiffIgnoreWhitespace((v) => !v) },
-    { id: "diff-paths",     label: diffShowPaths ? "Diff: Hide path list" : "Diff: Show path list", category: "Workspace", keywords: ["diff", "paths", "structural", "keys", "list"], disabled: activeOperation !== "diff", action: () => setDiffShowPaths((v) => !v) },
-    { id: "diff-beautify",  label: "Diff: Beautify both sides", category: "Workspace", keywords: ["diff", "beautify", "pretty", "format"], disabled: activeOperation !== "diff", action: () => beautifyDiffSides("both") },
-    { id: "diff-copy-left", label: "Diff: Copy left", category: "Workspace", keywords: ["diff", "copy", "left", "original"], disabled: activeOperation !== "diff", action: () => void copyDiffText("left") },
-    { id: "diff-copy-right",label: "Diff: Copy right", category: "Workspace", keywords: ["diff", "copy", "right", "modified"], disabled: activeOperation !== "diff", action: () => void copyDiffText("right") },
-    { id: "diff-copy-report", label: "Diff: Copy full report", category: "Workspace", keywords: ["diff", "copy", "report", "export", "summary"], disabled: activeOperation !== "diff", action: () => void copyDiffText("report") },
-    { id: "diff-download",  label: "Diff: Download report", category: "Workspace", keywords: ["diff", "download", "export", "report", "json"], disabled: activeOperation !== "diff" || diffKind !== "document", action: downloadDiffReport },
-    { id: "diff-kind-doc",  label: "Diff: Document mode (text/JSON)", category: "Workspace", keywords: ["diff", "document", "text", "json", "monaco"], disabled: activeOperation !== "diff", action: () => setDiffKind("document") },
-    { id: "diff-kind-list", label: "Diff: List / set mode (SQL IN)", category: "Workspace", keywords: ["diff", "list", "set", "common", "sql", "in", "intersection", "compare lists"], disabled: activeOperation !== "diff", action: () => setDiffKind("list") },
-    { id: "diff-kind-single", label: "Diff: Single list (dedupe / count / sort)", category: "Workspace", keywords: ["diff", "single", "dedupe", "duplicates", "count", "sort", "list"], disabled: activeOperation !== "diff", action: () => setDiffKind("single") },
-    // New operations
-    { id: "op-sort-arrays", label: "Sort array items",         category: "Actions", keywords: ["sort", "arrays", "items", "order"], disabled: inputEmpty || showBusy, action: () => { setFocusedPane("output"); runOperation("sortArrays"); } },
-    { id: "op-dedup",       label: "Remove duplicate items",   category: "Actions", keywords: ["dedup", "duplicate", "unique", "array"], disabled: inputEmpty || showBusy, action: () => { setFocusedPane("output"); runOperation("dedup"); } },
-    // CSV delimiter settings
-    { id: "csv-comma",     label: "CSV delimiter: Comma (,)",     category: "Settings", keywords: ["csv", "delimiter", "comma"], badge: csvDelimiter === ","  ? "active" : undefined, action: () => setCsvDelimiter(",")  },
-    { id: "csv-tab",       label: "CSV delimiter: Tab (TSV)",     category: "Settings", keywords: ["csv", "delimiter", "tab", "tsv"], badge: csvDelimiter === "\t" ? "active" : undefined, action: () => setCsvDelimiter("\t") },
-    { id: "csv-semicolon", label: "CSV delimiter: Semicolon (;)", category: "Settings", keywords: ["csv", "delimiter", "semicolon"], badge: csvDelimiter === ";"  ? "active" : undefined, action: () => setCsvDelimiter(";")  },
-    { id: "csv-pipe",      label: "CSV delimiter: Pipe (|)",      category: "Settings", keywords: ["csv", "delimiter", "pipe"], badge: csvDelimiter === "|"  ? "active" : undefined, action: () => setCsvDelimiter("|")  },
-    // Pin/Unpin current view
-    { id: "pin-view",   label: pinnedItems.has(`view:${rightView}`) ? `Unpin current view (${rightView})` : `Pin current view (${rightView})`, category: "Settings", keywords: ["pin", "unpin", "toolbar", "view"], action: () => setPinnedItems((s) => { const n = new Set(s); if (n.has(`view:${rightView}`)) n.delete(`view:${rightView}`); else n.add(`view:${rightView}`); return n; }) },
-    { id: "pin-format", label: pinnedItems.has(`fmt:${convertToFormat}`) ? `Unpin current format (${convertToFormat})` : `Pin current format (${convertToFormat})`, category: "Settings", keywords: ["pin", "unpin", "toolbar", "format"], action: () => setPinnedItems((s) => { const n = new Set(s); if (n.has(`fmt:${convertToFormat}`)) n.delete(`fmt:${convertToFormat}`); else n.add(`fmt:${convertToFormat}`); return n; }) },
-    // Settings
-    { id: "set-sort-keys",    label: formatOptions.sortKeys    ? "Sort keys: On (turn off)"    : "Sort keys: Off (turn on)",    category: "Settings", keywords: ["sort", "keys", "alphabetical"],           badge: formatOptions.sortKeys    ? "on" : undefined, disabled: inputEmpty, action: () => applyFormatWithOptions({ ...formatOptions, sortKeys:    !formatOptions.sortKeys    }) },
-    { id: "set-rm-empty",     label: formatOptions.removeEmpty ? "Remove empty: On (turn off)" : "Remove empty: Off (turn on)", category: "Settings", keywords: ["remove", "empty", "null", "clean"],          badge: formatOptions.removeEmpty ? "on" : undefined, disabled: inputEmpty, action: () => applyFormatWithOptions({ ...formatOptions, removeEmpty: !formatOptions.removeEmpty }) },
-    { id: "set-quote-double", label: "Quote style: Double",   category: "Settings", keywords: ["quote", "double"],     badge: formatOptions.quoteStyle === "double" ? "active" : undefined, disabled: inputEmpty, action: () => applyFormatWithOptions({ ...formatOptions, quoteStyle: "double" }) },
-    { id: "set-quote-single", label: "Quote style: Single",   category: "Settings", keywords: ["quote", "single"],     badge: formatOptions.quoteStyle === "single" ? "active" : undefined, disabled: inputEmpty, action: () => applyFormatWithOptions({ ...formatOptions, quoteStyle: "single" }) },
-    { id: "set-indent-inc",   label: `Indent: increase (${Math.min(10, formatOptions.indentation + 1)})`, category: "Settings", keywords: ["indent", "spaces"], disabled: inputEmpty || formatOptions.indentation >= 10, action: () => applyFormatWithOptions({ ...formatOptions, indentation: Math.min(10, formatOptions.indentation + 1) }) },
-    { id: "set-indent-dec",   label: `Indent: decrease (${Math.max(0,  formatOptions.indentation - 1)})`, category: "Settings", keywords: ["indent", "spaces"], disabled: inputEmpty || formatOptions.indentation <= 0,  action: () => applyFormatWithOptions({ ...formatOptions, indentation: Math.max(0,  formatOptions.indentation - 1) }) },
-    { id: "set-indent-reset", label: "Indent: reset to 2",     category: "Settings", keywords: ["indent", "spaces", "reset"], disabled: inputEmpty || formatOptions.indentation === 2, action: () => applyFormatWithOptions({ ...formatOptions, indentation: 2 }) },
-    { id: "set-live",         label: liveTransform ? "Live transform: On (turn off)" : "Live transform: Off (turn on)", category: "Settings", keywords: ["live", "auto", "realtime", "transform"], badge: liveTransform ? "on" : undefined, action: () => setLiveTransform((v) => !v) },
-    { id: "set-viewasmenu",   label: viewAsMenu ? "Compact menus: On" : "Compact menus: Off (pinned toolbar)", category: "Settings", keywords: ["menu", "view", "panel", "sidebar"], badge: viewAsMenu ? "on" : undefined, action: () => setViewAsMenu((v) => !v) },
-    { id: "set-reset",        label: "Reset all settings to default", category: "Settings", keywords: ["reset", "default", "restore"], action: () => resetSettingsToDefault() },
-    // Theme
-    { id: "theme-light",  label: "Theme: Light",  category: "Theme", badge: themeMode === "light"  ? "active" : undefined, action: () => setThemeMode("light")  },
-    { id: "theme-dark",   label: "Theme: Dark",   category: "Theme", badge: themeMode === "dark"   ? "active" : undefined, action: () => setThemeMode("dark")   },
-    { id: "theme-system", label: "Theme: System", category: "Theme", badge: themeMode === "system" ? "active" : undefined, action: () => setThemeMode("system") },
-    // Editor: fold / unfold
-    { id: "fold-all",   label: "Fold all  (collapse top-level keys)", category: "Workspace", keywords: ["fold", "collapse", "all", "keys"], disabled: inputEmpty, action: () => inputEditorApiRef.current?.collapseAll() },
-    { id: "unfold-all", label: "Unfold all (expand top-level keys)",  category: "Workspace", keywords: ["unfold", "expand", "all", "keys"],  disabled: inputEmpty, action: () => inputEditorApiRef.current?.expandAll()   },
-    // Split input
-    { id: "split-input", label: splitInputOpen ? "Close split input pane" : "Open split input pane", category: "Workspace", keywords: ["split", "input", "two", "pane", "side by side"], badge: splitInputOpen ? "on" : undefined, action: () => setSplitInputOpen((v) => !v) },
-    // Tabs
-    { id: "tab-toggle", label: showTabs ? "Disable multi-tab mode" : "Enable multi-tab mode", category: "Workspace", keywords: ["tab", "tabs", "multi", "mode", "enable", "disable"], badge: showTabs ? "on" : undefined, action: () => setShowTabs((v) => !v) },
-    { id: "tab-new",   label: "New tab",           category: "Workspace", keywords: ["tab", "new", "document", "add"], disabled: !showTabs, action: addTab },
-    { id: "tab-close", label: "Close current tab", category: "Workspace", keywords: ["tab", "close", "remove"], disabled: !showTabs || tabs.length <= 1, action: () => closeTab(activeTabId) },
-    { id: "tab-close-others", label: "Close other tabs", category: "Workspace", keywords: ["tab", "close", "others", "keep", "current"], disabled: !showTabs || tabs.length <= 1, action: () => closeOtherTabs() },
-    { id: "tab-close-all", label: "Close all tabs", category: "Workspace", keywords: ["tab", "close", "all", "reset", "tabs"], disabled: !showTabs || tabs.length <= 1, action: () => closeAllTabs() },
-    // Auto-format on paste
-    { id: "auto-fmt-paste", label: autoFormatOnPaste ? "Auto-format on paste: On (turn off)" : "Auto-format on paste: Off (turn on)", category: "Settings", keywords: ["auto", "format", "paste", "beautify", "pretty"], badge: autoFormatOnPaste ? "on" : undefined, action: () => setAutoFormatOnPaste((v) => !v) },
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  ], [inputEmpty, showBusy, convertToFormat, rightView, parsedOutput, typeLanguage, activeOperation, output, themeMode, editorFontSize, isOutputMaximized, isWindowFullscreen, toggleWindowFullscreen, formatOptions, liveTransform, viewAsMenu, canUndo, canRedo, lineWrap, diffSideBySide, diffIgnoreWhitespace, diffShowPaths, diffKind, csvDelimiter, sharedLinkUrl, pinnedItems, undoStack.length, tabs.length, activeTabId, splitInputOpen, autoFormatOnPaste, showTabs, swapDiffSides, beautifyDiffSides, copyDiffText, downloadDiffReport, isUtilsMode, utilTab, isDiffMode, handleWorkspaceReset, resetSettingsToDefault, openTour]);
+  const selectedOutput: OutputId =
+    activeOperation === "generateTypes"
+      ? `type:${typeLanguage}`
+      : activeOperation && MORE_OPERATIONS.some((o) => o.id === `op:${activeOperation}`)
+        ? `op:${activeOperation}`
+        : `fmt:${convertToFormat}`;
+  const goTransform = (id: OutputId) => {
+    if (!isDiffMode && !isUtilsMode) chooseOutput(id);
+    else openNewTab({ kind: "transform", output: id });
+  };
+  /** Clears the active input: the lone input, or both documents in Compare. */
+  const clearActiveInput = () => {
+    if (isDiffMode && diffKind === "document") {
+      clearDiffSide("both");
+      return;
+    }
+    setInput("");
+    pushHistory("");
+    setOutput("");
+    setParsedOutput(null);
+    setError(null);
+    setValidationError(null);
+    setFocusedPane("input");
+  };
+  const tidyActive = () => {
+    if (isDiffMode) beautifyDiffSides("both", true);
+    else void tidyInput();
+  };
+  const inTransform = !isDiffMode && !isUtilsMode;
+  const commandPaletteCommands = useMemo((): Command[] => {
+    const T = "Transform", C = "Compare", U = "Utils", R = "Recipes", I = "Input", O = "Output", TB = "Tabs", V = "View", S = "Settings", H = "Help";
+    const on = (cond: boolean) => (cond ? "Current" : undefined);
+    const noOutput = !output.trim();
+    const MORE_LABEL: Record<string, string> = {
+      "op:schema": "Generate JSON Schema",
+      "op:openapi": "Generate OpenAPI spec",
+      "op:validate": "Validate against a schema",
+      "op:flatten": "Flatten nested keys",
+      "op:unflatten": "Unflatten dotted keys",
+      "op:minify": "Minify output",
+    };
+    const MORE_KEYWORDS: Record<string, string[]> = {
+      "op:schema": ["infer", "jsonschema"],
+      "op:openapi": ["swagger", "api"],
+      "op:validate": ["check", "ajv", "jsonschema"],
+      "op:flatten": ["dot", "paths", "nested"],
+      "op:unflatten": ["dot", "paths", "nest", "expand"],
+      "op:minify": ["compact", "compress", "uglify", "whitespace"],
+    };
+    const UTIL_KEYWORDS: Record<string, string[]> = {
+      auto: ["identify", "what is this", "detect"],
+      uuid: ["guid", "unique id"],
+      password: ["random", "secret", "generate"],
+      lorem: ["placeholder", "dummy text", "ipsum"],
+      hash: ["sha", "sha256", "md5", "checksum", "digest"],
+      instant: ["epoch", "unix", "timestamp", "timezone", "time zone", "date", "utc", "world clock"],
+      cron: ["schedule", "crontab"],
+      regex: ["regexp", "regular expression", "pattern", "match"],
+      case: ["camel", "snake", "kebab", "pascal", "uppercase", "lowercase"],
+      stats: ["count", "characters", "words", "lines", "length"],
+      clean: ["repair", "fix json", "trailing comma", "single quotes", "broken json"],
+      base64: ["b64", "encode", "decode", "atob", "btoa"],
+      url: ["percent", "uri", "encode", "decode", "query string"],
+      hex: ["bytes", "hexadecimal", "encode", "decode"],
+      html: ["entities", "escape", "unescape", "amp"],
+      escape: ["backslash", "quote", "string", "stringify"],
+      jwt: ["token", "bearer", "decode", "claims"],
+      urlparse: ["query", "host", "params", "split url"],
+      number: ["binary", "octal", "decimal", "hexadecimal", "radix", "base"],
+      color: ["hex", "rgb", "hsl", "colour"],
+    };
+    const COMPARE_LABEL = { list: "Compare two lists", single: "Dedupe and sort one list", document: "Compare two documents" } as const;
+    // Recipes that only repeat another command (Convert to YAML, Flatten, Compare two lists...) are left out.
+    const RECIPE_LABEL: Partial<Record<PresetId, string>> = {
+      "flatten-to-csv": "Flatten JSON and convert to CSV",
+      "api-response-types": "Generate types from an API response",
+      "extract-ids-to-sql-in": "Turn a list of IDs into a SQL IN clause",
+    };
+    const list: Command[] = [
+      // Transform: every output. Same kind of tab switches in place, otherwise a new tab opens.
+      ...FORMAT_KINDS.map((fmt) => ({
+        id: `dest-fmt-${fmt}`,
+        label: `Convert to ${FORMAT_LABELS[fmt]}`,
+        category: T,
+        keywords: [fmt, "convert", "format", "transform", "output", ...(fmt === "yaml" ? ["yml"] : fmt === "xml" ? ["markup"] : fmt === "csv" ? ["spreadsheet", "excel"] : [])],
+        badge: on(inTransform && selectedOutput === `fmt:${fmt}`),
+        action: () => goTransform(`fmt:${fmt}`),
+      })),
+      ...TYPE_LANGUAGES.map((t) => ({
+        id: `dest-type-${t.id}`,
+        label: t.id === "sql" ? "Generate SQL" : `Generate ${t.label} types`,
+        category: T,
+        keywords: [t.id, t.label, "types", "interface", "struct", "generate"],
+        badge: on(inTransform && selectedOutput === `type:${t.id}`),
+        action: () => goTransform(`type:${t.id}`),
+      })),
+      ...MORE_OPERATIONS.map((o) => ({
+        id: `dest-${o.id}`,
+        label: MORE_LABEL[o.id] ?? o.label,
+        category: T,
+        keywords: [o.id.slice(3), "schema", "transform", ...(MORE_KEYWORDS[o.id] ?? [])],
+        shortcut: o.id === "op:minify" ? "⌘⇧M" : undefined,
+        badge: on(inTransform && selectedOutput === o.id),
+        action: () => goTransform(o.id),
+      })),
+      // Compare: three kinds.
+      ...(["list", "single", "document"] as const).map((k) => ({
+        id: `dest-compare-${k}`,
+        label: COMPARE_LABEL[k],
+        category: C,
+        keywords: ["compare", "diff", "difference", "list", "document", "set", "sql in", ...(k === "single" ? ["dedupe", "duplicates", "unique", "count", "sort"] : k === "list" ? ["common", "union", "intersection", "missing"] : ["json", "changes"])],
+        badge: on(isDiffMode && diffKind === k),
+        action: () => {
+          if (isDiffMode) {
+            setDiffKind(k);
+            saveLastUsed({ compare: k });
+          } else openNewTab({ kind: "compare", compare: k });
+        },
+      })),
+      // Utils: every tool.
+      ...UTIL_TABS.map((t) => ({
+        id: `util-${t.id}`,
+        label: `Open ${t.label}`,
+        category: U,
+        keywords: [t.id, t.label.toLowerCase(), "utils", "devtools", "tool", ...(UTIL_KEYWORDS[t.id] ?? [])],
+        badge: on(isUtilsMode && utilTab === t.id),
+        action: () => {
+          if (isUtilsMode) {
+            setUtilTab(t.id);
+            saveLastUsed({ utils: t.id });
+          } else openNewTab({ kind: "utils", tool: t.id });
+        },
+      })),
+      // Actions.
+      ...INPUT_SAMPLES.map((smp) => ({
+        id: `sample-${smp.id}`,
+        label: `Load ${smp.label} sample`,
+        category: I,
+        keywords: ["sample", "example", "demo", smp.group ?? "", smp.id.split(":")[1]],
+        disabled: !inTransform,
+        action: () => loadInputSample(smp.id),
+      })),
+      { id: "act-tidy", label: "Tidy input", category: I, keywords: ["tidy", "format", "beautify", "pretty", "indent"], shortcut: "⌘⇧B", disabled: isUtilsMode || (inTransform && inputEmpty), action: tidyActive },
+      { id: "act-clear", label: "Clear input", category: I, keywords: ["clear", "empty", "wipe", "input"], disabled: isUtilsMode || (inTransform && inputEmpty), action: clearActiveInput },
+      { id: "act-reset", label: "Clear input and output", category: I, keywords: ["reset", "start over", "reset", "input", "output", "new"], shortcut: "⌘⌥R", action: handleWorkspaceReset },
+      { id: "act-copy", label: "Copy output", category: O, keywords: ["copy", "clipboard", "output"], shortcut: "⌘C", disabled: noOutput && !isDiffMode, action: copyOutput },
+      { id: "act-copy-b64", label: "Copy output as Base64", category: O, keywords: ["base64", "encode", "clipboard"], disabled: noOutput, action: () => void copyOutputAs("base64") },
+      { id: "act-copy-esc", label: "Copy output as escaped string", category: O, keywords: ["escaped", "string", "json string"], disabled: noOutput, action: () => void copyOutputAs("escaped") },
+      { id: "act-copy-uri", label: "Copy output as URL-encoded", category: O, keywords: ["url", "encoded", "percent", "uri"], disabled: noOutput, action: () => void copyOutputAs("uri") },
+      { id: "act-copy-dat", label: "Copy output as Data URI", category: O, keywords: ["data", "uri", "base64"], disabled: noOutput, action: () => void copyOutputAs("datauri") },
+      { id: "act-download", label: "Download output", category: O, keywords: ["save", "export", "file"], shortcut: "⌘⇧S", disabled: noOutput && !isDiffMode, action: () => downloadActive() },
+      { id: "act-share", label: "Share workspace", category: O, keywords: ["share", "link", "url", "short link"], shortcut: "⌘⇧E", disabled: noOutput && inTransform, action: requestShare },
+      ...(sharedLinkUrl
+        ? [{ id: "act-embed", label: "Copy embed URL", category: O, keywords: ["embed", "iframe", "share"], action: async () => { await navigator.clipboard.writeText(`${sharedLinkUrl}&embed=1`); toast({ message: "Embed URL copied" }); } }]
+        : []),
+      { id: "act-paste", label: "Paste from clipboard", category: I, keywords: ["paste", "clipboard"], shortcut: "⌘V", disabled: !inTransform, action: pasteFromClipboard },
+      { id: "act-import", label: "Import file", category: I, keywords: ["load", "browse", "upload", "open", "file"], disabled: !inTransform, action: () => document.getElementById("import-json-file")?.click() },
+      { id: "act-undo", label: "Undo input change", category: I, keywords: ["undo", "history", "back"], shortcut: "⌘Z", disabled: !canUndo, action: () => moveHistory(-1) },
+      { id: "act-redo", label: "Redo input change", category: I, keywords: ["redo", "history", "forward"], shortcut: "⌘⇧Z", disabled: !canRedo, action: () => moveHistory(1) },
+      { id: "act-history", label: "Browse input history", category: I, keywords: ["history", "stack", "timeline"], action: () => setShowHistoryPanel(true) },
+      { id: "act-history-export", label: "Download input history", category: I, keywords: ["history", "export", "download"], disabled: undoStack.length <= 1, action: exportHistory },
+      { id: "act-find", label: "Find in output", category: O, keywords: ["find", "search", "output"], shortcut: "⌘F", disabled: noOutput, action: () => { setFocusedPane("output"); setTimeout(() => outputEditorApiRef.current?.find(), 50); } },
+      { id: "act-sort-arrays", label: "Sort array items", category: O, keywords: ["sort", "arrays", "items", "order"], disabled: inputEmpty || showBusy || !inTransform, action: () => { setFocusedPane("output"); runOperation("sortArrays"); } },
+      { id: "act-dedup", label: "Remove duplicate array items", category: O, keywords: ["dedupe", "duplicates", "unique", "dedup", "duplicate", "unique", "array"], disabled: inputEmpty || showBusy || !inTransform, action: () => { setFocusedPane("output"); runOperation("dedup"); } },
+      { id: "act-diff-prev", label: "Go to previous change", category: C, keywords: ["diff", "previous", "change"], disabled: !(isDiffMode && diffKind === "document"), action: () => diffEditorRef.current?.prevChange() },
+      { id: "act-diff-next", label: "Go to next change", category: C, keywords: ["diff", "next", "change"], disabled: !(isDiffMode && diffKind === "document"), action: () => diffEditorRef.current?.nextChange() },
+      { id: "act-diff-swap", label: "Swap A and B", category: C, keywords: ["diff", "swap", "exchange", "sides"], disabled: !(isDiffMode && diffKind === "document"), action: swapDiffSides },
+      { id: "act-diff-copy-report", label: "Copy comparison report", category: C, keywords: ["diff", "copy", "report", "summary"], disabled: !(isDiffMode && diffKind === "document"), action: () => void copyDiffText("report") },
+      { id: "act-tab-new", label: "New tab", category: TB, keywords: ["tab", "new", "add"], shortcut: "⌥N", action: () => addTab() },
+      { id: "act-tab-close", label: "Close tab", category: TB, keywords: ["tab", "close", "remove"], shortcut: "⌥W", disabled: tabs.length <= 1, action: () => closeTab(activeTabId) },
+      { id: "act-tab-reopen", label: "Reopen closed tab", category: TB, keywords: ["tab", "reopen", "restore", "closed"], badge: closedTabName ?? undefined, disabled: !closedTabName, action: reopenTab },
+      { id: "act-tab-close-others", label: "Close other tabs", category: TB, keywords: ["tab", "close", "others", "keep"], disabled: tabs.length <= 1, action: () => closeOtherTabs() },
+      { id: "act-tab-close-all", label: "Close all tabs", category: TB, keywords: ["tab", "close", "all"], disabled: tabs.length <= 1, action: () => closeAllTabs() },
+      ...PRESETS.filter((pr) => RECIPE_LABEL[pr.id]).map((pr) => ({ id: `recipe-${pr.id}`, label: RECIPE_LABEL[pr.id] as string, category: R, keywords: pr.keywords, action: () => runPreset(pr.id) })),
+      // View.
+      ...(
+        [
+          ["raw", "Show text view", "⌘1", "text raw code"],
+          ["tree", "Show tree view", "⌘2", "tree explore expand collapse"],
+          ["graph", "Show graph view", "⌘3", "graph diagram nodes"],
+          ["query", "Show query view", "⌘4", "query jsonpath jmespath filter search"],
+          ["table", "Show table view", "⌘5", "table grid rows columns spreadsheet"],
+        ] as const
+      ).map(([v, label, shortcut, kw]) => ({
+        id: `view-${v}`,
+        label,
+        category: V,
+        keywords: kw.split(" "),
+        shortcut,
+        badge: on(inTransform && rightView === v),
+        disabled: !inTransform || (v !== "raw" && !parsedOutput),
+        action: () => { setRightView(v); setFocusedPane("output"); },
+      })),
+      { id: "view-wrap", label: lineWrap ? "Turn off wrap long lines" : "Turn on wrap long lines", category: V, keywords: ["wrap", "line", "long", "scroll"], shortcut: "⌥Z", badge: lineWrap ? "On" : undefined, action: () => setLineWrap((v) => !v) },
+      { id: "view-maximize", label: isOutputMaximized ? "Show input" : "Hide input", category: V, keywords: ["maximize", "expand", "output", "pane"], shortcut: "⌥M", disabled: !inTransform, action: () => setIsOutputMaximized((v) => !v) },
+      { id: "view-focus-input", label: "Focus input", category: V, keywords: ["focus", "input", "editor"], shortcut: "⌥1", disabled: !inTransform, action: () => { setFocusedPane("input"); inputEditorApiRef.current?.focus(); } },
+      { id: "view-focus-output", label: "Focus output", category: V, keywords: ["focus", "output", "editor"], shortcut: "⌥2", disabled: !inTransform, action: () => { setFocusedPane("output"); outputEditorApiRef.current?.focus(); } },
+      { id: "view-fold", label: "Fold all in input", category: V, keywords: ["fold", "collapse", "keys"], disabled: inputEmpty || !inTransform, action: () => inputEditorApiRef.current?.collapseAll() },
+      { id: "view-unfold", label: "Unfold all in input", category: V, keywords: ["unfold", "expand", "keys"], disabled: inputEmpty || !inTransform, action: () => inputEditorApiRef.current?.expandAll() },
+      { id: "view-zoom-in", label: "Increase font size", category: V, keywords: ["zoom in", "zoom", "font", "bigger", "larger"], shortcut: "⌘+", disabled: editorFontSize >= 24, action: () => setEditorFontSize((n) => Math.min(24, n + 1)) },
+      { id: "view-zoom-out", label: "Decrease font size", category: V, keywords: ["zoom out", "zoom", "font", "smaller"], shortcut: "⌘−", disabled: editorFontSize <= 10, action: () => setEditorFontSize((n) => Math.max(10, n - 1)) },
+      { id: "view-zoom-reset", label: "Reset font size", category: V, keywords: ["reset zoom", "zoom", "font", "reset"], shortcut: "⌘0", disabled: editorFontSize === 13, action: () => setEditorFontSize(13) },
+      { id: "view-fullscreen", label: isWindowFullscreen ? "Exit fullscreen" : "Enter fullscreen", category: V, keywords: ["fullscreen", "window"], action: toggleWindowFullscreen },
+      { id: "view-diff-layout", label: diffSideBySide ? "Show changes inline" : "Show changes side by side", category: V, keywords: ["diff", "inline", "side by side", "layout"], disabled: !(isDiffMode && diffKind === "document"), action: () => setDiffSideBySide((v) => !v) },
+      // Settings.
+      { id: "set-live", label: liveTransform ? "Turn off live transform" : "Turn on live transform", category: S, keywords: ["live", "auto", "realtime", "transform"], shortcut: "⌘⇧L", badge: liveTransform ? "On" : undefined, action: () => setLiveTransform((v) => !v) },
+      { id: "set-paste", label: autoFormatOnPaste ? "Turn off format on paste" : "Turn on format on paste", category: S, keywords: ["auto", "format", "paste", "beautify"], badge: autoFormatOnPaste ? "On" : undefined, action: () => setAutoFormatOnPaste((v) => !v) },
+      { id: "set-sort-keys", label: formatOptions.sortKeys ? "Turn off sort keys" : "Turn on sort keys", category: S, keywords: ["sort", "keys", "alphabetical"], badge: formatOptions.sortKeys ? "On" : undefined, disabled: inputEmpty || !inTransform, action: () => applyFormatWithOptions({ ...formatOptions, sortKeys: !formatOptions.sortKeys }) },
+      { id: "set-drop-empty", label: formatOptions.removeEmpty ? "Turn off drop empty values" : "Turn on drop empty values", category: S, keywords: ["remove", "empty", "null"], badge: formatOptions.removeEmpty ? "On" : undefined, disabled: inputEmpty || !inTransform, action: () => applyFormatWithOptions({ ...formatOptions, removeEmpty: !formatOptions.removeEmpty }) },
+      ...([2, 4, 0] as const).map((n) => ({
+        id: `set-indent-${n}`,
+        label: n === 0 ? "Set indent to none" : `Set indent to ${n} spaces`,
+        category: S,
+        keywords: ["indent", "spaces", "tabs"],
+        badge: on(formatOptions.indentation === n),
+        disabled: inputEmpty || !inTransform,
+        action: () => applyFormatWithOptions({ ...formatOptions, indentation: n }),
+      })),
+      { id: "set-quote-double", label: "Use double quotes", category: S, keywords: ["quote", "double"], badge: on(formatOptions.quoteStyle === "double"), disabled: inputEmpty || !inTransform, action: () => applyFormatWithOptions({ ...formatOptions, quoteStyle: "double" }) },
+      { id: "set-quote-single", label: "Use single quotes", category: S, keywords: ["quote", "single"], badge: on(formatOptions.quoteStyle === "single"), disabled: inputEmpty || !inTransform, action: () => applyFormatWithOptions({ ...formatOptions, quoteStyle: "single" }) },
+      ...([[",", "comma"], ["	", "tab"], [";", "semicolon"], ["|", "pipe"]] as const).map(([d, name]) => ({
+        id: `set-csv-${name}`,
+        label: `Set CSV delimiter to ${name}`,
+        category: S,
+        keywords: ["csv", "delimiter", name],
+        badge: on(csvDelimiter === d),
+        action: () => setCsvDelimiter(d),
+      })),
+      { id: "set-options-reset", label: "Reset options", category: S, keywords: ["reset", "options", "defaults", "indent", "sort"], disabled: !inTransform, action: () => resetTransformOptions() },
+      { id: "theme-light", label: "Use light theme", category: S, keywords: ["appearance", "theme", "light"], badge: on(themeMode === "light"), action: () => setThemeMode("light") },
+      { id: "theme-dark", label: "Use dark theme", category: S, keywords: ["appearance", "night", "theme", "dark"], badge: on(themeMode === "dark"), action: () => setThemeMode("dark") },
+      { id: "theme-system", label: "Use system theme", category: S, keywords: ["appearance", "os", "theme", "system", "auto"], badge: on(themeMode === "system"), action: () => setThemeMode("system") },
+      { id: "set-reset", label: "Reset settings", category: S, keywords: ["reset", "default", "restore", "settings"], action: () => resetSettingsToDefault() },
+      { id: "set-clear-data", label: "Clear saved data and reload", category: S, keywords: ["clear", "cache", "wipe", "localstorage", "fresh"], action: () => void clearAllCache() },
+      // Help.
+      { id: "help-tour", label: "Take the tour", category: H, keywords: ["tour", "walkthrough", "guide", "intro", "onboarding"], action: () => { setCommandPaletteOpen(false); openTour("palette"); } },
+      { id: "help-shortcuts", label: "Open keyboard shortcuts", category: H, keywords: ["keys", "shortcuts", "hotkeys"], shortcut: "⌘/", action: () => window.dispatchEvent(new Event("formaty:open-shortcuts")) },
+      { id: "help-docs", label: "Open documentation", category: H, keywords: ["docs", "help", "guide"], action: () => router.push("/docs") },
+      { id: "help-changelog", label: "Open changelog", category: H, keywords: ["whats new", "what's new", "changelog", "release", "version", "updates"], action: () => router.push("/changelog") },
+      { id: "help-github", label: "Open GitHub", category: H, keywords: ["github", "source", "issues"], action: () => window.open("https://github.com/kdkumawat/formaty", "_blank", "noopener,noreferrer") },
+      { id: "help-reload", label: "Reload app", category: H, keywords: ["reload", "refresh", "restart"], action: () => window.location.reload() },
+    ];
+    return list.map((c) => ({ ...c, icon: c.icon ?? commandIcon(c.id) }));
+    // The handlers above close over live workspace state; the listed values are what changes what the palette shows.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inputEmpty, showBusy, convertToFormat, rightView, parsedOutput, typeLanguage, activeOperation, output, themeMode, editorFontSize, isOutputMaximized, isWindowFullscreen, toggleWindowFullscreen, formatOptions, csvDelimiter, liveTransform, canUndo, canRedo, lineWrap, diffSideBySide, diffKind, sharedLinkUrl, undoStack.length, tabs.length, activeTabId, autoFormatOnPaste, swapDiffSides, beautifyDiffSides, copyDiffText, isUtilsMode, utilTab, isDiffMode, handleWorkspaceReset, resetSettingsToDefault, openTour, closedTabName, sqlTable, typeName, sqlDialect, clearDiffSide]);
 
   const settingsPanelContent = (
-                <div className="w-[20rem] max-w-[85vw]">
-  {/* Header */}
-  <div className="flex items-center gap-2">
-    <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/12 text-primary">
-      <Cog6ToothIcon className="h-3.5 w-3.5" aria-hidden />
-    </span>
-    <div className="min-w-0 flex-1">
-      <p className="text-xs font-semibold leading-tight tracking-tight text-[var(--workspace-text)]">Settings</p>
-      <p className="truncate text-[10px] leading-snug text-[var(--workspace-text-muted)]">
-        Saved automatically · applies to this tab
-      </p>
-    </div>
-    <span className="inline-flex h-4 shrink-0 items-center rounded-full bg-emerald-500/10 px-1.5 text-[9px] font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-      Local
-    </span>
-  </div>
+    <SettingsPanel
+      themeMode={themeMode}
+      onThemeMode={setThemeMode}
+      liveTransform={liveTransform}
+      onLiveTransform={setLiveTransform}
+      autoFormatOnPaste={autoFormatOnPaste}
+      onAutoFormatOnPaste={setAutoFormatOnPaste}
+      lineWrap={lineWrap}
+      onLineWrap={setLineWrap}
+      showInstant={isUtilsMode && utilTab === "instant"}
+      indent={formatOptions.indentation}
+      onIndent={(n) => setFormatOptions((o) => ({ ...o, indentation: n }))}
+      fontSize={editorFontSize}
+      onFontSize={setEditorFontSize}
+      onReset={resetSettingsToDefault}
+      onClearCache={() => void clearAllCache()}
+    />
+  );
 
-  {/* Settings tabs - General / Compare / Utils */}
-  <div
-    className="mb-2 mt-2 flex items-center gap-px rounded-lg border border-[var(--workspace-border)] bg-muted/50 p-0.5"
-    role="tablist"
-    aria-label="Settings sections"
-  >
-    {(
-      [
-        ["general", "General"],
-        ["compare", "Compare"],
-        ["utils", "Utils"],
-      ] as const
-    ).map(([tab, label]) => (
-      <button
-        key={tab}
-        type="button"
-        role="tab"
-        aria-selected={settingsTab === tab}
-        className={`h-6 flex-1 rounded-md text-[11px] font-semibold transition-colors ${
-          settingsTab === tab
-            ? "bg-primary text-primary-foreground shadow-sm"
-            : "text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)] hover:text-[var(--workspace-text)]"
-        }`}
-        onClick={() => setSettingsTab(tab)}
-      >
-        {label}
-      </button>
-    ))}
-  </div>
+  const loadSampleDocuments = () => {
+    const right = SAMPLE_JSON.replace("formaty", "formaty-app").replace("1023", "1100").replace("\"tue\"", "\"wed\"");
+    setDiffLeftInput(SAMPLE_JSON);
+    setDiffRightInput(right);
+    diffEditorRef.current?.setBoth(SAMPLE_JSON, right);
+    executeOperation("diff", { leftText: SAMPLE_JSON, rightText: right });
+  };
+  /** Fills the input from a Sample menu id: `fmt:<format>`, `fmt:curl` or `ex:<example id>`. */
+  const loadInputSample = (id: string) => {
+    const [group, key] = id.split(":");
+    const example = group === "ex" ? EXAMPLES.find((e) => e.id === key) : undefined;
+    const kind = (group === "fmt" ? key : "json") as FormatKind | "curl";
+    const sample = example ? example.data : kind === "curl" ? SAMPLE_CURL : SAMPLES[kind];
+    setInput(sample);
+    pushHistory(sample);
+    setInputFormatOverride(kind === "curl" ? "curl" : null);
+    setError(null);
+    setValidationError(null);
+    parseOnly(sample, kind);
+    setFocusedPane("output");
+    if (!isDesktopLayout) setMobileShowOutput(true);
+  };
+  /** Rewrite the input in its own format with the current indent and sort settings. */
+  const tidyInput = async () => {
+    if (resolvedInputFormat === "curl" || !input.trim()) return;
+    try {
+      const json = await getParsedInput();
+      const text = await convertJsonToOutput(json, { toFormat: resolvedInputFormat });
+      setInput(text);
+      pushHistory(text);
+    } catch (e) {
+      toast({ message: explainProblem({ input, raw: e instanceof Error ? e.message : "", format: resolvedInputFormat, forced: inputFormatOverride }).message, type: "error" });
+    }
+  };
+  /** Problem to show under the input, in plain words with the line it points at and any way out (see explainProblem). */
+  const inputProblem = useMemo(() => {
+    const raw = validationError ?? error;
+    if (!raw) return null;
+    return explainProblem({ input, raw, format: resolvedInputFormat, forced: inputFormatOverride });
+  }, [validationError, error, input, resolvedInputFormat, inputFormatOverride]);
 
-  {settingsTab === "general" && (
-  <>
-  {/* Behavior */}
-  <SettingsRule title="Behavior" />
-  <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-px">
-    {(
-      [
-        ["Compact menus", viewAsMenu, (v: boolean) => setViewAsMenu(v)],
-        ["Multi-tab mode", showTabs, (v: boolean) => setShowTabs(v)],
-        ["Live transform", liveTransform, (v: boolean) => setLiveTransform(v)],
-        ["Line wrap", lineWrap, (v: boolean) => setLineWrap(v)],
-        ["Format on paste", autoFormatOnPaste, (v: boolean) => setAutoFormatOnPaste(v)],
-      ] as const
-    ).map(([label, on, setOn]) => (
-      <label
-        key={label}
-        className="flex min-h-7 cursor-pointer items-center justify-between gap-2 rounded-md px-1.5 py-1 text-xs text-[var(--workspace-text)] transition-colors hover:bg-primary/5"
-      >
-        <span className="min-w-0">{label}</span>
-        <Switch checked={on} onCheckedChange={setOn} />
-      </label>
-    ))}
-
-  </div>
-  </>)}
-
-  {/* Toolbar pins - kept next to the Compact menus toggle */}
-  {settingsTab === "general" && (
-    <>
-      <SettingsRule title="Toolbar" />
-      <div className="mt-1 space-y-2">
-        {!viewAsMenu ? (
-          <div className="space-y-1.5">
-            <PinChipRow
-              label="Format"
-              items={FORMAT_KINDS.map((fmt) => ({ id: `fmt:${fmt}`, label: FORMAT_LABELS[fmt] }))}
-              pinned={(id) => pinnedItems.has(id)}
-              onToggle={(id) =>
-                setPinnedItems((s) => {
-                  const n = new Set(s);
-                  if (n.has(id)) n.delete(id);
-                  else n.add(id);
-                  return n;
-                })
-              }
-            />
-            <PinChipRow
-              label="View"
-              items={(["raw", "tree", "graph", "query", "table"] as const).map((view) => ({
-                id: `view:${view}`,
-                label: view[0].toUpperCase() + view.slice(1),
-              }))}
-              pinned={(id) => pinnedItems.has(id)}
-              onToggle={(id) =>
-                setPinnedItems((s) => {
-                  const n = new Set(s);
-                  if (n.has(id)) n.delete(id);
-                  else n.add(id);
-                  return n;
-                })
-              }
-            />
-            <PinChipRow
-              label="Action"
-              items={OPERATION_ACTIONS.map(([label, action]) => ({ id: `action:${action}`, label }))}
-              pinned={(id) => pinnedItems.has(id)}
-              onToggle={(id) =>
-                setPinnedItems((s) => {
-                  const n = new Set(s);
-                  if (n.has(id)) n.delete(id);
-                  else n.add(id);
-                  return n;
-                })
-              }
-            />
-            <PinChipRow
-              label="Types"
-              items={TYPE_LANGUAGES.slice(0, 8).map((item) => ({ id: `type:${item.id}`, label: item.label }))}
-              pinned={(id) => pinnedItems.has(id)}
-              onToggle={(id) =>
-                setPinnedItems((s) => {
-                  const n = new Set(s);
-                  if (n.has(id)) n.delete(id);
-                  else n.add(id);
-                  return n;
-                })
-              }
-            />
-          </div>
-        ) : (
-          <p className="rounded-md bg-primary/5 px-2 py-1.5 text-[10px] leading-snug text-[var(--workspace-text-muted)]">
-            Compact menus is on - the toolbar uses{" "}
-            <strong className="text-primary">Format · View · Actions · Types</strong> dropdowns. Turn off{" "}
-            <strong className="text-primary">Compact menus</strong> in Behavior to show pinned shortcuts instead.
-          </p>
-        )}
-      </div>
-    </>
-  )}
-
-  {settingsTab === "general" && (
-  <>
-  {/* Editor */}
-  <SettingsRule title="Editor" />
-  <div className="mt-1">
-    <SettingsRow
-      label={
-        <>
-          Font size
-          <PinButton
-            pinned={pinnedItems.has("fontSize")}
-            label="font size"
-            onClick={() =>
-              setPinnedItems((s) => {
-                const n = new Set(s);
-                if (n.has("fontSize")) n.delete("fontSize");
-                else n.add("fontSize");
-                return n;
-              })
-            }
-          />
-        </>
+  /** One click on an output chip, More item or palette entry, inside the current Transform tab. */
+  const pickCurlTarget = (id: string) => {
+    try {
+      const target = getCurlTarget(id as CurlTargetId);
+      const code = generateCurlCode(parseCurl(input), id as CurlTargetId);
+      prevActionStateRef.current = { output, parsedOutput, outputLanguage, outputExt };
+      setCurlTarget(id as CurlTargetId);
+      setFocusedPane("output");
+      setRightView("raw");
+      setOutput(code);
+      setOutputLanguage(id === "python" ? "python" : id === "go" ? "go" : "javascript");
+      setOutputExt(target?.ext ?? "txt");
+      setActiveOperation(null);
+    } catch (e) {
+      toast({ message: explainProblem({ input, raw: e instanceof Error ? e.message : "", format: "curl", forced: null }).message, type: "error" });
+    }
+  };
+  const chooseOutput = (id: OutputId) => {
+    setCurlTarget(null);
+    setFocusedPane("output");
+    saveLastUsed({ transform: id });
+    if (!FIXED_OUTPUT_CHIPS.includes(id) && !learnedChips.includes(id)) {
+      const next = [id, learnedChips[0]].filter((x): x is OutputId => Boolean(x)).slice(0, 2);
+      setLearnedChips(next);
+      try {
+        localStorage.setItem("formaty-learned-chips", JSON.stringify(next));
+      } catch {
+        /* storage unavailable */
       }
-    >
-      <SettingsStepper
-        value={editorFontSize}
-        decLabel="Decrease font size"
-        incLabel="Increase font size"
-        resetLabel="Reset font size"
-        onDec={() => setEditorFontSize((s) => Math.max(10, s - 1))}
-        onInc={() => setEditorFontSize((s) => Math.min(24, s + 1))}
-        onReset={() => setEditorFontSize(14)}
-      />
-    </SettingsRow>
-  </div>
-  </>)}
+    }
+    const val = id.slice(id.indexOf(":") + 1);
+    if (id.startsWith("fmt:")) {
+      const fmt = val as FormatKind;
+      if (inputEmpty) {
+        setConvertToFormat(fmt);
+        setActiveOperation(null);
+        setOutputExt(EXT_BY_FORMAT[fmt]);
+        setOutputLanguage(fmt);
+      } else {
+        runConvert(fmt);
+      }
+    } else if (id.startsWith("type:")) {
+      const lang = val as TypeTargetLanguage;
+      trackEvent("generate_types", { language: lang, source: "chips" });
+      setRightView("raw");
+      setTypeLanguage(lang);
+      setActiveOperation("generateTypes");
+      setOutputLanguage(LANGUAGE_BY_TYPE_TARGET[lang]);
+      setOutputExt(TYPE_LANGUAGES.find((t) => t.id === lang)?.ext ?? "txt");
+      if (!inputEmpty) executeOperation("generateTypes", { typeLanguage: lang });
+    } else if (inputEmpty && val !== "validate") {
+      setRightView("raw");
+      setActiveOperation(val as OperationAction);
+    } else {
+      runOperation(val as OperationAction);
+    }
+  };
+  const inputInvalid = inputValid === false;
+  const staleOutput = inputInvalid && output.trim().length > 0;
+  const isTypeOutput = selectedOutput.startsWith("type:") && selectedOutput !== "type:sql";
+  /** Image or data copy of the graph view. Throws on failure so the Copy button can say so. */
+  const copyGraphAs = async (id: string) => {
+    const g = graphViewRef.current;
+    if (id === "json") {
+      await navigator.clipboard.writeText(JSON.stringify(parsedOutput, null, 2));
+    } else if (!g) {
+      throw new Error("Graph export is not ready yet.");
+    } else if (id === "png") await g.copyPngToClipboard();
+    else if (id === "jpg") await g.copyJpgToClipboard();
+    else await g.copySvgToClipboard();
+    trackEvent("copy", { format: id, mode: "transform" });
+  };
+  /** The Copy button of the Transform result: format remembered per view. */
+  const copyView = rightView === "graph" ? "graph" : rightView === "table" ? "table" : "text";
+  const transformCopyFormats: CopyFormat[] =
+    copyView === "graph"
+      ? GRAPH_COPY_OPTIONS
+      : copyView === "table"
+        ? TABLE_COPY_AS_OPTIONS
+        : [{ id: "same-as-output", label: "As shown", group: "Output" }, ...DEFAULT_COPY_AS_OPTIONS];
+  const transformCopyFormat =
+    copyView === "graph"
+      ? graphCopyFormat
+      : (copyAsMemory[copyView] ?? (copyView === "table" ? "markdown-table" : "same-as-output"));
+  const transformCopy: CopyButtonProps = {
+    formats: transformCopyFormats,
+    format: transformCopyFormat,
+    onFormatChange: (id) => {
+      if (copyView === "graph") setGraphCopyFormat(id as GraphCopyFormat);
+      else setCopyAsMemory((m) => ({ ...m, [copyView]: id as CopyAsFormat }));
+    },
+    disabled: !(canDownload && !inputInvalid),
+    onCopy: async (f) => {
+      const id = f ?? transformCopyFormat;
+      if (copyView === "graph") return copyGraphAs(id);
+      trackEvent("copy", { format: id, mode: "transform" });
+      const text = resolveCopyText(id as CopyAsFormat);
+      if (!text.trim()) throw new Error("Nothing to copy");
+      await navigator.clipboard.writeText(text);
+    },
+  };
+  const resetTransformOptions = () => {
+    setSqlTable("");
+    setTypeName("");
+    setSqlDialect("sqlite");
+    if (selectedOutput.startsWith("fmt:") && !inputEmpty) applyFormatWithOptions({ ...DEFAULT_FORMAT_OPTIONS });
+    else setFormatOptions({ ...DEFAULT_FORMAT_OPTIONS });
+  };
+  const outputHeader = (
+    <OutputHeader
+      selected={selectedOutput}
+      learned={learnedChips}
+      onSelect={chooseOutput}
+      curl={
+        resolvedInputFormat === "curl"
+          ? { targets: CURL_TARGETS.map((t) => ({ id: t.id, label: t.label })), selected: curlTarget, onPick: pickCurlTarget }
+          : undefined
+      }
+      busy={showBusy}
+      stale={staleOutput}
+      view={rightView}
+      onView={(v) => {
+        trackEvent("view", { view: v });
+        setRightView(v);
+        setFocusedPane("output");
+      }}
+      canVisualize={Boolean(parsedOutput)}
+      isData={selectedOutput.startsWith("fmt:")}
+      isJson={selectedOutput === "fmt:json"}
+      sortKeys={formatOptions.sortKeys}
+      onSortKeys={(v) => applyFormatWithOptions({ ...formatOptions, sortKeys: v })}
+      indent={formatOptions.indentation}
+      onIndent={(n) => applyFormatWithOptions({ ...formatOptions, indentation: n })}
+      quoteStyle={formatOptions.quoteStyle}
+      onQuoteStyle={(q) => applyFormatWithOptions({ ...formatOptions, quoteStyle: q })}
+      removeEmpty={formatOptions.removeEmpty}
+      onRemoveEmpty={(v) => applyFormatWithOptions({ ...formatOptions, removeEmpty: v })}
+      isSql={selectedOutput === "type:sql"}
+      sqlTable={sqlTable}
+      onSqlTable={setSqlTable}
+      sqlDialect={sqlDialect}
+      onSqlDialect={setSqlDialect}
+      isType={isTypeOutput}
+      typeName={typeName}
+      onTypeName={setTypeName}
+      onResetOptions={resetTransformOptions}
+      canMoveToInput={selectedOutput.startsWith("fmt:") && output.trim().length > 0 && !inputInvalid}
+      onMoveToInput={() => {
+        setInput(output);
+        pushHistory(output);
+        setInputFormatOverride(null);
+        setFocusedPane("input");
+      }}
+      canDownload={canDownload && !inputInvalid}
+      onDownload={() => downloadOutput()}
+      copy={transformCopy}
+    />
+  );
 
-  {settingsTab === "compare" && (
+  const copyActive = () => {
+    if (isUtilsMode && utilTab === "instant") {
+      getInstantActions()?.onCopy();
+      return;
+    }
+    // List modes: use stored quote+layout preference.
+    if (isListCopyMode && copyItems.length > 0) {
+      const pref = loadListCopyPref(copyMode);
+      const text = pref === "as-seen"
+        ? getActiveOutputText()
+        : formatListCopyAsText(copyItems, pref.quote, pref.layout, pref.suffix);
+      void navigator.clipboard.writeText(text).then(
+        () => {
+          setCopyState("done");
+          resetCopySoon();
+        },
+        () => setCopyState("error"),
+      );
+      return;
+    }
+    const text = getActiveOutputText();
+    if (!text.trim() && !isDiffMode) {
+      if (!isUtilsMode) void copyOutput();
+      return;
+    }
+    if (!text.trim()) return;
+    void navigator.clipboard.writeText(text).then(
+      () => {
+        setCopyState("done");
+        toast({ message: "Copied" });
+        resetCopySoon();
+      },
+      () => setCopyState("error"),
+    );
+  };
+  const saveTextFile = (text: string, filename: string) => {
+    const url = URL.createObjectURL(new Blob([text], { type: "text/plain;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast({ message: "Downloaded" });
+  };
+  const downloadActive = () => {
+    if (isUtilsMode && utilTab === "instant") {
+      getInstantActions()?.onDownload();
+      return;
+    }
+    if (isUtilsMode) {
+      const text = getActiveOutputText();
+      if (text) saveTextFile(text, `formaty-${utilTab}.txt`);
+      return;
+    }
+    if (isDiffMode) {
+      if ((diffKind === "list" || diffKind === "single") && listCompareExport?.text) {
+        saveTextFile(listCompareExport.text, listCompareExport.filename);
+        return;
+      }
+      downloadDiffReport();
+      return;
+    }
+    downloadOutput();
+  };
+  const undoActive = () => {
+    if (isDiffMode) diffEditorRef.current?.undo();
+    else if (isUtilsMode) moveUtilsHistory(-1);
+    else moveHistory(-1);
+  };
+  const redoActive = () => {
+    if (isDiffMode) diffEditorRef.current?.redo();
+    else if (isUtilsMode) moveUtilsHistory(1);
+    else moveHistory(1);
+  };
+  const resetActive = () => {
+    if (isUtilsMode && utilTab === "instant") {
+      getInstantActions()?.onReset();
+      return;
+    }
+    handleWorkspaceReset();
+  };
+  const actionRow = (
+    <ActionRow
+      canCopy={
+        (isDiffMode && diffKind !== "document" ? Boolean(listCompareExport?.count) : Boolean(getActiveOutputText().trim())) ||
+        (!isDiffMode && !isUtilsMode && canDownload) ||
+        (isUtilsMode && utilTab === "instant")
+      }
+      onCopy={copyActive}
+      canDownload={isUtilsMode || isDiffMode ? true : canDownload}
+      onDownload={downloadActive}
+      onUndo={undoActive}
+      onRedo={redoActive}
+      canUndo={isUtilsMode ? canUtilsUndo : isDiffMode ? undefined : canUndo}
+      canRedo={isUtilsMode ? canUtilsRedo : isDiffMode ? undefined : canRedo}
+      onReset={isDiffMode ? undefined : resetActive}
+      resetLabel={isUtilsMode && utilTab === "instant" ? (getInstantActions()?.resetLabel ?? "Reset") : "Reset"}
+      outputActions={isUtilsMode && utilTab === "instant"}
+    />
+  );
+
+
+  const cycleIndent = () => {
+    const next = { ...formatOptions, indentation: formatOptions.indentation === 2 ? 4 : 2 };
+    if (selectedOutput.startsWith("fmt:") && !isDiffMode && !isUtilsMode) applyFormatWithOptions(next);
+    else setFormatOptions(next);
+  };
+  const countLines = (t: string) => (t.trim() ? t.split("\n").filter((l) => l.trim()).length : 0);
+  const itemsLabel = (n: number) => `${n.toLocaleString()} ${n === 1 ? "item" : "items"}`;
+  const sbItem = "shrink-0 tabular-nums max-sm:hidden";
+  const sbAlways = "shrink-0 tabular-nums";
+  const statusDetails = isUtilsMode ? (
+    <span className={sbItem}>{UTIL_TABS.find((t) => t.id === utilTab)?.label ?? utilTab}</span>
+  ) : isDiffMode ? (
     <>
-      <SettingsRule title="List parsing" />
-      <div className="mt-1 space-y-2">
-        <div>
-          <p className="pb-1 text-[10px] font-medium text-[var(--workspace-text-muted)]">Split by</p>
-          <div className="flex flex-wrap gap-1">
-            {(
-              [
-                ["auto", "Auto"],
-                ["comma", "Comma"],
-                ["semicolon", "Semicolon"],
-                ["pipe", "Pipe"],
-                ["whitespace", "Whitespace"],
-                ["json", "JSON array"],
-              ] as const
-            ).map(([delim, label]) => (
-              <button
-                key={delim}
-                type="button"
-                onClick={() => setListCompareOptions((prev) => ({ ...prev, delimiter: delim }))}
-                className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors ${
-                  listCompareOptions.delimiter === delim
-                    ? "bg-primary/15 text-primary"
-                    : "bg-muted text-[var(--workspace-text-muted)] hover:bg-primary/10 hover:text-[var(--workspace-text)]"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div>
-          <p className="pb-1 text-[10px] font-medium text-[var(--workspace-text-muted)]">Parsing</p>
-          <div className="flex flex-wrap gap-1">
-            {(
-              [
-                ["trim", "Trim whitespace"],
-                ["ignoreEmpty", "Skip empty"],
-                ["caseInsensitive", "Ignore case"],
-                ["stripQuotes", "Strip quotes"],
-                ["numericNormalize", "Normalize numbers"],
-                ["autoClean", "Auto-clean on paste"],
-              ] as const
-            ).map(([key, label]) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() =>
-                  setListCompareOptions((prev) => ({ ...prev, [key]: !prev[key as keyof ListParseOptions] }))
-                }
-                className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors ${
-                  listCompareOptions[key as keyof ListParseOptions]
-                    ? "bg-primary/15 text-primary"
-                    : "bg-muted text-[var(--workspace-text-muted)] hover:bg-primary/10 hover:text-[var(--workspace-text)]"
-                }`}
-              >
-                <span
-                  className={`h-1.5 w-1.5 rounded-full ${listCompareOptions[key as keyof ListParseOptions] ? "bg-primary" : "bg-[var(--workspace-border)]"}`}
-                />
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-      <p className="mt-3 rounded-md bg-primary/5 px-2 py-1.5 text-[10px] leading-snug text-[var(--workspace-text-muted)]">
-        Document diff options (hunks, inline vs side-by-side, whitespace, paths) live in the Compare toolbar.
-      </p>
+      {diffKind === "single" ? (
+        <span className={sbItem}>{itemsLabel(listCounts.left)}</span>
+      ) : diffKind === "list" ? (
+        <>
+          <span className={sbItem}>
+            <span className="text-side-a">A</span> {itemsLabel(listCounts.left)}
+          </span>
+          <span className={sbItem}>
+            <span className="text-side-b">B</span> {itemsLabel(listCounts.right)}
+          </span>
+        </>
+      ) : (
+        <span className={sbItem}>
+          <span className="text-side-a">A</span> {countLines(diffLeftInput).toLocaleString()} lines
+        </span>
+      )}
     </>
-  )}
-  {settingsTab === "utils" && (
-    <p className="mt-3 rounded-md bg-primary/5 px-2 py-1.5 text-[10px] leading-snug text-[var(--workspace-text-muted)]">
-      Each utility keeps its own options (count, length, character sets) right in the tool pane.
-    </p>
-  )}
-
-  {settingsTab === "general" && (
+  ) : inputEmpty ? null : (
     <>
-      {/* Formatting */}
-      <SettingsRule title="Formatting" />
-      <div className="mt-1 space-y-px">
-        <SettingsRow
-          label={
-            <>
-              Indent
-              <PinButton
-                pinned={pinnedItems.has("indent")}
-                label="indent"
-                onClick={() =>
-                  setPinnedItems((s) => {
-                    const n = new Set(s);
-                    if (n.has("indent")) n.delete("indent");
-                    else n.add("indent");
-                    return n;
-                  })
-                }
-              />
-            </>
-          }
-        >
-          <SettingsStepper
-            value={formatOptions.indentation}
-            decLabel="Decrease indent"
-            incLabel="Increase indent"
-            resetLabel="Reset indent"
-            minWidth="min-w-[1.5rem]"
-            onDec={() => {
-              const v = Math.max(0, formatOptions.indentation - 1);
-              applyFormatWithOptions({ ...formatOptions, indentation: v });
-            }}
-            onInc={() => {
-              const v = Math.min(10, formatOptions.indentation + 1);
-              applyFormatWithOptions({ ...formatOptions, indentation: v });
-            }}
-            onReset={() => applyFormatWithOptions({ ...formatOptions, indentation: 2 })}
-          />
-        </SettingsRow>
-        <SettingsRow label="Quotes">
-          <div className="inline-flex overflow-hidden rounded-md border border-[var(--workspace-border)]/60 bg-muted/50">
-            {(["double", "single"] as const).map((q) => (
-              <button
-                key={q}
-                type="button"
-                className={`flex h-7 min-w-[2.25rem] items-center justify-center px-2 text-xs font-medium transition-colors ${
-                  formatOptions.quoteStyle === q
-                    ? "bg-primary/15 text-primary"
-                    : "text-[var(--workspace-text-muted)] hover:bg-primary/5 hover:text-[var(--workspace-text)]"
-                }`}
-                onClick={() => applyFormatWithOptions({ ...formatOptions, quoteStyle: q })}
-              >
-                {q === "double" ? "\u201C \u201D" : "' '"}
-              </button>
-            ))}
-          </div>
-        </SettingsRow>
-        <SettingsRow label="JSON">
-          <div className="flex items-center gap-1">
-            <label className="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-md border border-[var(--workspace-border)]/60 bg-muted/30 px-2 text-xs font-medium text-[var(--workspace-text)] transition-colors hover:border-primary/30 hover:bg-primary/5 has-[[data-state=checked]]:border-primary/40 has-[[data-state=checked]]:bg-primary/10">
-              <Checkbox checked={formatOptions.sortKeys} onCheckedChange={(c) => applyFormatWithOptions({ ...formatOptions, sortKeys: c === true })} />
-              Sort keys
-            </label>
-            <label className="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-md border border-[var(--workspace-border)]/60 bg-muted/30 px-2 text-xs font-medium text-[var(--workspace-text)] transition-colors hover:border-primary/30 hover:bg-primary/5 has-[[data-state=checked]]:border-primary/40 has-[[data-state=checked]]:bg-primary/10">
-              <Checkbox checked={formatOptions.removeEmpty} onCheckedChange={(c) => applyFormatWithOptions({ ...formatOptions, removeEmpty: c === true })} />
-              Drop empty
-            </label>
-          </div>
-        </SettingsRow>
-      </div>
-      <div className="mt-2">
-        <SettingsRule title="SQL generation" />
-        <div className="mt-1 flex flex-wrap gap-1">
-          {([
-            ["sqlite", "SQLite"],
-            ["postgres", "PostgreSQL"],
-            ["mysql", "MySQL"],
-          ] as const).map(([id, label]) => (
+      <span className={sbItem}>{getInputFormatLabel(resolvedInputFormat)}</span>
+      <span className={sbItem}>{inputSizeFormatted}</span>
+      <span className={sbItem}>{inputLineCount.toLocaleString()} {inputLineCount === 1 ? "line" : "lines"}</span>
+      {cursorPosition && <span className={sbItem}>Ln {cursorPosition.line}, Col {cursorPosition.column}</span>}
+      {inputValid === true && <span className={`${sbAlways} text-ok`}>Valid {getInputFormatLabel(resolvedInputFormat)}</span>}
+      {inputValid === false &&
+        (inputProblem?.line ? (
+          <Tooltip content={inputProblem.message}>
             <button
-              key={id}
               type="button"
-              onClick={() => setSqlDialect(id)}
-              className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors ${
-                sqlDialect === id
-                  ? "bg-primary/15 text-primary"
-                  : "bg-muted text-[var(--workspace-text-muted)] hover:bg-primary/10 hover:text-[var(--workspace-text)]"
-              }`}
+              className="shrink-0 text-bad outline-none hover:underline focus-visible:ring-2 focus-visible:ring-[var(--focus)]"
+              onClick={() => inputEditorApiRef.current?.goToLine(inputProblem.line as number, 1)}
             >
-              {label}
+              Invalid: line {inputProblem.line}
             </button>
-          ))}
-        </div>
-        <p className="mt-1.5 rounded-md bg-primary/5 px-2 py-1.5 text-[10px] leading-snug text-[var(--workspace-text-muted)]">
-          Used by “Types → SQL”. Types are inferred from your data - review before running.
-        </p>
-      </div>
+          </Tooltip>
+        ) : (
+          <Tooltip content={inputProblem?.message}>
+            <span className={`${sbAlways} text-bad`}>Invalid</span>
+          </Tooltip>
+        ))}
     </>
-  )}
-
-  {settingsTab === "general" && (
-  <>
-  {/* Toolbar buttons visibility - moved up from output action bar */}
-  <div className="mt-2.5 border-t border-[var(--workspace-border)]/60 pt-2">
-    <div className="flex items-center gap-2.5 pb-1">
-      <p className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--workspace-text-muted)]">
-        Toolbar buttons
-      </p>
-      <span className="h-px flex-1 bg-[var(--workspace-border)]/60" aria-hidden />
-    </div>
-    <div className="grid grid-cols-2 gap-x-2">
-      {(Object.keys(ACTION_LABELS) as OutputActionId[]).map((id) => {
-        if (id === "copyAs") return null; // merged into Copy
-        if (id === "useAsInput") return null; // removed
-        if (id === "share") return null; // always on
-        if (id === "reset") return null; // always on
-        if (id === "maximize" && (isDiffMode || isUtilsMode)) return null;
-        return (
-          <label
-            key={id}
-            className="flex min-h-7 cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 text-xs text-[var(--workspace-text)] transition-colors hover:bg-primary/5"
-          >
-            <Checkbox
-              checked={outputActionVisibility[id] !== false}
-              onCheckedChange={() => {
-                setOutputActionVisibility((prev) => {
-                  const next = { ...prev, [id]: !prev[id] };
-                  const anyOn = (Object.keys(next) as OutputActionId[]).some(
-                    (k) => next[k] && k !== "share" && k !== "reset" && !(k === "maximize" && (isDiffMode || isUtilsMode)),
-                  );
-                  if (!anyOn) return prev;
-                  saveVisibility(next);
-                  return next;
-                });
-              }}
-            />
-            {ACTION_LABELS[id]}
-          </label>
-        );
-      })}
-    </div>
-  </div>
-
-  {/* Footer - replay tour, reset & clear cache */}
-  <div className="mt-2.5 space-y-2 border-t border-[var(--workspace-border)]/60 pt-2">
-    <button
-      type="button"
-      className="flex h-7 w-full items-center justify-center gap-1.5 rounded-md border border-[var(--workspace-border)]/60 bg-muted/40 text-xs font-medium text-[var(--workspace-text-muted)] transition-all hover:border-primary/25 hover:bg-primary/10 hover:text-primary"
-      onClick={() => {
-        setTransformConfigOpen(false);
-        openTour("settings");
-      }}
-    >
-      <SparklesIcon className="h-3.5 w-3.5" />
-      Replay tour
-    </button>
-    <button
-      type="button"
-      className="flex h-7 w-full items-center justify-center gap-1.5 rounded-md border border-[var(--workspace-border)]/60 bg-muted/40 text-xs font-medium text-[var(--workspace-text-muted)] transition-all hover:border-primary/25 hover:bg-primary/10 hover:text-primary"
-      onClick={resetSettingsToDefault}
-    >
-      <ArrowPathIcon className="h-3.5 w-3.5" />
-      Reset to default (all tabs)
-    </button>
-    <button
-      type="button"
-      className={`flex h-7 w-full items-center justify-center gap-1.5 rounded-md border text-xs font-medium transition-all ${
-        confirmClearCache
-          ? "border-red-500/40 bg-red-500/15 text-red-500 hover:bg-red-500/25"
-          : "border-[var(--workspace-border)]/60 bg-muted/40 text-[var(--workspace-text-muted)] hover:border-red-500/30 hover:bg-red-500/10 hover:text-red-500"
-      }`}
-      onClick={() => {
-        if (!confirmClearCache) {
-          setConfirmClearCache(true);
-          window.setTimeout(() => setConfirmClearCache(false), 3000);
-          return;
-        }
-        void clearAllCache();
-      }}
-    >
-      <TrashIcon className="h-3.5 w-3.5" />
-      {confirmClearCache ? "Confirm: wipe everything?" : "Clear cache & reload app"}
-    </button>
-    <p className="text-[10px] leading-snug text-[var(--workspace-text-muted)]">
-      Clear cache wipes all saved sessions, settings, and offline data, then loads Formaty fresh.
-    </p>
-  </div>
-  </>
-  )}
-</div>
   );
 
   return (
+    <KitTooltipProvider>
     <main
       id="main"
       className="relative flex flex-col overflow-hidden bg-[var(--workspace-background)] text-[var(--workspace-text)]"
@@ -4709,12 +4184,12 @@ export function WorkspaceContent({
     >
       {dragActive && (
         <div className="pointer-events-none absolute inset-0 z-[100] flex items-center justify-center bg-[var(--workspace-background)]/70 backdrop-blur-sm">
-          <div className="flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-primary/50 bg-[var(--workspace-panel)]/90 px-10 py-8 shadow-2xl shadow-primary/10">
+          <div className="flex flex-col items-center gap-3 rounded-lg border-2 border-dashed border-primary/50 bg-[var(--workspace-panel)]/90 px-10 py-8 shadow-2xl shadow-primary/10">
             <DocumentArrowDownIcon className="h-8 w-8 text-primary" />
-            <p className="text-sm font-semibold text-[var(--workspace-text)]">
+            <p className="text-[13px] font-semibold text-[var(--workspace-text)]">
               Drop {isDiffMode ? "one or two files" : "a file"} to import
             </p>
-            <p className="text-[11px] text-[var(--workspace-text-muted)]">
+            <p className="text-[13px] text-[var(--workspace-text-muted)]">
               {isDiffMode
                 ? "Two files → left / right · one file → side you drop on"
                 : "JSON · XML · YAML · TOML · CSV · TXT — stays in your browser"}
@@ -4724,15 +4199,31 @@ export function WorkspaceContent({
       )}
       {!embed && (
         <WorkspaceHeader
-          themeMode={themeMode}
-          onThemeChange={(m) => {
-            trackEvent("theme", { mode: m });
-            setThemeMode(m);
-          }}
+          tabs={chromeTabs}
+          activeTabId={activeTabId}
+          onSwitchTab={switchToTab}
+          onCloseTab={closeTab}
+          onRenameTab={renameTab}
+          onNewTab={openNewTab}
+          onReopenTab={reopenTab}
+          closedTabName={closedTabName}
           onOpenCommandPalette={() => {
             trackEvent("command_palette", { source: "header" });
             setCommandPaletteOpen(true);
           }}
+          onOpenTour={() => openTour("settings")}
+          shareOpen={shareOpen}
+          onShareOpenChange={setShareOpen}
+          shareContent={
+            <SharePanel
+              open={shareOpen}
+              tabCount={tabs.length}
+              buildHash={(allTabs) => encodeState(buildShareState(allTabs))}
+              onUpload={uploadShare}
+              sharedUrl={sharedLinkUrl}
+              onDeleteShared={deleteShared}
+            />
+          }
           settingsOpen={transformConfigOpen}
           onSettingsOpenChange={setTransformConfigOpen}
           settingsContent={settingsPanelContent}
@@ -4745,7 +4236,7 @@ export function WorkspaceContent({
             href="/playground"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[var(--workspace-text-muted)] transition-colors hover:text-primary"
+            className="inline-flex items-center gap-1.5 text-[13px] font-medium text-[var(--workspace-text-muted)] transition-colors hover:text-primary"
           >
             <Logo size={14} className="shrink-0" />
             Open in Formaty
@@ -4754,874 +4245,92 @@ export function WorkspaceContent({
       )}
 
       {loadedToolPreset && (
-        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-4 py-1">
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-3 py-1">
           <div className="flex items-center gap-2.5 min-w-0">
             <span className="h-4 w-0.5 shrink-0 rounded-full bg-primary/70" aria-hidden />
             <span className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-0.5">
               <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" aria-hidden />
-              <span className="text-[11px] font-semibold text-primary">
+              <span className="text-[13px] font-semibold text-primary">
                 {TOOL_PAGES[loadedToolPreset]?.h1 ?? loadedToolPreset}
               </span>
             </span>
-            <span className="hidden text-[11px] text-[var(--workspace-text-muted)] sm:inline">preset loaded</span>
+            <span className="hidden text-[13px] text-[var(--workspace-text-muted)] sm:inline">preset loaded</span>
           </div>
           <div className="flex shrink-0 items-center gap-3">
             <a
               href={`/${loadedToolPreset}`}
-              className="hidden items-center gap-1 text-[11px] text-[var(--workspace-text-muted)] transition-colors hover:text-primary sm:inline-flex"
+              className="hidden items-center gap-1 text-[13px] text-[var(--workspace-text-muted)] transition-colors hover:text-primary sm:inline-flex"
             >
-              <ArrowLeftCircleIcon className="h-3.5 w-3.5" />
+              <ArrowLeftCircleIcon className="size-4" />
               Tool page
             </a>
-            <button
-              type="button"
-              aria-label="Dismiss"
-              className="text-[var(--workspace-text-muted)] transition-colors hover:text-[var(--workspace-text)]"
-              onClick={() => setLoadedToolPreset(null)}
-            >
-              <XMarkIcon className="h-3.5 w-3.5" />
-            </button>
+            <IconButton label="Dismiss" onClick={() => setLoadedToolPreset(null)}>
+              <XMarkIcon />
+            </IconButton>
           </div>
         </div>
       )}
 
       {/* Outer: tab rail (sidebar) + workspace. Tabs must never sit in a column stack with the editors. */}
-      <div className="flex min-h-0 flex-1 flex-row overflow-hidden">
-        {isDesktopLayout && showTabs && (
-          <div data-tour="tab-bar" className="flex h-full w-8 shrink-0 flex-col overflow-y-auto border-r border-[var(--workspace-border)] bg-[var(--workspace-panel)] pb-1 pt-1">
-            {tabs.map((tab) => {
-              const isActive = activeTabId === tab.id;
-              const displayName = tab.renamed ? tab.label : `${letterForTab(tab.id)}${tab.num}`;
-              return (
-              <div
-                key={tab.id}
-                role="tab"
-                tabIndex={0}
-                className={`group relative flex min-h-9 cursor-pointer items-center justify-center overflow-hidden py-0.5 transition-all duration-150 ${isActive ? "bg-primary/10 text-primary" : "text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)]/60 hover:text-[var(--workspace-text)]"}`}
-                onClick={() => switchToTab(tab.id)}
-                onDoubleClick={(e) => { e.stopPropagation(); startRename(tab, e.currentTarget); }}
-                onKeyDown={(e) => e.key === "Enter" && switchToTab(tab.id)}
-              >
-                {isActive && (
-                  <span className="absolute inset-y-1 left-0 w-[2px] rounded-full bg-primary" />
-                )}
-                <Tooltip
-                  content={tab.renamed ? `${tab.label} · double-click to rename` : `${displayName} · double-click to rename`}
-                  side="right"
-                >
-                  <span
-                    className="max-h-16 truncate px-px text-[10px] font-medium leading-none tracking-wide"
-                    style={{ writingMode: "vertical-rl", textOrientation: "upright" }}
-                  >
-                    {displayName}
-                  </span>
-                </Tooltip>
-                {tabs.length > 1 && (
-                  <button
-                    type="button"
-                    className="absolute -right-0.5 -top-0.5 hidden h-3.5 w-3.5 items-center justify-center rounded-full bg-[var(--workspace-border)] text-[var(--workspace-text-muted)] group-hover:flex hover:bg-red-500/20 hover:text-red-400"
-                    onClick={(e) => { e.stopPropagation(); closeTab(tab.id); }}
-                    aria-label={`Close ${displayName}`}
-                  >
-                    <XMarkIcon className="h-2 w-2" />
-                  </button>
-                )}
-              </div>
-              );
-            })}
-            <Tooltip content="New tab">
-            <button
-              type="button"
-              className="mt-0.5 flex h-7 w-full items-center justify-center text-[var(--workspace-text-muted)] transition-all duration-100 hover:bg-primary/5 hover:text-primary"
-              onClick={addTab}
-              aria-label="New tab"
-            >
-              <PlusIcon className="h-3.5 w-3.5" />
-            </button>
-            </Tooltip>
-            {tabs.length > 1 && (
-              <>
-                <div className="mx-auto my-1 h-px w-4 bg-[var(--workspace-border)]" aria-hidden />
-                <Tooltip content="Close all tabs">
-                <button
-                  type="button"
-                  className="flex h-7 w-full items-center justify-center text-[var(--workspace-text-muted)] transition-all duration-100 hover:bg-red-500/10 hover:text-red-500"
-                  onClick={closeAllTabs}
-                  aria-label="Close all tabs"
-                >
-                  <TrashIcon className="h-3.5 w-3.5" />
-                </button>
-                </Tooltip>
-                <Tooltip content="Close other tabs">
-                <button
-                  type="button"
-                  className="flex h-6 w-full items-center justify-center text-[var(--workspace-text-muted)] transition-all duration-100 hover:bg-amber-500/10 hover:text-amber-600"
-                  onClick={closeOtherTabs}
-                  aria-label="Close other tabs"
-                >
-                  <XCircleIcon className="h-3.5 w-3.5" />
-                </button>
-                </Tooltip>
-              </>
-            )}
-          </div>
-        )}
-        {renamingTabId && renameRect && (
-          <input
-            autoFocus
-            value={renameValue}
-            onChange={(e) => setRenameValue(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") commitRename();
-              else if (e.key === "Escape") cancelRename();
-            }}
-            onBlur={commitRename}
-            aria-label="Rename tab"
-            className="fixed z-[90] h-7 w-36 rounded-md border border-primary/40 bg-[var(--workspace-panel)] px-2 text-xs text-[var(--workspace-text)] shadow-lg outline-none"
-            style={{ top: renameRect.top, left: renameRect.left }}
-          />
-        )}
+      <div className="flex min-h-0 flex-1 flex-row overflow-hidden px-3">
         {renamingListSide && listRenameRect && (
-          <input
-            autoFocus
-            value={listRenameValue}
-            onChange={(e) => setListRenameValue(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") commitListRename();
-              else if (e.key === "Escape") cancelListRename();
-            }}
-            onBlur={commitListRename}
-            aria-label="Rename list"
-            className="fixed z-[90] h-7 min-w-32 rounded-md border border-primary/40 bg-[var(--workspace-panel)] px-2 text-xs text-[var(--workspace-text)] shadow-lg outline-none"
-            style={{ top: listRenameRect.top, left: listRenameRect.left, width: Math.max(128, listRenameRect.width) }}
-          />
+          // Sits exactly over the name button it replaces: same box, no border, an inset ring as the only cue.
+          <div
+            className="fixed z-[90] flex items-center rounded-md bg-[var(--workspace-panel)] px-1.5 text-[14px] font-semibold text-[var(--workspace-text)] ring-[1.5px] ring-inset ring-[var(--focus)]"
+            style={{ top: listRenameRect.top, left: listRenameRect.left, height: listRenameRect.height, minWidth: listRenameRect.width }}
+          >
+            <InlineRename initial={listRenameValue} label="Rename" onDone={commitListRename} />
+          </div>
         )}
       {/* Column: stable full-width tool row + split (icons never jump when left panel hides) */}
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        {/* ── Full-width secondary toolbar (Transform | Compare | Utils + output actions) ── */}
-        <div
-          className={`flex min-h-9 shrink-0 flex-wrap items-center gap-0.5 overflow-hidden border-b px-1.5 py-0.5 text-xs ${inputEditorBgClass} text-[var(--workspace-text-muted)]`}
-        >
-          <div
-            className="relative flex h-7 shrink-0 overflow-hidden rounded-md bg-muted"
-            role="group"
-            aria-label="Workspace tool"
-          >
-            {(
-              [
-                {
-                  id: "transform",
-                  label: "Transform",
-                  active: !isDiffMode && !isUtilsMode,
-                  title: "Format, convert, views, types",
-                  onClick: () => {
-                    if (isDiffMode) runOperation("diff");
-                    else if (isUtilsMode) runOperation("utils");
-                  },
-                },
-                {
-                  id: "compare",
-                  label: "Compare",
-                  active: isDiffMode,
-                  title: "Document or list compare",
-                  onClick: () => {
-                    if (!isDiffMode) runOperation("diff");
-                  },
-                },
-                {
-                  id: "utils",
-                  label: "Utils",
-                  active: isUtilsMode,
-                  title: "UUID, Base64, JWT, hash, time…",
-                  onClick: () => {
-                    if (!isUtilsMode) runOperation("utils");
-                  },
-                },
-              ] as const
-            ).map((tab, i) => (
-              <Tooltip key={tab.id} content={tab.title}>
-              <button
-                type="button"
-                data-tour={tab.id === "compare" ? "compare-tab" : tab.id === "utils" ? "utils-tab" : undefined}
-                className={`relative h-7 cursor-pointer px-3 text-xs font-semibold transition-colors duration-150 ${
-                  i > 0 ? "border-l border-[var(--workspace-border)]" : ""
-                } ${
-                  tab.active
-                    ? "text-primary"
-                    : "text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)] hover:text-[var(--workspace-text)]"
-                }`}
-                onClick={tab.onClick}
-              >
-                  {tab.active && (
-                  <motion.span
-                    layoutId="tool-mode-pill"
-                    className="absolute inset-0 bg-primary/15"
-                    transition={{ type: "spring", stiffness: 420, damping: 34 }}
-                  />
-                )}
-                <span className="relative z-[1]">{tab.label}</span>
-              </button>
-              </Tooltip>
-            ))}
-          </div>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-t-lg bg-[var(--workspace-panel)] text-[var(--workspace-text)]">
+        {isDiffMode && (
+          <CompareBar
+            kind={diffKind}
+            onKind={(k) => {
+              setDiffKind(k);
+              saveLastUsed({ compare: k });
+            }}
+            options={listCompareOptions}
+            onOptions={setListCompareOptions}
+            setToolbarHost={setListToolbarHost}
+            split={split}
+            actions={actionRow}
+          />
+        )}
 
-            {!isDiffMode && !isUtilsMode && (
-            <>
-            <div className="mx-1 h-5 w-px shrink-0 bg-[var(--workspace-border)]" aria-hidden />
-            {!viewAsMenu && (() => {
-              const fmtPins = FORMAT_KINDS.filter((f) => pinnedItems.has(`fmt:${f}`));
-              const viewPins = (["raw", "tree", "graph", "query", "table"] as const).filter((v) => pinnedItems.has(`view:${v}`));
-              const actionPins = OPERATION_ACTIONS.filter(([, a]) => pinnedItems.has(`action:${a}`));
-              const typePins = TYPE_LANGUAGES.filter((t) => pinnedItems.has(`type:${t.id}`));
-              const hasPins = fmtPins.length + viewPins.length + actionPins.length + typePins.length > 0
-                || pinnedItems.has("fontSize") || pinnedItems.has("indent");
-              if (!hasPins) return null;
-              const groups: React.ReactNode[] = [];
-              if (fmtPins.length > 0) {
-                groups.push(
-                  <span key="fmt" className="flex shrink-0 items-center gap-0.5">
-                    {fmtPins.map((fmt) => (
-                      <PinnedToolbarButton key={fmt} icon={FORMAT_ICONS[fmt] ?? Squares2X2Icon} label={FORMAT_LABELS[fmt]} disabled={inputEmpty} btnClass={pinnedBtnClass} activeClass={tbActiveClass} active={convertToFormat === fmt} onClick={() => { setFocusedPane("output"); runConvert(fmt); }} />
-                    ))}
-                  </span>,
-                );
-              }
-              if (viewPins.length > 0) {
-                groups.push(
-                  <span key="view" data-tour="view-switcher" className="flex shrink-0 items-center gap-0.5">
-                    {viewPins.map((view) => (
-                      <PinnedToolbarButton key={view} icon={VIEW_ICONS[view] ?? EyeIcon} label={view[0].toUpperCase() + view.slice(1)} disabled={inputEmpty || ((view === "tree" || view === "graph" || view === "query" || view === "table") && !parsedOutput)} btnClass={pinnedBtnClass} activeClass={tbActiveClass} active={rightView === view} onClick={() => { setRightView(view); setFocusedPane("output"); }} />
-                    ))}
-                  </span>,
-                );
-              }
-              if (actionPins.length > 0) {
-                groups.push(
-                  <span key="act" className="flex shrink-0 items-center gap-0.5">
-                    {actionPins.map(([label, action]) => (
-                      <PinnedToolbarButton key={action} icon={ACTION_ICONS[action] ?? BoltIcon} label={label} disabled={showBusy || inputEmpty} btnClass={pinnedBtnClass} activeClass={tbActiveClass} active={activeOperation === action} onClick={() => { if (!isDiffMode && !isUtilsMode && rightView !== "raw") setRightView("raw"); runOperation(action); }} />
-                    ))}
-                  </span>,
-                );
-              }
-              if (typePins.length > 0) {
-                groups.push(
-                  <span key="type" className="flex shrink-0 items-center gap-0.5">
-                    {typePins.map((item) => (
-                      <PinnedToolbarButton key={item.id} leading={<TypeBadge id={item.id} />} label={item.label} disabled={inputEmpty} btnClass={pinnedBtnClass} activeClass={tbActiveClass} active={activeOperation === "generateTypes" && typeLanguage === item.id} onClick={() => { trackEvent("generate_types", { language: item.id, source: "pinned" }); setFocusedPane("output"); if (!isDiffMode && !isUtilsMode && rightView !== "raw") setRightView("raw"); setActiveOperation("generateTypes"); executeOperation("generateTypes", { typeLanguage: item.id }); }} />
-                    ))}
-                  </span>,
-                );
-              }
-              if (pinnedItems.has("fontSize") || pinnedItems.has("indent")) {
-                groups.push(
-                  <span key="steps" className="flex shrink-0 items-center gap-1">
-                    {pinnedItems.has("fontSize") && (
-                      <Tooltip content="Font size" className="shrink-0">
-                      <div className={settingsBtnGroupClass}>
-                        <button type="button" aria-label="Decrease font size" className={pinnedStepBtnClass} onClick={() => setEditorFontSize((s) => Math.max(10, s - 1))}><MinusIcon className="h-3.5 w-3.5" /></button>
-                        <span className="flex h-7 min-w-[1.5rem] items-center justify-center px-1 text-xs font-medium tabular-nums text-[var(--workspace-text)]">{editorFontSize}</span>
-                        <button type="button" aria-label="Increase font size" className={pinnedStepBtnClass} onClick={() => setEditorFontSize((s) => Math.min(24, s + 1))}><PlusIcon className="h-3.5 w-3.5" /></button>
-                      </div>
-                      </Tooltip>
-                    )}
-                    {pinnedItems.has("indent") && (
-                      <Tooltip content="Indent" className="shrink-0">
-                      <div className={settingsBtnGroupClass}>
-                        <button type="button" aria-label="Decrease indent" className={pinnedStepBtnClass} onClick={() => { const v = Math.max(0, formatOptions.indentation - 1); applyFormatWithOptions({ ...formatOptions, indentation: v }); }}><MinusIcon className="h-3.5 w-3.5" /></button>
-                        <span className="flex h-7 min-w-[1.25rem] items-center justify-center px-1 text-xs font-medium tabular-nums text-[var(--workspace-text)]">{formatOptions.indentation}</span>
-                        <button type="button" aria-label="Increase indent" className={pinnedStepBtnClass} onClick={() => { const v = Math.min(10, formatOptions.indentation + 1); applyFormatWithOptions({ ...formatOptions, indentation: v }); }}><PlusIcon className="h-3.5 w-3.5" /></button>
-                      </div>
-                      </Tooltip>
-                    )}
-                  </span>,
-                );
-              }
-              return (
-                <>
-                  {groups.map((g, i) => (
-                    <React.Fragment key={i}>
-                      {i > 0 ? toolbarSep : null}
-                      {g}
-                    </React.Fragment>
-                  ))}
-                  {toolbarSep}
-                </>
-              );
-            })()}
-            {!viewAsMenu && (
-            <Dropdown open={moreMenuOpen} onOpenChange={setMoreMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`w-max min-w-[8rem] max-h-[min(70vh,32rem)] overflow-y-auto`} trigger={<Tooltip content="More actions"><div data-tour="toolbar-menus" className={`${selectBtnClass} ${moreMenuOpen ? selectBtnOpenClass : ""}`}><span className="font-medium">More</span><ChevronDownIcon className="h-3 w-3" aria-hidden /></div></Tooltip>}>
-              <div className="flex flex-col" onClick={(e) => e.stopPropagation()}>
-                {menuSectionLabel("Format")}
-                {(["json", "xml", "yaml", "toml", "csv"] as const).map((fmt) => (
-                  <button key={fmt} type="button" disabled={inputEmpty} data-selected={convertToFormat === fmt || undefined} className={`${menuItemClass} ${convertToFormat === fmt ? menuItemActiveClass : ""}`} onClick={() => { setFocusedPane("output"); runConvert(fmt); setMoreMenuOpen(false); }}>
-                    {sharedMenuCheck(convertToFormat === fmt)}
-                    <span className="min-w-0 flex-1 truncate text-left">{FORMAT_LABELS[fmt]}</span>
-                  </button>
-                ))}
-                <div className="my-1 h-px bg-[var(--workspace-border)]" role="separator" aria-hidden />
-                {menuSectionLabel("View")}
-                {(["raw", "tree", "graph", "query", "table"] as const).map((view) => (
-                  <button key={view} type="button" disabled={inputEmpty || ((view === "tree" || view === "graph" || view === "query" || view === "table") && !parsedOutput)} data-selected={rightView === view || undefined} className={`${menuItemClass} ${rightView === view ? menuItemActiveClass : ""}`} onClick={() => { setRightView(view); setFocusedPane("output"); setMoreMenuOpen(false); }}>
-                    {sharedMenuCheck(rightView === view)}
-                    <span className="min-w-0 flex-1 truncate text-left">{view[0].toUpperCase() + view.slice(1)}</span>
-                  </button>
-                ))}
-                <div className="my-1 h-px bg-[var(--workspace-border)]" role="separator" aria-hidden />
-                {menuSectionLabel("Actions")}
-                {(["beautify", "minify", "flatten", "unflatten", "schema", "validate"] as const).map((action) => {
-                  const [label] = OPERATION_ACTIONS.find(([, a]) => a === action) ?? [action, action];
-                  return (
-                    <button key={action} type="button" disabled={showBusy || inputEmpty} data-selected={activeOperation === action || undefined} className={`${menuItemClass} ${activeOperation === action ? menuItemActiveClass : ""}`} onClick={() => { runOperation(action); setMoreMenuOpen(false); }}>
-                      {sharedMenuCheck(activeOperation === action)}
-                      <span className="min-w-0 flex-1 truncate text-left">{label}</span>
-                    </button>
-                  );
-                })}
-                <div className="my-1 h-px bg-[var(--workspace-border)]" role="separator" aria-hidden />
-                {menuSectionLabel("Types")}
-                <button type="button" disabled={inputEmpty} data-selected={activeOperation !== "generateTypes" || undefined} className={`${menuItemClass} ${activeOperation === "generateTypes" ? "" : "!bg-primary/12 !text-primary"}`} onClick={() => { setFocusedPane("output"); runOperation("beautify"); setMoreMenuOpen(false); }}>
-                  {sharedMenuCheck(activeOperation !== "generateTypes")}
-                  <span className="min-w-0 flex-1 truncate text-left">None</span>
-                </button>
-                {TYPE_LANGUAGES.map((item) => (
-                  <button key={item.id} type="button" disabled={inputEmpty} data-selected={(activeOperation === "generateTypes" && typeLanguage === item.id) || undefined} className={`${menuItemClass} ${activeOperation === "generateTypes" && typeLanguage === item.id ? menuItemActiveClass : ""}`} onClick={() => { trackEvent("generate_types", { language: item.id, source: "menu" }); setFocusedPane("output"); if (!isDiffMode && !isUtilsMode && rightView !== "raw") setRightView("raw"); setActiveOperation("generateTypes"); executeOperation("generateTypes", { typeLanguage: item.id }); setMoreMenuOpen(false); }}>
-                    {sharedMenuCheck(activeOperation === "generateTypes" && typeLanguage === item.id)}
-                    <span className="min-w-0 flex-1 truncate text-left">{item.label}</span>
-                  </button>
-                ))}
-              </div>
-            </Dropdown>
-            )}
-            {viewAsMenu && (<span data-tour="toolbar-menus" className="flex shrink-0 items-center gap-0.5">
-            <Dropdown open={formatMenuOpen} onOpenChange={setFormatMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`w-max min-w-[8rem]`} trigger={<Tooltip content={`Format: ${FORMAT_LABELS[convertToFormat]}`}><div className={`${selectBtnClass} ${formatMenuOpen ? selectBtnOpenClass : ""}`} {...formatIcon.bind}><TriggerIcon Icon={FORMAT_ICONS[convertToFormat] ?? Squares2X2Icon} iconRef={formatIcon.ref} className="h-3.5 w-3.5 shrink-0 text-primary" /><span className="font-medium">Format</span><ChevronDownIcon className="h-3 w-3 shrink-0" aria-hidden /></div></Tooltip>}>
-              <div className="flex flex-col" onClick={(e) => e.stopPropagation()}>
-                {menuSectionLabel("Structured")}
-                {(["json", "xml", "yaml", "toml"] as const).map((fmt) => (
-                  <button key={fmt} type="button" disabled={inputEmpty} className={`${menuItemClass} ${convertToFormat === fmt ? menuItemActiveClass : ""}`} onClick={() => { setFocusedPane("output"); runConvert(fmt); setFormatMenuOpen(false); }}>
-                    {sharedMenuCheck(convertToFormat === fmt)}
-                    <span className="min-w-0 flex-1 truncate text-left">{FORMAT_LABELS[fmt]}</span>
-                  </button>
-                ))}
-                <div className="my-1 h-px bg-[var(--workspace-border)]" role="separator" aria-hidden />
-                {menuSectionLabel("Tabular")}
-                <button type="button" disabled={inputEmpty} className={`${menuItemClass} ${convertToFormat === "csv" ? menuItemActiveClass : ""}`} onClick={() => { setFocusedPane("output"); runConvert("csv"); setFormatMenuOpen(false); }}>
-                  {sharedMenuCheck(convertToFormat === "csv")}
-                  <span className="min-w-0 flex-1 truncate text-left">{FORMAT_LABELS.csv}</span>
-                </button>
-              </div>
-            </Dropdown>
-            <Dropdown open={viewMenuOpen} onOpenChange={setViewMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`w-max min-w-[9rem]`} trigger={<Tooltip content={`View: ${rightView[0].toUpperCase()}${rightView.slice(1)}`}><div data-tour="view-switcher" className={`${selectBtnClass} ${viewMenuOpen ? selectBtnOpenClass : ""}`} {...viewIcon.bind}><TriggerIcon Icon={VIEW_ICONS[rightView] ?? EyeIcon} iconRef={viewIcon.ref} className="h-3.5 w-3.5 shrink-0 text-primary" /><span className="font-medium">View</span><ChevronDownIcon className="h-3 w-3 shrink-0" aria-hidden /></div></Tooltip>}>
-              <div className="flex flex-col" onClick={(e) => e.stopPropagation()}>
-                {menuSectionLabel("Text")}
-                <button type="button" disabled={inputEmpty} className={`${menuItemClass} ${rightView === "raw" ? menuItemActiveClass : ""}`} onClick={() => { setRightView("raw"); setFocusedPane("output"); setViewMenuOpen(false); }}>
-                  {sharedMenuCheck(rightView === "raw")}
-                  <span className="min-w-0 flex-1 truncate text-left">Raw</span>
-                  <kbd className="rounded border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-1 py-px font-mono text-[9px] text-[var(--workspace-text-muted)]">⌘1</kbd>
-                </button>
-                <div className="my-1 h-px bg-[var(--workspace-border)]" role="separator" aria-hidden />
-                {menuSectionLabel("Visualize")}
-                {(["tree", "graph", "table"] as const).map((view, vi) => (                    <button key={view} type="button" disabled={inputEmpty || !parsedOutput} className={`${menuItemClass} ${rightView === view ? menuItemActiveClass : ""}`} onClick={() => { trackEvent("view", { view }); setRightView(view); setFocusedPane("output"); setViewMenuOpen(false); }}>
-                    {sharedMenuCheck(rightView === view)}
-                    <span className="min-w-0 flex-1 truncate text-left">{view[0].toUpperCase() + view.slice(1)}</span>
-                    <kbd className="rounded border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-1 py-px font-mono text-[9px] text-[var(--workspace-text-muted)]">⌘{vi + 2}</kbd>
-                  </button>
-                ))}
-                <div className="my-1 h-px bg-[var(--workspace-border)]" role="separator" aria-hidden />
-                {menuSectionLabel("Query")}
-                <button type="button" disabled={inputEmpty || !parsedOutput} className={`${menuItemClass} ${rightView === "query" ? menuItemActiveClass : ""}`} onClick={() => { trackEvent("view", { view: "query" }); setRightView("query"); setFocusedPane("output"); setViewMenuOpen(false); }}>
-                  {sharedMenuCheck(rightView === "query")}
-                  <span className="min-w-0 flex-1 truncate text-left">Query</span>
-                  <kbd className="rounded border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-1 py-px font-mono text-[9px] text-[var(--workspace-text-muted)]">⌘4</kbd>
-                </button>
-              </div>
-            </Dropdown>
-            <Dropdown open={actionsMenuOpen} onOpenChange={setActionsMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`w-max min-w-[9rem]`} trigger={<Tooltip content={activeOperation && OPERATION_ACTION_LABELS[activeOperation] ? `Actions: ${OPERATION_ACTION_LABELS[activeOperation]}` : "Transform actions"}><div className={`${selectBtnClass} ${actionsMenuOpen ? selectBtnOpenClass : ""}`} {...actionsIcon.bind}><TriggerIcon Icon={activeOperation ? (ACTION_ICONS[activeOperation] ?? BoltIcon) : BoltIcon} iconRef={actionsIcon.ref} className={`h-3.5 w-3.5 shrink-0 ${activeOperation && ACTION_ICONS[activeOperation] ? "text-primary" : "text-[var(--workspace-text-muted)]"}`} /><span className="font-medium">Actions</span><ChevronDownIcon className="h-3 w-3 shrink-0" aria-hidden /></div></Tooltip>}>
-              <div className="flex flex-col" onClick={(e) => e.stopPropagation()}>
-                <button type="button" disabled={inputEmpty} className={`${menuItemClass} ${!OPERATION_ACTION_LABELS[activeOperation ?? ""] ? menuItemActiveClass : ""}`} onClick={() => { restorePreviousActionOutput(); setActionsMenuOpen(false); }}>
-                  {sharedMenuCheck(!OPERATION_ACTION_LABELS[activeOperation ?? ""])}
-                  <span className="min-w-0 flex-1 truncate text-left">None</span>
-                </button>
-                <div className="my-1 h-px bg-[var(--workspace-border)]" role="separator" aria-hidden />
-                {menuSectionLabel("Format")}
-                {(["beautify", "minify"] as const).map((action) => {
-                  const [label] = OPERATION_ACTIONS.find(([, a]) => a === action) ?? [action, action];
-                  return (
-                    <button key={action} type="button" disabled={showBusy || inputEmpty} className={`${menuItemClass} ${activeOperation === action ? menuItemActiveClass : ""}`} onClick={() => { runOperation(action); setActionsMenuOpen(false); }}>
-                      {sharedMenuCheck(activeOperation === action)}
-                      <span className="min-w-0 flex-1 truncate text-left">{label}</span>
-                      <kbd className="rounded border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-1 py-px font-mono text-[9px] text-[var(--workspace-text-muted)]">{action === "beautify" ? "⌘⇧B" : "⌘⇧M"}</kbd>
-                    </button>
-                  );
-                })}
-                <div className="my-1 h-px bg-[var(--workspace-border)]" role="separator" aria-hidden />
-                {menuSectionLabel("Structure")}
-                {(["flatten", "unflatten"] as const).map((action) => {
-                  const [label] = OPERATION_ACTIONS.find(([, a]) => a === action) ?? [action, action];
-                  return (
-                    <button key={action} type="button" disabled={showBusy || inputEmpty} className={`${menuItemClass} ${activeOperation === action ? menuItemActiveClass : ""}`} onClick={() => { runOperation(action); setActionsMenuOpen(false); }}>
-                      {sharedMenuCheck(activeOperation === action)}
-                      <span className="min-w-0 flex-1 truncate text-left">{label}</span>
-                    </button>
-                  );
-                })}
-                <div className="my-1 h-px bg-[var(--workspace-border)]" role="separator" aria-hidden />
-                {menuSectionLabel("Inspect / Spec")}
-                {(["schema", "openapi", "validate"] as const).map((action) => {
-                  const [label] = OPERATION_ACTIONS.find(([, a]) => a === action) ?? [action, action];
-                  return (
-                    <button key={action} type="button" disabled={showBusy || inputEmpty} className={`${menuItemClass} ${activeOperation === action ? menuItemActiveClass : ""}`} onClick={() => { runOperation(action); setActionsMenuOpen(false); }}>
-                      {sharedMenuCheck(activeOperation === action)}
-                      <span className="min-w-0 flex-1 truncate text-left">{label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </Dropdown>
-            <Dropdown open={typesMenuOpen} onOpenChange={setTypesMenuOpen} side="bottom" align="start" rootClassName="shrink-0" contentClassName={`w-max min-w-[8rem] max-h-[60vh] overflow-y-auto`} trigger={<Tooltip content={activeOperation === "generateTypes" ? `Types: ${TYPE_LANGUAGES.find((t) => t.id === typeLanguage)?.label ?? ""}` : "Generate Types"}><div className={`${selectBtnClass} ${typesMenuOpen || activeOperation === "generateTypes" ? selectBtnOpenClass : ""}`}>{activeOperation === "generateTypes" ? <TypeBadge id={typeLanguage} /> : <CodeBracketIcon className="h-3.5 w-3.5 shrink-0 text-[var(--workspace-text-muted)]" />}<span className="font-medium">Types</span><ChevronDownIcon className="h-3 w-3 shrink-0" aria-hidden /></div></Tooltip>}>
-              <div className="flex flex-col" onClick={(e) => e.stopPropagation()}>
-                <button type="button" disabled={inputEmpty} data-selected={activeOperation !== "generateTypes" || undefined} className={`${menuItemClass} ${activeOperation === "generateTypes" ? "" : "!bg-primary/12 !text-primary"}`} onClick={() => { setFocusedPane("output"); runOperation("beautify"); setTypesMenuOpen(false); }}>
-                  {sharedMenuCheck(activeOperation !== "generateTypes")}
-                  <span className="min-w-0 flex-1 truncate text-left">None</span>
-                </button>
-                <div className="my-1 h-px bg-[var(--workspace-border)]" role="separator" aria-hidden />
-                {(
-                  [
-                    { label: "TypeScript", ids: ["typescript", "zod"] as const },
-                    { label: "Python", ids: ["python", "pydantic"] as const },
-                    { label: "Compiled", ids: ["java", "csharp", "go", "kotlin", "swift", "rust"] as const },
-                    { label: "Schemas", ids: ["protobuf", "sql"] as const },
-                  ] as const
-                ).map((group, gi) => (
-                  <React.Fragment key={group.label}>
-                    {gi > 0 && <div className="my-1 h-px bg-[var(--workspace-border)]" role="separator" aria-hidden />}
-                    {menuSectionLabel(group.label)}
-                    {TYPE_LANGUAGES.filter((t) => (group.ids as readonly string[]).includes(t.id)).map((item) => (
-                      <button key={item.id} type="button" disabled={inputEmpty} data-selected={(activeOperation === "generateTypes" && typeLanguage === item.id) || undefined} className={`${menuItemClass} ${activeOperation === "generateTypes" && typeLanguage === item.id ? menuItemActiveClass : ""}`} onClick={() => { trackEvent("generate_types", { language: item.id, source: "types_menu" }); setFocusedPane("output"); if (!isDiffMode && !isUtilsMode && rightView !== "raw") setRightView("raw"); setActiveOperation("generateTypes"); executeOperation("generateTypes", { typeLanguage: item.id }); setTypesMenuOpen(false); }}>
-                        {sharedMenuCheck(activeOperation === "generateTypes" && typeLanguage === item.id)}
-                        <span className="min-w-0 flex-1 truncate text-left">{item.label}</span>
-                      </button>
-                    ))}
-                  </React.Fragment>
-                ))}
-              </div>
-            </Dropdown>
-            {resolvedInputFormat === "curl" && !isDiffMode && !isUtilsMode && (
-              <Dropdown
-                open={curlCodeOpen}
-                onOpenChange={setCurlCodeOpen}
-                side="bottom"
-                align="start"
-                rootClassName="shrink-0"
-                contentClassName="w-max min-w-[10rem]"
-                trigger={
-                  <Tooltip content={curlTarget ? `Output shows ${getCurlTarget(curlTarget)?.label ?? ""} - pick another to regenerate` : "Generate code from this cURL command"}>
-                  <div className={`${selectBtnClass} ${curlCodeOpen ? selectBtnOpenClass : ""}`}>
-                    {curlTarget ? <TypeBadge id={curlTarget} /> : <CodeBracketIcon className="h-3.5 w-3.5" />}
-                    <span className="font-medium">Code</span>
-                    <ChevronDownIcon className="h-3 w-3 shrink-0" aria-hidden />
-                  </div>
-                  </Tooltip>
-                }
-              >
-                <div className="flex flex-col" onClick={(e) => e.stopPropagation()}>
-                  <button
-                    type="button"
-                    className={`${sharedMenuItemClass} ${!curlTarget ? sharedMenuItemActiveClass : ""}`}
-                    onClick={() => {
-                      restorePreviousActionOutput();
-                      setCurlTarget(null);
-                      setCurlCodeOpen(false);
-                    }}
-                  >
-                    {sharedMenuCheck(!curlTarget)}
-                    <span className="min-w-0 flex-1 text-left">None</span>
-                  </button>
-                  <div className="my-1 h-px bg-[var(--workspace-border)]" role="separator" aria-hidden />
-                  {CURL_TARGETS.map((target) => (
-                    <button
-                      key={target.id}
-                      type="button"
-                      className={`${sharedMenuItemClass} ${curlTarget === target.id ? sharedMenuItemActiveClass : ""}`}
-                      onClick={() => {
-                        try {
-                          prevActionStateRef.current = { output, parsedOutput, outputLanguage, outputExt };
-                          const parsed = parseCurl(input);
-                          const code = generateCurlCode(parsed, target.id as CurlTargetId);
-                          setCurlTarget(target.id as CurlTargetId);
-                          setFocusedPane("output");
-                          setOutput(code);
-                          setOutputLanguage(target.id === "python" ? "python" : target.id === "go" ? "go" : "javascript");
-                          setOutputExt(target.ext);
-                          setActiveOperation(null);
-                          if (!isDesktopLayout) setMobileShowOutput(true);
-                        } catch {
-                          toast({ message: "Could not parse this cURL command", type: "error" });
-                        }
-                        setCurlCodeOpen(false);
-                      }}
-                    >
-                      {sharedMenuCheck(curlTarget === target.id)}
-                      <span className="min-w-0 flex-1 text-left">{target.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </Dropdown>
-            )}
-            </span>)}
-            </>)}
-
-          {isDiffMode && (
-            <>
-              <div className="mx-1 h-5 w-px shrink-0 bg-[var(--workspace-border)]" aria-hidden />
-              <div className="flex h-7 shrink-0 overflow-hidden rounded-md bg-muted">
-                <Tooltip content="Document text/JSON diff">
-                <button
-                  type="button"
-                  className={`relative h-7 cursor-pointer px-3 text-xs font-semibold transition-colors duration-150 ${diffKind === "document" ? "text-primary" : "text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)] hover:text-[var(--workspace-text)]"}`}
-                  onClick={() => setDiffKind("document")}
-                >
-                  {diffKind === "document" && (
-                    <motion.span
-                      layoutId="diff-kind-pill"
-                      className="absolute inset-0 bg-primary/15"
-                      transition={{ type: "spring", stiffness: 420, damping: 34 }}
-                    />
-                  )}
-                  <span className="relative z-[1]">Document</span>
-                </button>
-                </Tooltip>
-                <Tooltip content="List / set compare">
-                <button
-                  type="button"
-                  className={`relative h-7 cursor-pointer border-l border-[var(--workspace-border)] px-3 text-xs font-semibold transition-colors duration-150 ${diffKind === "list" ? "text-primary" : "text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)] hover:text-[var(--workspace-text)]"}`}
-                  onClick={() => setDiffKind("list")}
-                >
-                  {diffKind === "list" && (
-                    <motion.span
-                      layoutId="diff-kind-pill"
-                      className="absolute inset-0 bg-primary/15"
-                      transition={{ type: "spring", stiffness: 420, damping: 34 }}
-                    />
-                  )}
-                  <span className="relative z-[1]">Lists</span>
-                </button>
-                </Tooltip>
-                <Tooltip content="Single list: dedupe, count, sort">
-                <button
-                  type="button"
-                  className={`relative h-7 cursor-pointer border-l border-[var(--workspace-border)] px-3 text-xs font-semibold transition-colors duration-150 ${diffKind === "single" ? "text-primary" : "text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)] hover:text-[var(--workspace-text)]"}`}
-                  onClick={() => setDiffKind("single")}
-                >
-                  {diffKind === "single" && (
-                    <motion.span
-                      layoutId="diff-kind-pill"
-                      className="absolute inset-0 bg-primary/15"
-                      transition={{ type: "spring", stiffness: 420, damping: 34 }}
-                    />
-                  )}
-                  <span className="relative z-[1]">Single</span>
-                </button>
-                </Tooltip>
-              </div>
-
-              {diffKind !== "document" && (
-                <div
-                  ref={setListToolbarHost}
-                  className="flex min-h-7 min-w-0 flex-1 flex-nowrap items-center gap-1 overflow-hidden"
-                />
-              )}
-              {diffKind === "document" && (
-                <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-0.5 overflow-hidden">
-                  <div className="flex h-7 shrink-0 overflow-hidden rounded-md bg-muted">
-                    <Tooltip content="Previous difference" className="shrink-0">
-                    <button type="button" aria-label="Previous change" className="flex h-7 w-7 cursor-pointer items-center justify-center text-[var(--workspace-text-muted)] transition-colors hover:bg-primary/10 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40" disabled={!diffNav.total} onClick={() => diffEditorRef.current?.prevChange()}>
-                      <ChevronUpIcon className="h-3.5 w-3.5" />
-                    </button>
-                    </Tooltip>
-                    <Tooltip content="Current / total hunks" className="shrink-0">
-                    <span className="flex h-7 min-w-[2.75rem] items-center justify-center border-x border-[var(--workspace-border)]/60 px-1 text-center text-[11px] font-medium tabular-nums text-[var(--workspace-text)]">
-                      {diffNav.total ? `${diffNav.current}/${diffNav.total}` : "0"}
-                    </span>
-                    </Tooltip>
-                    <Tooltip content="Next difference" className="shrink-0">
-                    <button type="button" aria-label="Next change" className="flex h-7 w-7 cursor-pointer items-center justify-center text-[var(--workspace-text-muted)] transition-colors hover:bg-primary/10 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40" disabled={!diffNav.total} onClick={() => diffEditorRef.current?.nextChange()}>
-                      <ChevronDownIcon className="h-3.5 w-3.5" />
-                    </button>
-                    </Tooltip>
-                  </div>
-                  {diffLineStats && diffLineStats.hunks > 0 ? (
-                    <div className="flex shrink-0 items-center gap-1 text-[10px] font-medium tabular-nums">
-                      <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-emerald-600 dark:text-emerald-400">+{diffLineStats.linesAdded}</span>
-                      <span className="rounded bg-red-500/15 px-1.5 py-0.5 text-red-600 dark:text-red-400">−{diffLineStats.linesRemoved}</span>
-                      <span className="hidden sm:inline rounded bg-[var(--workspace-background)] px-1.5 py-0.5 text-[var(--workspace-text-muted)]">{diffLineStats.hunks} hunk{diffLineStats.hunks === 1 ? "" : "s"}</span>
-                    </div>
-                  ) : (diffLeftInput.trim() || diffRightInput.trim()) ? (
-                    <span className="shrink-0 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">Identical</span>
-                  ) : null}
-                  <Tooltip content={diffSideBySide ? "Inline view" : "Side-by-side"} className="shrink-0">
-                  <button type="button" className={diffToolBtn} onClick={() => { trackEvent("diff_toggle", { setting: "layout", value: !diffSideBySide }); setDiffSideBySide((v) => !v); }}>
-                    {diffSideBySide ? "Inline" : "Side-by-side"}
-                  </button>
-                  </Tooltip>
-                  <Tooltip content="Ignore trim whitespace" className="shrink-0">
-                  <button type="button" className={`${diffToolBtn} ${diffIgnoreWhitespace ? "!bg-primary/12 !text-primary" : ""}`} onClick={() => { trackEvent("diff_toggle", { setting: "ignore_ws", value: !diffIgnoreWhitespace }); setDiffIgnoreWhitespace((v) => !v); }}>
-                    {diffIgnoreWhitespace ? "Ignore WS ✓" : "Ignore WS"}
-                  </button>
-                  </Tooltip>
-                  <Tooltip content="Ignore array order in structural diff (arrays matched as sets)" className="shrink-0">
-                  <button
-                    type="button"
-                    className={`${diffToolBtn} ${diffIgnoreOrder ? "!bg-primary/12 !text-primary" : ""}`}
-                    onClick={() => setDiffIgnoreOrder((v) => !v)}
-                  >
-                    {diffIgnoreOrder ? "Order-free ✓" : "Order-free"}
-                  </button>
-                  </Tooltip>
-                  <Tooltip content={canShowPathDiff ? "Structural path-level changes (JSON/XML/YAML/CSV)" : "Path diff needs parseable data on both sides"} className="shrink-0">
-                  <button
-                    type="button"
-                    disabled={!canShowPathDiff}
-                    className={`${diffToolBtn} ${diffShowPaths ? "!bg-primary/12 !text-primary" : ""}`}
-                    onClick={() => { trackEvent("diff_toggle", { setting: "paths", value: !diffShowPaths }); setDiffShowPaths((v) => !v); }}
-                  >
-                    <ListBulletIcon className="h-3.5 w-3.5 shrink-0" />
-                    <span className="hidden sm:inline">Paths</span>
-                    {canShowPathDiff && structuralDiff && structuralDiff.total > 0 && (
-                      <span className="tabular-nums opacity-80">{structuralDiff.total}</span>
-                    )}
-                  </button>
-                  </Tooltip>
-                  <Tooltip content="Beautify both sides" className="shrink-0">
-                  <button type="button" className={diffToolBtn} onClick={() => beautifyDiffSides("both")}>
-                    Beautify
-                  </button>
-                  </Tooltip>
-                </div>
-              )}
-            </>
-          )}
-
-          {isDiffMode ? (
-            <span className="w-2 shrink-0" aria-hidden />
-          ) : (
-            <span className="min-w-2 flex-1" />
-          )}
-
-          <OutputActionBar
-              canCopy={
-                Boolean(getActiveOutputText().trim()) ||
-                (!isDiffMode && !isUtilsMode && canDownload) ||
-                (isUtilsMode && utilTab === "instant")
-              }
-              canShare
-              canShareAll={showTabs && tabs.length > 1}
-              isGraphView={!isDiffMode && !isUtilsMode && isGraphView}
-              isMaximized={isOutputMaximized}
-              copyLabel={copyLabel}
-              copyTooltip={
-                isListCopyMode
-                  ? `Copy as: ${getFormatShortLabel(copyPref)}`
-                  : undefined
-              }
-              shareLabel={shareLabel}
-              actionBounce={actionBounce}
-              downloadMenuOpen={downloadMenuOpen && !isDiffMode}
-              onDownloadMenuOpenChange={setDownloadMenuOpen}
-              visibility={outputActionVisibility}
-              onUndo={() => {
-                if (isDiffMode) diffEditorRef.current?.undo();
-                else        if (isUtilsMode) moveUtilsHistory(-1);
-        else if (!isUtilsMode) moveHistory(-1);
-              }}
-              onRedo={() => {
-                if (isDiffMode) diffEditorRef.current?.redo();
-                else        if (isUtilsMode) moveUtilsHistory(1);
-        else if (!isUtilsMode) moveHistory(1);
-              }}
-              canUndo={!isDiffMode && !isUtilsMode ? canUndo : isUtilsMode ? canUtilsUndo : undefined}
-              canRedo={!isDiffMode && !isUtilsMode ? canRedo : isUtilsMode ? canUtilsRedo : undefined}
-              onShare={() => {
-                // Instant: defer to its registered handler (the workspace bar
-                // is the only chrome in embedded mode).
-                if (isUtilsMode && utilTab === "instant") {
-                  getInstantActions()?.onShare();
-                  return;
-                }
-                setShareAllTabs(false);
-                requestShare();
-              }}
-              onShareAll={() => {
-                setShareAllTabs(true);
-                requestShare();
-              }}
-              onShareInstant={
-                isUtilsMode && utilTab === "instant"
-                  ? () => getInstantActions()?.onShare()
-                  : undefined
-              }
-              shareInstantLabel="Share Instant only"
-              onCopy={() => {
-                if (isUtilsMode && utilTab === "instant") {
-                  getInstantActions()?.onCopy();
-                  return;
-                }
-                // List modes: use stored quote+layout preference.
-                if (isListCopyMode && copyItems.length > 0) {
-                  const pref = loadListCopyPref(copyMode);
-                  const text = pref === "as-seen"
-                    ? getActiveOutputText()
-                    : formatListCopyAsText(copyItems, pref.quote, pref.layout, pref.suffix);
-                  void navigator.clipboard.writeText(text).then(
-                    () => {
-                      setCopyState("done");
-                      resetCopySoon();
-                    },
-                    () => setCopyState("error"),
-                  );
-                  return;
-                }
-                const text = getActiveOutputText();
-                if (!text.trim() && !isDiffMode) {
-                  if (!isUtilsMode) void copyOutput();
-                  return;
-                }
-                if (!text.trim()) return;
-                void navigator.clipboard.writeText(text).then(
-                  () => {
-                    setCopyState("done");
-                    toast({ message: "Copied" });
-                    resetCopySoon();
-                  },
-                  () => setCopyState("error"),
-                );
-              }}
-              onDownload={() => {
-                if (isUtilsMode && utilTab === "instant") {
-                  getInstantActions()?.onDownload();
-                  return;
-                }
-                if (isUtilsMode) {
-                  const text = getActiveOutputText();
-                  if (!text) return;
-                  const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement("a");
-                  a.href = url;
-                  a.download = `formaty-${utilTab}.txt`;
-                  a.click();
-                  URL.revokeObjectURL(url);
-                  toast({ message: "Downloaded" });
-                  return;
-                }
-                if (isDiffMode) {
-                  if ((diffKind === "list" || diffKind === "single") && listCompareExport?.text) {
-                    const blob = new Blob([listCompareExport.text], { type: "text/plain;charset=utf-8" });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement("a");
-                    a.href = url;
-                    a.download = listCompareExport.filename;
-                    a.click();
-                    URL.revokeObjectURL(url);
-                    toast({ message: "Downloaded" });
-                    return;
-                  }
-                  downloadDiffReport();
-                  return;
-                }
-                downloadOutput();
-              }}
-              onToggleMaximize={
-                isDiffMode || isUtilsMode
-                  ? undefined
-                  : () => setIsOutputMaximized((v) => !v)
-              }
-              onCopyAs={copyOutputAs}
-              copyAsOptions={activeCopyAsOptions}
-              lastCopyAsId={copyAsMemory[copyMemoryKey]}
-              onLastCopyAsIdChange={(id) =>
-                setCopyAsMemory((m) => ({ ...m, [copyMemoryKey]: id }))
-              }
-              onGraphCopy={graphCopy}
-              graphCopyFormat={graphCopyFormat}
-              onGraphCopyFormatChange={setGraphCopyFormat}
-              onReset={() => {
-                if (isUtilsMode && utilTab === "instant") {
-                  getInstantActions()?.onReset();
-                  return;
-                }
-                handleWorkspaceReset();
-              }}
-              resetLabel={
-                isUtilsMode && utilTab === "instant"
-                  ? getInstantActions()?.resetLabel ?? "Reset"
-                  : isUtilsMode
-                    ? "Reset util"
-                    : isDiffMode
-                      ? "Reset both sides"
-                      : "Reset input & output"
-              }
-              formatPopover={
-                isListCopyMode
-                  ? (closeDropdown) => (
-                      <FormatPopoverContent
-                        items={copyItems}
-                        rawOutput={getActiveOutputText()}
-                        mode={copyMode}
-                        pref={copyPref}
-                        onPrefChange={handleCopyPrefChange}
-                        onFormatCopy={(text) => {
-                          void navigator.clipboard.writeText(text).then(
-                            () => {
-                              setCopyState("done");
-                              resetCopySoon();
-                            },
-                            () => setCopyState("error"),
-                          );
-                        }}
-                        encodeFormats={
-                          !isDiffMode && rightView !== "table"
-                            ? DEFAULT_COPY_AS_OPTIONS.map((o) => ({ id: o.id, label: o.label } as EncodeOption))
-                            : undefined
-                        }
-                        onEncodeCopy={!isDiffMode && rightView !== "table" ? copyOutputAs : undefined}
-                        onClose={closeDropdown}
-                      />
-                    )
-                  : undefined
-              }
-              forceHide={{
-                useAsInput: isDiffMode || isUtilsMode,
-                maximize: isDiffMode || isUtilsMode,
-                undo: false,
-                redo: false,
-              }}
-            />
+      {stackSwitch && (
+        <div className="flex shrink-0 items-center justify-center border-b border-[var(--workspace-border)] px-3 py-1">
+          <Segmented
+            aria-label="Pane"
+            value={mobileShowOutput ? "output" : "input"}
+            onChange={(v) => setMobileShowOutput(v === "output")}
+            options={[
+              { value: "input", label: "Input" },
+              { value: "output", label: "Output" },
+            ]}
+            className="w-full max-w-xs [&>button]:flex-1"
+          />
         </div>
-
+      )}
       <div
         ref={splitContainerRef}
-        className={`flex min-h-0 min-w-0 flex-1 overflow-hidden ${isDesktopLayout && !hideInputPanel ? "flex-row" : "flex-col"}`}
+        className={`flex min-h-0 min-w-0 flex-1 ${isDesktopLayout ? "overflow-hidden" : "overflow-y-auto"} ${isDesktopLayout && !hideInputPanel ? "flex-row" : "flex-col"}`}
       >
-        {!hideInputPanel && (!isDesktopLayout ? !mobileShowOutput : true) && (isDesktopLayout || output.trim() || !inputEmpty) && (
+        {inputCollapsed && (
+          <div className="flex w-9 shrink-0 flex-col items-center gap-2 border-r border-[var(--workspace-border)] py-1.5">
+            <IconButton label="Show input" tooltipSide="right" onClick={() => setIsOutputMaximized(false)}>
+              <ChevronRightIcon />
+            </IconButton>
+            <span className="text-[12px] font-medium text-[var(--workspace-text-muted)] [writing-mode:vertical-rl]">Input</span>
+          </div>
+        )}
+        {showInputPane && (
         <div
-          className={`flex min-h-0 overflow-hidden bg-[var(--workspace-background)] transition-opacity duration-200 flex-col ${
-            isDesktopLayout ? "shrink-0" : "min-h-0 flex-1"
-          } ${isDesktopLayout && focusedPane === "output" ? "opacity-70" : "opacity-100"}`}
-          style={isDesktopLayout ? { width: `${split}%`, minWidth: 160 } : undefined}
+          className={`flex min-w-0 flex-col overflow-hidden ${isDesktopLayout ? "shrink-0" : "min-h-[280px] flex-1"}`}
+          style={isDesktopLayout ? { width: `${split}%`, minWidth: 240 } : undefined}
         >
-          {!isDesktopLayout && !mobileShowOutput && (
-            <button
-              type="button"
-              className="flex w-full shrink-0 items-center justify-center gap-2 border-b border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-4 py-3 text-sm font-medium text-primary transition-colors hover:bg-[var(--workspace-background)] active:opacity-80"
-              onClick={() => setMobileShowOutput(true)}
-            >
-              View output
-              <ArrowRightCircleIcon className="h-4 w-4 shrink-0" />
-            </button>
-          )}
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-                    <input
+          <input
             id="import-json-file"
             type="file"
             accept=".json,.yaml,.yml,.xml,.toml,.csv,.txt,application/json,text/plain"
@@ -5634,169 +4343,74 @@ export function WorkspaceContent({
               }
             }}
           />
-
-          {droppedFile && !isDiffMode && (
-            <div className="flex shrink-0 items-center gap-2 border-b border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-3 py-1.5">
-              <span className="inline-flex h-4 shrink-0 items-center rounded-full bg-primary/10 px-1.5 text-[9px] font-semibold uppercase tracking-wide text-primary">
-                {droppedFile.format}
-              </span>
-              <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-[var(--workspace-text)]">
-                {droppedFile.name}
-              </span>
-              <span className="shrink-0 text-[10px] tabular-nums text-[var(--workspace-text-muted)]">
-                {formatSize(droppedFile.size)}
-              </span>
-              <button
-                type="button"
-                className={`${linkBtnClass} h-6 w-6 shrink-0 !p-0`}
-                title="Dismiss file info"
-                aria-label="Dismiss file info"
-                onClick={() => setDroppedFile(null)}
-              >
-                <XMarkIcon className="h-3.5 w-3.5" />
-              </button>
-            </div>
+          <InputHeader
+            formatLabel={getInputFormatLabel(resolvedInputFormat)}
+            hasInput={!inputEmpty}
+            onCollapse={isDesktopLayout ? () => setIsOutputMaximized(true) : undefined}
+            onSample={loadInputSample}
+            onClear={() => {
+              setInput("");
+              pushHistory("");
+              setOutput("");
+              setParsedOutput(null);
+              setError(null);
+              setValidationError(null);
+              setFocusedPane("input");
+            }}
+            override={inputFormatOverride}
+            onOverride={setInputFormatOverride}
+            wrap={lineWrap}
+            onWrap={setLineWrap}
+            onTidy={() => void tidyInput()}
+            canTidy={inputValid === true && resolvedInputFormat !== "curl"}
+          />
+          <div
+            data-tour="input-editor"
+            className="relative min-h-0 flex-1 cursor-text overflow-hidden"
+            onClick={() => setFocusedPane("input")}
+            onMouseEnter={() => setFocusedPane("input")}
+          >
+            <JsonEditor
+              value={input}
+              onChange={(next) => {
+                setInput(next);
+                pushHistory(next);
+                setFocusedPane("input");
+              }}
+              className="h-full"
+              language={resolvedInputFormat === "toml" || resolvedInputFormat === "csv" || resolvedInputFormat === "curl" ? "plaintext" : resolvedInputFormat}
+              monacoTheme={monacoTheme}
+              fontSize={editorFontSize}
+              wordWrap={lineWrap ? "on" : "off"}
+              onEditorMount={(api) => { inputEditorApiRef.current = api; }}
+              onCtrlEnter={parseOnly}
+              onCursorChange={(line, column) => { setCursorPosition({ line, column }); cursorPositionRef.current = { line, column }; }}
+              disableLargeMode={forceFullEditor}
+            />
+            {inputEmpty && (
+              <EmptyInput onChooseFile={() => document.getElementById("import-json-file")?.click()} onSample={loadInputSample} />
+            )}
+          </div>
+          {resolvedInputFormat === "curl" && !inputEmpty && (
+            <CurlSendStrip
+              // A click always sends again; only Ctrl+Enter may reuse the last response.
+              onSend={() => { curlCacheRef.current = null; parseOnly(); setFocusedPane("input"); }}
+              sending={curlFetching}
+              disabled={inputValid === false}
+              sent={input === lastExecutedCurlInput}
+            />
           )}
-
-          {splitInputOpen && isDesktopLayout ? (
-            <div
-              ref={splitContainerInputRef}
-              className="flex min-h-0 flex-1 overflow-hidden"
-              onMouseEnter={() => setFocusedPane("input")}
-            >
-              <div
-                className="relative min-h-0 overflow-hidden cursor-text shrink-0"
-                style={{ width: `${splitRatio}%` }}
-                onClick={() => setFocusedPane("input")}
-              >
-                <JsonEditor
-                  value={input}
-                  onChange={(next) => { setInput(next); pushHistory(next); setFocusedPane("input"); }}
-                  className="h-full"
-                  language={resolvedInputFormat === "toml" || resolvedInputFormat === "csv" || resolvedInputFormat === "curl" ? "plaintext" : resolvedInputFormat}
-                  monacoTheme={monacoTheme}
-                  fontSize={editorFontSize}
-                  wordWrap={lineWrap ? "on" : "off"}
-                  onEditorMount={(api) => { inputEditorApiRef.current = api; }}
-                  onCtrlEnter={parseOnly}
-                  onCursorChange={(line, column) => { setCursorPosition({ line, column }); cursorPositionRef.current = { line, column }; }}
-                  placeholder="Left input…"
-                  disableLargeMode={forceFullEditor}
-                />
-              </div>
-              <div
-                role="separator"
-                aria-orientation="vertical"
-                className="group relative flex shrink-0 cursor-col-resize justify-center"
-                onMouseDown={() => setIsSplitResizing(true)}
-              >
-                <div className="absolute inset-y-0 left-1/2 w-px -translate-x-px bg-[var(--workspace-border)] transition-all duration-200 group-hover:w-[2px] group-hover:bg-gradient-to-b group-hover:from-transparent group-hover:via-primary group-hover:to-transparent group-hover:opacity-100 group-hover:[box-shadow:0_0_8px_rgba(109,109,244,0.4)]" />
-              </div>
-              <div
-                className="relative min-h-0 flex-1 overflow-hidden cursor-text"
-                onClick={() => setFocusedPane("input")}
-              >
-                <JsonEditor
-                  value={splitInput2}
-                  onChange={setSplitInput2}
-                  className="h-full"
-                  language="json"
-                  monacoTheme={monacoTheme}
-                  fontSize={editorFontSize}
-                  wordWrap={lineWrap ? "on" : "off"}
-                  onEditorMount={(api) => { splitInput2ApiRef.current = api; }}
-                  placeholder="Right input…"
-                  disableLargeMode={forceFullEditor}
-                />
-              </div>
-            </div>
-          ) : (
-            <div
-              data-tour="input-editor"
-              className="relative min-h-0 flex-1 overflow-hidden cursor-text"
-              onClick={() => setFocusedPane("input")}
-              onMouseEnter={() => setFocusedPane("input")}
-            >
-              <JsonEditor
-                value={input}
-                onChange={(next) => {
-                  setInput(next);
-                  pushHistory(next);
-                  setFocusedPane("input");
-                }}
-                className="h-full"
-                language={resolvedInputFormat === "toml" || resolvedInputFormat === "csv" || resolvedInputFormat === "curl" ? "plaintext" : resolvedInputFormat}
-                monacoTheme={monacoTheme}
-                fontSize={editorFontSize}
-                wordWrap={lineWrap ? "on" : "off"}
-                onEditorMount={(api) => { inputEditorApiRef.current = api; }}
-                onCtrlEnter={parseOnly}
-                onCursorChange={(line, column) => { setCursorPosition({ line, column }); cursorPositionRef.current = { line, column }; }}
-                disableLargeMode={forceFullEditor}
-              />
-              {resolvedInputFormat === "curl" && input.trim() && input !== lastExecutedCurlInput && !curlFetching && (
-                <div className="pointer-events-none absolute inset-x-0 bottom-2 z-10 flex justify-center">
-                  <button
-                    type="button"
-                    className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-[var(--workspace-panel)]/95 px-3 py-1 text-[10px] font-medium text-primary shadow-lg backdrop-blur transition-colors hover:bg-primary/10"
-                    onClick={() => { parseOnly(); setFocusedPane("input"); }}
-                  >
-                    Press
-                    <kbd className="rounded border border-primary/30 bg-[var(--workspace-background)] px-1 py-px font-mono text-[9px]">
-                      {typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl"}
-                    </kbd>
-                    <kbd className="rounded border border-primary/30 bg-[var(--workspace-background)] px-1 py-px font-mono text-[9px]">Enter</kbd>
-                    to execute
-                  </button>
-                </div>
-              )}
-              {inputEmpty && (
-                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3 p-8 text-center select-none">
-                  <div className="rounded-xl border border-dashed border-[var(--workspace-border)] bg-[var(--workspace-panel)]/50 px-6 py-4 backdrop-blur-sm">
-                    <div className="mb-2 flex flex-wrap items-center justify-center gap-1.5">
-                      {["JSON", "XML", "YAML", "TOML", "CSV", "cURL"].map((fmt) => (
-                        <span
-                          key={fmt}
-                          className="rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-2 py-0.5 font-mono text-[11px] text-[var(--workspace-text-muted)]"
-                        >
-                          {fmt}
-                        </span>
-                      ))}
-                    </div>
-                    <p className="text-sm text-[var(--workspace-text-muted)]">
-                      Paste or drop your data{" "}
-                      <kbd className="rounded border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-1.5 py-0.5 font-mono text-[10px]">
-                        ⌘V
-                      </kbd>
-                    </p>
-                    <p className="mt-1.5 text-[11px] text-[var(--workspace-text-muted)]">
-                      Format · Inspect · Query · Convert · Compare · Generate code
-                    </p>
-                    <button
-                      type="button"
-                      className="pointer-events-auto mt-3 rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-all hover:bg-primary/20"
-                      onClick={() => {
-                        const sample = JSON.stringify(
-                          { id: 1, name: "Alice", roles: ["admin", "dev"], active: true, meta: { plan: "pro", expires: "2026-01-01" } },
-                          null,
-                          2,
-                        );
-                        setInput(sample);
-                        pushHistory(sample);
-                        setFocusedPane("output");
-                      }}
-                    >
-                      Load sample
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
+          {inputProblem && (
+            <InputErrorStrip
+              message={inputProblem.message}
+              line={inputProblem.line}
+              onGoToLine={(l) => inputEditorApiRef.current?.goToLine(l, 1)}
+              actions={inputProblem.actions.map((a) => ({ label: a.label, onClick: () => setInputFormatOverride(a.format) }))}
+            />
           )}
-        </div>
         </div>
         )}
-        {isDesktopLayout && !hideInputPanel && (isDesktopLayout || output.trim() || !inputEmpty) && (
+        {isDesktopLayout && showInputPane && (
           <div
             role="separator"
             aria-orientation="vertical"
@@ -5804,27 +4418,14 @@ export function WorkspaceContent({
             style={{ width: 9, marginLeft: -4, marginRight: -4, zIndex: 10 }}
             onMouseDown={() => setIsResizing(true)}
           >
-            <div className="pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-[var(--workspace-border)] transition-all duration-150 group-hover:w-[3px] group-hover:bg-primary/60 group-hover:shadow-[0_0_6px_rgba(109,109,244,0.35)] group-active:w-[3px] group-active:bg-primary group-active:shadow-[0_0_8px_rgba(109,109,244,0.5)]" />
+            <div className="pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-[var(--workspace-border)] transition-colors group-hover:bg-brand group-active:bg-brand" />
           </div>
         )}
-        <div
-          className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[var(--workspace-background)] ${!isDesktopLayout && !mobileShowOutput && !isDiffMode ? "hidden" : ""}`}
-          style={isDesktopLayout && !hideInputPanel && (output.trim() || !inputEmpty) ? { width: `${100 - split}%` } : undefined}
-        >
-          {!isDesktopLayout && mobileShowOutput && !inputEmpty && !isDiffMode && (
-            <button
-              type="button"
-              className="flex w-full shrink-0 items-center justify-center gap-2 border-b border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-4 py-3 text-sm font-medium text-primary transition-colors hover:bg-[var(--workspace-background)] active:opacity-80"
-              onClick={() => {
-                setMobileShowOutput(false);
-                setIsOutputMaximized(false);
-              }}
-            >
-              <ArrowLeftCircleIcon className="h-4 w-4 shrink-0" />
-              Back to input
-            </button>
-          )}
-          <div data-tour="output-pane" className="relative flex min-h-[200px] min-h-0 flex-1 flex-col overflow-hidden">
+        {!isDesktopLayout && showInputPane && showOutputPane && <div className="h-px shrink-0 bg-[var(--workspace-border)]" aria-hidden />}
+        {showOutputPane && (
+        <div className={`flex min-w-0 flex-1 flex-col overflow-hidden ${isDesktopLayout ? "" : "min-h-[320px]"}`}>
+          {!hideInputPanel && outputHeader}
+          <div data-tour="output-pane" className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
             <div
               key={
                 isUtilsMode
@@ -5833,11 +4434,12 @@ export function WorkspaceContent({
                     ? `diff-${diffKind}`
                     : `transform-${rightView}`
               }
-              className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+              className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden ${staleOutput ? "opacity-60" : ""}`}
             >
             {isUtilsMode ? (
               <UtilsPanel
-                linkBtnClass={linkBtnClass}
+                headerActions={actionRow}
+                linkBtnClass=""
                 panelClass={outputPanelClass}
                 isDark={isDark}
                 activeTab={utilTab}
@@ -5862,13 +4464,15 @@ export function WorkspaceContent({
                     right={diffRightInput}
                     onLeftChange={setDiffLeftInput}
                     onRightChange={setDiffRightInput}
-                    linkBtnClass={linkBtnClass}
-                    panelClass={outputPanelClass}
-                          isDark={isDark}
+                    isDark={isDark}
                     toolbarHost={listToolbarHost}
+                    split={split}
+                    onResizeStart={startResize}
                     onExportChange={setListCompareExport}
                     fontSize={editorFontSize}
                     options={listCompareOptions}
+                    onOptionsChange={setListCompareOptions}
+                    onCountsChange={reportListCounts}
                     initialCsvColumn={csvColumn}
                     onCsvColumnChange={setCsvColumn}
                     activeBucket={activeBucket}
@@ -5881,44 +4485,52 @@ export function WorkspaceContent({
                   <SingleListPanel
                     value={diffLeftInput}
                     onChange={setDiffLeftInput}
-                    linkBtnClass={linkBtnClass}
-                    panelClass={outputPanelClass}
                     isDark={isDark}
                     toolbarHost={listToolbarHost}
+                    split={split}
+                    onResizeStart={startResize}
                     onExportChange={setListCompareExport}
                     fontSize={editorFontSize}
                     options={listCompareOptions}
+                    onOptionsChange={setListCompareOptions}
+                    onCountChange={reportListCount}
                     listLabel={tabs.find((t) => t.id === activeTabId)?.leftLabel ?? tabs.find((t) => t.id === activeTabId)?.rightLabel}
                     onStartListRename={startListRename}
                   />
                 ) : (
-                  <div className="flex min-h-0 flex-1 overflow-hidden">
-                    <div className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden ${diffShowPaths ? "" : "w-full"}`}>
-                      {diffSideBySide && (
-                        <div className={`relative flex h-7 shrink-0 border-b text-[11px] font-medium ${outputPanelClass}`}>
-                          <div className="flex min-w-0 flex-1 items-center gap-1.5 border-r border-[var(--workspace-border)] px-2 text-[var(--workspace-text-muted)]">
-                            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-red-400/80" />
-                            <span className="truncate">Left</span>
-                          </div>
-                          {/* Swap button centered on the divider - mirrors List Compare */}
-                          <div className="flex w-6 shrink-0 items-center justify-center group/swap">
-                            <Tooltip content="Swap left and right">
-                            <button
-                              type="button"
-                              onClick={swapDiffSides}
-                              className={`${linkBtnClass} h-6 min-h-6 w-6 rounded-md opacity-0 transition-opacity duration-150 group-hover/swap:opacity-100`}
-                              aria-label="Swap left and right"
-                            >
-                              <ArrowsRightLeftIcon className="h-3.5 w-3.5" />
-                            </button>
-                            </Tooltip>
-                          </div>
-                          <div className="flex min-w-0 flex-1 items-center gap-1.5 px-2 text-[var(--workspace-text-muted)]">
-                            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400/80" />
-                            <span className="truncate">Right</span>
-                          </div>
-                        </div>
-                      )}
+                  <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                    <DocumentHeader
+                      host={listToolbarHost}
+                      onDownload={downloadDiffReport}
+                      leftName={tabs.find((t) => t.id === activeTabId)?.leftLabel ?? "Document A"}
+                      rightName={tabs.find((t) => t.id === activeTabId)?.rightLabel ?? "Document B"}
+                      onRename={startListRename}
+                      view={diffShowPaths ? "fields" : diffSideBySide ? "side" : "lines"}
+                      onView={(v) => {
+                        trackEvent("diff_toggle", { setting: "view", value: v });
+                        setDiffShowPaths(v === "fields");
+                        if (v !== "fields") setDiffSideBySide(v === "side");
+                      }}
+                      canFields={canShowPathDiff}
+                      stats={diffLineStats}
+                      structural={structuralDiff}
+                      hasContent={Boolean(diffLeftInput.trim() || diffRightInput.trim())}
+                      nav={diffNav}
+                      onPrev={() => diffEditorRef.current?.prevChange()}
+                      onNext={() => diffEditorRef.current?.nextChange()}
+                      onSample={loadSampleDocuments}
+                      onTidy={() => beautifyDiffSides("both", true)}
+                      canTidy={documentDiffLanguage === "json" && Boolean(diffLeftInput.trim() || diffRightInput.trim())}
+                      onClear={() => clearDiffSide("both")}
+                      onSwap={swapDiffSides}
+                      ignoreWhitespace={diffIgnoreWhitespace}
+                      onIgnoreWhitespace={setDiffIgnoreWhitespace}
+                      copyFormat={docCopyFormat}
+                      onCopyFormat={setDocCopyFormat}
+                      onCopy={(what) => copyDiffText(what)}
+                    />
+                    {diffShowPaths && <FieldTable summary={structuralDiff} />}
+                    <div className={diffShowPaths ? "hidden" : "flex min-h-0 flex-1 flex-col overflow-hidden"}>
                       <JsonDiffEditor
                         key={`diff-doc-${activeTabId}`}
                         ref={diffEditorRef}
@@ -5943,205 +4555,35 @@ export function WorkspaceContent({
                         disableLargeMode={forceFullEditor}
                       />
                     </div>
-                    {diffShowPaths && (
-                      <div className={`flex w-full max-w-[min(100%,20rem)] shrink-0 flex-col border-l sm:w-80 ${outputPanelClass}`}>
-                        <div className="flex shrink-0 items-center gap-1 border-b border-[var(--workspace-border)] px-2 py-1.5">
-                          <ListBulletIcon className="h-3.5 w-3.5 text-[var(--workspace-text-muted)]" />
-                          <span className="text-[11px] font-semibold text-[var(--workspace-text)]">Path changes</span>
-                          <span className="ml-auto text-[10px] tabular-nums text-[var(--workspace-text-muted)]">
-                            {structuralDiff ? structuralDiff.total : "-"}
-                          </span>
-                          <Tooltip content="Close path list">
-                          <SquareBtn
-                            className={`${linkBtnClass} h-6 min-h-6 w-6`}
-                            onClick={() => setDiffShowPaths(false)}
-                          >
-                            <XMarkIcon className="h-3.5 w-3.5" />
-                          </SquareBtn>
-                          </Tooltip>
-                        </div>
-                        <div className="flex shrink-0 gap-0.5 border-b border-[var(--workspace-border)] px-1.5 py-1">
-                          {([
-                            ["all", "All"],
-                            ["added", "+"],
-                            ["removed", "−"],
-                            ["changed", "~"],
-                          ] as const).map(([id, label]) => (
-                            <button
-                              key={id}
-                              type="button"
-                              className={`${linkBtnClass} h-6 min-h-6 flex-1 px-1 text-[10px] font-medium ${diffPathFilter === id ? "text-primary !bg-primary/10" : ""}`}
-                              onClick={() => setDiffPathFilter(id)}
-                            >
-                              {label}
-                            </button>
-                          ))}
-                        </div>
-                        <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
-                          {structuralDiff === null ? (
-                            <p className="px-2 py-3 text-[11px] leading-relaxed text-[var(--workspace-text-muted)]">
-                              Path list is available when both sides are valid JSON.
-                            </p>
-                          ) : filteredDiffRows.length === 0 ? (
-                            <p className="px-2 py-3 text-[11px] text-[var(--workspace-text-muted)]">
-                              {structuralDiff.total === 0 ? "No structural differences." : "No changes match this filter."}
-                            </p>
-                          ) : (
-                            <ul className="flex flex-col gap-1">
-                              {filteredDiffRows.map((row, i) => (
-                                <li
-                                  key={`${row.path}-${row.change}-${i}`}
-                                  className="rounded-lg border border-[var(--workspace-border)]/50 bg-[var(--workspace-background)]/50 px-2 py-1.5"
-                                >
-                                  <div className="flex items-start gap-1.5">
-                                    <span
-                                      className={`mt-0.5 shrink-0 rounded px-1 py-px text-[9px] font-bold uppercase tracking-wide ${
-                                        row.change === "added"
-                                          ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-                                          : row.change === "removed"
-                                            ? "bg-red-500/15 text-red-600 dark:text-red-400"
-                                            : "bg-amber-500/15 text-amber-700 dark:text-amber-400"
-                                      }`}
-                                    >
-                                      {row.change === "added" ? "+" : row.change === "removed" ? "−" : "~"}
-                                    </span>
-                                    <div className="min-w-0 flex-1">
-                                      <Tooltip content={row.path} className="block max-w-full">
-                                      <p className="truncate font-mono text-[10px] font-semibold text-[var(--workspace-text)]">
-                                        {row.path}
-                                      </p>
-                                      </Tooltip>
-                                    </div>
-                                  </div>
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                        </div>
-                      </div>
-                    )}
                   </div>
                 )}
-              </div>
-            ) : (error || validationError) ? (
-              <div className={`flex h-full min-h-[200px] flex-col items-start justify-start gap-2 p-4 overflow-y-auto ${outputPanelClass}`}>
-                <div className="flex w-full items-center gap-2 text-error font-medium">
-                  <XCircleIcon className="h-5 w-5 shrink-0" />
-                  Error
-                  <span className="flex-1" />
-                  <Tooltip content="Clear input and error">
-                  <button
-                    type="button"
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--workspace-border)] px-3 py-1.5 text-xs font-medium text-[var(--workspace-text)] hover:bg-primary/10 hover:text-primary"
-                    onClick={() => {
-                      setInput("");
-                      setOutput("");
-                      setParsedOutput(null);
-                      setError(null);
-                      setValidationError(null);
-                      setActiveOperation(null);
-                      setCopyState("idle");
-                      setFocusedPane("input");
-                      if (!isDesktopLayout) setMobileShowOutput(false);
-                    }}
-                  >
-                    <XMarkIcon className="h-3.5 w-3.5" />
-                    Clear
-                  </button>
-                  </Tooltip>
-                </div>
-                <pre className="w-full text-left text-sm text-[var(--workspace-text-muted)] whitespace-pre-wrap break-words font-mono">
-                  {error ?? validationError}
-                </pre>
-                <div className="flex flex-wrap items-center gap-2">
-                {(() => {
-                  const msg = error ?? validationError ?? "";
-                  const m = msg.match(/position\s+(\d+)/i) || msg.match(/line\s+(\d+)/i) || msg.match(/at position\s+(\d+)/i);
-                  if (!m) return null;
-                  const n = Number(m[1]);
-                  if (!Number.isFinite(n) || n < 1) return null;
-                  // Prefer line number if "line N", else approximate line from char position
-                  const isLine = /line\s+\d+/i.test(msg);
-                  let line = n;
-                  if (!isLine) {
-                    const slice = input.slice(0, n);
-                    line = slice.split("\n").length;
-                  }
-                  return (
-                    <button
-                      type="button"
-                      className="rounded-lg border border-[var(--workspace-border)] px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10"
-                      onClick={() => {
-                        setFocusedPane("input");
-                        if (!isDesktopLayout) setMobileShowOutput(false);
-                        inputEditorApiRef.current?.goToLine(line, 1);
-                      }}
-                    >
-                      Jump to line {line} in input
-                    </button>
-                  );
-                })()}
-                  {rightView === "table" ? (
-                    <button
-                      type="button"
-                      className="rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/15"
-                      onClick={() => {
-                        setInput(SAMPLE_JSON_TABLE);
-                        pushHistory(SAMPLE_JSON_TABLE);
-                        setInputFormatOverride(null);
-                        setError(null);
-                        setValidationError(null);
-                        parseOnly(SAMPLE_JSON_TABLE, "json");
-                        setRightView("table");
-                        setFocusedPane("output");
-                        if (!isDesktopLayout) setMobileShowOutput(true);
-                      }}
-                    >
-                      Load table sample
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      className="rounded-lg border border-[var(--workspace-border)] px-3 py-1.5 text-xs font-medium text-[var(--workspace-text-muted)] hover:bg-primary/10 hover:text-primary"
-                      onClick={() => setRightView("raw")}
-                    >
-                      Switch to Raw
-                    </button>
-                  )}
-                </div>
               </div>
             ) : rightView === "raw" ? (
               output.trim() || curlFetching ? (
                 <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
                   {curlMeta && resolvedInputFormat === "curl" && (
                     <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-2.5 py-1.5">
-                      <span
-                        className={`inline-flex h-5 items-center gap-1 rounded-full px-2 text-[10px] font-bold tabular-nums ${
-                          curlMeta.ok
-                            ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-                            : "bg-red-500/15 text-red-600 dark:text-red-400"
-                        }`}
-                      >
-                        HTTP {curlMeta.status}
-                      </span>
-                      <span className="text-[10px] tabular-nums text-[var(--workspace-text-muted)]">
+                      <StatusText tone={curlMeta.ok ? "ok" : "bad"} className="tabular-nums">
+                        HTTP {curlMeta.status}{curlMeta.statusText ? ` ${curlMeta.statusText}` : ""}
+                      </StatusText>
+                      <span className="text-[13px] tabular-nums text-[var(--workspace-text-muted)]">
                         {curlMeta.size} B
                       </span>
                       {curlMeta.timingMs >= 0 && (
-                        <span className="text-[10px] tabular-nums text-[var(--workspace-text-muted)]">
+                        <span className="text-[13px] tabular-nums text-[var(--workspace-text-muted)]">
                           {curlMeta.timingMs} ms
                         </span>
                       )}
                       {curlMeta.headers["content-type"] && (
-                        <span className="hidden truncate font-mono text-[10px] text-[var(--workspace-text-muted)] sm:inline">
+                        <span className="hidden truncate font-mono text-[13px] text-[var(--workspace-text-muted)] sm:inline">
                           {curlMeta.headers["content-type"]}
                         </span>
                       )}
-                      <span className="ml-auto text-[10px] text-[var(--workspace-text-muted)]">Response</span>
+                      <span className="ml-auto text-[13px] text-[var(--workspace-text-muted)]">Response</span>
                     </div>
                   )}
                   {curlFetching ? (
-                    <div className="flex h-full min-h-0 flex-1 flex-col gap-2 overflow-hidden bg-[var(--workspace-panel)] px-4 py-3" aria-label="Fetching response">
+                    <div className="flex h-full min-h-0 flex-1 flex-col gap-2 overflow-hidden bg-[var(--workspace-panel)] px-3 py-2" aria-label="Fetching response">
                       {[70, 45, 55, 80, 40, 65, 30].map((w, i) => (
                         <div
                           key={i}
@@ -6149,7 +4591,7 @@ export function WorkspaceContent({
                           style={{ width: `${w}%`, animationDelay: `${i * 90}ms` }}
                         />
                       ))}
-                      <p className="mt-1 text-[10px] font-medium text-[var(--workspace-text-muted)]">
+                      <p className="mt-1 text-[13px] font-medium text-[var(--workspace-text-muted)]">
                         Executing request…
                       </p>
                     </div>
@@ -6170,168 +4612,17 @@ export function WorkspaceContent({
                   )}
                 </div>
               ) : (
-                <div className="flex h-full min-h-[280px] flex-col items-center justify-center gap-6 p-6 text-center overflow-y-auto bg-[var(--workspace-panel)]">
-                  {/* Brand + tagline */}
-                  <motion.div
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.35 }}
-                    className="flex flex-col items-center gap-2"
-                  >
-                    <div className="flex gap-0.5 items-center" aria-label="Formaty">
-                      <Logo size={36} className="shrink-0" />
-                    </div>
-                    <p className="max-w-md text-sm text-[var(--workspace-text-muted)] leading-relaxed">
-                      Format, convert, compare, and developer utils - JSON, XML, YAML, and more. Everything runs locally in your browser.
-                    </p>
-                    <p className="text-[11px] text-[var(--workspace-text-muted)]">{quickTip ?? QUICK_TIPS[0]}</p>
-                  </motion.div>
-
-                  {/* Quick actions */}
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3, delay: 0.07 }}
-                    className="flex flex-wrap items-center justify-center gap-2"
-                  >
-                    <button type="button" className="inline-flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary transition-all hover:bg-primary/15 hover:shadow-sm" onClick={pasteFromClipboard}>
-                      <ClipboardDocumentIcon className="h-3.5 w-3.5" />
-                      Paste
-                    </button>
-                    <button type="button" className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-3 py-1.5 text-xs font-medium text-[var(--workspace-text-muted)] transition-all hover:border-primary/30 hover:text-primary hover:shadow-sm" onClick={() => document.getElementById("import-json-file")?.click()} {...uploadIcon.bind}>
-                      <AnimatedUploadIcon ref={uploadIcon.ref} className="h-3.5 w-3.5" />
-                      Import file
-                    </button>
-                    <button type="button" className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-3 py-1.5 text-xs font-medium text-[var(--workspace-text-muted)] transition-all hover:border-primary/30 hover:text-primary hover:shadow-sm" onClick={() => runOperation("diff")}>
-                      <ArrowsRightLeftIcon className="h-3.5 w-3.5" />
-                      Compare
-                    </button>
-                  </motion.div>
-
-                  {/* Samples */}
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3, delay: 0.14 }}
-                    className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-[var(--workspace-border)] bg-[var(--workspace-background)]/60 px-5 py-3"
-                  >
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]">Try a sample</span>
-                    <div className="flex flex-wrap items-center justify-center gap-1.5">
-                      {FORMAT_KINDS.map((fmt) => (
-                        <button
-                          key={fmt}
-                          type="button"
-                          className="rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-2.5 py-1 font-mono text-[11px] font-medium text-[var(--workspace-text-muted)] transition-all hover:border-primary/40 hover:text-primary hover:shadow-sm"
-                          onClick={() => {
-                            const sample = SAMPLES[fmt];
-                            setInput(sample);
-                            pushHistory(sample);
-                            setInputFormatOverride(null);
-                            setError(null);
-                            setValidationError(null);
-                            parseOnly(sample, fmt);
-                            setFocusedPane("output");
-                            if (!isDesktopLayout) setMobileShowOutput(true);
-                          }}
-                        >
-                          {FORMAT_LABELS[fmt]}
-                        </button>
-                      ))}
-                      <button
-                        type="button"
-                        className="rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-2.5 py-1 font-mono text-[11px] font-medium text-[var(--workspace-text-muted)] transition-all hover:border-primary/40 hover:text-primary hover:shadow-sm"
-                        onClick={() => {
-                          setInput(SAMPLE_JSON_TABLE);
-                          pushHistory(SAMPLE_JSON_TABLE);
-                          setInputFormatOverride(null);
-                          setError(null);
-                          setValidationError(null);
-                          parseOnly(SAMPLE_JSON_TABLE, "json");
-                          setRightView("table");
-                          setFocusedPane("output");
-                          if (!isDesktopLayout) setMobileShowOutput(true);
-                        }}
-                      >
-                        Table
-                      </button>
-                      <button
-                        type="button"
-                        className="rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-2.5 py-1 font-mono text-[11px] font-medium text-[var(--workspace-text-muted)] transition-all hover:border-primary/40 hover:text-primary hover:shadow-sm"
-                        onClick={() => {
-                          setInput(SAMPLE_CURL);
-                          pushHistory(SAMPLE_CURL);
-                          setInputFormatOverride("curl");
-                          setError(null);
-                          setValidationError(null);
-                          parseOnly(SAMPLE_CURL, "curl");
-                          setFocusedPane("output");
-                          if (!isDesktopLayout) setMobileShowOutput(true);
-                        }}
-                      >
-                        cURL
-                      </button>
-                    </div>
-                  </motion.div>
-
-                  {/* Example gallery */}
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3, delay: 0.21 }}
-                    className="flex flex-col items-center gap-2"
-                  >
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]">Example gallery</span>
-                    <div className="flex flex-wrap justify-center gap-1.5">
-                      {EXAMPLES.map((ex) => (
-                        <button
-                          key={ex.id}
-                          type="button"
-                          className="rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-2.5 py-1 text-[11px] font-medium text-[var(--workspace-text-muted)] transition-all hover:border-primary/40 hover:text-primary hover:shadow-sm"
-                          onClick={() => {
-                            setInput(ex.data);
-                            pushHistory(ex.data);
-                            setInputFormatOverride(null);
-                            setError(null);
-                            setValidationError(null);
-                            parseOnly(ex.data, "json");
-                            setConvertToFormat("json");
-                            setRightView("raw");
-                            setFocusedPane("output");
-                            if (!isDesktopLayout) setMobileShowOutput(true);
-                          }}
-                        >
-                          {ex.label}
-                        </button>
-                      ))}
-                    </div>
-                  </motion.div>
-
-                  {/* Capability strip */}
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ duration: 0.4, delay: 0.28 }}
-                    className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[10px] font-medium text-[var(--workspace-text-muted)]"
-                  >
-                    <span>JSONPath / JMESPath</span>
-                    <span className="text-[var(--workspace-border)]">·</span>
-                    <span>cURL → API</span>
-                    <span className="text-[var(--workspace-border)]">·</span>
-                    <span>Tree · Graph · Table</span>
-                    <span className="text-[var(--workspace-border)]">·</span>
-                    <span>Schema & Types</span>
-                    <span className="text-[var(--workspace-border)]">·</span>
-                    <span>Diff & Share</span>
-                  </motion.div>
+                <div className="flex h-full min-h-[120px] items-start p-3 text-[13px] text-[var(--workspace-text-muted)]">
+                  {inputInvalid ? "Fix the input to see the result." : "The result appears here."}
                 </div>
               )
             ) : null}
             {!isUtilsMode && !isDiffMode && rightView === "tree" ? (
               parsedOutput ? (
                 isHugeRight ? (
-                  <div className={`flex h-full min-h-[200px] flex-col items-center justify-center gap-3 border p-6 text-center text-sm text-[var(--workspace-text-muted)] ${outputPanelClass}`}>
+                  <div className={`flex h-full min-h-[200px] flex-col items-center justify-center gap-3 border p-6 text-center text-[13px] text-[var(--workspace-text-muted)] ${outputPanelClass}`}>
                     <p>Tree view is disabled for inputs over ~2MB to keep the UI responsive.</p>
-                    <button type="button" className={`${linkBtnClass} h-8 px-3 font-medium text-primary`} onClick={() => setRightView("raw")}>Switch to Raw</button>
+                    <Button variant="secondary" onClick={() => setRightView("raw")}>Switch to text</Button>
                   </div>
                 ) : (
                   <TreeView
@@ -6346,7 +4637,7 @@ export function WorkspaceContent({
                   />
                 )
               ) : (
-                <div className={`flex h-full min-h-[200px] items-center justify-center border text-sm text-[var(--workspace-text-muted)] ${outputPanelClass}`}>
+                <div className={`flex h-full min-h-[200px] items-center justify-center border text-[13px] text-[var(--workspace-text-muted)] ${outputPanelClass}`}>
                   Current output is not valid JSON.
                 </div>
               )
@@ -6354,9 +4645,9 @@ export function WorkspaceContent({
             {!isUtilsMode && !isDiffMode && rightView === "graph" ? (
               parsedOutput ? (
                 isLargeRight ? (
-                  <div className={`flex h-full min-h-[200px] flex-col items-center justify-center gap-3 border p-6 text-center text-sm text-[var(--workspace-text-muted)] ${outputPanelClass}`}>
+                  <div className={`flex h-full min-h-[200px] flex-col items-center justify-center gap-3 border p-6 text-center text-[13px] text-[var(--workspace-text-muted)] ${outputPanelClass}`}>
                     <p>Graph view is disabled for inputs over ~400KB. Use Raw, Query, or download instead.</p>
-                    <button type="button" className={`${linkBtnClass} h-8 px-3 font-medium text-primary`} onClick={() => setRightView("raw")}>Switch to Raw</button>
+                    <Button variant="secondary" onClick={() => setRightView("raw")}>Switch to text</Button>
                   </div>
                 ) : (
                   <GraphView
@@ -6368,7 +4659,7 @@ export function WorkspaceContent({
                   />
                 )
               ) : (
-                <div className={`flex h-full min-h-[200px] items-center justify-center border text-sm text-[var(--workspace-text-muted)] ${outputPanelClass}`}>
+                <div className={`flex h-full min-h-[200px] items-center justify-center border text-[13px] text-[var(--workspace-text-muted)] ${outputPanelClass}`}>
                   Current output is not valid JSON.
                 </div>
               )
@@ -6387,7 +4678,7 @@ export function WorkspaceContent({
                   onOpenInListCompare={openInListCompare}
                 />
               ) : (
-                <div className={`flex h-full min-h-[200px] items-center justify-center border text-sm text-[var(--workspace-text-muted)] ${outputPanelClass}`}>
+                <div className={`flex h-full min-h-[200px] items-center justify-center border text-[13px] text-[var(--workspace-text-muted)] ${outputPanelClass}`}>
                   Current output is not valid JSON.
                 </div>
               )
@@ -6414,9 +4705,9 @@ export function WorkspaceContent({
                 }
                 if (isLargeRight) {
                   return (
-                    <div className={`flex h-full min-h-[200px] flex-col items-center justify-center gap-3 border p-6 text-center text-sm text-[var(--workspace-text-muted)] ${outputPanelClass}`}>
+                    <div className={`flex h-full min-h-[200px] flex-col items-center justify-center gap-3 border p-6 text-center text-[13px] text-[var(--workspace-text-muted)] ${outputPanelClass}`}>
                       <p>Table view is disabled for inputs over ~400KB to keep the UI responsive.</p>
-                      <button type="button" className={`${linkBtnClass} h-8 px-3 font-medium text-primary`} onClick={() => setRightView("raw")}>Switch to Raw</button>
+                      <Button variant="secondary" onClick={() => setRightView("raw")}>Switch to text</Button>
                     </div>
                   );
                 }
@@ -6429,12 +4720,11 @@ export function WorkspaceContent({
                     byteSize={effectiveRightByteSize}
                   />
                 ) : (
-                  <div className={`flex h-full min-h-[200px] flex-col items-center justify-center gap-2 border p-6 text-center text-sm text-[var(--workspace-text-muted)] ${outputPanelClass}`}>
+                  <div className={`flex h-full min-h-[200px] flex-col items-center justify-center gap-2 border p-6 text-center text-[13px] text-[var(--workspace-text-muted)] ${outputPanelClass}`}>
                     <p>No tabular data yet. Paste a JSON <strong className="text-[var(--workspace-text)]">array of objects</strong>.</p>
                     <div className="flex flex-wrap justify-center gap-2">
-                      <button
-                        type="button"
-                        className={`${linkBtnClass} h-8 px-3 font-medium text-primary`}
+                      <Button
+                        variant="secondary"
                         onClick={() => {
                           setInput(SAMPLE_JSON_TABLE);
                           pushHistory(SAMPLE_JSON_TABLE);
@@ -6445,15 +4735,11 @@ export function WorkspaceContent({
                           setRightView("table");
                         }}
                       >
-                        Load table sample
-                      </button>
-                      <button
-                        type="button"
-                        className={`${linkBtnClass} h-8 px-3 font-medium`}
-                        onClick={() => setRightView("raw")}
-                      >
-                        Switch to Raw
-                      </button>
+                        Sample
+                      </Button>
+                      <Button variant="ghost" onClick={() => setRightView("raw")}>
+                        Switch to text
+                      </Button>
                     </div>
                   </div>
                 );
@@ -6462,142 +4748,54 @@ export function WorkspaceContent({
             </div>
           </div>
         </div>
+        )}
       </div>
       </div>
       </div>
 
       {embed && <div className="h-px shrink-0 bg-[var(--workspace-border)]" aria-hidden />}
 
+      {!embed && (
+        <StatusBar
+          details={statusDetails}
+          liveTransform={liveTransform}
+          onLiveTransform={setLiveTransform}
+          indent={formatOptions.indentation}
+          onCycleIndent={cycleIndent}
+          onShortcuts={() => window.dispatchEvent(new Event("formaty:open-shortcuts"))}
+        />
+      )}
+
       {isHugeInput && !embed ? (
-        <div className="flex shrink-0 items-center gap-2 border-b border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-[11px] text-amber-700 dark:text-amber-300">
+        <div className="flex shrink-0 items-center gap-2 border-b border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-[13px] text-amber-700 dark:text-amber-300">
           <span className="font-semibold">Huge input — read-only mode.</span>
           <span>Tree/Table/Graph show the first 200 rows. Editor is hardened (no syntax worker, max 5 000 lines visible).</span>
           {forceFullEditor ? (
-            <button
-              type="button"
-              className="ml-auto rounded-md border border-amber-500/40 px-2 py-0.5 text-[11px] font-medium hover:bg-amber-500/15"
-              onClick={() => setForceFullEditor(false)}
-            >
+            <Button variant="secondary" className="ml-auto" onClick={() => setForceFullEditor(false)}>
               Re-enable safety
-            </button>
+            </Button>
           ) : (
-            <button
-              type="button"
-              className="ml-auto rounded-md border border-amber-500/40 px-2 py-0.5 text-[11px] font-medium hover:bg-amber-500/15"
+            <Button
+              variant="secondary"
+              className="ml-auto"
               onClick={() => {
                 setForceFullEditor(true);
                 toast({ message: "Full editor on — page may lag at this size", type: "info" });
               }}
             >
               Edit anyway
-            </button>
+            </Button>
           )}
         </div>
       ) : null}
 
-      <StatusBar
-        valid={inputValid}
-        errorMessage={error ?? validationError}
-        lineCount={inputLineCount}
-        sizeFormatted={inputSizeFormatted}
-        liveTransform={liveTransform}
-        onLiveTransformToggle={() => setLiveTransform((v) => !v)}
-        cursorPosition={cursorPosition ? `Ln ${cursorPosition.line}, Col ${cursorPosition.column}` : undefined}
-        indentSize={formatOptions.indentation}
-        encoding="UTF-8"
-        hide={embed}
-        rightActions={
-          <span className="flex shrink-0 items-center gap-1 font-mono text-[11px] tracking-wide text-[var(--workspace-text-muted)]">
-            {isDiffMode ? (
-              <>
-                <span className="font-semibold text-[var(--workspace-text)]">Compare</span>
-                <span className="text-primary">·</span>
-                <span className="font-semibold text-[var(--workspace-text)]">{diffKind === "document" ? "Document" : diffKind === "single" ? "Single list" : "Lists"}</span>
-              </>
-            ) : isUtilsMode ? (
-              <>
-                <span className="font-semibold text-[var(--workspace-text)]">Utils</span>
-                <span className="text-primary">·</span>
-                <span className="font-semibold text-[var(--workspace-text)]">{UTIL_TABS.find((t) => t.id === utilTab)?.label ?? utilTab}</span>
-              </>
-            ) : (
-              <>
-                <span className="font-semibold text-[var(--workspace-text)]">{getInputFormatLabel(resolvedInputFormat)}</span>
-                <span className="text-primary">→</span>
-                <span className="font-semibold text-[var(--workspace-text)]">{activeOperation === "generateTypes" ? selectedTypeLanguageLabel : FORMAT_LABELS[convertToFormat]}</span>
-              </>
-            )}
-          </span>
-        }
-        sharedLink={
-          sharedLinkUrl ? (
-            <span className="flex shrink-0 items-center gap-1">
-              <span className="shrink-0 text-primary">Shared</span>
-              <Tooltip content={sharedLinkUrl} className="min-w-0 flex-1">
-              <a
-                href={sharedLinkUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block max-w-[8rem] truncate hover:underline sm:max-w-[12rem]"
-              >
-                {sharedLinkUrl.replace(/^https?:\/\/[^/]+/, "")}
-              </a>
-              </Tooltip>
-              <Tooltip content="Copy link">
-              <UiButton
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-5 w-5 shrink-0 rounded text-[var(--workspace-text-muted)] hover:text-[var(--workspace-text)] [&_svg]:!h-3.5 [&_svg]:!w-3.5"
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText(sharedLinkUrl);
-                    toast({ message: "Link copied", url: sharedLinkUrl, duration: 4000 });
-                  } catch {
-                    /* ignore */
-                  }
-                }}
-                {...copyLinkIcon.bind}
-              >
-                <AnimatedCopyIcon ref={copyLinkIcon.ref} className="h-3.5 w-3.5" />
-              </UiButton>
-              </Tooltip>
-              <Tooltip content="Disable sharing">
-              <UiButton
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-5 w-5 shrink-0 rounded text-[var(--workspace-text-muted)] hover:text-[var(--workspace-text)] [&_svg]:!h-3.5 [&_svg]:!w-3.5"
-                onClick={async () => {
-                  const idToDelete = sharedLinkId;
-                  setSharedLinkId(null);
-                  setSharedLinkUrl(null);
-                  isViewingSharedRef.current = false;
-                  if (idToDelete) await deletePlayground(idToDelete);
-                  toast({ message: "Link disabled" });
-                }}
-              >
-                <LinkSlashIcon className="h-3.5 w-3.5" />
-              </UiButton>
-              </Tooltip>
-            </span>
-          ) : undefined
-        }
-      />
       <Toaster />
 
         <CommandPalette
           open={commandPaletteOpen}
           onClose={() => setCommandPaletteOpen(false)}
           commands={commandPaletteCommands}
-          isDark={isDark}
-          recentIds={recentActions}
-          onExecute={(id) => {
-            setRecentActions((prev) => {
-              const next = [id, ...prev.filter((x) => x !== id)].slice(0, 3);
-              return next;
-            });
-          }}
+          context={isUtilsMode ? { label: "Utils", categories: ["Utils"], suggested: ["util-auto", "util-uuid", "util-jwt", "util-base64", "util-hash"] } : isDiffMode ? { label: "Compare", categories: ["Compare"], suggested: ["act-diff-next", "act-diff-swap", "dest-compare-document", "dest-compare-list"] } : { label: "Transform", categories: ["Transform", "Input", "Output"], suggested: ["dest-fmt-yaml", "dest-fmt-csv", "act-tidy", "act-copy", "act-share", "act-find"] }}
         />
 
         {/* Guided product tour - first-run onboarding + explicit replay. */}
@@ -6609,23 +4807,23 @@ export function WorkspaceContent({
 
         {/* History Panel */}
         {showHistoryPanel && (
-          <div className="fixed inset-0 z-[200] flex items-stretch justify-end" onClick={() => setShowHistoryPanel(false)}>
+          <div className="fixed inset-0 z-[200] flex items-stretch justify-end bg-black/30 backdrop-blur-[2px]" onClick={() => setShowHistoryPanel(false)}>
             <div
               role="dialog"
               aria-modal="true"
               aria-label="History"
-              className={`flex h-full w-full max-w-sm flex-col shadow-2xl shadow-black/20 border-l ${isDark ? "bg-[var(--workspace-panel)]/95 backdrop-blur-xl border-[var(--workspace-border)]/60" : "bg-white/95 backdrop-blur-xl border-black/[0.06]"}`}
+              className="flex h-full w-full max-w-sm flex-col border-l border-[var(--workspace-border)] bg-popover shadow-menu"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className={`flex shrink-0 items-center justify-between border-b px-4 py-3 ${isDark ? "border-white/[0.06]" : "border-black/[0.06]"}`}>
+              <div className="flex h-11 shrink-0 items-center justify-between border-b border-[var(--workspace-border)] px-3">
                 <div className="flex items-center gap-2">
-                  <ClockIcon className="h-4 w-4 text-primary" />
-                  <span className="text-sm font-semibold tracking-wide text-[var(--workspace-text)]">Input History</span>
-                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium tabular-nums ${isDark ? "bg-white/[0.06] text-white/40" : "bg-black/[0.04] text-black/40"}`}>{undoIndex + 1}/{undoStack.length}</span>
+                  <ClockIcon className="size-4 text-[var(--workspace-text-muted)]" />
+                  <span className="text-[14px] font-semibold text-[var(--workspace-text)]">Input history</span>
+                  <span className="text-[12px] tabular-nums text-[var(--workspace-text-muted)]">{undoIndex + 1}/{undoStack.length}</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <button type="button" className={`${linkBtnClass} h-7 min-h-7 text-[11px] font-medium`} onClick={exportHistory}>Export</button>
-                  <SquareBtn aria-label="Close history" className={`${linkBtnClass} h-7 min-h-7 w-7 [&_svg]:!size-4`} onClick={() => setShowHistoryPanel(false)}><XMarkIcon className="h-4 w-4" /></SquareBtn>
+                  <Button variant="ghost" icon={<ArrowDownTrayIcon />} onClick={exportHistory}>Download</Button>
+                  <IconButton label="Close history" onClick={() => setShowHistoryPanel(false)}><XMarkIcon /></IconButton>
                 </div>
               </div>
               <div className="flex-1 overflow-y-auto">
@@ -6636,7 +4834,7 @@ export function WorkspaceContent({
                     <button
                       key={idx}
                       type="button"
-                      className={`flex w-full flex-col items-start gap-1 border-b px-4 py-3 text-left transition-all duration-100 ${isDark ? "border-white/[0.04]" : "border-black/[0.04]"} ${isCurrent ? "bg-primary/10" : isDark ? "hover:bg-white/[0.03]" : "hover:bg-black/[0.02]"}`}
+                      className={`relative flex w-full flex-col items-start gap-1 border-b border-[var(--workspace-border)] px-3 py-2.5 text-left transition-colors ${isCurrent ? "bg-control" : "hover:bg-control"}`}
                       onClick={() => {
                         const delta = idx - undoIndex;
                         if (delta !== 0) moveHistory(delta as -1 | 1);
@@ -6644,13 +4842,13 @@ export function WorkspaceContent({
                       }}
                     >
                       <div className="flex w-full items-center gap-2">
-                        {isCurrent && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />}
-                        <span className={`text-[11px] font-medium ${isCurrent ? "text-primary" : "text-[var(--workspace-text-muted)]"}`}>
-                          {isCurrent ? "Current" : `History ${idx + 1}`}
+                        {isCurrent && <span aria-hidden className="absolute inset-y-2 left-0 w-0.5 rounded-full bg-action" />}
+                        <span className={`text-[13px] font-medium ${isCurrent ? "text-[var(--workspace-text)]" : "text-[var(--workspace-text-muted)]"}`}>
+                          {isCurrent ? "Current" : `Version ${idx + 1}`}
                         </span>
-                        <span className={`ml-auto text-[10px] ${isDark ? "text-white/30" : "text-black/30"}`}>{getSizeFormatted(content)}</span>
+                        <span className="ml-auto text-[12px] tabular-nums text-[var(--workspace-text-muted)]">{getSizeFormatted(content)}</span>
                       </div>
-                      <span className="line-clamp-2 font-mono text-[11px] text-[var(--workspace-text-muted)]">
+                      <span className="line-clamp-2 font-mono text-[12px] leading-[1.5] text-[var(--workspace-text-muted)]">
                         {content.slice(0, 120) || "(empty)"}
                       </span>
                     </button>
@@ -6670,7 +4868,7 @@ export function WorkspaceContent({
           <DialogContent className="max-w-3xl">
             <DialogHeader>
               <DialogTitle className="text-sm">Validate against a schema</DialogTitle>
-              <DialogDescription className="text-xs leading-relaxed">
+              <DialogDescription className="text-[13px] leading-relaxed">
                 Paste a{" "}
                 <strong className="text-[var(--workspace-text)]">JSON Schema</strong> or{" "}
                 <strong className="text-[var(--workspace-text)]">YAML schema</strong> to validate
@@ -6678,16 +4876,17 @@ export function WorkspaceContent({
               </DialogDescription>
             </DialogHeader>
             <Textarea
-              className="h-60 w-full font-mono text-xs"
+              className="h-60 w-full font-mono text-[13px]"
               value={modalValue}
               onChange={(e) => setModalValue(e.target.value)}
               placeholder="Paste a JSON Schema or YAML schema…"
             />
             <DialogFooter>
-              <UiButton variant="outline" onClick={() => setModalKind(null)}>
+              <Button variant="secondary" onClick={() => setModalKind(null)}>
                 Cancel
-              </UiButton>
-              <UiButton
+              </Button>
+              <Button
+                variant="primary"
                 disabled={!isModalInputValid}
                 onClick={() => {
                   if (!isModalInputValid) return;
@@ -6697,7 +4896,7 @@ export function WorkspaceContent({
                 }}
               >
                 Validate
-              </UiButton>
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -6706,9 +4905,9 @@ export function WorkspaceContent({
           <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle className="text-sm">Allow paste</DialogTitle>
-              <DialogDescription className="text-xs leading-relaxed">
+              <DialogDescription className="text-[13px] leading-relaxed">
                 Formaty reads your clipboard when you use{" "}
-                <kbd className="rounded border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-1 py-px font-mono text-[10px]">
+                <kbd className="rounded border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-1 py-px font-mono text-[13px]">
                   ⌘V
                 </kbd>{" "}
                 on an empty workspace. Your browser blocked that read - click{" "}
@@ -6717,74 +4916,29 @@ export function WorkspaceContent({
               </DialogDescription>
             </DialogHeader>
             {pastePromptError && (
-              <p className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-[11px] leading-snug text-red-500">
+              <p className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-[13px] leading-snug text-red-500">
                 Paste is still blocked. Use the editor&apos;s own Ctrl/⌘+V instead, or allow
                 clipboard access in this site&apos;s permission settings.
               </p>
             )}
             <DialogFooter>
-              <UiButton variant="outline" onClick={() => setShowPastePrompt(false)}>
+              <Button variant="secondary" onClick={() => setShowPastePrompt(false)}>
                 Cancel
-              </UiButton>
-              <UiButton onClick={() => void allowPasteRetry()}>Allow paste</UiButton>
+              </Button>
+              <Button variant="primary" onClick={() => void allowPasteRetry()}>Allow paste</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
-        <Dialog
-          open={shareConfirmOpen}
-          onOpenChange={(open) => {
-            if (!open) setShareConfirmOpen(false);
-          }}
-        >
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle className="text-sm">Share this workspace?</DialogTitle>
-              <DialogDescription className="text-xs leading-relaxed">
-                Everything else in Formaty runs{" "}
-                <strong className="text-[var(--workspace-text)]">locally in your browser</strong>.
-                Sharing uploads your current input (and related settings) so others can open a link.
-                Do not share secrets, tokens, or personal data.
-              </DialogDescription>
-            </DialogHeader>
-            {showTabs && tabs.length > 1 && (
-              <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-[var(--workspace-border)] bg-[var(--workspace-background)]/60 px-3 py-2.5">
-                <Checkbox
-                  className="mt-0.5"
-                  checked={shareAllTabs}
-                  onCheckedChange={(c) => setShareAllTabs(c === true)}
-                />
-                <span className="text-xs leading-relaxed text-[var(--workspace-text)]">
-                  <strong className="font-semibold">Share all {tabs.length} tabs</strong>
-                  <span className="mt-0.5 block text-[var(--workspace-text-muted)]">
-                    Include every tab’s input, output, Compare sides, and Utils state. Unchecked shares only the active tab.
-                  </span>
-                </span>
-              </label>
-            )}
-            <ul className="list-inside list-disc text-[11px] text-[var(--workspace-text-muted)]">
-              <li>Link can be disabled later from the status bar</li>
-              <li>If cloud share is unavailable, a URL hash fallback is used in the browser</li>
-            </ul>
-            <DialogFooter>
-              <UiButton variant="outline" onClick={() => setShareConfirmOpen(false)}>
-                Cancel
-              </UiButton>
-              <UiButton onClick={() => void shareWorkspace()}>Create link &amp; copy</UiButton>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
 
         {showFirstRunHint && (
-          <div className="fixed bottom-20 left-1/2 z-50 flex max-w-[min(92vw,28rem)] -translate-x-1/2 items-start gap-3 rounded-xl border border-[var(--workspace-border)] bg-[var(--workspace-panel)]/95 px-4 py-3 text-xs shadow-xl backdrop-blur-md">
+          <div className="fixed bottom-6 left-1/2 z-50 flex max-w-[min(92vw,28rem)] -translate-x-1/2 items-start gap-3 rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-panel)]/95 px-3 py-2 text-[13px] shadow-xl backdrop-blur-md">
             <div className="min-w-0 flex-1">
               <p className="font-semibold text-[var(--workspace-text)]">Quick tip</p>
               <p className="mt-0.5 text-[var(--workspace-text-muted)]">{quickTip ?? QUICK_TIPS[0]}</p>
             </div>
-            <button
-              type="button"
-              className="shrink-0 text-[var(--workspace-text-muted)] hover:text-[var(--workspace-text)]"
-              aria-label="Dismiss"
+            <IconButton
+              label="Dismiss"
               onClick={() => {
                 setShowFirstRunHint(false);
                 try {
@@ -6794,11 +4948,12 @@ export function WorkspaceContent({
                 }
               }}
             >
-              <XMarkIcon className="h-4 w-4" />
-            </button>
+              <XMarkIcon />
+            </IconButton>
           </div>
         )}
 
     </main>
+    </KitTooltipProvider>
   );
 }

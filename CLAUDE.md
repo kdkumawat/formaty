@@ -17,7 +17,7 @@ bun run build            # static export to out/ (Next.js `output: "export"`)
 bun run lint             # eslint (flat config, eslint.config.mjs)
 bun run test             # run all vitest tests once
 bun run test -- <path>   # run a single test file, e.g. bun run test -- src/lib/json/core.test.ts
-bun scripts/gen-og.mjs   # regenerate OG share cards (real browser screenshots of each route; requires `bun run build` first) + PNG favicons from SVG sources. Does NOT touch public/og.png (manually authored).
+node scripts/gen-og.mjs  # regenerate OG share cards (real browser screenshots of each route; requires `bun run build` first), public/og.png (the home page hero, same way) and PNG favicons from SVG sources. Runs under Node or Bun; on Windows use Node (Bun 1.3.14 times out launching Playwright's Chromium).
 ```
 
 Tests use **Vitest** (node environment), colocated as `src/**/*.test.ts`. The `@` alias is wired in `vitest.config.ts` (not just `tsconfig.json`).
@@ -72,12 +72,12 @@ Code layout under `src/lib/instant/`:
 - `timeline.ts` — `defaultWindow`, `maybePanWindow`, `hourMarkers` for the horizontal hour-strip board.
 - `sun.ts` — sunrise/sunset helpers (used by the TimelineBoard gradients).
 - `persist.ts` — localStorage prefs (`locations`, `primaryTimezone`, `timeFormat`, `showSeconds`, `spanHours`) + onboard flag.
-- `settingsBus.ts` — module-level pub/sub so the workspace settings panel (Utils tab → `InstantSettingsPanel`) can read and write Instant's `spanHours` / `timeFormat` / `showSeconds` without lifting state out of `InstantApp`. The standalone `/utils/instant` page renders the same controls inline (no duplicate gear) since it has no settings panel.
+- `settingsBus.ts` — module-level pub/sub so the workspace settings panel (`SettingsPanel.tsx`, its Instant group shown while the Instant tool is open) can read and write Instant's `spanHours` / `timeFormat` / `showSeconds` without lifting state out of `InstantApp`. The standalone `/utils/instant` page renders the same controls inline (no duplicate gear) since it has no settings panel.
 - `locations.ts` — builders for `Location` from a catalog row, custom input, or IANA id.
 - `types.ts` — `Location`, `ZonedProjection`, `TimeFormat`, `TimelineSpanHours`, `InstantMode`.
 - `copy.ts` — clipboard text emitters (`copyHuman` builds the multi-zone summary).
 
-Components: `src/components/instant/InstantApp.tsx` (compact header with primary-location chip + unified smart input + hidden `<input type="datetime-local">` fallback + Now/Live pill + global OutputActionBar for copy/share/reset; primary moment + day nav with "Today" highlight; −1d/−1h/+1h/+1d quick-nav; range mode; location chips; inline display-options row on standalone; TimelineBoard), `src/components/instant/InstantSettingsPanel.tsx` (settings slot for the workspace settings panel's Utils tab — days stepper, 12h/24h, show seconds), and `src/components/instant/LocationPicker.tsx` (modal that surfaces countries first, then curated cities + the full IANA zone list grouped by region; matches by country, city, country code, or raw IANA id). The per-row `<input type="time">` and bottom Unix converter in the timeline board were removed — edit the displayed moment through the unified header input. `TimelineBoard.tsx` now has a hover-revealed copy icon per row (copies that row's wall time) and renders the primary location first.
+Components: `src/components/instant/InstantApp.tsx` (compact header with primary-location chip + unified smart input + hidden `<input type="datetime-local">` fallback + Now/Live pill + global OutputActionBar for copy/share/reset; primary moment + day nav with "Today" highlight; −1d/−1h/+1h/+1d quick-nav; range mode; location chips; inline display-options row on standalone; TimelineBoard), `src/components/instant/LocationPicker.tsx` (modal that surfaces countries first, then curated cities + the full IANA zone list grouped by region; matches by country, city, country code, or raw IANA id). The per-row `<input type="time">` and bottom Unix converter in the timeline board were removed — edit the displayed moment through the unified header input. `TimelineBoard.tsx` now has a hover-revealed copy icon per row (copies that row's wall time) and renders the primary location first.
 
 ### Shareable state
 
@@ -87,7 +87,7 @@ Components: `src/components/instant/InstantApp.tsx` (compact header with primary
 
 No global store is used — `src/components/WorkspaceContent.tsx` (a large `"use client"` component) owns workspace state via React `useState`/`useRef`. Key components:
 
-- `src/components/workspace/` — the workspace shell (EditorPanel, Header, StatusBar, OutputActionBar, panels).
+- `src/components/workspace/` — the workspace shell (Header with typed tabs, NewTabMenu, PaneHeaders, OutputPicker, CompareBar, DocumentCompare, ShareDialog, SettingsPanel, StatusBar, EditorPanel, OutputActionBar).
 - `src/components/ui/` — shadcn/ui primitives (Radix-based; `components.json` + Tailwind v4).
 - `src/components/landing/` — marketing page sections (`index.ts` re-exports them).
 - `src/components/` root — workspace feature components (JsonEditor, JsonDiffEditor, ListComparePanel, SingleListPanel, QueryView, TreeView, GraphView, TableView, CommandPalette, GuidedTour, etc.).
@@ -98,3 +98,13 @@ No global store is used — `src/components/WorkspaceContent.tsx` (a large `"use
 - **`next.config.ts`**: `output: "export"`, `transpilePackages: ["jsoncrack-react"]`, and env pass-through (`FORMATY_API_URL`, `SITE_URL`, `NEXT_PUBLIC_GA_MEASUREMENT_ID`). Env vars are optional — see `.env.example`. `SITE_URL` defaults to `https://formaty.dev`.
 - **Lint** uses Next.js 16 flat config (`eslint.config.mjs`); several React Compiler `react-hooks/*` rules are intentionally disabled (hand-written memoization, ref access during render). Do not re-enable without reason.
 - React 19, Tailwind CSS v4, Next.js 16, Monaco Editor, jsoncrack-react (graph view).
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

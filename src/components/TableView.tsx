@@ -2,17 +2,29 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  ArrowsPointingOutIcon,
   BarsArrowDownIcon,
   BarsArrowUpIcon,
+  ChevronDownIcon,
   ChevronRightIcon,
+  MagnifyingGlassIcon,
   TableCellsIcon,
   ViewColumnsIcon,
-} from "@heroicons/react/24/outline";
-import { AnimatedMagnifierIcon, useIconAnimation } from "@/components/icons";
+} from "@heroicons/react/16/solid";
 import type { JsonValue } from "@/lib/json/core";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Tooltip } from "@/components/workspace/Tooltip";
+import {
+  Button,
+  IconButton,
+  Menu,
+  MenuCheckboxItem,
+  MenuContent,
+  MenuItem,
+  MenuSeparator,
+  MenuTrigger,
+  TextField,
+  Tooltip,
+  TruncatedText,
+} from "@/components/kit";
+import { WrapText } from "lucide-react";
 import { HUGE_INPUT_BYTES } from "@/lib/io/size";
 import { ReadOnlyTextViewer } from "@/components/editor/ReadOnlyTextViewer";
 import {
@@ -140,17 +152,6 @@ export function TableView({ data, className = "", fontSize = 13, byteSize }: Tab
     }
   }, [data, isHuge]);
 
-  if (isHuge) {
-    return (
-      <div className={`flex h-full min-h-0 flex-col overflow-hidden ${className ?? ""}`} style={{ fontSize }}>
-        <div className="shrink-0 border-b border-[var(--workspace-border)] px-3 py-1.5 text-[11px] text-[var(--workspace-text-muted)]">
-          Huge input — table view disabled. Showing the first 200 rows.
-        </div>
-        <ReadOnlyTextViewer value={hugePreview} language="json" className="flex-1" />
-      </div>
-    );
-  }
-
   const [stack, setStack] = useState<NavFrame[]>([{ label: "Root", data }]);
 
   // Reset navigation when the root data identity/content changes from parent
@@ -159,18 +160,15 @@ export function TableView({ data, className = "", fontSize = 13, byteSize }: Tab
   }, [data]);
 
   const current = stack[stack.length - 1]!;
-  const base = useMemo(() => toTableRows(current.data), [current.data]);
+  const base = useMemo(() => (isHuge ? null : toTableRows(current.data)), [current.data, isHuge]);
   const allHeaders = useMemo(() => base?.headers ?? [], [base]);
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [query, setQuery] = useState("");
-  const [colsOpen, setColsOpen] = useState(false);
   // Word-wrap cell content. Off (default) keeps each cell to one line with
   // ellipsis + tooltip; on wraps long values inside the cell.
   const [wordWrap, setWordWrap] = useState(false);
-  /** Search magnifier nudges when the box is hovered or focused. */
-  const searchIcon = useIconAnimation();
 
   // Reset filters when drilling
   useEffect(() => {
@@ -178,7 +176,6 @@ export function TableView({ data, className = "", fontSize = 13, byteSize }: Tab
     setSortKey(null);
     setSortDir("asc");
     setQuery("");
-    setColsOpen(false);
   }, [stack.length, current.data]);
 
   const visibleHeaders = useMemo(
@@ -223,25 +220,35 @@ export function TableView({ data, className = "", fontSize = 13, byteSize }: Tab
     setStack((prev) => prev.slice(0, depth + 1));
   };
 
+  if (isHuge) {
+    return (
+      <div className={`flex h-full min-h-0 flex-col overflow-hidden ${className ?? ""}`} style={{ fontSize }}>
+        <div className="shrink-0 border-b border-[var(--workspace-border)] px-3 py-1.5 text-[12px] text-[var(--workspace-text-muted)]">
+          Huge input: table view disabled. Showing the first 200 rows.
+        </div>
+        <ReadOnlyTextViewer value={hugePreview} language="json" className="flex-1" />
+      </div>
+    );
+  }
+
   if (!base) {
     return (
       <div
-        className={`flex h-full min-h-[200px] flex-col items-center justify-center gap-2 p-6 text-center text-sm text-[var(--workspace-text-muted)] ${className}`}
+        className={`flex h-full min-h-[200px] flex-col items-center justify-center gap-2 p-6 text-center text-[13px] text-[var(--workspace-text-muted)] ${className}`}
       >
         <p>
           Table view works best with an{" "}
           <strong className="text-[var(--workspace-text)]">array of objects</strong>.
         </p>
-        <p className="max-w-sm text-[11px] leading-relaxed">
+        <p className="max-w-sm text-[12px] leading-relaxed">
           Example:{" "}
-          <code className="rounded bg-[var(--workspace-background)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--workspace-text)]">
+          <code className="rounded bg-[var(--workspace-background)] px-1.5 py-0.5 font-mono text-[12px] text-[var(--workspace-text)]">
             {`[{"id":1,"name":"a"},{"id":2,"name":"b"}]`}
           </code>
           . Nested arrays and objects open as separate tables when you click them.
         </p>
-        <p className="text-[11px]">
-          Load the <strong className="text-[var(--workspace-text)]">Table</strong> sample from the
-          empty workspace, or switch to Raw / Query.
+        <p className="text-[12px]">
+          Load a table sample from the empty input, or switch to the text view.
         </p>
       </div>
     );
@@ -276,140 +283,83 @@ export function TableView({ data, className = "", fontSize = 13, byteSize }: Tab
     <div className={`flex h-full min-h-0 flex-col overflow-hidden ${className ?? ""}`} style={{ fontSize }}>
       {/* Breadcrumbs when nested */}
       {stack.length > 1 && (
-        <div className="flex shrink-0 flex-wrap items-center gap-0.5 border-b border-[var(--workspace-border)] px-2 py-1.5">
+        <div className="flex shrink-0 flex-wrap items-center gap-0.5 border-b border-[var(--workspace-border)] px-3 py-1">
           {stack.map((frame, i) => (
             <span key={`${frame.label}-${i}`} className="flex items-center gap-0.5">
-              {i > 0 && (
-                <ChevronRightIcon className="h-3 w-3 shrink-0 text-[var(--workspace-text-muted)]" />
+              {i > 0 && <ChevronRightIcon aria-hidden className="size-4 shrink-0 text-[var(--workspace-text-muted)]" />}
+              {i === stack.length - 1 ? (
+                <span className="max-w-[10rem] truncate px-2 text-[13px] font-semibold text-[var(--workspace-text)]">{frame.label}</span>
+              ) : (
+                <Button variant="ghost" className="max-w-[10rem]" onClick={() => goToDepth(i)}>
+                  <span className="truncate">{frame.label}</span>
+                </Button>
               )}
-              <Tooltip content={frame.label}>
-              <button
-                type="button"
-                disabled={i === stack.length - 1}
-                onClick={() => goToDepth(i)}
-                className={`max-w-[10rem] truncate rounded-md px-1.5 py-0.5 text-[11px] font-medium transition-colors ${
-                  i === stack.length - 1
-                    ? "text-primary"
-                    : "text-[var(--workspace-text-muted)] hover:bg-primary/10 hover:text-primary"
-                }`}
-              >
-                {frame.label}
-              </button>
-              </Tooltip>
             </span>
           ))}
         </div>
       )}
 
-      <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-[var(--workspace-border)] px-2 py-1.5">
-        <div className="relative flex min-w-[10rem] flex-1 items-center" {...searchIcon.bind}>
-          <AnimatedMagnifierIcon ref={searchIcon.ref} className="pointer-events-none absolute left-2 h-3.5 w-3.5 text-[var(--workspace-text-muted)]" />
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onFocus={searchIcon.bind.onFocus}
-            onBlur={searchIcon.bind.onBlur}
-            placeholder="Search rows…"
-            className="h-7 w-full rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-background)] py-1 pl-7 pr-2 text-[11px] text-[var(--workspace-text)] outline-none focus:ring-1 focus:ring-primary"
-          />
-        </div>
-        <span className="text-[10px] tabular-nums text-[var(--workspace-text-muted)]">
+      <div className="flex min-h-9 shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-[var(--workspace-border)] px-3 py-1">
+        <TextField
+          aria-label="Search rows"
+          icon={<MagnifyingGlassIcon />}
+          placeholder="Search rows"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onClear={() => setQuery("")}
+          wrapperClassName="min-w-[10rem] flex-1 sm:max-w-xs"
+        />
+        <span className="text-[12px] tabular-nums text-[var(--workspace-text-muted)]">
           {processed.length}
           {processed.length !== base.rows.length ? ` / ${base.rows.length}` : ""} rows
-          {visibleHeaders.length !== allHeaders.length
-            ? ` · ${visibleHeaders.length}/${allHeaders.length} cols`
-            : ""}
+          {visibleHeaders.length !== allHeaders.length ? ` · ${visibleHeaders.length}/${allHeaders.length} cols` : ""}
         </span>
-        <Tooltip content={wordWrap ? "Single-line cells with ellipsis" : "Wrap long cell text"}>
-          <button
-            type="button"
+        <span className="ml-auto flex items-center gap-1">
+          <IconButton
+            label={wordWrap ? "Single-line cells" : "Wrap long cell text"}
+            variant={wordWrap ? "selected" : "ghost"}
             aria-pressed={wordWrap}
             onClick={() => setWordWrap((v) => !v)}
-            className={`inline-flex h-7 cursor-pointer items-center gap-1 rounded-md border px-2 text-[11px] font-medium transition-colors ${
-              wordWrap
-                ? "border-primary/40 bg-primary/10 text-primary"
-                : "border-[var(--workspace-border)] text-[var(--workspace-text-muted)] hover:bg-primary/10 hover:text-primary"
-            }`}
           >
-            <ArrowsPointingOutIcon className="h-3.5 w-3.5" />
-            Wrap
-          </button>
-        </Tooltip>
-        <div className="relative">
-          <button
-            type="button"
-            className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-md border border-[var(--workspace-border)] px-2 text-[11px] font-medium text-[var(--workspace-text-muted)] hover:bg-primary/10 hover:text-primary"
-            onClick={() => setColsOpen((v) => !v)}
-          >
-            <ViewColumnsIcon className="h-3.5 w-3.5" />
-            Columns
-          </button>
-          {colsOpen && (
-            <>
-              <button
-                type="button"
-                className="fixed inset-0 z-40 cursor-default"
-                aria-label="Close"
-                onClick={() => setColsOpen(false)}
-              />
-              <div className="absolute right-0 top-full z-50 mt-1 max-h-56 w-48 overflow-y-auto rounded-xl border border-[var(--workspace-border)] bg-[var(--workspace-panel)] p-1.5 shadow-2xl shadow-black/30 ring-1 ring-black/5 dark:ring-white/10">
-                <button
-                  type="button"
-                  className="mb-1 w-full rounded-md px-2 py-1 text-left text-[10px] font-medium text-primary hover:bg-primary/10"
-                  onClick={() => setHidden(new Set())}
-                >
-                  Show all
-                </button>
-                {allHeaders.map((h) => (
-                  <label
-                    key={h}
-                    className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-[11px] text-[var(--workspace-text)] hover:bg-primary/5"
-                  >
-                    <Checkbox
-                      checked={!hidden.has(h)}
-                      onCheckedChange={() => toggleCol(h)}
-                    />
-                    <span className="truncate font-mono">{h}</span>
-                  </label>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
+            <WrapText />
+          </IconButton>
+          <Menu>
+            <MenuTrigger asChild>
+              <Button variant="ghost" icon={<ViewColumnsIcon />} iconRight={<ChevronDownIcon />}>
+                Columns
+              </Button>
+            </MenuTrigger>
+            <MenuContent align="end" className="max-h-72 w-56">
+              <MenuItem onSelect={() => setHidden(new Set())}>Show all</MenuItem>
+              <MenuSeparator />
+              {allHeaders.map((h) => (
+                <MenuCheckboxItem key={h} checked={!hidden.has(h)} onCheckedChange={() => toggleCol(h)} onSelect={(e) => e.preventDefault()}>
+                  <span className="font-mono">{h}</span>
+                </MenuCheckboxItem>
+              ))}
+            </MenuContent>
+          </Menu>
+        </span>
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto">
         {visibleHeaders.length === 0 ? (
-          <div className="p-6 text-center text-sm text-[var(--workspace-text-muted)]">No columns visible</div>
+          <div className="p-6 text-center text-[13px] text-[var(--workspace-text-muted)]">No columns visible</div>
         ) : (
           <Table className="w-full border-collapse text-[length:inherit]">
             <TableHeader>
               <TableRow className={cn(headerClass, "sticky top-0 z-10 hover:bg-[var(--workspace-background)]")}>
                 {visibleHeaders.map((h) => (
                   <TableHead key={h} className={`${cellClass} whitespace-nowrap p-0`}>
-                    <Tooltip content="Sort">
-                    <button
-                      type="button"
-                      className="inline-flex h-8 w-full cursor-pointer items-center gap-1 px-2 text-left font-medium hover:bg-primary/5"
+                    <Button
+                      variant="ghost"
+                      aria-label={`Sort by ${h}`}
+                      className="w-full justify-between rounded-none"
+                      iconRight={sortKey === h ? (sortDir === "asc" ? <BarsArrowUpIcon /> : <BarsArrowDownIcon />) : <ChevronDownIcon />}
                       onClick={() => toggleSort(h)}
                     >
-                      <span className="truncate font-mono leading-none">{h}</span>
-                      <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center">
-                        {sortKey === h ? (
-                          sortDir === "asc" ? (
-                            <BarsArrowUpIcon className="h-3.5 w-3.5 text-primary" />
-                          ) : (
-                            <BarsArrowDownIcon className="h-3.5 w-3.5 text-primary" />
-                          )
-                        ) : (
-                          <span className="flex h-3.5 w-3.5 items-center justify-center text-[10px] leading-none opacity-30" aria-hidden>
-                            ↕
-                          </span>
-                        )}
-                      </span>
-                    </button>
-                    </Tooltip>
+                      <TruncatedText className="min-w-0 flex-1 text-left font-mono">{h}</TruncatedText>
+                    </Button>
                   </TableHead>
                 ))}
               </TableRow>
@@ -446,21 +396,11 @@ export function TableView({ data, className = "", fontSize = 13, byteSize }: Tab
                               : h;
                         return (
                           <TableCell key={h} className={`${cellClass} max-w-[280px] px-1.5 py-0.5`}>
-                            <Tooltip content={`Open as table: ${nestedMeta(val)}`} className="block max-w-full">
-                            <button
-                              type="button"
-                              onClick={() => drillInto(label, val)}
-                              className="group inline-flex max-w-full items-center gap-1.5 rounded-md border border-primary/20 bg-primary/5 px-2 py-1 text-left transition-colors hover:border-primary/40 hover:bg-primary/10"
-                            >
-                              <TableCellsIcon className="h-3.5 w-3.5 shrink-0 text-primary" />
-                              <span className="min-w-0 truncate font-mono text-[var(--workspace-text)]">
-                                {display.length > 48 ? `${display.slice(0, 48)}…` : display}
-                              </span>
-                              <span className="shrink-0 text-[9px] font-semibold uppercase tracking-wide text-primary/80">
-                                {nestedMeta(val)}
-                              </span>
-                              <ChevronRightIcon className="h-3 w-3 shrink-0 text-primary opacity-60 group-hover:opacity-100" />
-                            </button>
+                            <Tooltip content={`Open as table: ${nestedMeta(val)}`}>
+                              <Button variant="secondary" icon={<TableCellsIcon />} className="max-w-full" onClick={() => drillInto(label, val)}>
+                                <span className="min-w-0 truncate font-mono">{display.length > 48 ? `${display.slice(0, 48)}…` : display}</span>
+                                <span className="shrink-0 text-[12px] font-normal text-[var(--workspace-text-muted)]">{nestedMeta(val)}</span>
+                              </Button>
                             </Tooltip>
                           </TableCell>
                         );
@@ -468,13 +408,13 @@ export function TableView({ data, className = "", fontSize = 13, byteSize }: Tab
 
                       return (
                         <TableCell key={h} className={`${cellClass} max-w-[240px] px-2 py-1 font-mono align-top`}>
-                          <Tooltip content={display} className={`block max-w-full ${wordWrap ? "whitespace-pre-wrap break-words" : "truncate"}`}>
-                            {wordWrap ? (
-                              <span>{display}</span>
-                            ) : (
-                              <span title={display}>{truncateCell(display)}</span>
-                            )}
-                          </Tooltip>
+                          {wordWrap ? (
+                            <span className="block max-w-full whitespace-pre-wrap break-words">{display}</span>
+                          ) : (
+                            <Tooltip content={display} disabled={display.length <= 80}>
+                              <span className="block max-w-full truncate">{truncateCell(display)}</span>
+                            </Tooltip>
+                          )}
                         </TableCell>
                       );
                     })}

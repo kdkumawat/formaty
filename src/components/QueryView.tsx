@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
-import { Tooltip } from "@/components/workspace/Tooltip";
+import { Button, Chip, Segmented, Tooltip } from "@/components/kit";
 import { JsonEditor } from "@/components/JsonEditor";
 import { runQuery, type QueryLanguage } from "@/lib/query/runQuery";
 import { formatJson } from "@/lib/json/core";
@@ -66,7 +66,6 @@ function saveHistory(items: string[]) {
 export function QueryView({
   data,
   className = "",
-  isDark = false,
   fontSize = 13,
   monacoTheme = "vs-dark",
   onResultChange,
@@ -133,86 +132,64 @@ export function QueryView({
     onResultChange?.(result);
   }, [result, onResultChange]);
 
-  const linkBtnClass =
-    "inline-flex h-7 items-center rounded-md px-2 text-[11px] font-medium text-[var(--workspace-text-muted)] transition-colors hover:bg-primary/10 hover:text-primary";
-
-  const textareaClass = isDark
-    ? "border-[var(--workspace-border)] bg-[var(--workspace-background)] text-[var(--workspace-text)] placeholder:text-[var(--workspace-text-muted)]"
-    : "border-[var(--workspace-border)] bg-[var(--workspace-background)] text-[var(--workspace-text)] placeholder:text-[var(--workspace-text-muted)]";
+  const textareaClass =
+    "border-[var(--workspace-border)] bg-[var(--workspace-background)] text-[var(--workspace-text)] placeholder:text-[var(--workspace-text-muted)]";
 
   return (
     <div className={`flex h-full flex-col overflow-hidden ${className}`}>
-      <div className="flex shrink-0 flex-col gap-1.5 border-b border-[var(--workspace-border)] px-2 py-1.5">
-        <div className="flex flex-wrap items-center gap-1">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--workspace-text-muted)]">
-            Query
-          </span>
-          {QUERY_LANGUAGES.map(({ id, label }) => (
-            <button
-              key={id}
-              type="button"
-              className={`${linkBtnClass} ${queryLang === id ? "!bg-primary/12 !text-primary" : ""}`}
-              onClick={() => setQueryLang(id)}
-            >
-              {label}
-            </button>
-          ))}
+      <div className="flex shrink-0 flex-col gap-2 border-b border-[var(--workspace-border)] px-3 py-2">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <Segmented
+            aria-label="Query language"
+            value={queryLang}
+            onChange={setQueryLang}
+            options={QUERY_LANGUAGES.map(({ id, label }) => ({ value: id, label }))}
+          />
           <span className="flex-1" />
           {result.trim() && (
             <>
-              <span className="hidden shrink-0 text-[10px] font-medium tabular-nums text-[var(--workspace-text-muted)] md:inline">
-                Copy or “Use as input” from the toolbar above
+              <span className="hidden shrink-0 text-[12px] text-[var(--workspace-text-muted)] md:inline">
+                Copy or download the result from the header above
               </span>
               {onOpenInListCompare && (
-                <button
-                  type="button"
-                  className={`${linkBtnClass} shrink-0 text-primary`}
-                  title="Open the result in List Compare to extract IDs and generate SQL"
-                  onClick={() => onOpenInListCompare(result)}
-                >
-                  Open in List Compare
-                </button>
+                <Tooltip content="Open the result in Compare to extract IDs and generate SQL">
+                  <Button variant="secondary" onClick={() => onOpenInListCompare(result)}>
+                    Open in Compare
+                  </Button>
+                </Tooltip>
               )}
             </>
           )}
         </div>
         <textarea
           rows={2}
-          className={`w-full shrink-0 resize-none rounded-lg border p-2 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-primary ${textareaClass}`}
+          aria-label="Query"
+          className={`w-full shrink-0 resize-none rounded-md border p-2 font-mono text-[13px] outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)] ${textareaClass}`}
           placeholder={QUERY_LANGUAGES.find((l) => l.id === queryLang)?.placeholder}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           spellCheck={false}
         />
         <div className="flex flex-wrap items-center gap-1">
-          {SAMPLES[queryLang].map((s) => (
-            <button
-              key={s.q}
-              type="button"
-              className="rounded border border-[var(--workspace-border)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--workspace-text-muted)] hover:border-primary/40 hover:text-primary"
-              onClick={() => setQuery(s.q)}
-            >
-              {s.label}
-            </button>
+          {SAMPLES[queryLang].map((smp) => (
+            <Chip key={smp.q} on={false} className="font-mono" onClick={() => setQuery(smp.q)}>
+              {smp.label}
+            </Chip>
           ))}
           {history.length > 0 && (
             <>
-              <span className="mx-1 h-3 w-px bg-[var(--workspace-border)]" />
+              <span className="mx-1 h-4 w-px bg-[var(--workspace-border)]" aria-hidden />
               {history.slice(0, 4).map((h) => (
                 <Tooltip content={h} key={h}>
-                <button
-                  type="button"
-                  className="max-w-[8rem] truncate rounded border border-[var(--workspace-border)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--workspace-text-muted)] hover:border-primary/40 hover:text-primary"
-                  onClick={() => setQuery(h)}
-                >
-                  {h}
-                </button>
+                  <Chip on={false} className="max-w-[8rem] font-mono" onClick={() => setQuery(h)}>
+                    <span className="truncate">{h}</span>
+                  </Chip>
                 </Tooltip>
               ))}
             </>
           )}
         </div>
-        {error && <div className="text-xs text-error">{error}</div>}
+        {error && <div className="text-[13px] text-bad">{error}</div>}
       </div>
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <JsonEditor

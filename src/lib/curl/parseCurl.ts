@@ -168,6 +168,8 @@ export interface CurlExecutionResult {
   finalUrl: string;
 }
 
+const REQUEST_TIMEOUT_MS = 30_000;
+
 /**
  * Execute a parsed curl command via fetch, capturing status, headers, size,
  * and timing. Throws on network errors but NOT on non-2xx responses - the
@@ -182,8 +184,17 @@ export async function executeCurlDetailed(parsed: CurlParsed): Promise<CurlExecu
     init.body = parsed.body;
   }
   const started = performance.now();
-  const res = await fetch(parsed.url, init);
-  const text = await res.text();
+  // Without a limit a silent server leaves "Executing request" up forever.
+  init.signal = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+  let res: Response;
+  let text: string;
+  try {
+    res = await fetch(parsed.url, init);
+    text = await res.text();
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "TimeoutError") throw new Error("Request timed out after 30 seconds");
+    throw e;
+  }
   const timingMs = Math.max(0, Math.round(performance.now() - started));
   const headers: Record<string, string> = {};
   res.headers.forEach((value, key) => {

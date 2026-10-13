@@ -76,7 +76,7 @@ export function pinNoopJsonWorker(): void {
   const existing = w.MonacoEnvironment;
   w.MonacoEnvironment = {
     ...(existing ?? {}),
-    getWorker(_id: string, _label: string) {
+    getWorker() {
       return create();
     },
   };

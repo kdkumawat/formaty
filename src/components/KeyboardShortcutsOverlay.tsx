@@ -9,8 +9,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Button as UiButton } from "@/components/ui/button";
-import { displayShortcut, isEditableTarget, SHORTCUT_GROUPS } from "@/lib/shortcuts";
+import { Button, Kbd } from "@/components/kit";
+import { isEditableTarget, SHORTCUT_GROUPS } from "@/lib/shortcuts";
 
 /**
  * Keyboard-shortcuts reference overlay for the Formaty workspace.
@@ -42,7 +42,7 @@ export function KeyboardShortcutsOverlay() {
     return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
   }, []);
 
-  // Open from the status-bar `?` button (dispatched by StatusBar).
+  // Open from the help menu.
   useEffect(() => {
     const onOpen = () => setOpen(true);
     window.addEventListener("formaty:open-shortcuts", onOpen);
@@ -53,33 +53,29 @@ export function KeyboardShortcutsOverlay() {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle className="text-sm">Keyboard shortcuts</DialogTitle>
-          <DialogDescription className="text-xs">
-            Everything is reachable from the keyboard. Press{" "}
-            <kbd className="rounded border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--workspace-text)]">
-              {displayShortcut("⌘K")}
-            </kbd>{" "}
-            to run any action by name.
+          <DialogTitle className="text-[14px]">Keyboard shortcuts</DialogTitle>
+          <DialogDescription className="text-[13px]">
+            Everything is reachable from the keyboard. Press <Kbd keys="⌘K" /> to run any action by name.
           </DialogDescription>
         </DialogHeader>
         <div className="max-h-[60vh] overflow-y-auto pr-1">
           {SHORTCUT_GROUPS.map((group) => (
             <div key={group.title} className="mb-3 last:mb-0">
-              <p className="mb-1 px-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]">
-                {group.title}
-              </p>
+              <p className="mb-1 px-1 text-[12px] font-medium text-[var(--workspace-text-muted)]">{group.title}</p>
               <div className="overflow-hidden rounded-lg border border-[var(--workspace-border)]">
                 {group.items.map((item, i) => (
                   <div
                     key={item.keys}
-                    className={`flex items-center justify-between gap-4 bg-[var(--workspace-panel)] px-3 py-2 text-xs ${
+                    className={`flex items-center justify-between gap-4 bg-[var(--workspace-panel)] px-3 py-1.5 text-[13px] ${
                       i > 0 ? "border-t border-[var(--workspace-border)]" : ""
                     }`}
                   >
                     <span className="text-[var(--workspace-text)]">{item.label}</span>
-                    <kbd className="shrink-0 rounded border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--workspace-text-muted)]">
-                      {displayShortcut(item.keys)}
-                    </kbd>
+                    <span className="flex shrink-0 items-center gap-1">
+                      {item.keys.split(" · ").map((k) => (
+                        <Kbd key={k} keys={k} />
+                      ))}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -87,9 +83,9 @@ export function KeyboardShortcutsOverlay() {
           ))}
         </div>
         <DialogFooter>
-          <UiButton variant="outline" onClick={() => setOpen(false)}>
+          <Button variant="secondary" onClick={() => setOpen(false)}>
             Close
-          </UiButton>
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

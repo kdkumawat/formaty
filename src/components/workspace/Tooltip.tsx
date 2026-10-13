@@ -58,7 +58,7 @@ export function Tooltip({
         {triggerContent}
         <TooltipContent
           side={side}
-          className="max-w-[16rem] w-max border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-2 py-1 text-[10px] font-medium leading-snug text-[var(--workspace-text)] shadow-lg"
+          className="max-w-[16rem] w-max border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-2 py-1 text-xs font-medium leading-snug text-[var(--workspace-text)] shadow-lg"
         >
           <span className="min-w-0 break-words whitespace-normal">{content}</span>
           {shortcut && (

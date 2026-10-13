@@ -12,6 +12,7 @@ import {
   type CatalogCity,
   type CountryEntry,
 } from "@/lib/instant/catalog";
+import { Button, Segmented, TextField } from "@/components/kit";
 import { projectInstant } from "@/lib/instant/engine";
 import { locationFromCity, locationFromCustom } from "@/lib/instant/locations";
 import type { Location } from "@/lib/instant/types";
@@ -219,8 +220,8 @@ export function LocationPicker({ open, anchor, onClose, onPick, atInstant }: Loc
   const rowClass = (focused: boolean) =>
     `flex w-full items-baseline justify-between gap-3 px-4 py-2 text-left transition-colors ${
       focused
-        ? "bg-primary/15 text-[var(--workspace-text)]"
-        : "hover:bg-[var(--workspace-background)]"
+        ? "bg-control-hover text-[var(--workspace-text)]"
+        : "hover:bg-control"
     }`;
   const renderResultRow = (r: Result, idx: number) => {
     const focused = idx === focusIdx;
@@ -242,17 +243,17 @@ export function LocationPicker({ open, anchor, onClose, onPick, atInstant }: Loc
             onClick={() => pickResult(r)}
           >
             <span className="min-w-0">
-              <span className="block truncate text-sm text-[var(--workspace-text)]">
+              <span className="block truncate text-[13px] text-[var(--workspace-text)]">
                 {r.entry.name}
-                <span className="ml-1.5 font-mono text-[10px] text-[var(--workspace-text-muted)]">
+                <span className="ml-1.5 font-mono text-[12px] text-[var(--workspace-text-muted)]">
                   {r.entry.code}
                 </span>
               </span>
-              <span className="text-[11px] text-[var(--workspace-text-muted)]">
+              <span className="text-[12px] text-[var(--workspace-text-muted)]">
                 {r.entry.capital} · {r.entry.iana}
               </span>
             </span>
-            <span className="shrink-0 font-mono text-[11px] tabular-nums text-[var(--workspace-text-muted)]">
+            <span className="shrink-0 font-mono text-[12px] tabular-nums text-[var(--workspace-text-muted)]">
               UTC{p.offsetLabel}
             </span>
           </button>
@@ -276,21 +277,21 @@ export function LocationPicker({ open, anchor, onClose, onPick, atInstant }: Loc
             onClick={() => pickResult(r)}
           >
             <span className="min-w-0">
-              <span className="block truncate text-sm text-[var(--workspace-text)]">
+              <span className="block truncate text-[13px] text-[var(--workspace-text)]">
                 {r.city.city}
                 {r.city.countryCode ? (
-                  <span className="ml-1.5 font-mono text-[10px] text-[var(--workspace-text-muted)]">
+                  <span className="ml-1.5 font-mono text-[12px] text-[var(--workspace-text-muted)]">
                     {r.city.countryCode}
                   </span>
                 ) : null}
               </span>
-              <span className="text-[11px] text-[var(--workspace-text-muted)]">
+              <span className="text-[12px] text-[var(--workspace-text-muted)]">
                 {r.city.country}
                 {r.city.country ? " · " : ""}
                 {r.city.iana}
               </span>
             </span>
-            <span className="shrink-0 font-mono text-[11px] tabular-nums text-[var(--workspace-text-muted)]">
+            <span className="shrink-0 font-mono text-[12px] tabular-nums text-[var(--workspace-text-muted)]">
               UTC{p.offsetLabel}
             </span>
           </button>
@@ -315,22 +316,22 @@ export function LocationPicker({ open, anchor, onClose, onPick, atInstant }: Loc
           onClick={() => pickResult(r)}
         >
           <span className="min-w-0">
-            <span className="block truncate text-sm text-[var(--workspace-text)]">
+            <span className="block truncate text-[13px] text-[var(--workspace-text)]">
               {r.abbr ? (
-                <span className="mr-1.5 rounded bg-primary/10 px-1 py-px font-mono text-[10px] font-semibold uppercase tracking-wider text-primary">
+                <span className="mr-1.5 rounded bg-control px-1 py-px font-mono text-[12px] font-semibold text-[var(--workspace-text)]">
                   {r.abbr}
                 </span>
               ) : null}
               {r.label.replace(/^[A-Z]{2,5} · /, "")}
             </span>
-            <span className="font-mono text-[11px] text-[var(--workspace-text-muted)]">
+            <span className="font-mono text-[12px] text-[var(--workspace-text-muted)]">
               {r.iana}
             </span>
           </span>
           {isQueryZone ? (
-            <span className="shrink-0 text-[10px] uppercase tracking-wider text-primary">Use</span>
+            <span className="shrink-0 text-[12px] font-medium text-[var(--workspace-text)]">Use</span>
           ) : (
-            <span className="shrink-0 font-mono text-[11px] tabular-nums text-[var(--workspace-text-muted)]">
+            <span className="shrink-0 font-mono text-[12px] tabular-nums text-[var(--workspace-text-muted)]">
               UTC{p.offsetLabel}
             </span>
           )}
@@ -401,46 +402,26 @@ export function LocationPicker({ open, anchor, onClose, onPick, atInstant }: Loc
       role="dialog"
       aria-label="Add location"
       style={{ position: "fixed", top: pos.top, right: pos.right, zIndex: 60 }}
-      className="w-96 max-w-[calc(100vw-1rem)] overflow-hidden rounded-2xl border border-[var(--workspace-border)] bg-[var(--workspace-panel)] shadow-2xl"
+      className="w-96 max-w-[calc(100vw-1rem)] overflow-hidden rounded-lg bg-popover text-[var(--workspace-text)] shadow-menu"
     >
-      {/* Segmented tab switch matching the workspace settings panel
-          (General | Compare | Utils). Same container + active fill so the
-          user gets a single pattern across the app. */}
-      <div
-        className="flex items-center gap-px border-b border-[var(--workspace-border)] bg-muted/50 p-1"
-        role="tablist"
-        aria-label="Location source"
-      >
-        {(
-          [
-            ["search", "Search"],
-            ["custom", "Custom"],
-          ] as const
-        ).map(([key, label]) => {
-          const active = key === "custom" ? custom : !custom;
-          return (
-            <button
-              key={key}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              className={`h-7 flex-1 rounded-md text-[11px] font-semibold transition-colors ${
-                active
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-background)] hover:text-[var(--workspace-text)]"
-              }`}
-              onClick={() => setCustom(key === "custom")}
-            >
-              {label}
-            </button>
-          );
-        })}
+      <div className="border-b border-[var(--workspace-border)] p-2">
+        <Segmented<"search" | "custom">
+          aria-label="Location source"
+          value={custom ? "custom" : "search"}
+          onChange={(v) => setCustom(v === "custom")}
+          className="w-full [&>button]:flex-1"
+          options={[
+            { value: "search", label: "Search" },
+            { value: "custom", label: "Custom" },
+          ]}
+        />
       </div>
 
         {!custom ? (
           <>
-            <input
+            <TextField
               ref={inputRef}
+              wrapperClassName="m-2 w-[calc(100%-1rem)]"
               value={q}
               onChange={(e) => setQ(e.target.value)}
               onKeyDown={(e) => {
@@ -465,8 +446,7 @@ export function LocationPicker({ open, anchor, onClose, onPick, atInstant }: Loc
                 }
               }}
               placeholder="City, country, IN, or Asia/Kolkata"
-              className="w-full border-b border-[var(--workspace-border)] bg-transparent px-4 py-2.5 text-xs text-[var(--workspace-text)] outline-none placeholder:text-[var(--workspace-text-muted)]"
-              aria-autocomplete="list"
+                            aria-autocomplete="list"
               aria-controls={listId}
               aria-activedescendant={results[focusIdx] ? `${listId}-${focusIdx}` : undefined}
             />
@@ -479,7 +459,7 @@ export function LocationPicker({ open, anchor, onClose, onPick, atInstant }: Loc
               {q.trim() ? (
                 <>
                   {countryResults.length > 0 && (
-                    <li className="px-4 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]">
+                    <li className="px-4 pb-1 pt-2 text-[12px] font-medium text-[var(--workspace-text-muted)]">
                       Countries
                     </li>
                   )}
@@ -491,7 +471,7 @@ export function LocationPicker({ open, anchor, onClose, onPick, atInstant }: Loc
                     return renderResultRow(r, idx);
                   })}
                   {abbrResults.length > 0 && (
-                    <li className="px-4 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]">
+                    <li className="px-4 pb-1 pt-2 text-[12px] font-medium text-[var(--workspace-text-muted)]">
                       Timezone abbreviations
                     </li>
                   )}
@@ -503,7 +483,7 @@ export function LocationPicker({ open, anchor, onClose, onPick, atInstant }: Loc
                     return renderResultRow(r, idx);
                   })}
                   {cityResults.length > 0 && (
-                    <li className="px-4 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]">
+                    <li className="px-4 pb-1 pt-2 text-[12px] font-medium text-[var(--workspace-text-muted)]">
                       Cities
                     </li>
                   )}
@@ -515,7 +495,7 @@ export function LocationPicker({ open, anchor, onClose, onPick, atInstant }: Loc
                     return renderResultRow(r, idx);
                   })}
                   {ianaResults.length > 0 && (
-                    <li className="mt-1 px-4 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]">
+                    <li className="mt-1 px-4 pb-1 pt-2 text-[12px] font-medium text-[var(--workspace-text-muted)]">
                       Timezones
                     </li>
                   )}
@@ -527,7 +507,7 @@ export function LocationPicker({ open, anchor, onClose, onPick, atInstant }: Loc
                     return renderResultRow(r, idx);
                   })}
                   {queryAsZone ? (
-                    <li className="mt-1 border-t border-[var(--workspace-border)] px-4 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]">
+                    <li className="mt-1 border-t border-[var(--workspace-border)] px-4 pb-1 pt-2 text-[12px] font-medium text-[var(--workspace-text-muted)]">
                       Add as raw IANA
                     </li>
                   ) : null}
@@ -546,14 +526,14 @@ export function LocationPicker({ open, anchor, onClose, onPick, atInstant }: Loc
                       })()
                     : null}
                   {countryResults.length === 0 && abbrResults.length === 0 && cityResults.length === 0 && ianaResults.length === 0 && !queryAsZone ? (
-                    <li className="px-4 py-6 text-sm text-[var(--workspace-text-muted)]">
+                    <li className="px-4 py-6 text-[13px] text-[var(--workspace-text-muted)]">
                       No matches. Try a city, country, code, or IANA zone.
                     </li>
                   ) : null}
                 </>
               ) : (
                 <>
-                  <li className="px-4 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]">
+                  <li className="px-4 pb-1 pt-2 text-[12px] font-medium text-[var(--workspace-text-muted)]">
                     Popular
                   </li>
                   {SUGGESTED_CITIES.map((c) => {
@@ -565,9 +545,9 @@ export function LocationPicker({ open, anchor, onClose, onPick, atInstant }: Loc
                   })}
                   {grouped.map(({ region, items }) => (
                     <li key={region}>
-                      <div className="px-4 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]">
+                      <div className="px-4 pb-1 pt-2 text-[12px] font-medium text-[var(--workspace-text-muted)]">
                         {region}
-                        <span className="ml-1.5 font-normal text-[var(--workspace-text-muted)]/70">{items.length}</span>
+                        <span className="ml-1.5 font-normal text-[var(--workspace-text-muted)]">{items.length}</span>
                       </div>
                       <ul>
                         {items.map((ianaZone) => {
@@ -597,61 +577,63 @@ export function LocationPicker({ open, anchor, onClose, onPick, atInstant }: Loc
               submitCustom();
             }}
           >
-            <label className="block text-[10px] text-[var(--workspace-text-muted)]">
+            <label className="block text-[12px] text-[var(--workspace-text-muted)]">
               City
-              <input
+              <TextField
+                wrapperClassName="mt-1 w-full"
                 value={city}
                 onChange={(e) => setCity(e.target.value)}
                 required
-                className="mt-1 h-7 w-full rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-2 text-xs text-[var(--workspace-text)] outline-none"
               />
             </label>
             <div className="grid grid-cols-[1fr_5rem] gap-2">
-              <label className="block text-[10px] text-[var(--workspace-text-muted)]">
+              <label className="block text-[12px] text-[var(--workspace-text-muted)]">
                 Country
-                <input
+                <TextField
+                  wrapperClassName="mt-1 w-full"
                   value={country}
                   onChange={(e) => setCountry(e.target.value)}
-                  className="mt-1 h-7 w-full rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-2 text-xs text-[var(--workspace-text)] outline-none"
                 />
               </label>
-              <label className="block text-[10px] text-[var(--workspace-text-muted)]">
+              <label className="block text-[12px] text-[var(--workspace-text-muted)]">
                 Code
-                <input
+                <TextField
+                  wrapperClassName="mt-1 w-full"
                   value={countryCode}
                   onChange={(e) => setCountryCode(e.target.value.toUpperCase().slice(0, 3))}
                   placeholder="IN"
-                  className="mt-1 h-7 w-full rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-2 font-mono text-xs uppercase text-[var(--workspace-text)] outline-none"
+                  className="font-mono"
                 />
               </label>
             </div>
-            <label className="block text-[10px] text-[var(--workspace-text-muted)]">
+            <label className="block text-[12px] text-[var(--workspace-text-muted)]">
               Timezone (IANA)
               <div className="relative mt-1">
-                <input
+                <TextField
+                  wrapperClassName="w-full"
                   value={iana}
                   onChange={(e) => setIana(e.target.value)}
                   onFocus={() => setIanaFocus(true)}
                   onBlur={() => window.setTimeout(() => setIanaFocus(false), 120)}
                   placeholder="Asia/Kolkata"
-                  className="h-7 w-full rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-2 font-mono text-xs text-[var(--workspace-text)] outline-none focus:border-primary/40"
+                  className="font-mono"
                   aria-autocomplete="list"
                 />
                 {ianaFocus && (ianaSuggestions.length > 0 || matchedCountry) && (
                   <ul
                     role="listbox"
-                    className="absolute left-0 right-0 top-full z-20 mt-1 max-h-60 overflow-y-auto rounded-md border border-primary/30 bg-[var(--workspace-panel)] py-1 text-xs shadow-2xl"
+                    className="absolute left-0 right-0 top-full z-20 mt-1 max-h-60 overflow-y-auto rounded-lg bg-popover py-1 text-[13px] shadow-menu"
                   >
                     {matchedCountry && (
-                      <li className="px-3 pb-1 pt-1.5 text-[9px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]">
+                      <li className="px-3 pb-1 pt-1.5 text-[12px] font-medium text-[var(--workspace-text-muted)]">
                         Country
                       </li>
                     )}
                     {matchedCountry && (
-                      <li role="option">
+                      <li role="option" aria-selected={false}>
                         <button
                           type="button"
-                          className="flex w-full items-baseline justify-between gap-3 px-3 py-1.5 text-left hover:bg-[var(--workspace-background)]"
+                          className="flex w-full items-baseline justify-between gap-3 px-3 py-1.5 text-left hover:bg-control"
                           onMouseDown={(e) => e.preventDefault()}
                           onClick={() => {
                             setIana(matchedCountry.iana);
@@ -662,34 +644,34 @@ export function LocationPicker({ open, anchor, onClose, onPick, atInstant }: Loc
                           }}
                         >
                           <span className="min-w-0">
-                            <span className="block truncate text-xs font-medium text-[var(--workspace-text)]">
+                            <span className="block truncate text-[13px] font-medium text-[var(--workspace-text)]">
                               {matchedCountry.name}
                             </span>
-                            <span className="font-mono text-[10px] text-[var(--workspace-text-muted)]">
+                            <span className="font-mono text-[12px] text-[var(--workspace-text-muted)]">
                               {matchedCountry.iana}
                             </span>
                           </span>
-                          <span className="shrink-0 text-[10px] uppercase tracking-wider text-primary">Use</span>
+                          <span className="shrink-0 text-[12px] font-medium text-[var(--workspace-text)]">Use</span>
                         </button>
                       </li>
                     )}
                     {ianaSuggestions.length > 0 && (
-                      <li className="px-3 pb-1 pt-1.5 text-[9px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]">
+                      <li className="px-3 pb-1 pt-1.5 text-[12px] font-medium text-[var(--workspace-text-muted)]">
                         IANA zones
                       </li>
                     )}
                     {ianaSuggestions.map((z) => (
-                      <li key={z.iana} role="option">
+                      <li key={z.iana} role="option" aria-selected={false}>
                         <button
                           type="button"
-                          className="flex w-full items-baseline justify-between gap-3 px-3 py-1.5 text-left hover:bg-[var(--workspace-background)]"
+                          className="flex w-full items-baseline justify-between gap-3 px-3 py-1.5 text-left hover:bg-control"
                           onMouseDown={(e) => e.preventDefault()}
                           onClick={() => {
                             setIana(z.iana);
                             setIanaFocus(false);
                           }}
                         >
-                          <span className="truncate font-mono text-xs text-[var(--workspace-text)]">{z.iana}</span>
+                          <span className="truncate font-mono text-[13px] text-[var(--workspace-text)]">{z.iana}</span>
                         </button>
                       </li>
                     ))}
@@ -698,16 +680,17 @@ export function LocationPicker({ open, anchor, onClose, onPick, atInstant }: Loc
               </div>
             </label>
             {error && (
-              <p className="text-xs text-destructive" role="alert">
+              <p className="text-[13px] text-bad" role="alert">
                 {error}
               </p>
             )}
-            <button
+            <Button
               type="submit"
-              className="h-8 rounded-lg bg-primary/15 text-xs font-semibold text-primary"
+              variant="primary"
+              
             >
               Add location
-            </button>
+            </Button>
           </form>
         )}
     </div>

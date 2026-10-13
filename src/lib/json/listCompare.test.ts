@@ -10,6 +10,11 @@ import {
   formatCountDeltaSummary,
   formatListItems,
   formatSqlClause,
+  detectListDelimiter,
+  listExportExample,
+  listExportExtension,
+  listExportFormatLabel,
+  needsListTidy,
   parseListText,
   sortListText,
   type ListItem,
@@ -36,20 +41,24 @@ describe("parseListText", () => {
   });
 
   it("respects quoted commas (does not split inside quotes)", () => {
-    expect(parseListText('"a,1","b,2"', base)).toEqual(['"a,1"', '"b,2"']);
-    expect(parseListText('"a,1","b,2"', { ...base, stripQuotes: true })).toEqual(["a,1", "b,2"]);
+    expect(parseListText('"a,1","b,2"', { ...base, stripQuotes: false })).toEqual(['"a,1"', '"b,2"']);
+    expect(parseListText('"a,1","b,2"', base)).toEqual(["a,1", "b,2"]);
   });
 
   it("drops empty lines by default", () => {
     expect(parseListText("a\n\nb\n", base)).toEqual(["a", "b"]);
   });
 
-  it("preserves exact values when trim is off", () => {
-    expect(parseListText("  a  \n b ", base)).toEqual(["  a  ", " b "]);
+  it("preserves exact values when trim is turned off", () => {
+    expect(parseListText("  a  \n b ", { ...base, trim: false })).toEqual(["  a  ", " b "]);
   });
 
-  it("trims when requested", () => {
-    expect(parseListText("  a  \n b ", { ...base, trim: true })).toEqual(["a", "b"]);
+  it("trims by default", () => {
+    expect(parseListText("  a  \n b ", base)).toEqual(["a", "b"]);
+  });
+
+  it("defaults trim and stripQuotes on", () => {
+    expect(DEFAULT_LIST_PARSE_OPTIONS).toMatchObject({ trim: true, stripQuotes: true, ignoreEmpty: true, caseInsensitive: false });
   });
 
   it("strips outer quotes when requested", () => {
@@ -161,10 +170,24 @@ describe("buildListSummary", () => {
     expect(s.sections.map((x) => x.bucket)).toEqual(["common", "leftOnly", "rightOnly"]);
     expect(s.sections.map((x) => x.count)).toEqual([2, 1, 1]);
     expect(s.sections[0]!.items.map((i) => i.value)).toEqual(["b", "c"]);
-    expect(s.text).toContain("Common (2)");
+    expect(s.text).toContain("In both (2)");
     expect(s.text).toContain("  b");
-    expect(s.text).toContain("Left (1)");
-    expect(s.text).toContain("Right (1)");
+    expect(s.text).toContain("Only in A (1)");
+    expect(s.text).toContain("Only in B (1)");
+  });
+
+  it("writes the exact plain-text report: tab names, items indented two spaces, blank line between groups", () => {
+    const r = compareLists("a\nb\nc\nc", "b\nc\nd", base);
+    expect(buildListSummary(r).text).toBe(
+      ["In both (2)", "  b", "  c ×2 in A, ×1 in B", "", "Only in A (1)", "  a", "", "Only in B (1)", "  d", "", "Repeated in A (1)", "  c ×2"].join("\n"),
+    );
+  });
+
+  it("keeps a value that contains a line break on one indented line", () => {
+    const r = compareLists("a,b", "a", base);
+    r.leftOnly = [{ value: "x\ny", key: "x\ny", count: 1 }];
+    r.stats.leftOnly = 1;
+    expect(buildListSummary(r).text).toContain("Only in A (1)\n  x y");
   });
 
   it("includes duplicates sections only when duplicates exist", () => {
@@ -173,23 +196,23 @@ describe("buildListSummary", () => {
     expect(s.sections.map((x) => x.bucket)).toEqual(["common", "leftOnly", "rightOnly", "leftDupes", "rightDupes"]);
     const leftDupes = s.sections.find((x) => x.bucket === "leftDupes")!;
     expect(leftDupes.items.map((i) => i.value)).toEqual(["a"]);
-    expect(s.text).toContain("Left duplicates (1)");
-    expect(s.text).toContain("Right duplicates (1)");
+    expect(s.text).toContain("Repeated in A (1)");
+    expect(s.text).toContain("Repeated in B (1)");
   });
 
   it("omits zero-count sections", () => {
     const r = compareLists("a\nb", "a\nb", base);
     const s = buildListSummary(r);
     expect(s.sections.map((x) => x.bucket)).toEqual(["common"]);
-    expect(s.text).not.toContain("Left (");
-    expect(s.text).not.toContain("Right (");
+    expect(s.text).not.toContain("Only in A");
+    expect(s.text).not.toContain("Only in B");
   });
 
   it("annotates count mismatches inline in the Common section", () => {
     const r = compareLists("A\nA\nB", "A\nB\nB", base);
     const s = buildListSummary(r);
-    expect(s.text).toContain("A ×2 left, ×1 right");
-    expect(s.text).toContain("B ×1 left, ×2 right");
+    expect(s.text).toContain("A ×2 in A, ×1 in B");
+    expect(s.text).toContain("B ×1 in A, ×2 in B");
     expect(s.countDeltas).toHaveLength(2);
   });
 
@@ -197,14 +220,14 @@ describe("buildListSummary", () => {
     const r = compareLists("A\nA\nB", "A\nA\nB", base);
     const s = buildListSummary(r);
     expect(s.countDeltas).toEqual([]);
-    expect(s.text).not.toContain("left");
+    expect(s.text).not.toContain(" in A,");
   });
 
   it("hides delta notes when showCountDeltas is false", () => {
     const r = compareLists("A\nA\nB", "A\nB\nB", base);
     const s = buildListSummary(r, { showCountDeltas: false });
     expect(s.countDeltas).toEqual([]);
-    expect(s.text).not.toContain("×2 left");
+    expect(s.text).not.toContain("×2 in A");
   });
 
   it("includes the Changed section only when requested", () => {
@@ -275,6 +298,70 @@ describe("analyzeSingleList", () => {
   });
 });
 
+describe("analyzeSingleList with default options", () => {
+  const d = (text: string) => analyzeSingleList(text);
+  const pairs = (xs: { value: string; count: number }[]) => xs.map((i) => [i.value, i.count]);
+
+  it("treats 'a, b, c, a' as 3 distinct with a repeated", () => {
+    const a = d("a, b, c, a");
+    expect(a.uniqueCount).toBe(3);
+    expect(pairs(a.duplicates)).toEqual([["a", 2]]);
+    expect(pairs(a.once)).toEqual([["b", 1], ["c", 1]]);
+    expect(a.onceCount).toBe(2);
+  });
+
+  it("treats quoted SQL values as plain values", () => {
+    const a = d("'x1', 'x2', 'x1'");
+    expect(a.uniqueCount).toBe(2);
+    expect(pairs(a.duplicates)).toEqual([["x1", 2]]);
+  });
+
+  it("merges trimmed lines but keeps case differences", () => {
+    const a = d("Apple\napple\n apple \nAPPLE\nbanana\nbanana");
+    expect(a.uniqueCount).toBe(4);
+    expect(pairs(a.duplicates)).toEqual([["apple", 2], ["banana", 2]]);
+    expect(pairs(a.once)).toEqual([["Apple", 1], ["APPLE", 1]]);
+  });
+
+  it("never splits a line list on spaces", () => {
+    const a = d("New York\nSan Francisco\nNew York");
+    expect(a.uniqueCount).toBe(2);
+    expect(pairs(a.duplicates)).toEqual([["New York", 2]]);
+  });
+
+  it("counts a JSON array with mixed types", () => {
+    const a = d('["a","b","a",1,1]');
+    expect(a.uniqueCount).toBe(3);
+    expect(pairs(a.duplicates)).toEqual([["a", 2], ["1", 2]]);
+    expect(pairs(a.once)).toEqual([["b", 1]]);
+  });
+});
+
+describe("detectListDelimiter", () => {
+  it("returns newline for empty text", () => {
+    expect(detectListDelimiter("")).toBe("newline");
+    expect(detectListDelimiter("  \n ")).toBe("newline");
+  });
+
+  it("picks what auto parsing uses", () => {
+    expect(detectListDelimiter("a\nb")).toBe("newline");
+    expect(detectListDelimiter("a, b, c")).toBe("comma");
+    expect(detectListDelimiter("a; b; c")).toBe("semicolon");
+    expect(detectListDelimiter("a | b | c")).toBe("pipe");
+    expect(detectListDelimiter("a  b  c")).toBe("whitespace");
+    expect(detectListDelimiter("New York")).toBe("newline");
+  });
+
+  it("reports json for a JSON array", () => {
+    expect(detectListDelimiter('["a","b"]')).toBe("json");
+  });
+
+  it("agrees with parseListText auto", () => {
+    expect(detectListDelimiter("a;b;c")).toBe("semicolon");
+    expect(parseListText("a;b;c", base)).toEqual(["a", "b", "c"]);
+  });
+});
+
 describe("sortListText", () => {
   it("sorts ascending and descending", () => {
     expect(sortListText("b\na\nc", base, "asc")).toBe("a\nb\nc");
@@ -297,12 +384,32 @@ describe("formatListItems exports", () => {
   ];
 
   it("escapes single quotes in SQL IN", () => {
-    expect(formatListItems(items, "sql-in-single")).toBe("'a''b', 'c'");
+    expect(formatListItems(items, "sql-in-single")).toBe("IN ('a''b', 'c')");
+  });
+
+  it("wraps NOT IN, unquoted numbers and double quotes", () => {
+    const ab: ListItem[] = [
+      { value: "a", key: "a", count: 1 },
+      { value: "b", key: "b", count: 1 },
+    ];
+    const nums: ListItem[] = [
+      { value: "1", key: "1", count: 1 },
+      { value: "2", key: "2", count: 1 },
+    ];
+    expect(formatListItems(ab, "sql-not-in")).toBe("NOT IN ('a', 'b')");
+    expect(formatListItems(nums, "sql-in-unquoted")).toBe("IN (1, 2)");
+    expect(formatListItems(ab, "sql-in-double")).toBe('IN ("a", "b")');
   });
 
   it("escapes double quotes in SQL IN (double)", () => {
     const quoted: ListItem[] = [{ value: 'say "hi"', key: 'say "hi"', count: 1 }];
-    expect(formatListItems(quoted, "sql-in-double")).toBe('"say ""hi"""');
+    expect(formatListItems(quoted, "sql-in-double")).toBe('IN ("say ""hi""")');
+  });
+
+  it("keeps chunked wrapped formats as one valid list", () => {
+    const four: ListItem[] = ["a", "b", "c", "d"].map((v) => ({ value: v, key: v, count: 1 }));
+    expect(formatListItems(four, "sql-in-single", "none", 2)).toBe("IN ('a', 'b',\n'c', 'd')");
+    expect(formatListItems(four, "sql-array", "none", 3)).toBe("ARRAY['a', 'b', 'c',\n'd']");
   });
 
   it("emits SQL VALUES rows", () => {
@@ -376,6 +483,52 @@ describe("formatListItems exports", () => {
       { value: "a", key: "a", count: 5 },
     ];
     expect(formatListItems(xs, "newline", "frequency")).toBe("a\nb");
+  });
+});
+
+describe("export format metadata", () => {
+  it("uses the plain labels from the Copy as menu", () => {
+    expect(listExportFormatLabel("newline")).toBe("One per line");
+    expect(listExportFormatLabel("raw")).toBe("One per line");
+    expect(listExportFormatLabel("comma-space")).toBe("Comma separated");
+    expect(listExportFormatLabel("comma")).toBe("Comma, no space");
+    expect(listExportFormatLabel("tsv")).toBe("Tab separated");
+    expect(listExportFormatLabel("sql-in-single")).toBe("IN list");
+    expect(listExportFormatLabel("sql-not-in")).toBe("NOT IN list");
+    expect(listExportFormatLabel("sql-values")).toBe("VALUES rows");
+    expect(listExportFormatLabel("sql-in-unquoted")).toBe("Numbers, unquoted");
+    expect(listExportFormatLabel("json-array")).toBe("JSON array");
+    expect(listExportFormatLabel("js-array-single")).toBe("JavaScript array");
+    expect(listExportFormatLabel("python-list")).toBe("Python list");
+    expect(listExportFormatLabel("csv-quoted")).toBe("CSV quoted");
+    expect(listExportFormatLabel("markdown-table")).toBe("Markdown table");
+  });
+
+  it("maps each format to a file extension", () => {
+    expect(listExportExtension("newline")).toBe("txt");
+    expect(listExportExtension("comma-space")).toBe("txt");
+    expect(listExportExtension("json-array")).toBe("json");
+    expect(listExportExtension("json-array-numbers")).toBe("json");
+    expect(listExportExtension("csv-quoted")).toBe("csv");
+    expect(listExportExtension("tsv")).toBe("tsv");
+    expect(listExportExtension("sql-not-in")).toBe("sql");
+    expect(listExportExtension("sql-values")).toBe("sql");
+    expect(listExportExtension("markdown-table")).toBe("md");
+    expect(listExportExtension("html-table")).toBe("html");
+    expect(listExportExtension("yaml-list")).toBe("yaml");
+    expect(listExportExtension("js-array-double")).toBe("js");
+    expect(listExportExtension("python-list")).toBe("py");
+    expect(listExportExtension("go-slice")).toBe("go");
+  });
+
+  it("shows a short example of each shape", () => {
+    expect(listExportExample("sql-in-single")).toBe("IN ('a', 'b')");
+    expect(listExportExample("sql-not-in")).toBe("NOT IN ('a', 'b')");
+    expect(listExportExample("sql-values")).toBe("('a'), ('b')");
+    expect(listExportExample("sql-in-unquoted")).toBe("IN (1, 2)");
+    expect(listExportExample("comma-space")).toBe("a, b");
+    expect(listExportExample("comma")).toBe("a,b");
+    expect(listExportExample("json-array")).toBe('["a", "b"]');
   });
 });
 
@@ -531,5 +684,76 @@ describe("cleanListInput", () => {
 
   it("splits multi-line comma-separated input", () => {
     expect(cleanListInput("foo, bar\nbaz, qux")).toBe("foo\nbar\nbaz\nqux");
+  });
+});
+
+describe("needsListTidy", () => {
+  it("is false for empty and already tidy text", () => {
+    expect(needsListTidy("")).toBe(false);
+    expect(needsListTidy("a\nb\nc")).toBe(false);
+    expect(needsListTidy("New York\nit's")).toBe(false);
+  });
+
+  it("is true when cleaning would change the text", () => {
+    expect(needsListTidy("a, b")).toBe(true);
+    expect(needsListTidy("'a'\n'b'")).toBe(true);
+    expect(needsListTidy("a\n\nb")).toBe(true);
+    expect(needsListTidy(" a\nb")).toBe(true);
+    expect(needsListTidy("a\nb\n")).toBe(true);
+    expect(needsListTidy("a  b")).toBe(true);
+    expect(needsListTidy("a\r\nb")).toBe(true);
+    expect(needsListTidy("[a\nb]")).toBe(true);
+  });
+
+  it("agrees with cleanListInput", () => {
+    const samples = ["a", "a\nb", "a,b", '"a"', "(a)", "  ", "a b", "a\tb", "x\n y", "a'b", "'a'b'"];
+    for (const t of samples) expect(needsListTidy(t)).toBe(cleanListInput(t) !== t);
+  });
+});
+
+describe("performance on 200,000 short lines", () => {
+  const text = Array.from({ length: 200_000 }, (_, i) => `id${i % 150_000}`).join("\n");
+  const ms = (fn: () => unknown) => {
+    const t0 = performance.now();
+    fn();
+    return performance.now() - t0;
+  };
+
+  it("needsListTidy is fast", () => {
+    expect(ms(() => needsListTidy(text))).toBeLessThan(2000);
+  });
+
+  it("cleanListInput is fast", () => {
+    expect(ms(() => cleanListInput(text))).toBeLessThan(2000);
+  });
+
+  it("analyzeSingleList is fast", () => {
+    let r!: ReturnType<typeof analyzeSingleList>;
+    expect(ms(() => (r = analyzeSingleList(text)))).toBeLessThan(2000);
+    expect(r.uniqueCount).toBe(150_000);
+    expect(r.duplicateKeys).toBe(50_000);
+  });
+
+  it("cleanListInput stays linear on one long comma line", () => {
+    const line = Array.from({ length: 100_000 }, (_, i) => `'v${i}'`).join(", ");
+    expect(ms(() => cleanListInput(line))).toBeLessThan(2000);
+  });
+});
+
+describe("one item per line with trailing separators", () => {
+  const values = (t: string) => analyzeSingleList(t, DEFAULT_LIST_PARSE_OPTIONS);
+  it("finds repeats in a quoted SQL list written one per line", () => {
+    const r = values("'a',\n'b',\n'a'");
+    expect(r.unique.map((i) => i.value)).toEqual(["a", "b"]);
+    expect(r.duplicateKeys).toBe(1);
+  });
+  it("splits wrapped comma lists on both commas and line breaks", () => {
+    expect(values("a, b,\nc, a").unique.map((i) => i.value)).toEqual(["a", "b", "c"]);
+  });
+  it("drops trailing semicolons", () => {
+    expect(values("a;\nb;\na;").unique.map((i) => i.value)).toEqual(["a", "b"]);
+  });
+  it("keeps commas inside lines that do not end with one", () => {
+    expect(detectListDelimiter("Smith, John\nDoe, Jane")).toBe("newline");
   });
 });

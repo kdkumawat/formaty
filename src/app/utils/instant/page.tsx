@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import { FaqList, Footer, H2_SM, PageHero, WRAP } from "@/components/landing";
 import { InstantApp } from "@/components/instant/InstantApp";
 import { INSTANT_PAGE } from "@/lib/seoInstant";
 import { getCanonicalUrl, SITE_URL } from "@/lib/seo";
@@ -98,9 +99,15 @@ export default function InstantPage() {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(webAppJsonLd) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }} />
+      <PageHero
+        small
+        crumbs={[{ label: "Formaty", href: "/" }, { label: "Utils", href: "/utils" }, { label: INSTANT_PAGE.h1 }]}
+        title={INSTANT_PAGE.h1}
+        intro={INSTANT_PAGE.description}
+      />
       <Suspense
         fallback={
-          <div className="flex min-h-screen items-center justify-center bg-[var(--workspace-background)] text-sm text-[var(--workspace-text-muted)]">
+          <div className="flex min-h-screen items-center justify-center bg-[var(--workspace-background)] text-base text-[var(--workspace-text-muted)]">
             Loading Instant…
           </div>
         }
@@ -109,24 +116,13 @@ export default function InstantPage() {
       </Suspense>
 
       {/* FAQ - mirrors the FAQPage JSON-LD emitted above */}
-      <section className="mx-auto max-w-3xl px-4 pb-16">
-        <h2 className="text-sm font-semibold uppercase tracking-[0.16em] text-[var(--workspace-text-muted)]">
-          FAQ
-        </h2>
-        <div className="mt-4 space-y-3">
-          {INSTANT_FAQ.map((f) => (
-            <details
-              key={f.q}
-              className="group rounded-xl border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-4 py-3"
-            >
-              <summary className="cursor-pointer list-none text-sm font-medium text-[var(--workspace-text)]">
-                {f.q}
-              </summary>
-              <p className="mt-2 text-sm leading-relaxed text-[var(--workspace-text-muted)]">{f.a}</p>
-            </details>
-          ))}
+      <section aria-labelledby="instant-faq" className="bg-[var(--workspace-background)] text-[var(--workspace-text)]">
+        <div className={`${WRAP} grid gap-x-12 gap-y-4 py-[clamp(40px,6vw,80px)] lg:grid-cols-[minmax(0,1fr)_minmax(0,2.4fr)]`}>
+          <h2 id="instant-faq" className={H2_SM}>FAQ</h2>
+          <FaqList items={INSTANT_FAQ} />
         </div>
       </section>
+      <Footer />
     </>
   );
 }

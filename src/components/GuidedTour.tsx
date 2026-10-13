@@ -3,7 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, MotionConfig } from "framer-motion";
 import { createPortal } from "react-dom";
-import { TOUR_STEPS } from "@/lib/tourSteps";
+import { Button } from "@/components/kit";
+import { TOUR_STEPS as ALL_TOUR_STEPS } from "@/lib/tourSteps";
+
+// Mode switch and status bar no longer exist (tabs are typed, no bottom bar): drop their steps.
+const TOUR_STEPS = ALL_TOUR_STEPS;
 
 interface GuidedTourProps {
   open: boolean;
@@ -241,30 +245,18 @@ export function GuidedTour({ open, onOpenChange, onExit }: GuidedTourProps) {
   const controls = useMemo(
     () => (
       <div className="mt-3 flex items-center justify-between gap-2 border-t border-[var(--workspace-border)] pt-3">
-        <button
-          type="button"
-          onClick={skip}
-          className="rounded px-2 py-1 text-[11px] font-medium text-[var(--workspace-text-muted)] transition-colors hover:bg-[var(--workspace-border)]/40 hover:text-[var(--workspace-text)]"
-        >
+        <Button variant="ghost" onClick={skip}>
           Skip
-        </button>
+        </Button>
         <div className="flex items-center gap-2">
           {stepIndex > 0 && (
-            <button
-              type="button"
-              onClick={goBack}
-              className="rounded border border-[var(--workspace-border)] bg-[var(--workspace-background)] px-3 py-1 text-[11px] font-medium text-[var(--workspace-text)] transition-colors hover:bg-[var(--workspace-border)]/40"
-            >
+            <Button variant="secondary" onClick={goBack}>
               Back
-            </button>
+            </Button>
           )}
-          <button
-            type="button"
-            onClick={goNext}
-            className="rounded bg-primary px-3 py-1 text-[11px] font-semibold text-primary-foreground transition-opacity hover:opacity-90"
-          >
+          <Button variant="primary" onClick={goNext}>
             {isLast ? "Done" : "Next"}
-          </button>
+          </Button>
         </div>
       </div>
     ),
@@ -278,7 +270,7 @@ export function GuidedTour({ open, onOpenChange, onExit }: GuidedTourProps) {
           key={s.id}
           aria-hidden
           className={`h-1 rounded-full transition-all duration-200 ${
-            i === stepIndex ? "w-3.5 bg-primary" : i < stepIndex ? "w-1 bg-primary/40" : "w-1 bg-[var(--workspace-border)]"
+            i === stepIndex ? "w-3.5 bg-brand" : i < stepIndex ? "w-1 bg-brand/40" : "w-1 bg-[var(--workspace-border)]"
           }`}
         />
       ))}
@@ -287,11 +279,11 @@ export function GuidedTour({ open, onOpenChange, onExit }: GuidedTourProps) {
 
   const cardBody = (
     <>
-      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-primary">{step.title}</p>
-      <p className="mt-1.5 text-xs leading-relaxed text-[var(--workspace-text)]">{step.body}</p>
+      <p className="text-[14px] font-semibold text-[var(--workspace-text)]">{step.title}</p>
+      <p className="mt-1.5 text-[13px] leading-relaxed text-[var(--workspace-text)]">{step.body}</p>
       <div className="mt-3 flex items-center justify-between">
         {dots}
-        <span className="text-[10px] tabular-nums text-[var(--workspace-text-muted)]">
+        <span className="text-[12px] tabular-nums text-[var(--workspace-text-muted)]">
           {stepIndex + 1}/{TOUR_STEPS.length}
         </span>
       </div>
@@ -328,7 +320,7 @@ export function GuidedTour({ open, onOpenChange, onExit }: GuidedTourProps) {
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 8 }}
         transition={{ duration: 0.18, ease: "easeOut" }}
-        className={`w-full overflow-y-auto rounded-xl border border-[var(--workspace-border)] bg-[var(--workspace-panel)] p-4 shadow-2xl shadow-black/20 outline-none ${
+        className={`w-full overflow-y-auto rounded-lg border border-[var(--workspace-border)] bg-[var(--workspace-panel)] p-4 shadow-2xl shadow-black/20 outline-none ${
           !isDesktop ? "max-h-[80vh] max-w-[92vw]" : "max-w-sm"
         }`}
         style={{ maxWidth: isDesktop ? "24rem" : "92vw" }}
@@ -383,7 +375,7 @@ export function GuidedTour({ open, onOpenChange, onExit }: GuidedTourProps) {
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 4 }}
           transition={{ duration: 0.18, ease: "easeOut" }}
-          className="pointer-events-auto absolute w-80 rounded-xl border border-[var(--workspace-border)] bg-[var(--workspace-panel)] p-4 shadow-2xl shadow-black/20 outline-none"
+          className="pointer-events-auto absolute w-80 rounded-lg border border-[var(--workspace-border)] bg-[var(--workspace-panel)] p-4 shadow-2xl shadow-black/20 outline-none"
           style={{ top: cardPos.top, left: cardPos.left, width: CARD_WIDTH }}
         >
           {cardBody}

@@ -32,6 +32,12 @@ interface JsonEditorProps {
   /** Bypass the huge-input hardening (caller takes responsibility for the
    *  performance cost at > HUGE_INPUT_BYTES). */
   disableLargeMode?: boolean;
+  /** Accessible name of the text area. */
+  ariaLabel?: string;
+  /** Fired after a paste has landed, with the full text now in the editor. */
+  onPaste?: (text: string) => void;
+  /** Plain-text surface for lists: no suggestions, hovers, links, folding or highlights, and 12px of left padding. */
+  plain?: boolean;
 }
 
 export function JsonEditor({
@@ -50,6 +56,9 @@ export function JsonEditor({
   onEditorMount,
   onCtrlEnter,
   disableLargeMode = false,
+  ariaLabel,
+  onPaste,
+  plain = false,
 }: JsonEditorProps) {
   const editorRef = React.useRef<editor.IStandaloneCodeEditor | null>(null);
   const resolvedTheme = resolveFormatyTheme(monacoTheme);
@@ -72,6 +81,8 @@ export function JsonEditor({
    *  Cmd/Ctrl+Enter would run against stale state from mount time). */
   const onCtrlEnterRef = React.useRef(onCtrlEnter);
   onCtrlEnterRef.current = onCtrlEnter;
+  const onPasteRef = React.useRef(onPaste);
+  onPasteRef.current = onPaste;
   /** On macOS KeyMod.CtrlCmd only matches Cmd, so plain Ctrl+Enter would fall
    *  through to Monaco's default newline insert. Bind bare Ctrl there too. */
   const isMac = React.useMemo(
@@ -133,6 +144,27 @@ export function JsonEditor({
           quickSuggestions: !passiveReadOnly,
           suggestOnTriggerCharacters: !passiveReadOnly,
           parameterHints: { enabled: !passiveReadOnly },
+          ...(ariaLabel ? { ariaLabel } : {}),
+          ...(plain
+            ? {
+                lineDecorationsWidth: 12,
+                folding: false,
+                glyphMargin: false,
+                overviewRulerLanes: 0,
+                overviewRulerBorder: false,
+                hideCursorInOverviewRuler: true,
+                renderLineHighlight: "none" as const,
+                hover: { enabled: "off" as const },
+                links: false,
+                occurrencesHighlight: "off" as const,
+                selectionHighlight: false,
+                quickSuggestions: false,
+                suggestOnTriggerCharacters: false,
+                wordBasedSuggestions: "off" as const,
+                parameterHints: { enabled: false },
+                unicodeHighlight: { ambiguousCharacters: false, invisibleCharacters: false },
+              }
+            : {}),
           ...hugeOptions,
         }}
         onChange={(next) => onChange(next ?? "")}
@@ -150,6 +182,7 @@ export function JsonEditor({
           if (isMac) {
             editor.addCommand(monaco.KeyMod.Ctrl | monaco.KeyCode.Enter, onCtrlEnter);
           }
+          editor.onDidPaste(() => onPasteRef.current?.(editor.getValue()));
           if (onEditorMount) {
             onEditorMount({
               find: () => editor.trigger("keyboard", "actions.find", null),

@@ -1,13 +1,13 @@
 // Regenerates PNG favicons and per-route OG share cards.
-// Usage: bun run build && bun scripts/gen-og.mjs
+// Usage: bun run build && node scripts/gen-og.mjs   (Bun works too where it can launch Playwright's Chromium)
 //
 // Cards are REAL BROWSER SCREENSHOTS: the static export in out/ is
 // served over localhost, every page is loaded in headless Chromium (Playwright)
 // at exactly 1200x630 with dark theme, and the settled capture is saved as
-// public/og/<route>.png. The base public/og.png is a manually-authored image
-// and is intentionally NOT written by this script. If a route or the browser
-// is unavailable, a satori card (committed Geist font) is used as fallback so
-// the script always succeeds.
+// public/og/<route>.png. The base public/og.png is the home page captured the
+// same way in light theme (ink stage, white product window). If a route or the
+// browser is unavailable, a satori card (committed Geist font) is used as
+// fallback so the script always succeeds; og.png is then left as it is.
 //
 // Titles/descriptions come from src/lib/seo.ts, src/lib/seoUtils.ts and
 // src/lib/seoInstant.ts so fallback cards always match what the pages emit.
@@ -43,12 +43,12 @@ function loadSeo() {
     mkdirSync(out.split("/").slice(0, -1).join("/"), { recursive: true });
     writeFileSync(out, js);
   }
-  // Shim the type-only import for seoUtils.
+  // seoUtils imports through the "@/" alias. Point its seo import at the transpiled file and shim the
+  // type-only one, so the script runs under Node as well as Bun (only Bun resolves the alias itself).
   const utilsPath = ".og-gen/lib/seoUtils.cjs";
-  const utilsJs = readFileSync(utilsPath, "utf8").replace(
-    /require\("@\/lib\/utils\/devtools"\)/g,
-    "{}",
-  );
+  const utilsJs = readFileSync(utilsPath, "utf8")
+    .replace(/require\("@\/lib\/seo"\)/g, 'require("./seo.cjs")')
+    .replace(/require\("@\/lib\/utils\/devtools"\)/g, "{}");
   writeFileSync(utilsPath, utilsJs);
   return {
     seo: require("../.og-gen/lib/seo.cjs"),
@@ -82,7 +82,7 @@ const ROUTE_PATHS = {
   instant: "/utils/instant",
 };
 const BRAND = seo.SITE_NAME || "Formaty";
-const BRAND_LINE = "Free · Local-first · No sign-up";
+const BRAND_LINE = "Free, local-first, no sign-up";
 
 /** Strip the " | Formaty" suffix and split into at most 2 balanced lines. */
 function titleLines(title) {
@@ -116,7 +116,7 @@ function cardElement({ title, subtitle }) {
         flexDirection: "column",
         justifyContent: "space-between",
         padding: "64px 72px",
-        backgroundImage: "linear-gradient(135deg, #0a0a10 0%, #10101a 55%, #141422 100%)",
+        backgroundColor: "#0C0B0A",
       },
       children: [
         {
@@ -131,11 +131,11 @@ function cardElement({ title, subtitle }) {
                     width: 56,
                     height: 56,
                     borderRadius: 14,
-                    background: "linear-gradient(135deg, #6d6df4, #4f8ff7)",
+                    background: "#F2B544",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    color: "#ffffff",
+                    color: "#1A1816",
                     fontSize: 34,
                     fontWeight: 700,
                   },
@@ -145,7 +145,7 @@ function cardElement({ title, subtitle }) {
               {
                 type: "div",
                 props: {
-                  style: { fontSize: 40, fontWeight: 700, color: "#ececf1", letterSpacing: -1 },
+                  style: { fontSize: 40, fontWeight: 700, color: "#F2F0ED", letterSpacing: -1 },
                   children: BRAND,
                 },
               },
@@ -162,7 +162,7 @@ function cardElement({ title, subtitle }) {
                 style: {
                   fontSize,
                   fontWeight: 700,
-                  color: i === 0 && lines.length > 1 ? "#ececf1" : "#a5a5ff",
+                  color: "#F2F0ED",
                   letterSpacing: -2,
                   lineHeight: 1.05,
                   display: "flex",
@@ -180,14 +180,14 @@ function cardElement({ title, subtitle }) {
               {
                 type: "div",
                 props: {
-                  style: { fontSize: 26, color: "#9a9aa5", lineHeight: 1.35, display: "flex" },
+                  style: { fontSize: 26, color: "#A8A39C", lineHeight: 1.35, display: "flex" },
                   children: subtitle,
                 },
               },
               {
                 type: "div",
                 props: {
-                  style: { fontSize: 24, fontWeight: 600, color: "#ececf1", display: "flex" },
+                  style: { fontSize: 24, fontWeight: 600, color: "#F2F0ED", display: "flex" },
                   children: BRAND_LINE,
                 },
               },
@@ -287,9 +287,10 @@ async function screenshotPages(pages) {
 
   const shots = new Map();
   try {
-    for (const { slug, path } of pages) {
+    for (const { slug, path, light } of pages) {
       const url = `${base}${path}`;
       try {
+        await page.emulateMedia({ colorScheme: light ? "light" : "dark" });
         await page.goto(url, { waitUntil: "networkidle" });
         await page.evaluate(() => document.fonts.ready);
         await page.evaluate(() => {
@@ -321,8 +322,13 @@ async function main() {
     console.log("falling back to satori cards");
   }
 
+  // HOME is the site-wide card: the landing hero, in light theme.
+  const HOME = "@home";
   const shots = existsSync("out/index.html")
-    ? await screenshotPages(ALL_ROUTES.map((slug) => ({ slug, path: ROUTE_PATHS[slug] ?? `/${slug}` })))
+    ? await screenshotPages([
+        { slug: HOME, path: "/", light: true },
+        ...ALL_ROUTES.map((slug) => ({ slug, path: ROUTE_PATHS[slug] ?? `/${slug}` })),
+      ])
     : new Map();
 
   let used = 0;
@@ -336,7 +342,10 @@ async function main() {
   }
   console.log(`generated ${ALL_ROUTES.length} route cards (${used} real screenshots, ${ALL_ROUTES.length - used} satori fallbacks)`);
 
-  // public/og.png is manually authored — this script never touches it.
+  if (shots.has(HOME)) {
+    await sharp(shots.get(HOME)).png({ compressionLevel: 9 }).toFile("public/og.png");
+    console.log("generated og.png from the home page");
+  }
 
   // Favicons from src/app/icon.svg (no text, sharp is fine).
   await sharp("src/app/icon.svg").resize(192, 192).png().toFile("public/icon-192.png");

@@ -56,6 +56,16 @@ describe("csvAdapter.parse", () => {
   });
 });
 
+describe("csvAdapter.parse errors", () => {
+  it("names the line of a short row", () => {
+    expect(() => csvAdapter.parse("a,b,c\n1,2,3\n4,5\n")).toThrow("Too few fields: expected 3 fields but parsed 2 (line 3)");
+  });
+
+  it("reads a single column without complaining about the delimiter", () => {
+    expect(csvAdapter.parse("a\n1\n2\n")).toEqual([{ a: "1" }, { a: "2" }]);
+  });
+});
+
 describe("csvAdapter.stringify", () => {
   it("round-trips through parse", () => {
     const data = [

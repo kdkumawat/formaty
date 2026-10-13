@@ -1,39 +1,21 @@
-"use client";
-
-import {
-  Hero,
-  UseCases,
-  Tools,
-  CodeGen,
-  Compare,
-  TryIt,
-  Instant,
-  Privacy,
-  FaqSection,
-  LovedBy,
-  FinalCTA,
-  Footer,
-  LandingHeader,
-} from "@/components/landing";
+import { Hero, Convert, Generators, Compare, MoreTools, Privacy, FaqSection, FinalCTA, Footer, SiteHeader } from "@/components/landing";
 
 export function HomePage() {
   return (
-    <div className="min-h-screen bg-[var(--workspace-background)]">
-      <LandingHeader />
-      <main id="main" className="flex-1">
+    <div className="min-h-screen bg-[var(--workspace-background)] text-[var(--workspace-text)]">
+      {/* The hero carries the page's amber key, so the header's playground link starts plain. */}
+      <SiteHeader quiet />
+      <main id="main">
         <Hero />
-        <UseCases />
-        <Tools />
-        <CodeGen />
+        <Convert />
+        <Generators />
         <Compare />
-        <TryIt />
-        <Instant />
-        <Privacy />
+        <MoreTools />
         <FaqSection />
-        <LovedBy />
+        <Privacy />
         <FinalCTA />
-        <Footer />
       </main>
+      <Footer />
     </div>
   );
 }

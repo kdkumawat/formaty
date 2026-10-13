@@ -54,6 +54,8 @@ export interface WorkspaceState {
   rightLabel?: string;
   /** Utils: active util tab. */
   utilTab?: string;
+  /** Version of the list-option defaults this state was saved under (absent = 1). */
+  listOptionsVersion?: number;
   /** Multi-tab share: list of tabs. */
   tabs?: Array<{ id: string; label: string; num: number; renamed?: boolean; leftLabel?: string; rightLabel?: string; compareActiveBucket?: ListBucket }>;
   activeTabId?: string;
@@ -62,6 +64,18 @@ export interface WorkspaceState {
   tabSnapshots?: Record<string, unknown>;
   /** Preset/recipe state marker (informational - recipes re-run on open). */
   preset?: string;
+}
+
+/** 2: `trim` and `stripQuotes` became default-on. Saves and links carry this marker. */
+export const LIST_OPTIONS_VERSION = 2;
+
+/** Saved before v2: switch the two new default-on flags on once; v2+ keeps the user's choice. */
+export function upgradeListOptions<T extends { listCompareOptions?: Partial<ListParseOptions> }>(
+  saved: T,
+  version: number | undefined,
+): T {
+  if ((version ?? 1) >= LIST_OPTIONS_VERSION || !saved.listCompareOptions) return saved;
+  return { ...saved, listCompareOptions: { ...saved.listCompareOptions, trim: true, stripQuotes: true } };
 }
 
 const MAX_UNCOMPRESSED = 100_000;

@@ -17,18 +17,21 @@ import {
   HomeIcon,
   MagnifyingGlassIcon,
   ScaleIcon,
-} from "@heroicons/react/24/outline";
+} from "@heroicons/react/16/solid";
 import "jsoncrack-react/style.css";
 import type { JSONCrackProps, JSONCrackRef, LayoutDirection } from "jsoncrack-react";
 import type { JsonValue } from "@/lib/json/core";
 import { searchJson } from "@/lib/json/core";
 import { HUGE_INPUT_BYTES } from "@/lib/io/size";
-import { Tooltip } from "@/components/workspace/Tooltip";
+import { IconButton, TextField } from "@/components/kit";
 
 const JSONCrackDynamic = dynamic(
   () => import("jsoncrack-react").then((module) => module.JSONCrack),
   { ssr: false },
 ) as ComponentType<JSONCrackProps & RefAttributes<JSONCrackRef>>;
+
+const panelColor = () =>
+  getComputedStyle(document.documentElement).getPropertyValue("--workspace-panel").trim() || "#ffffff";
 
 export interface GraphViewProps {
   data: JsonValue;
@@ -106,8 +109,9 @@ export const GraphView = forwardRef<GraphViewRef, GraphViewProps>(function Graph
     const texts = el.querySelectorAll("text");
     texts.forEach((t) => {
       const content = t.textContent ?? "";
+      const hit = getComputedStyle(document.documentElement).getPropertyValue("--focus").trim() || "#B45309";
       if (term && content.toLowerCase().includes(term)) {
-        t.setAttribute("fill", isDark ? "#fbbf24" : "#ca8a04");
+        t.setAttribute("fill", hit);
         t.setAttribute("font-weight", "bold");
       } else {
         t.removeAttribute("font-weight");
@@ -122,9 +126,6 @@ export const GraphView = forwardRef<GraphViewRef, GraphViewProps>(function Graph
       return LAYOUTS[(current + 1) % LAYOUTS.length];
     });
   };
-
-  const searchInputClass =
-    "flex h-8 min-w-[8rem] max-w-48 items-center gap-2 rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-2 text-sm text-[var(--workspace-text)] shadow-none outline-none focus:ring-2 focus:ring-primary/30";
 
   const renderGraphImage = async (format: "png" | "jpg"): Promise<Blob> => {
     const source = exportRef.current;
@@ -174,7 +175,7 @@ export const GraphView = forwardRef<GraphViewRef, GraphViewProps>(function Graph
     }
 
     ctx.scale(scale, scale);
-    ctx.fillStyle = isDark ? "#12121a" : "#ffffff";
+    ctx.fillStyle = panelColor();
     ctx.fillRect(0, 0, width, height);
 
     try {
@@ -221,7 +222,7 @@ export const GraphView = forwardRef<GraphViewRef, GraphViewProps>(function Graph
     } catch {
       // Final fallback: html2canvas with onclone to replace lab/oklch colors
       try {
-        const fallbackColor = isDark ? "#12121a" : "#ffffff";
+        const fallbackColor = panelColor();
         const { default: html2canvas } = await import("html2canvas");
       const canvas = await html2canvas(source, {
           backgroundColor: fallbackColor,
@@ -334,62 +335,37 @@ export const GraphView = forwardRef<GraphViewRef, GraphViewProps>(function Graph
         />
       </div>
 
-      <div className="absolute bottom-2 left-2 z-10 flex items-center gap-2">
-        <div className="flex items-center gap-0.5 rounded-lg border border-[var(--workspace-border)] p-0.5 bg-[var(--workspace-background)]/95 backdrop-blur-sm">
-          <Tooltip content="Focus root">
-          <button
-            type="button"
-            className="rounded p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors"
-            onClick={() => graphRef.current?.focusFirstNode()}
-            aria-label="Focus root"
-          >
-            <HomeIcon className="h-4 w-4" />
-          </button>
-          </Tooltip>
-          <Tooltip content="Fit graph">
-          <button
-            type="button"
-            className="rounded p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors"
-            onClick={() => graphRef.current?.centerView()}
-            aria-label="Fit graph"
-          >
-            <ArrowsPointingOutIcon className="h-4 w-4" />
-          </button>
-          </Tooltip>
-          <Tooltip content="Rotate layout">
-          <button
-            type="button"
-            className="rounded p-1 text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)] transition-colors"
-            onClick={rotateLayout}
-            aria-label="Rotate layout"
-          >
-            <ArrowPathRoundedSquareIcon className="h-4 w-4" />
-          </button>
-          </Tooltip>
-          <Tooltip content={showGrid ? "Hide rulers" : "Show rulers"}>
-          <button
-            type="button"
-            className={`rounded p-1 transition-colors ${showGrid ? "bg-primary text-primary-foreground" : "text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)] hover:text-[var(--workspace-text)]"}`}
+      <div className="absolute inset-x-2 bottom-2 z-10 flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-0.5 rounded-md bg-[var(--workspace-panel)] p-0.5 shadow-menu">
+          <IconButton label="Focus root" onClick={() => graphRef.current?.focusFirstNode()}>
+            <HomeIcon />
+          </IconButton>
+          <IconButton label="Fit graph" onClick={() => graphRef.current?.centerView()}>
+            <ArrowsPointingOutIcon />
+          </IconButton>
+          <IconButton label="Rotate layout" onClick={rotateLayout}>
+            <ArrowPathRoundedSquareIcon />
+          </IconButton>
+          <IconButton
+            label={showGrid ? "Hide rulers" : "Show rulers"}
+            variant={showGrid ? "selected" : "ghost"}
+            aria-pressed={showGrid}
             onClick={() => setShowGrid((prev) => !prev)}
-            aria-label={showGrid ? "Hide rulers" : "Show rulers"}
           >
-            <ScaleIcon className="h-4 w-4" />
-          </button>
-          </Tooltip>
+            <ScaleIcon />
+          </IconButton>
         </div>
 
-        <label className={searchInputClass}>
-          <MagnifyingGlassIcon className="h-4 w-4 shrink-0 text-[var(--workspace-text-muted)]" />
-          <input
-            type="text"
-            placeholder="Search node"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            className="min-w-0 flex-1 bg-transparent text-[var(--workspace-text)] placeholder:text-[var(--workspace-text-muted)]"
-            aria-label="Search graph"
-          />
-        </label>
-        {search.trim() ? <span className="text-xs text-[var(--workspace-text-muted)] shrink-0">{searchMatches} matches</span> : null}
+        <TextField
+          aria-label="Search graph"
+          icon={<MagnifyingGlassIcon />}
+          placeholder="Search node"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          onClear={() => setSearch("")}
+          wrapperClassName="min-w-[8rem] max-w-48 flex-1 shadow-menu !bg-[var(--workspace-panel)]"
+        />
+        {search.trim() ? <span className="shrink-0 rounded-md bg-[var(--workspace-panel)] px-2 py-1 text-[12px] text-[var(--workspace-text-muted)]">{searchMatches} matches</span> : null}
       </div>
     </div>
   );

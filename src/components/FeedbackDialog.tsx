@@ -1,24 +1,10 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import {
-  ChatBubbleLeftRightIcon,
-  PaperAirplaneIcon,
-  PlusIcon,
-  XMarkIcon,
-} from "@heroicons/react/24/outline";
+import { ChatBubbleLeftRightIcon, PaperAirplaneIcon, PlusIcon, XMarkIcon } from "@heroicons/react/16/solid";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Tooltip } from "@/components/workspace/Tooltip";
+import { Button, IconButton, Select, TextField } from "@/components/kit";
 import { toast } from "@/components/Toast";
 import {
   FEEDBACK_CATEGORIES,
@@ -36,9 +22,6 @@ interface FeedbackEntry {
 }
 
 const DEFAULT_CATEGORY: FeedbackCategory = "suggestion";
-
-const iconTriggerClass =
-  "flex h-5 w-5 shrink-0 items-center justify-center rounded text-[var(--workspace-text-muted)] transition-colors hover:bg-[var(--workspace-border)]/40 hover:text-[var(--workspace-text)]";
 
 export interface FeedbackDialogProps {
   trigger?: "icon" | "link" | "button";
@@ -133,7 +116,7 @@ export function FeedbackDialog({
             href="https://github.com/kdkumawat/formaty/issues"
             target="_blank"
             rel="noopener noreferrer"
-            className="font-medium text-primary hover:underline"
+            className="font-medium text-[var(--workspace-text)] hover:underline"
           >
             GitHub
           </a>{" "}
@@ -143,14 +126,14 @@ export function FeedbackDialog({
     }
     if (error === "network") {
       return (
-        <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+        <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-[13px] text-destructive">
           Could not reach the feedback service. Check your connection and try again.
         </p>
       );
     }
     if (error) {
       return (
-        <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+        <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-[13px] text-destructive">
           Something went wrong ({error}). Please try again.
         </p>
       );
@@ -160,27 +143,20 @@ export function FeedbackDialog({
 
   const triggerNode =
     trigger === "icon" ? (
-      <Tooltip content={label}>
-        <button
-          type="button"
-          aria-label={label}
-          className={`${iconTriggerClass} ${className}`}
-          onClick={() => setOpen(true)}
-        >
-          <ChatBubbleLeftRightIcon className="h-3.5 w-3.5 shrink-0" />
-        </button>
-      </Tooltip>
+      <IconButton label={label} className={className} onClick={() => setOpen(true)}>
+        <ChatBubbleLeftRightIcon />
+      </IconButton>
     ) : trigger === "link" ? (
+      // Text link for the 24px status bar and the marketing footer, where a 28px button does not fit.
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className={`text-xs text-[var(--workspace-text-muted)] transition-colors hover:text-primary ${className}`}
+        className={`text-[12px] text-[var(--workspace-text-muted)] outline-none transition-colors hover:text-[var(--workspace-text)] focus-visible:ring-2 focus-visible:ring-[var(--focus)] ${className}`}
       >
         {label}
       </button>
     ) : (
-      <Button type="button" variant="outline" className={className} onClick={() => setOpen(true)}>
-        <ChatBubbleLeftRightIcon className="h-4 w-4" />
+      <Button variant="secondary" className={className} icon={<ChatBubbleLeftRightIcon />} onClick={() => setOpen(true)}>
         {label}
       </Button>
     );
@@ -191,8 +167,8 @@ export function FeedbackDialog({
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-xl">
           <DialogHeader>
-            <DialogTitle className="text-base">Send feedback</DialogTitle>
-            <DialogDescription className="text-xs leading-relaxed">
+            <DialogTitle className="text-[14px]">Send feedback</DialogTitle>
+            <DialogDescription className="text-[13px] leading-relaxed">
               Help improve Formaty. Add several items at once - they are submitted together in one
               batch, and you can keep adding more after sending.
             </DialogDescription>
@@ -205,33 +181,17 @@ export function FeedbackDialog({
                 className="rounded-lg border border-[var(--workspace-border)] bg-[var(--workspace-panel)]/60 p-2.5"
               >
                 <div className="mb-2 flex items-center gap-2">
-                  <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wider text-[var(--workspace-text-muted)]">
-                    Item {idx + 1}
-                  </span>
+                  <span className="shrink-0 text-[12px] font-medium text-[var(--workspace-text-muted)]">Item {idx + 1}</span>
                   <Select
+                    aria-label="Category"
                     value={entry.category}
-                    onValueChange={(v) => updateEntry(entry.id, { category: v as FeedbackCategory })}
-                  >
-                    <SelectTrigger className="h-7 w-36 shrink-0 rounded-md text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {FEEDBACK_CATEGORIES.map((c) => (
-                        <SelectItem key={c.id} value={c.id} className="text-xs">
-                          {c.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    onChange={(v) => updateEntry(entry.id, { category: v })}
+                    options={FEEDBACK_CATEGORIES.map((c) => ({ value: c.id, label: c.label }))}
+                  />
                   {entries.length > 1 && (
-                    <button
-                      type="button"
-                      aria-label="Remove item"
-                      className="ml-auto flex h-6 w-6 shrink-0 items-center justify-center rounded text-[var(--workspace-text-muted)] transition-colors hover:bg-[var(--workspace-border)]/40 hover:text-[var(--workspace-text)]"
-                      onClick={() => removeEntry(entry.id)}
-                    >
-                      <XMarkIcon className="h-3.5 w-3.5" />
-                    </button>
+                    <IconButton label="Remove item" className="ml-auto" onClick={() => removeEntry(entry.id)}>
+                      <XMarkIcon />
+                    </IconButton>
                   )}
                 </div>
                 <Textarea
@@ -241,21 +201,16 @@ export function FeedbackDialog({
                   className="min-h-[64px] resize-y text-sm"
                   maxLength={FEEDBACK_MAX_MESSAGE}
                 />
-                <p className="mt-1 text-right text-[10px] tabular-nums text-[var(--workspace-text-muted)]">
+                <p className="mt-1 text-right text-[12px] tabular-nums text-[var(--workspace-text-muted)]">
                   {entry.message.length}/{FEEDBACK_MAX_MESSAGE}
                 </p>
               </div>
             ))}
 
             {entries.length < FEEDBACK_MAX_ITEMS && (
-              <button
-                type="button"
-                onClick={addEntry}
-                className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-[var(--workspace-border)] px-3 py-2 text-xs font-medium text-[var(--workspace-text-muted)] transition-colors hover:border-primary/40 hover:text-primary"
-              >
-                <PlusIcon className="h-3.5 w-3.5" />
+              <Button variant="secondary" className="w-full" icon={<PlusIcon />} onClick={addEntry}>
                 Add another item ({entries.length}/{FEEDBACK_MAX_ITEMS})
-              </button>
+              </Button>
             )}
           </div>
 
@@ -271,35 +226,36 @@ export function FeedbackDialog({
               onChange={(e) => setWebsite(e.target.value)}
               className="hidden"
             />
-            <Input
+            <TextField
               type="email"
+              aria-label="Email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="Your email (optional - only if you want a reply)"
-              className="h-9 text-sm"
+              placeholder="Your email (optional, only if you want a reply)"
+              wrapperClassName="w-full"
+              size="md"
             />
             {renderError()}
           </div>
 
           <div className="flex items-center justify-between gap-3 border-t border-[var(--workspace-border)] pt-3">
-            <p className="min-w-0 text-[10px] leading-snug text-[var(--workspace-text-muted)]">
+            <p className="min-w-0 text-[12px] leading-snug text-[var(--workspace-text-muted)]">
               {sentCount !== null && (
-                <span className="mb-0.5 block font-medium text-emerald-500">
+                <span className="mb-0.5 block font-medium text-ok">
                   Last send: {sentCount} item{sentCount === 1 ? "" : "s"}
                 </span>
               )}
               Your current page and browser info are attached automatically. No account needed.
             </p>
             <Button
-              type="button"
-              disabled={validItems.length === 0 || submitting}
+              variant="primary"
+              loading={submitting}
+              disabled={validItems.length === 0}
+              icon={<PaperAirplaneIcon />}
               onClick={() => void handleSubmit()}
               className="shrink-0"
             >
-              <PaperAirplaneIcon className="h-4 w-4" />
-              {submitting
-                ? "Sending..."
-                : `Send ${validItems.length} item${validItems.length === 1 ? "" : "s"}`}
+              {submitting ? "Sending" : `Send ${validItems.length} item${validItems.length === 1 ? "" : "s"}`}
             </Button>
           </div>
         </DialogContent>
