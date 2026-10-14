@@ -86,7 +86,7 @@ function Tail({ hint, shortcut }: Pick<RowExtras, "hint" | "shortcut">) {
   return (
     <>
       {hint != null && <span className={cn("shrink-0 pl-3 text-right font-mono text-[11.5px] font-normal", mutedText)}>{hint}</span>}
-      {shortcut && <Kbd keys={shortcut} />}
+      {shortcut && <Kbd keys={shortcut} className="!bg-transparent !font-mono !shadow-none !text-[11.5px] !text-[var(--workspace-text-muted)]" />}
     </>
   );
 }
@@ -167,7 +167,7 @@ export const MenuLabel = forwardRef<HTMLDivElement, ComponentPropsWithoutRef<typ
   { className, ...props },
   ref,
 ) {
-  return <DM.Label ref={ref} className={cn("px-2 pb-1 pt-2 text-[11.5px] font-[560] tracking-[0.01em]", mutedText, className)} {...props} />;
+  return <DM.Label ref={ref} className={cn("px-2 pb-1 pt-2 text-[12px] font-medium", mutedText, className)} {...props} />;
 });
 
 export const MenuSeparator = forwardRef<HTMLDivElement, ComponentPropsWithoutRef<typeof DM.Separator>>(

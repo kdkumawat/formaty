@@ -24,7 +24,7 @@ export function MobileMenu({ brand, action, children }: { brand: React.ReactNode
         </IconButton>
       </Dialog.Trigger>
       <Dialog.Portal>
-        <Dialog.Overlay className="mk-ink fixed inset-0 z-50 bg-[var(--workspace-background)]/60 backdrop-blur-[2px] transition-opacity duration-[140ms] ease-out starting:opacity-0 md:hidden" />
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-[var(--workspace-background)]/60 backdrop-blur-[2px] transition-opacity duration-[140ms] ease-out starting:opacity-0 md:hidden" />
         <Dialog.Content
           aria-describedby={undefined}
           // Focus the sheet itself on open, so no control shows a focus ring until the visitor tabs.
@@ -36,7 +36,7 @@ export function MobileMenu({ brand, action, children }: { brand: React.ReactNode
           onClick={closeOnLink}
           // One press closes the sheet even while a tooltip inside it is open (the tooltip would take the first).
           onKeyDown={(e) => e.key === "Escape" && setOpen(false)}
-          className="mk-ink fixed inset-x-0 top-0 z-50 max-h-dvh overflow-y-auto border-b border-[var(--workspace-border)] bg-[var(--workspace-background)] pb-5 shadow-menu outline-none transition-[opacity,translate] duration-[140ms] ease-out starting:-translate-y-2 starting:opacity-0 md:hidden"
+          className="fixed inset-x-0 top-0 z-50 max-h-dvh overflow-y-auto border-b border-[var(--workspace-border)] bg-[var(--workspace-background)] pb-5 shadow-menu outline-none transition-[opacity,translate] duration-[140ms] ease-out starting:-translate-y-2 starting:opacity-0 md:hidden"
         >
           <Dialog.Title className="sr-only">Menu</Dialog.Title>
           <div className={`${WRAP} flex h-[var(--mk-header)] items-center justify-between gap-x-4`}>

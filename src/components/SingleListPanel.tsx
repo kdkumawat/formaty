@@ -10,8 +10,7 @@ import {
   ResultView,
   SplitBySelect,
   SplitHandle,
-  Tile,
-  TileRow,
+  ResultTabs,
   inputPaneClass,
   splitStyle,
   useExportFormat,
@@ -94,7 +93,6 @@ export function SingleListPanel({
   onCountChange,
   split = 38,
   onResizeStart,
-  toolbarHost,
   listLabel,
   onStartListRename,
 }: SingleListPanelProps) {
@@ -238,12 +236,19 @@ export function SingleListPanel({
             </div>
           ) : (
             <>
-              <TileRow label="Which items" host={toolbarHost}>
-                <Tile count={analysis.uniqueCount} label="Distinct" on={tile === "distinct"} onClick={() => setTile("distinct")} />
-                <Tile count={analysis.onceCount} label="Appear once" on={tile === "once"} onClick={() => setTile("once")} />
-                <Tile count={analysis.duplicateKeys} label="Repeated" on={tile === "repeated"} onClick={() => setTile("repeated")} />
-              </TileRow>
               <ResultView
+                tabs={
+                  <ResultTabs
+                    value={tile}
+                    onChange={(v) => setTile(v)}
+                    tabs={[
+                      { value: "distinct", label: "Distinct", count: analysis.uniqueCount },
+                      { value: "once", label: "Appear once", count: analysis.onceCount },
+                      { value: "repeated", label: "Repeated", count: analysis.duplicateKeys },
+                    ]}
+                  />
+                }
+                info={`${sorted.length.toLocaleString()} of ${analysis.rawCount.toLocaleString()} values · ${analysis.uniqueCount.toLocaleString()} distinct`}
                 items={sorted}
                 format={exportFormat}
                 onFormat={setExportFormat}

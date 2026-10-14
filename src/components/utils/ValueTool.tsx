@@ -1,12 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { TreeView } from "@/components/TreeView";
-import type { JsonValue } from "@/lib/json/core";
 import { cleanJson, sha1Hex, sha256Hex, shaHex, utilPlaceholder, UTIL_TABS, type UtilTab } from "@/lib/utils/devtools";
 import { selectFieldAll, type UtilToolState } from "@/components/utils/state";
 import { TOOL_META, detectReadings, looksEncoded, toolReadings, type Dir, type Reading } from "@/components/utils/readings";
 import { Button, EmptyState, InputActions, PaneHeader, ResultActions, RowCopy, Segmented } from "@/components/kit";
+import { JwtView } from "@/components/utils/JwtView";
 import { editorClass } from "@/components/compare/shared";
 
 interface Props {
@@ -22,12 +21,11 @@ const label = (id: UtilTab) => UTIL_TABS.find((t) => t.id === id)?.label ?? id;
 /** Readings of these kinds make generic encoding readings noise, so Auto-detect hides the hash too. */
 const SPECIFIC = new Set<UtilTab>(["jwt", "cron", "color", "clean"]);
 
-export function ValueTool({ tool, state, patch, onOpen, isDark }: Props) {
+export function ValueTool({ tool, state, patch, onOpen }: Props) {
   const meta = TOOL_META[tool];
   const input = state.input;
   const twoWay = !!meta.dirLabels;
   const dir: Dir = state.dir ?? (looksEncoded(tool, input) ? "decode" : "encode");
-  const [jwtTree, setJwtTree] = useState(false);
 
   // SHA digests are async; keyed by input so stale results are ignored.
   const wantsHash = tool === "hash" || tool === "auto";
@@ -60,18 +58,11 @@ export function ValueTool({ tool, state, patch, onOpen, isDark }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [outText]);
 
-  const parsed = useMemo<unknown>(() => {
-    if (tool !== "jwt" || !state.output) return null;
-    try {
-      return JSON.parse(state.output) as unknown;
-    } catch {
-      return null;
-    }
-  }, [tool, state.output]);
-
   const showEmpty = !input.trim() && tool !== "stats";
 
-  const copyText = tool === "jwt" ? state.output : (primary?.value ?? "");
+  const copyText = primary?.value ?? "";
+
+  if (tool === "jwt") return <JwtView state={state} patch={patch} />;
 
   return (
     <div className="grid min-h-0 flex-1 grid-cols-1 min-[901px]:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
@@ -121,26 +112,12 @@ export function ValueTool({ tool, state, patch, onOpen, isDark }: Props) {
           title="Result"
           left={rows.length > 0 && <span className="text-[12px] tabular-nums text-[var(--workspace-text-muted)]">{rows.length} {rows.length === 1 ? "reading" : "readings"}</span>}
           right={
-            <ResultActions copy={{ getText: () => copyText, disabled: !copyText }}>
-              {tool === "jwt" && parsed !== null && (
-                <Segmented<"rows" | "tree">
-                  aria-label="JWT view"
-                  value={jwtTree ? "tree" : "rows"}
-                  options={[
-                    { value: "rows", label: "Rows" },
-                    { value: "tree", label: "Tree" },
-                  ]}
-                  onChange={(v) => setJwtTree(v === "tree")}
-                />
-              )}
-            </ResultActions>
+            <ResultActions copy={{ getText: () => copyText, disabled: !copyText }} />
           }
         />
         <div className="min-h-0 flex-1 overflow-auto px-3 pb-3 pt-1">
           {showEmpty ? (
             <EmptyState title="Nothing to read yet" description="Paste a value on the left, or use Sample." />
-          ) : tool === "jwt" && jwtTree && parsed !== null ? (
-            <TreeView data={parsed as JsonValue} isDark={isDark} showTypeBadges={false} defaultExpanded fontSize={13} onNotify={() => {}} />
           ) : (
             rows.map((r, i) => {
               const body = (

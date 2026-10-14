@@ -18,9 +18,9 @@ describe("highlight", () => {
       ['"b"', "key"],
       [":", "punct"],
       ["[", "punct"],
-      ["true", "keyword"],
+      ["true", "bool"],
       [",", "punct"],
-      ["null", "keyword"],
+      ["null", "bool"],
       [",", "punct"],
       ['"x"', "string"],
       ["]}", "punct"],
@@ -49,7 +49,7 @@ describe("highlight", () => {
       ["'x'", "string"],
       ["ok", "key"],
       [":", "punct"],
-      ["yes", "keyword"],
+      ["yes", "bool"],
     ]);
   });
 
@@ -84,7 +84,7 @@ describe("highlight", () => {
       ["3", "number"],
       ["ok", "key"],
       ["=", "punct"],
-      ["true", "keyword"],
+      ["true", "bool"],
     ]);
   });
 
@@ -98,7 +98,7 @@ describe("highlight", () => {
       ['"A, b"', "string"],
       ["2", "number"],
       [",", "punct"],
-      ["true", "keyword"],
+      ["true", "bool"],
     ]);
   });
 

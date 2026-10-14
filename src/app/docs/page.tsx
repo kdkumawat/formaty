@@ -59,7 +59,7 @@ export default function DocsPage() {
         small
       />
 
-      <div className="bg-[var(--workspace-panel)] text-[var(--workspace-text)]">
+      <div className="text-[var(--workspace-text)]">
         <div className={`${WRAP} grid gap-x-16 gap-y-8 py-[clamp(32px,5vw,64px)] lg:grid-cols-[200px_minmax(0,1fr)]`}>
           <aside className="lg:sticky lg:top-24 lg:self-start">
             <nav aria-label="On this page" className="hidden lg:block">

@@ -26,7 +26,7 @@ export function ReadOnlyTextViewer({ value, language, className, wrap = false }:
         padding: "0.75rem 1rem",
         fontFamily: "var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)",
         fontSize: "12px",
-        lineHeight: 1.5,
+        lineHeight: 1.6,
         whiteSpace: wrap ? "pre-wrap" : "pre",
         overflow: "auto",
         height: "100%",

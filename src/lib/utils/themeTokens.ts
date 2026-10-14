@@ -2,15 +2,13 @@
  * First-paint theme tokens, injected as an inline <style> to prevent FOUC.
  *
  * Keep the values in sync with the `[data-theme]` blocks in `app/globals.css`.
- * `layout.tsx` embeds a hardcoded copy of these strings in its pre-hydration
- * inline script (it runs before any module loads, so it cannot import this).
- * If you change tokens here, update that inline script too.
+ * `layout.tsx` serializes these strings into its pre-hydration inline script.
  */
 export const DARK_THEME_CSS =
-  "html,body{--background:#0C0B0A;--foreground:#F2F0ED;--card:#141312;--card-foreground:#F2F0ED;--popover:#1A1917;--popover-foreground:#F2F0ED;--border:#2A2826;--input:#3D3A36;--muted:#0F0E0D;--muted-foreground:#A8A39C;--accent:#242220;--accent-foreground:#F2F0ED;--secondary:#1E1C1A;--secondary-foreground:#F2F0ED;--primary:#F2F0ED;--ring:#F2F0ED;--destructive:oklch(0.64 0.2 25);--workspace-background:#0C0B0A;--workspace-panel:#141312;--workspace-border:#2A2826;--workspace-text:#F2F0ED;--workspace-text-muted:#A8A39C}";
+  "html,body{--background:#0A0B0C;--foreground:#ECEDEF;--card:#111214;--card-foreground:#ECEDEF;--popover:#17181B;--popover-foreground:#ECEDEF;--border:#232529;--input:#30333A;--muted:#0D0E10;--muted-foreground:#9B9EA4;--accent:#24262A;--accent-foreground:#ECEDEF;--secondary:#1C1D21;--secondary-foreground:#ECEDEF;--primary:#ECEDEF;--ring:#F2B544;--destructive:#FF8A7A;--workspace-background:#0A0B0C;--workspace-panel:#111214;--workspace-border:#232529;--workspace-text:#ECEDEF;--workspace-text-muted:#9B9EA4}";
 
 export const LIGHT_THEME_CSS =
-  "html,body{--background:#F5F4F2;--foreground:#1A1816;--card:#ffffff;--card-foreground:#1A1816;--popover:#ffffff;--popover-foreground:#1A1816;--border:#E7E5E1;--input:#D2CFC9;--muted:#F8F7F5;--muted-foreground:#5E5A55;--accent:#EDEBE7;--accent-foreground:#1A1816;--secondary:#F8F7F5;--secondary-foreground:#1A1816;--primary:#1A1816;--ring:#1A1816;--destructive:oklch(0.58 0.23 25);--workspace-background:#F5F4F2;--workspace-panel:#ffffff;--workspace-border:#E7E5E1;--workspace-text:#1A1816;--workspace-text-muted:#5E5A55}";
+  "html,body{--background:#F6F6F4;--foreground:#111214;--card:#FFFFFF;--card-foreground:#111214;--popover:#FFFFFF;--popover-foreground:#111214;--border:#E4E4E0;--input:#CFCFC9;--muted:#FBFBFA;--muted-foreground:#5B5E63;--accent:#E6E6E2;--accent-foreground:#111214;--secondary:#F0F0EE;--secondary-foreground:#111214;--primary:#111214;--ring:#9A5B00;--destructive:#B3331A;--workspace-background:#F6F6F4;--workspace-panel:#FFFFFF;--workspace-border:#E4E4E0;--workspace-text:#111214;--workspace-text-muted:#5B5E63}";
 
 export function themeInlineCss(theme: "dark" | "light"): string {
   return theme === "dark" ? DARK_THEME_CSS : LIGHT_THEME_CSS;

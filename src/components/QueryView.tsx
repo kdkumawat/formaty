@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
-import { Button, Chip, Segmented, Tooltip } from "@/components/kit";
+import { Button, Chip, Select, Tooltip } from "@/components/kit";
 import { JsonEditor } from "@/components/JsonEditor";
 import { runQuery, type QueryLanguage } from "@/lib/query/runQuery";
 import { formatJson } from "@/lib/json/core";
@@ -132,44 +132,38 @@ export function QueryView({
     onResultChange?.(result);
   }, [result, onResultChange]);
 
-  const textareaClass =
-    "border-[var(--workspace-border)] bg-[var(--workspace-background)] text-[var(--workspace-text)] placeholder:text-[var(--workspace-text-muted)]";
-
   return (
     <div className={`flex h-full flex-col overflow-hidden ${className}`}>
       <div className="flex shrink-0 flex-col gap-2 border-b border-[var(--workspace-border)] px-3 py-2">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <Segmented
+        <div className="flex items-center gap-2">
+          <Select
             aria-label="Query language"
             value={queryLang}
             onChange={setQueryLang}
             options={QUERY_LANGUAGES.map(({ id, label }) => ({ value: id, label }))}
           />
-          <span className="flex-1" />
-          {result.trim() && (
-            <>
-              <span className="hidden shrink-0 text-[12px] text-[var(--workspace-text-muted)] md:inline">
-                Copy or download the result from the header above
-              </span>
-              {onOpenInListCompare && (
-                <Tooltip content="Open the result in Compare to extract IDs and generate SQL">
-                  <Button variant="secondary" onClick={() => onOpenInListCompare(result)}>
-                    Open in Compare
-                  </Button>
-                </Tooltip>
-              )}
-            </>
+          <input
+            aria-label="Query"
+            className="h-7 min-w-0 flex-1 rounded-md border border-[var(--input)] bg-[var(--workspace-background)] px-2 font-mono text-[13px] text-[var(--workspace-text)] outline-none placeholder:text-[var(--faint)] focus-visible:ring-2 focus-visible:ring-[var(--focus)] max-[900px]:h-9"
+            placeholder={QUERY_LANGUAGES.find((l) => l.id === queryLang)?.placeholder}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") run();
+            }}
+            spellCheck={false}
+          />
+          <Button variant="secondary" onClick={run}>
+            Run
+          </Button>
+          {result.trim() && onOpenInListCompare && (
+            <Tooltip content="Open the result in Compare to extract IDs and generate SQL">
+              <Button variant="ghost" className="max-md:hidden" onClick={() => onOpenInListCompare(result)}>
+                Open in Compare
+              </Button>
+            </Tooltip>
           )}
         </div>
-        <textarea
-          rows={2}
-          aria-label="Query"
-          className={`w-full shrink-0 resize-none rounded-md border p-2 font-mono text-[13px] outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)] ${textareaClass}`}
-          placeholder={QUERY_LANGUAGES.find((l) => l.id === queryLang)?.placeholder}
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          spellCheck={false}
-        />
         <div className="flex flex-wrap items-center gap-1">
           {SAMPLES[queryLang].map((smp) => (
             <Chip key={smp.q} on={false} className="font-mono" onClick={() => setQuery(smp.q)}>

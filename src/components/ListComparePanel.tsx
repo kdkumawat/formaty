@@ -2,11 +2,12 @@
 
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowsRightLeftIcon } from "@heroicons/react/16/solid";
-import { Button, EmptyState, Select } from "@/components/kit";
+import { createPortal } from "react-dom";
+import { Button, EmptyState, PaneHeader, Select } from "@/components/kit";
 import { toast } from "@/components/Toast";
 import { ListEditor } from "@/components/compare/ListEditor";
 import { SummaryView } from "@/components/compare/SummaryView";
-import { InputFooter, ListPaneHeader, ResultView, SplitBySelect, SplitHandle, Tile, TileRow, inputPaneClass, num, splitStyle, useExportFormat } from "@/components/compare/shared";
+import { InputFooter, ListPaneHeader, ResultView, SplitBySelect, ResultTab, ResultTabs, SplitHandle, inputPaneClass, num, splitStyle, useExportFormat } from "@/components/compare/shared";
 import {
   DEFAULT_LIST_PARSE_OPTIONS,
   buildListSummary,
@@ -81,6 +82,17 @@ function loadStoredSort(): ListSortMode {
   }
   return "asc";
 }
+
+const BUCKET_SOURCE: Partial<Record<ListBucket, string>> = {
+  common: "from A and B",
+  union: "from A and B",
+  leftOnly: "from A only",
+  rightOnly: "from B only",
+  symmetric: "from A or B, not both",
+  leftDupes: "repeated in A",
+  rightDupes: "repeated in B",
+  changed: "same key, different row",
+};
 
 const SAMPLES: Array<{ id: string; label: string; left: string; right: string }> = [
   {
@@ -249,7 +261,6 @@ export function ListComparePanel({
     if (!hasText && !wasEmpty.current) setActiveBucket("common");
     wasEmpty.current = !hasText;
   }, [hasText, setActiveBucket]);
-  const dupes = st.leftDupes + st.rightDupes;
   const dupeActive = activeBucket === "leftDupes" || activeBucket === "rightDupes";
 
   const listPane = (
@@ -289,6 +300,21 @@ export function ListComparePanel({
     </section>
   );
 
+  const [mainTabs, moreTabs] = useMemo(() => {
+    const t = (value: ListBucket, label: string, n?: number): ResultTab<ListBucket> => ({ value, label, count: n });
+    return [
+      [t("common", "In both", st.common), t("leftOnly", "Only in A", st.leftOnly), t("rightOnly", "Only in B", st.rightOnly), t("union", "All merged", st.union), t("symmetric", "In one only", st.symmetric)],
+      [
+        t("leftDupes", "Repeated in A", st.leftDupes),
+        t("rightDupes", "Repeated in B", st.rightDupes),
+        ...(csvColumn || st.changed > 0 ? [t("changed", "Changed", st.changed)] : []),
+        t("summary", "Summary"),
+      ],
+    ];
+  }, [st, csvColumn]);
+  const tabs = <ResultTabs tabs={mainTabs} more={moreTabs} value={activeBucket} onChange={setActiveBucket} />;
+  const sides = useMemo(() => ({ a: new Set(result.left.items.map((i) => i.key)), b: new Set(result.right.items.map((i) => i.key)) }), [result]);
+
   const repeatedIn = (["leftDupes", "rightDupes"] as const).map((b, i) => ({
     value: b,
     label: `${i === 0 ? leftLabel ?? "List A" : rightLabel ?? "List B"} ${num(st[b])}`,
@@ -296,6 +322,13 @@ export function ListComparePanel({
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+      {toolbarHost &&
+        createPortal(
+          <Button variant="ghost" icon={<ArrowsRightLeftIcon />} onClick={swap}>
+            Swap A and B
+          </Button>,
+          toolbarHost,
+        )}
       <div className="flex min-h-0 flex-1 flex-col overflow-auto min-[901px]:flex-row min-[901px]:overflow-hidden">
         {/* Inputs */}
         <div className={inputPaneClass} style={splitStyle(split)}>
@@ -307,9 +340,6 @@ export function ListComparePanel({
               onChange={(delimiter) => onOptionsChange?.((p) => ({ ...p, delimiter }))}
               texts={[dLeft, dRight]}
             />
-            <Button variant="ghost" className="ml-auto" icon={<ArrowsRightLeftIcon />} onClick={swap}>
-              Swap A and B
-            </Button>
           </InputFooter>
         </div>
         <SplitHandle onResizeStart={onResizeStart} />
@@ -334,18 +364,7 @@ export function ListComparePanel({
             </div>
           ) : (
             <>
-            <TileRow label="Which items" host={toolbarHost}>
-              <Tile count={st.leftOnly} label="Only in A" dot="bg-side-a" on={activeBucket === "leftOnly"} onClick={() => setActiveBucket("leftOnly")} />
-              <Tile count={st.common} label="In both" dot="bg-brand" on={activeBucket === "common"} onClick={() => setActiveBucket("common")} />
-              <Tile count={st.rightOnly} label="Only in B" dot="bg-side-b" on={activeBucket === "rightOnly"} onClick={() => setActiveBucket("rightOnly")} />
-              <Tile count={st.symmetric} label="In one only" on={activeBucket === "symmetric"} onClick={() => setActiveBucket("symmetric")} />
-              <Tile count={st.union} label="All merged" on={activeBucket === "union"} onClick={() => setActiveBucket("union")} />
-              <Tile count={dupes} label="Repeated" on={dupeActive} onClick={() => setActiveBucket(st.leftDupes ? "leftDupes" : "rightDupes")} />
-              {(csvColumn || st.changed > 0) && (
-                <Tile count={st.changed} label="Changed" on={activeBucket === "changed"} onClick={() => setActiveBucket("changed")} />
-              )}
-              <Tile label="Summary" on={isSummary} onClick={() => setActiveBucket("summary")} />
-            </TileRow>
+            {isSummary && <PaneHeader left={tabs} />}
             {(csvColumns || dupeActive) && (
               <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-[var(--workspace-border)] px-3 py-1">
                 {csvColumns && (
@@ -369,6 +388,9 @@ export function ListComparePanel({
               <SummaryView summary={summary!} closed={closedGroups} onClosedChange={setClosedGroups} />
             ) : (
               <ResultView
+                tabs={tabs}
+                info={`${num(sortedItems.length)} of ${num(st.union)} unique values · ${BUCKET_SOURCE[activeBucket] ?? "from A and B"}`}
+                sides={sides}
                 items={sortedItems}
                 format={exportFormat}
                 onFormat={setExportFormat}

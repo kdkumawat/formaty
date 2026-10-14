@@ -1,0 +1,86 @@
+const BY_ID: Record<string, string> = {
+  "dest-op:schema": "Infers a JSON Schema from the input's shape.",
+  "dest-op:openapi": "Wraps the input's inferred schema in an OpenAPI document.",
+  "dest-op:validate": "Checks the input against a JSON Schema you paste in.",
+  "dest-op:flatten": "Collapses nesting into single-level dotted keys.",
+  "dest-op:unflatten": "Expands dotted keys back into nested objects.",
+  "dest-op:minify": "Strips whitespace from the output.",
+  "dest-compare-list": "Common, left-only, right-only and union of two lists.",
+  "dest-compare-single": "Removes duplicates, counts and sorts one list.",
+  "dest-compare-document": "Side-by-side diff of two documents.",
+  "act-tidy": "Reformats the input with your indent and quote options.",
+  "act-clear": "Empties the input editor.",
+  "act-reset": "Empties both the input and the output.",
+  "act-copy": "Copies the output to the clipboard.",
+  "act-copy-b64": "Copies the output, Base64-encoded.",
+  "act-copy-esc": "Copies the output as a single escaped string.",
+  "act-copy-uri": "Copies the output, percent-encoded.",
+  "act-copy-dat": "Copies the output as a base64 data: URI.",
+  "act-download": "Saves the output as a file.",
+  "act-share": "Builds a link that carries this workspace.",
+  "act-embed": "Copies the embeddable form of the shared link.",
+  "act-paste": "Replaces the input with the clipboard text.",
+  "act-import": "Loads a file from disk into the input.",
+  "act-undo": "Steps the input back one change.",
+  "act-redo": "Steps the input forward one change.",
+  "act-history": "Lists earlier versions of the input.",
+  "act-history-export": "Saves the input history as a file.",
+  "act-find": "Searches inside the output.",
+  "act-sort-arrays": "Sorts the items of every array.",
+  "act-dedup": "Drops repeated items from every array.",
+  "act-diff-prev": "Jumps to the previous difference.",
+  "act-diff-next": "Jumps to the next difference.",
+  "act-diff-swap": "Exchanges the two documents.",
+  "act-diff-copy-report": "Copies a text summary of the differences.",
+  "act-tab-new": "Opens a blank tab.",
+  "act-tab-close": "Closes this tab.",
+  "act-tab-reopen": "Brings back the tab you closed last.",
+  "act-tab-close-others": "Keeps only this tab.",
+  "act-tab-close-all": "Closes every tab.",
+  "view-wrap": "Wraps long lines instead of scrolling sideways.",
+  "view-maximize": "Gives the output the full width, or restores the input.",
+  "view-focus-input": "Moves the cursor into the input.",
+  "view-focus-output": "Moves the cursor into the output.",
+  "view-fold": "Collapses every foldable block in the input.",
+  "view-unfold": "Expands every folded block in the input.",
+  "view-zoom-in": "Makes editor text larger.",
+  "view-zoom-out": "Makes editor text smaller.",
+  "view-zoom-reset": "Returns editor text to 13px.",
+  "view-fullscreen": "Toggles browser fullscreen.",
+  "view-diff-layout": "Switches the diff between side by side and inline.",
+  "set-live": "Re-runs the transform as you type.",
+  "set-paste": "Formats the input right after you paste.",
+  "set-sort-keys": "Sorts object keys alphabetically when formatting.",
+  "set-drop-empty": "Omits null and empty values when formatting.",
+  "set-quote-double": "Writes strings with double quotes.",
+  "set-quote-single": "Writes strings with single quotes.",
+  "set-options-reset": "Restores indent, quotes and key options.",
+  "theme-light": "Paper, the light theme.",
+  "theme-dark": "Carbon, the dark theme.",
+  "theme-system": "Follows your operating system.",
+  "set-reset": "Restores every setting to its default.",
+  "set-clear-data": "Deletes saved tabs and settings from this browser, then reloads.",
+  "help-tour": "A short walkthrough of the workspace.",
+  "help-shortcuts": "Lists every keyboard shortcut.",
+  "help-docs": "Opens the documentation.",
+  "help-changelog": "Opens the release notes.",
+  "help-github": "Opens the source repository.",
+  "help-reload": "Reloads the app.",
+  "recipe-flatten-to-csv": "Flattens nested JSON, then converts it to CSV.",
+  "recipe-api-response-types": "Reads an API response and writes TypeScript types.",
+  "recipe-extract-ids-to-sql-in": "Turns a list of IDs into a SQL IN clause.",
+};
+
+/** One truthful sentence per command id, or undefined to fall back to the generic line. */
+export function describeCommand(id: string, label: string): string | undefined {
+  if (BY_ID[id]) return BY_ID[id];
+  if (id.startsWith("dest-fmt-")) return `Converts the input to ${label.replace("Convert to ", "")}.`;
+  if (id === "dest-type-sql") return "Writes CREATE TABLE and INSERT statements from the data.";
+  if (id.startsWith("dest-type-")) return `Infers ${label.replace(/^Generate | types$/g, "")} types from the data.`;
+  if (id.startsWith("util-")) return `Opens ${label.replace("Open ", "")} in the Utils tab.`;
+  if (id.startsWith("sample-")) return `Fills the input with the ${label.replace(/^Load | sample$/g, "")} sample.`;
+  if (id.startsWith("view-")) return `Shows the output as ${label.replace("Show ", "").replace(" view", "")}.`;
+  if (id.startsWith("set-indent-")) return "Sets how many spaces each level is indented.";
+  if (id.startsWith("set-csv-")) return "Sets the separator used when writing CSV.";
+  return undefined;
+}

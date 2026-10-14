@@ -52,10 +52,9 @@ type SingleTile = "distinct" | "once" | "repeated";
 
 /**
  * The playground's list compare: the real bar, headers, tabs and result list over the same functions.
- * `full` shows every result tab (the hero keeps four). On the landing `hero` the page's own key is the one
- * amber action, so Copy is the quiet variant there.
+ * `full` shows every result tab (the narrow scene keeps four).
  */
-export default function Compare({ preset = {}, full = false, hero = false }: { preset?: ComparePreset; full?: boolean; hero?: boolean }) {
+export default function Compare({ preset = {}, full = false }: { preset?: ComparePreset; full?: boolean }) {
   const router = useRouter();
   const [kind, setKind] = useState<CompareKind>(preset.kind === "single" ? "single" : "list");
   const [left, setLeft] = useState(preset.left ?? LEFT);
@@ -66,7 +65,6 @@ export default function Compare({ preset = {}, full = false, hero = false }: { p
   const [format, setFormat] = useState<ListExportFormat>(preset.format ?? "newline");
   const [sort, setSort] = useState<ListSortMode>(kind === "single" ? "none" : "asc");
   const [host, setHost] = useState<HTMLElement | null>(null);
-  const copyVariant = hero ? "secondary" : undefined;
 
   const single = kind === "single";
   const sample = () => {
@@ -183,14 +181,14 @@ export default function Compare({ preset = {}, full = false, hero = false }: { p
           {summary ? (
             <div className="flex min-h-0 flex-1 flex-col">
               <PaneHeader
-                right={<ResultActions onDownload={() => downloadText("formaty-list-summary.txt", summary.text)} canDownload={!!summary.text} copy={{ getText: () => summary.text, disabled: !summary.text, variant: copyVariant }} />}
+                right={<ResultActions onDownload={() => downloadText("formaty-list-summary.txt", summary.text)} canDownload={!!summary.text} copy={{ getText: () => summary.text, disabled: !summary.text }} />}
               />
               <pre role="group" tabIndex={0} aria-label="Summary" className="m-0 min-h-0 flex-1 overflow-auto px-3 py-2 font-mono text-[13px] leading-[1.6]">
                 {summary.text || "Paste two lists to see a summary."}
               </pre>
             </div>
           ) : (
-            <ResultView items={items} format={format} onFormat={setFormat} sort={sort} onSort={setSort} fileBase={`formaty-list-${single ? tile : bucket}`} showCounts={single} empty="No items here." copyVariant={copyVariant} />
+            <ResultView items={items} format={format} onFormat={setFormat} sort={sort} onSort={setSort} fileBase={`formaty-list-${single ? tile : bucket}`} showCounts={single} empty="No items here." />
           )}
         </section>
       </div>

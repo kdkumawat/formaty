@@ -64,19 +64,18 @@ const LINK =
   "inline-flex min-h-8 items-center text-[14px] text-[var(--workspace-text-muted)] underline decoration-transparent decoration-1 underline-offset-4 transition-colors duration-150 hover:text-[var(--workspace-text)] hover:decoration-current pointer-coarse:min-h-11";
 const HEADING = "mb-2 py-1.5 font-sans text-[13px] font-medium leading-normal tracking-normal text-[var(--workspace-text)]";
 
-/** Shared by every marketing page: the sitemap, on ink in both themes, on the page's 12-column grid. */
+/** Shared by every marketing page: the sitemap on the page's 12-column grid. */
 export function Footer() {
   return (
-    <footer data-mk-stage className="mk-ink border-t border-[var(--workspace-border)] bg-[var(--workspace-background)] pb-8 pt-[clamp(40px,5vw,72px)]">
+    <footer className="border-t border-[var(--workspace-border)] pb-8 pt-12">
       <div className={WRAP}>
         <div className="grid grid-cols-2 gap-x-8 gap-y-10 md:grid-cols-4 lg:grid-cols-12">
           <div className="col-span-2 flex flex-col items-start gap-3 md:col-span-4">
-            <Link href="/" aria-label="Formaty home" className="inline-flex h-11 items-center gap-2.5 rounded-md font-display text-[21px] font-[650] tracking-[-0.035em]">
-              <Logo size={26} />
-              formaty
+            <Link href="/" aria-label="Formaty home" className="inline-flex h-11 items-center rounded-md">
+              <Logo size={24} wordmark />
             </Link>
             <p className="max-w-[26em] text-[14px] leading-[1.55] text-[var(--workspace-text-muted)]">
-              A local-first workspace for structured data. Free, no account, and nothing you paste leaves the tab.
+              Format, convert, compare and generate. In your browser, nowhere else.
             </p>
           </div>
           {COLUMNS.map((c) => (
@@ -93,7 +92,7 @@ export function Footer() {
           ))}
         </div>
 
-        <div className="mt-[clamp(32px,4vw,56px)] flex flex-wrap items-center justify-between gap-x-8 gap-y-2 border-t border-[var(--workspace-border)] pt-4">
+        <div className="mt-8 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 border-t border-[var(--workspace-border)] pt-4">
           <nav aria-label="Footer" className="flex flex-wrap items-center gap-x-5">
             <Link href="/playground" className={LINK}>Playground</Link>
             <Link href="/tools" className={LINK}>All tools</Link>
@@ -107,7 +106,7 @@ export function Footer() {
             <a href="https://x.com/kuldeep_kumawat" target="_blank" rel="noopener noreferrer" className={LINK}>X</a>
             <FeedbackDialog trigger="link" label="Feedback" className="min-h-8 !text-[14px] underline decoration-transparent decoration-1 underline-offset-4 hover:decoration-current pointer-coarse:min-h-11" />
           </nav>
-          <span className="text-[13px] tabular-nums text-[var(--workspace-text-muted)]">© {new Date().getFullYear()} Formaty</span>
+          <span className="text-[13px] text-[var(--workspace-text-muted)]">Free. No account. Open source on GitHub. © {new Date().getFullYear()} Formaty</span>
         </div>
       </div>
     </footer>

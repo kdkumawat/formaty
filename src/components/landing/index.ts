@@ -1,14 +1,11 @@
 export { Hero } from "./Hero";
-export { Convert } from "./Convert";
-export { Generators } from "./Generators";
-export { Compare } from "./Compare";
-export { MoreTools } from "./MoreTools";
+export { Capabilities } from "./Capabilities";
 export { Privacy } from "./Privacy";
 export { FaqSection } from "./Faq";
 export { FinalCTA } from "./FinalCTA";
 export { Footer } from "./Footer";
 export { SiteHeader } from "./SiteHeader";
-export { PageHero, Stage, SectionHead, RowList, GroupedRows, FaqList, PrivacyBand, PROSE, H2_SM } from "./PageParts";
+export { PageHero, Stage, RowList, GroupedRows, FaqList, PrivacyBand, PROSE, H2_SM } from "./PageParts";
 export { ExamplePanel } from "./ExamplePanel";
 export { KeyLink } from "./KeyLink";
-export { WRAP, LINK, RULE, SPACE, H1, H2, BODY } from "./ui";
+export { WRAP, LINK, RULE, H1, H2, BODY } from "./ui";

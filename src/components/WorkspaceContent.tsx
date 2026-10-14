@@ -121,6 +121,8 @@ import { savePlayground, updatePlayground, deletePlayground } from "@/lib/playgr
 import { PRESETS, getPreset, type PresetId } from "@/lib/presets";
 import { themeInlineCss } from "@/lib/utils/themeTokens";
 import type { Command } from "@/components/CommandPalette";
+import { describeCommand } from "@/components/palette/describe";
+import { previewOutput } from "@/components/palette/preview";
 import { isEditableTarget } from "@/lib/shortcuts";
 import { Toaster, toast } from "@/components/Toast";
 import type { JsonValue, TypeTargetLanguage } from "@/lib/json/core";
@@ -151,7 +153,7 @@ import {
   type Tab,
   type ThemeMode,
 } from "@/components/workspace/constants";
-import { autoTabName, numberDuplicates } from "@/components/workspace/tabNames";
+import { autoTabName, numberDuplicates, tabKindOf } from "@/components/workspace/tabNames";
 import { loadLastUsed, saveLastUsed, type NewTabSpec } from "@/components/workspace/NewTabMenu";
 import { INPUT_SAMPLES, CurlSendStrip, EmptyInput, InputErrorStrip, InputHeader, OutputHeader } from "@/components/workspace/PaneHeaders";
 import { ActionRow, CompareBar } from "@/components/workspace/CompareBar";
@@ -274,7 +276,7 @@ export function WorkspaceContent({
   const [themeMode, setThemeMode] = useState<ThemeMode>("system");
   const [systemDark, setSystemDark] = useState(false);
   const [themeSynced, setThemeSynced] = useState(false);
-  const [split, setSplit] = useState(38);
+  const [split, setSplit] = useState(41);
   const startResize = useCallback(() => setIsResizing(true), []);
   const [isResizing, setIsResizing] = useState(false);
   const [schemaInput, setSchemaInput] = useState("");
@@ -1088,7 +1090,7 @@ export function WorkspaceContent({
 
   const addTab = (overrides?: Partial<TabSnapshot>) => {
     trackEvent("tab_add");
-    setSplit(38);
+    setSplit(41);
     tabSnapshotsRef.current.set(activeTabId, captureTabSnapshot());
     tabCounterRef.current += 1;
     const newId = `t${tabCounterRef.current}`;
@@ -1196,7 +1198,12 @@ export function WorkspaceContent({
       });
     });
     const numbered = numberDuplicates(auto);
-    return tabs.map((t, i) => ({ id: t.id, name: t.renamed && t.label ? t.label : numbered[i], custom: Boolean(t.renamed && t.label) }));
+    return tabs.map((t, i) => ({
+      id: t.id,
+      name: t.renamed && t.label ? t.label : numbered[i],
+      custom: Boolean(t.renamed && t.label),
+      kind: tabKindOf(t.id === activeTabId ? activeOperation : (tabSnapshotsRef.current.get(t.id)?.activeOperation ?? null)),
+    }));
   }, [tabs, activeTabId, activeOperation, convertToFormat, typeLanguage, diffKind, utilTab, inputFormatOverride, detectedInputFormat]);
 
   /** Empty name returns the tab to its automatic name. */
@@ -3788,10 +3795,15 @@ export function WorkspaceContent({
       { id: "help-github", label: "Open GitHub", category: H, keywords: ["github", "source", "issues"], action: () => window.open("https://github.com/kdkumawat/formaty", "_blank", "noopener,noreferrer") },
       { id: "help-reload", label: "Reload app", category: H, keywords: ["reload", "refresh", "restart"], action: () => window.location.reload() },
     ];
-    return list.map((c) => ({ ...c, icon: c.icon ?? commandIcon(c.id) }));
+    // Output commands preview the active input converted; the sample is built only while the row is highlighted.
+    const previewOf = (c: Command): Command["preview"] =>
+      inTransform && c.id.startsWith("dest-") && !c.id.startsWith("dest-compare-") && c.id !== "dest-op:validate" && c.id !== "dest-op:openapi" && c.id !== "dest-op:unflatten"
+        ? () => previewOutput(inputRef.current, resolvedInputFormat, c.id.slice(5).replace(/^(fmt|type)-/, "$1:"))
+        : undefined;
+    return list.map((c) => ({ ...c, icon: c.icon ?? commandIcon(c.id), description: c.description ?? describeCommand(c.id, c.label), preview: previewOf(c) }));
     // The handlers above close over live workspace state; the listed values are what changes what the palette shows.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inputEmpty, showBusy, convertToFormat, rightView, parsedOutput, typeLanguage, activeOperation, output, themeMode, editorFontSize, isOutputMaximized, isWindowFullscreen, toggleWindowFullscreen, formatOptions, csvDelimiter, liveTransform, canUndo, canRedo, lineWrap, diffSideBySide, diffKind, sharedLinkUrl, undoStack.length, tabs.length, activeTabId, autoFormatOnPaste, swapDiffSides, beautifyDiffSides, copyDiffText, isUtilsMode, utilTab, isDiffMode, handleWorkspaceReset, resetSettingsToDefault, openTour, closedTabName, sqlTable, typeName, sqlDialect, clearDiffSide]);
+  }, [inputEmpty, showBusy, convertToFormat, rightView, parsedOutput, typeLanguage, activeOperation, output, themeMode, editorFontSize, isOutputMaximized, isWindowFullscreen, toggleWindowFullscreen, formatOptions, csvDelimiter, liveTransform, resolvedInputFormat, canUndo, canRedo, lineWrap, diffSideBySide, diffKind, sharedLinkUrl, undoStack.length, tabs.length, activeTabId, autoFormatOnPaste, swapDiffSides, beautifyDiffSides, copyDiffText, isUtilsMode, utilTab, isDiffMode, handleWorkspaceReset, resetSettingsToDefault, openTour, closedTabName, sqlTable, typeName, sqlDialect, clearDiffSide]);
 
   const settingsPanelContent = (
     <SettingsPanel
@@ -4272,7 +4284,7 @@ export function WorkspaceContent({
       )}
 
       {/* Outer: tab rail (sidebar) + workspace. Tabs must never sit in a column stack with the editors. */}
-      <div className="flex min-h-0 flex-1 flex-row overflow-hidden px-3">
+      <div className="flex min-h-0 flex-1 flex-row overflow-hidden p-2">
         {renamingListSide && listRenameRect && (
           // Sits exactly over the name button it replaces: same box, no border, an inset ring as the only cue.
           <div
@@ -4283,8 +4295,9 @@ export function WorkspaceContent({
           </div>
         )}
       {/* Column: stable full-width tool row + split (icons never jump when left panel hides) */}
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-t-lg bg-[var(--workspace-panel)] text-[var(--workspace-text)]">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden text-[var(--workspace-text)]">
         {isDiffMode && (
+          <div className="shrink-0 rounded-[10px] border border-[var(--workspace-border)] bg-[var(--workspace-panel)]">
           <CompareBar
             kind={diffKind}
             onKind={(k) => {
@@ -4297,10 +4310,11 @@ export function WorkspaceContent({
             split={split}
             actions={actionRow}
           />
+          </div>
         )}
 
       {stackSwitch && (
-        <div className="flex shrink-0 items-center justify-center border-b border-[var(--workspace-border)] px-3 py-1">
+        <div className="flex shrink-0 items-center justify-center rounded-[10px] border border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-3 py-1">
           <Segmented
             aria-label="Pane"
             value={mobileShowOutput ? "output" : "input"}
@@ -4315,7 +4329,7 @@ export function WorkspaceContent({
       )}
       <div
         ref={splitContainerRef}
-        className={`flex min-h-0 min-w-0 flex-1 ${isDesktopLayout ? "overflow-hidden" : "overflow-y-auto"} ${isDesktopLayout && !hideInputPanel ? "flex-row" : "flex-col"}`}
+        className={`flex min-h-0 min-w-0 flex-1 ${isDesktopLayout ? "overflow-hidden" : "gap-2 overflow-y-auto"} ${isDesktopLayout && !hideInputPanel ? "flex-row" : "flex-col"}`}
       >
         {inputCollapsed && (
           <div className="flex w-9 shrink-0 flex-col items-center gap-2 border-r border-[var(--workspace-border)] py-1.5">
@@ -4327,7 +4341,7 @@ export function WorkspaceContent({
         )}
         {showInputPane && (
         <div
-          className={`flex min-w-0 flex-col overflow-hidden ${isDesktopLayout ? "shrink-0" : "min-h-[280px] flex-1"}`}
+          className={`flex min-w-0 flex-col overflow-hidden rounded-[10px] border border-[var(--workspace-border)] bg-[var(--workspace-panel)] ${isDesktopLayout ? "shrink-0" : "min-h-[280px] flex-1"}`}
           style={isDesktopLayout ? { width: `${split}%`, minWidth: 240 } : undefined}
         >
           <input
@@ -4345,6 +4359,7 @@ export function WorkspaceContent({
           />
           <InputHeader
             formatLabel={getInputFormatLabel(resolvedInputFormat)}
+            detected={resolvedInputFormat}
             hasInput={!inputEmpty}
             onCollapse={isDesktopLayout ? () => setIsOutputMaximized(true) : undefined}
             onSample={loadInputSample}
@@ -4415,15 +4430,14 @@ export function WorkspaceContent({
             role="separator"
             aria-orientation="vertical"
             className="group relative flex shrink-0 cursor-col-resize items-stretch justify-center"
-            style={{ width: 9, marginLeft: -4, marginRight: -4, zIndex: 10 }}
+            style={{ width: 8, zIndex: 10 }}
             onMouseDown={() => setIsResizing(true)}
           >
-            <div className="pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-[var(--workspace-border)] transition-colors group-hover:bg-brand group-active:bg-brand" />
+            <div className="pointer-events-none absolute inset-y-2 left-1/2 w-0.5 -translate-x-1/2 rounded-full bg-transparent transition-colors group-hover:bg-[var(--workspace-text-muted)] group-active:bg-[var(--workspace-text)]" />
           </div>
         )}
-        {!isDesktopLayout && showInputPane && showOutputPane && <div className="h-px shrink-0 bg-[var(--workspace-border)]" aria-hidden />}
-        {showOutputPane && (
-        <div className={`flex min-w-0 flex-1 flex-col overflow-hidden ${isDesktopLayout ? "" : "min-h-[320px]"}`}>
+                {showOutputPane && (
+        <div className={`flex min-w-0 flex-1 flex-col overflow-hidden rounded-[10px] border border-[var(--workspace-border)] bg-[var(--workspace-panel)] ${isDesktopLayout ? "" : "min-h-[320px]"}`}>
           {!hideInputPanel && outputHeader}
           <div data-tour="output-pane" className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
             <div
@@ -4528,6 +4542,7 @@ export function WorkspaceContent({
                       copyFormat={docCopyFormat}
                       onCopyFormat={setDocCopyFormat}
                       onCopy={(what) => copyDiffText(what)}
+                      language={documentDiffLanguage}
                     />
                     {diffShowPaths && <FieldTable summary={structuralDiff} />}
                     <div className={diffShowPaths ? "hidden" : "flex min-h-0 flex-1 flex-col overflow-hidden"}>

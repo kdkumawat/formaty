@@ -8,7 +8,7 @@
 @theme inline {
   --font-sans: var(--font-geist), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;
-  --font-display: var(--font-bricolage), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-display: var(--font-archivo), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 
   /* shadcn/ui color utilities */
   --color-background: var(--background);
@@ -33,7 +33,29 @@
   --color-brand: var(--brand);
   --color-brand-foreground: var(--brand-foreground);
   --color-action: #F2B544;
-  --color-action-foreground: #1A1816;
+  --color-action-foreground: #141414;
+  --color-action-hover: var(--action-hover);
+  --color-action-pressed: var(--action-pressed);
+  --color-key-text: var(--key-text);
+  --color-faint: var(--faint);
+  --color-focus: var(--focus);
+  --color-selected: var(--selected-bg);
+  --color-selected-foreground: var(--selected-fg);
+  --color-selected-border: var(--selected-border);
+  --color-diff-add: var(--diff-add);
+  --color-diff-add-bg: var(--diff-add-bg);
+  --color-diff-remove: var(--diff-remove);
+  --color-diff-remove-bg: var(--diff-remove-bg);
+  --color-diff-change: var(--diff-change);
+  --color-diff-change-bg: var(--diff-change-bg);
+  --color-syn-key: var(--syn-key);
+  --color-syn-string: var(--syn-string);
+  --color-syn-number: var(--syn-number);
+  --color-syn-bool: var(--syn-bool);
+  --color-syn-punct: var(--syn-punct);
+  --color-syn-keyword: var(--syn-keyword);
+  --color-syn-comment: var(--syn-comment);
+  --shadow-raised-inset: var(--raised-inset);
   --color-sunk: var(--sunk);
   /* 3:1 boundary for unchecked switches and checkboxes */
   --color-edge: var(--edge);
@@ -46,101 +68,131 @@
   --color-bad-bg: var(--bad-bg);
   --color-side-a: var(--side-a);
   --color-side-b: var(--side-b);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  /* Bench radii: 4 dense/tags, 6 buttons/inputs, 10 menus/cards, 14 windows/plates */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+  --radius-2xl: 14px;
 }
 
-/* ── Dark (default, hero look) ─────────────────────────── */
+/* ── Carbon (dark, default) ────────────────────────────── */
 [data-theme="dark"],
 html:not([data-theme]) {
   color-scheme: dark;
-  /* Layered surfaces: canvas, panel, popover. Warm graphite neutrals; ink marks what is selected, amber is the brand and the one primary action. */
-  --background: #0C0B0A;
-  --foreground: #F2F0ED;
-  --card: #141312;
-  --card-foreground: #F2F0ED;
-  --popover: #1A1917;
-  --popover-foreground: #F2F0ED;
-  --primary: #F2F0ED;
-  --primary-foreground: #1A1816;
-  --secondary: #1E1C1A;
-  --secondary-foreground: #F2F0ED;
-  --muted: #0F0E0D;
-  --muted-foreground: #A8A39C;
-  --accent: #242220;
-  --accent-foreground: #F2F0ED;
-  --destructive: oklch(0.64 0.2 25);
-  --border: #2A2826;
-  --input: #3D3A36;
-  --ring: #F2F0ED;
-  --radius: 0.6rem;
+  /* Bench: cool carbon surfaces. Amber = the one primary action, the brand mark and the focus ring. Selection is neutral ink. */
+  --background: #0A0B0C;            /* canvas */
+  --foreground: #ECEDEF;
+  --card: #111214;                  /* panel */
+  --card-foreground: #ECEDEF;
+  --popover: #17181B;               /* raised */
+  --popover-foreground: #ECEDEF;
+  --primary: #ECEDEF;
+  --primary-foreground: #0A0B0C;
+  --secondary: #1C1D21;
+  --secondary-foreground: #ECEDEF;
+  --muted: #0D0E10;                 /* editor */
+  --muted-foreground: #9B9EA4;
+  --accent: #24262A;
+  --accent-foreground: #ECEDEF;
+  --destructive: #FF8A7A;
+  --border: #232529;                /* hairline */
+  --input: #30333A;                 /* hairline-strong */
+  --ring: #F2B544;
+  --radius: 0.375rem;
 
-  --workspace-background: #0C0B0A;
-  --workspace-panel: #141312;
-  --workspace-border: #2A2826;
-  --workspace-text: #F2F0ED;
-  --workspace-text-muted: #A8A39C;
-  --glow-color: rgba(242, 181, 68, 0.18);
-  --sunk: #0F0E0D;
-  --control: #1E1C1A;
-  --control-hover: #292725;
-  --menu-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 1px 2px rgba(0, 0, 0, 0.5), 0 16px 40px -8px rgba(0, 0, 0, 0.7);
-  --ok: #7BD39A;
-  --bad: #F7A58E;
-  --bad-bg: #33191A;
+  --workspace-background: #0A0B0C;
+  --workspace-panel: #111214;
+  --workspace-border: #232529;
+  --workspace-text: #ECEDEF;
+  --workspace-text-muted: #9B9EA4;
+  --glow-color: transparent;
+  --sunk: #0D0E10;
+  --control: #1C1D21;
+  --control-hover: #24262A;
+  --menu-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 16px 40px -8px rgba(0, 0, 0, 0.7);
+  --raised-inset: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --ok: #5FD38D;
+  --bad: #FF8A7A;
+  --bad-bg: rgba(255, 138, 122, 0.10);
   --focus: #F2B544;
-  --edge: #77726B;
-  --brand: #F2F0ED;
-  --brand-foreground: #1A1816;
+  --edge: #6E7178;
+  --faint: #6E7178;
+  --brand: #24262A;                 /* selected surface */
+  --brand-foreground: #ECEDEF;
+  --selected-bg: #24262A;
+  --selected-fg: #ECEDEF;
+  --selected-border: #30333A;
+  --action-hover: #F7C463;
+  --action-pressed: #E0A332;
+  --key-text: #F2B544;              /* amber as text/link */
   --side-a: #A995FF;
   --side-b: #3CCFBE;
+  --diff-add: #5FD38D;    --diff-add-bg: rgba(95, 211, 141, 0.10);
+  --diff-remove: #FF8A7A; --diff-remove-bg: rgba(255, 138, 122, 0.10);
+  --diff-change: #7DB8FF; --diff-change-bg: rgba(125, 184, 255, 0.10);
+  --syn-key: #ECEDEF; --syn-string: #A8D88F; --syn-number: #F4A97F; --syn-bool: #7DB8FF;
+  --syn-punct: #6E7178; --syn-keyword: #C9A2FF; --syn-comment: #6E7178;
+  --dot-grid: rgba(255, 255, 255, 0.05);
 }
 
-/* ── Light ─────────────────────────────────────────────── */
+/* ── Paper (light) ─────────────────────────────────────── */
 [data-theme="light"] {
   color-scheme: light;
-  /* Layered surfaces: canvas, panel, popover. Warm graphite neutrals; ink marks what is selected, amber is the brand and the one primary action. */
-  --background: #F5F4F2;
-  --foreground: #1A1816;
-  --card: #ffffff;
-  --card-foreground: #1A1816;
-  --popover: #ffffff;
-  --popover-foreground: #1A1816;
-  --primary: #1A1816;
-  --primary-foreground: #ffffff;
-  --secondary: #F8F7F5;
-  --secondary-foreground: #1A1816;
-  --muted: #F8F7F5;
-  --muted-foreground: #5E5A55;
-  --accent: #EDEBE7;
-  --accent-foreground: #1A1816;
-  --destructive: oklch(0.58 0.23 25);
-  --border: #E7E5E1;
-  --input: #D2CFC9;
-  --ring: #1A1816;
-  --radius: 0.6rem;
+  --background: #F6F6F4;
+  --foreground: #111214;
+  --card: #FFFFFF;
+  --card-foreground: #111214;
+  --popover: #FFFFFF;
+  --popover-foreground: #111214;
+  --primary: #111214;
+  --primary-foreground: #FFFFFF;
+  --secondary: #F0F0EE;
+  --secondary-foreground: #111214;
+  --muted: #FBFBFA;
+  --muted-foreground: #5B5E63;
+  --accent: #E6E6E2;
+  --accent-foreground: #111214;
+  --destructive: #B3331A;
+  --border: #E4E4E0;
+  --input: #CFCFC9;
+  --ring: #9A5B00;
+  --radius: 0.375rem;
 
-  --workspace-background: #F5F4F2;
-  --workspace-panel: #ffffff;
-  --workspace-border: #E7E5E1;
-  --workspace-text: #1A1816;
-  --workspace-text-muted: #5E5A55;
-  --glow-color: rgba(242, 181, 68, 0.22);
-  --sunk: #F8F7F5;
-  --control: #F1F0ED;
-  --control-hover: #E7E5E1;
-  --menu-shadow: 0 0 0 1px rgba(26, 24, 22, 0.08), 0 1px 2px rgba(26, 24, 22, 0.06), 0 16px 40px -8px rgba(26, 24, 22, 0.22);
+  --workspace-background: #F6F6F4;
+  --workspace-panel: #FFFFFF;
+  --workspace-border: #E4E4E0;
+  --workspace-text: #111214;
+  --workspace-text-muted: #5B5E63;
+  --glow-color: transparent;
+  --sunk: #FBFBFA;
+  --control: #F0F0EE;
+  --control-hover: #E6E6E2;
+  --menu-shadow: 0 0 0 1px rgba(17, 18, 20, 0.08), 0 1px 2px rgba(17, 18, 20, 0.06), 0 16px 40px -8px rgba(17, 18, 20, 0.22);
+  --raised-inset: inset 0 1px 0 rgba(255, 255, 255, 0.9);
   --ok: #17703A;
   --bad: #B3331A;
-  --bad-bg: #FBEAE6;
-  --focus: #B45309;
-  --edge: #8A857E;
-  --brand: #1A1816;
-  --brand-foreground: #ffffff;
+  --bad-bg: rgba(179, 51, 26, 0.08);
+  --focus: #9A5B00;
+  --edge: #8A8C90;
+  --faint: #8A8C90;
+  /* Paper selects with a lifted white surface, not a black fill: solid ink chips and tabs were too heavy on a light page. */
+  --brand: #E6E6E2;
+  --brand-foreground: #111214;
+  --selected-bg: #FFFFFF;
+  --selected-fg: #111214;
+  --selected-border: #CFCFC9;
+  --action-hover: #F7C463;
+  --action-pressed: #E0A332;
+  --key-text: #9A5B00;
   --side-a: #7357E0;
   --side-b: #0B8377;
+  --diff-add: #17703A;    --diff-add-bg: rgba(23, 112, 58, 0.08);
+  --diff-remove: #B3331A; --diff-remove-bg: rgba(179, 51, 26, 0.08);
+  --diff-change: #1F5FBF; --diff-change-bg: rgba(31, 95, 191, 0.08);
+  --syn-key: #111214; --syn-string: #2F7A1F; --syn-number: #B4531B; --syn-bool: #1F5FBF;
+  --syn-punct: #8A8C90; --syn-keyword: #6A3FC8; --syn-comment: #8A8C90;
+  --dot-grid: rgba(17, 18, 20, 0.06);
 }
 
 html {
@@ -168,11 +220,19 @@ body {
 @layer base {
   /* Headings: display font, tighter tracking, balanced lines */
   h1, h2, h3, h4, h5, h6 {
-    font-family: var(--font-display);
-    letter-spacing: -0.025em;
+    letter-spacing: -0.015em;
     line-height: 1.22;
     text-wrap: balance;
   }
+  /* Archivo at 118% width is for H1/H2 only; smaller headings stay in the UI face */
+  h1, h2 {
+    font-family: var(--font-display);
+    font-stretch: 118%;
+    font-weight: 700;
+    letter-spacing: -0.035em;
+    line-height: 1.02;
+  }
+  h2 { font-weight: 650; letter-spacing: -0.025em; }
 
   /* Long-form paragraphs read better with a touch more leading */
   p {
@@ -210,14 +270,14 @@ input[type="number"] {
   font-variant-numeric: tabular-nums;
 }
 
-/* Selection: warm amber tint, readable in both themes (ink text on light, cream text on dark) */
+/* Selection is neutral ink, never amber */
 ::selection {
-  background: rgba(242, 181, 68, 0.38);
+  background: rgba(17, 18, 20, 0.10);
   color: inherit;
 }
 [data-theme="dark"] ::selection,
 html:not([data-theme]) ::selection {
-  background: rgba(242, 181, 68, 0.3);
+  background: rgba(236, 237, 239, 0.12);
 }
 
 /* ── Monaco editor ───────────────────────────────────────── */
@@ -248,12 +308,9 @@ html:not([data-theme]) ::selection {
 @utility key-action {
   background-color: var(--color-action);
   color: var(--color-action-foreground);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.5), inset 0 -1px 0 rgb(122 70 0 / 0.4), 0 1px 1px rgb(26 24 22 / 0.12);
-  &:where(:not(:disabled, [aria-disabled="true"])):hover { background-color: color-mix(in srgb, var(--color-action) 86%, white); }
-  &:where(:not(:disabled, [aria-disabled="true"])):active {
-    background-color: color-mix(in srgb, var(--color-action) 88%, #7a4600);
-    box-shadow: inset 0 1px 2px rgb(122 70 0 / 0.45), inset 0 -1px 0 rgb(255 255 255 / 0.18);
-  }
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.28);
+  &:where(:not(:disabled, [aria-disabled="true"])):hover { background-color: var(--action-hover); }
+  &:where(:not(:disabled, [aria-disabled="true"])):active { background-color: var(--action-pressed); box-shadow: none; }
 }
 
 @utility key-ink {
@@ -263,14 +320,14 @@ html:not([data-theme]) ::selection {
   --ink-lo: rgb(0 0 0 / 0.5);
   --ink-hover: color-mix(in srgb, var(--brand) 84%, white);
   --ink-press: color-mix(in srgb, var(--brand) 70%, black);
-  box-shadow: inset 0 1px 0 var(--ink-hi), inset 0 -1px 0 var(--ink-lo), 0 1px 1px rgb(26 24 22 / 0.18);
+  box-shadow: inset 0 1px 0 var(--ink-hi), inset 0 -1px 0 var(--ink-lo), 0 1px 1px rgb(17 18 20 / 0.18);
   &:where(:not(:disabled, [aria-disabled="true"])):hover { background-color: var(--ink-hover); }
   &:where(:not(:disabled, [aria-disabled="true"])):active { background-color: var(--ink-press); box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.4); }
   :where([data-theme="dark"], html:not([data-theme])) & {
-    --ink-hi: rgb(255 255 255 / 0.9);
-    --ink-lo: rgb(26 24 22 / 0.28);
-    --ink-hover: color-mix(in srgb, var(--brand) 88%, black);
-    --ink-press: color-mix(in srgb, var(--brand) 76%, black);
+    --ink-hi: rgb(255 255 255 / 0.06);
+    --ink-lo: rgb(0 0 0 / 0.35);
+    --ink-hover: color-mix(in srgb, var(--brand) 88%, white);
+    --ink-press: color-mix(in srgb, var(--brand) 80%, black);
     box-shadow: inset 0 1px 0 var(--ink-hi), inset 0 -1px 0 var(--ink-lo), 0 1px 1px rgb(0 0 0 / 0.5);
   }
 }
@@ -279,7 +336,7 @@ html:not([data-theme]) ::selection {
 @utility key-tile {
   background-color: var(--workspace-panel);
   color: var(--workspace-text);
-  box-shadow: 0 0 0 1px var(--workspace-border), 0 1px 2px rgb(26 24 22 / 0.12), inset 0 1px 0 rgb(255 255 255 / 0.9);
+  box-shadow: 0 0 0 1px var(--workspace-border), 0 1px 2px rgb(17 18 20 / 0.12), inset 0 1px 0 rgb(255 255 255 / 0.9);
   :where([data-theme="dark"], html:not([data-theme])) & {
     background-color: var(--control-hover);
     box-shadow: 0 0 0 1px rgb(255 255 255 / 0.06), 0 1px 2px rgb(0 0 0 / 0.5), inset 0 1px 0 rgb(255 255 255 / 0.08);
@@ -312,7 +369,7 @@ html:not([data-theme]) ::selection {
 }
 
 /* Status colours for glyphs on the inverted toast/tooltip surface (ink in light, cream in dark): the opposite theme's values. */
-[data-theme="light"] { --ok-inverse: #7BD39A; --bad-inverse: #FF9C8A; }
+[data-theme="light"] { --ok-inverse: #5FD38D; --bad-inverse: #FF8A7A; }
 [data-theme="dark"], html:not([data-theme]) { --ok-inverse: #17703A; --bad-inverse: #B3331A; }
 
 @keyframes kit-pop {
@@ -386,24 +443,27 @@ html { scroll-behavior: smooth; }
 
 .mk-ink {
   color-scheme: dark;
-  --workspace-background: #0C0B0A;
-  --workspace-panel: #141312;
-  --workspace-border: #2A2826;
-  --workspace-text: #F2F0ED;
-  --workspace-text-muted: #A8A39C;
-  --input: #3D3A36;
-  --edge: #77726B;
+  --workspace-background: #0A0B0C;
+  --workspace-panel: #111214;
+  --workspace-border: #232529;
+  --workspace-text: #ECEDEF;
+  --workspace-text-muted: #9B9EA4;
+  --input: #30333A;
+  --edge: #6E7178;
+  --faint: #6E7178;
   --focus: #F2B544;
-  --sunk: #0F0E0D;
-  --control: #1E1C1A;
-  --control-hover: #292725;
-  --brand: #F2F0ED;
-  --brand-foreground: #1A1816;
+  --sunk: #0D0E10;
+  --control: #1C1D21;
+  --control-hover: #24262A;
+  --brand: #24262A;
+  --brand-foreground: #ECEDEF;
+  --raised-inset: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --dot-grid: rgba(255, 255, 255, 0.05);
   color: var(--workspace-text);
 }
-.mk-ink ::selection { background: rgb(242 181 68 / 0.38); color: inherit; }
+.mk-ink ::selection { background: rgba(236, 237, 239, 0.12); color: inherit; }
 
-/* The stage floor: flat ink and a hairline where it ends. No grid, no lift: the product window is the only light on it. */
+/* The stage floor: flat canvas and a hairline where it ends. No gradients, no glow. */
 .mk-stage-bg {
   position: absolute;
   inset-inline: 0;
@@ -413,40 +473,39 @@ html { scroll-behavior: smooth; }
   pointer-events: none;
 }
 
-/* The demo window on the stage: hairline ring, 1px top highlight, three-layer shadow. */
+/* The faint 1px dot grid, allowed behind the hero bench only. */
+.mk-dotgrid {
+  background-image: radial-gradient(var(--dot-grid) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* The demo window on the stage: panel fill, hairline ring, radius 14, raised inset, menu-grade shadow. */
 .mk-window {
-  background: var(--workspace-background);
-  box-shadow:
-    0 0 0 1px rgb(26 24 22 / 0.12),
-    inset 0 1px 0 rgb(255 255 255 / 0.9),
-    0 1px 2px rgb(0 0 0 / 0.14),
-    0 12px 24px -8px rgb(0 0 0 / 0.22),
-    0 40px 80px -24px rgb(0 0 0 / 0.45);
+  background: var(--sunk);
+  border-radius: 14px;
+  box-shadow: 0 0 0 1px var(--workspace-border), var(--raised-inset), 0 16px 40px -8px rgb(0 0 0 / 0.45);
 }
 [data-theme="dark"] .mk-window,
 html:not([data-theme]) .mk-window {
-  background: var(--sunk);
-  box-shadow:
-    0 0 0 1px rgb(255 255 255 / 0.1),
-    inset 0 1px 0 rgb(255 255 255 / 0.08),
-    0 1px 2px rgb(0 0 0 / 0.5),
-    0 16px 32px -8px rgb(0 0 0 / 0.6),
-    0 48px 96px -24px rgb(0 0 0 / 0.8);
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.08), var(--raised-inset), 0 16px 40px -8px rgb(0 0 0 / 0.7);
 }
 
-/* A specimen: a piece of the product laid flat on the page (level 1). Panel fill, hairline ring, one soft contact shadow. */
+/* A specimen: a piece of the product laid flat on the page. Panel fill, hairline, radius 14, raised inset. */
 .mk-plate {
   background: var(--workspace-panel);
-  box-shadow: 0 0 0 1px var(--workspace-border), 0 1px 2px rgb(26 24 22 / 0.05);
+  border-radius: 14px;
+  box-shadow: 0 0 0 1px var(--workspace-border), var(--raised-inset);
 }
 
-/* Display type: tight, balanced, punctuation hangs. Size and leading come from utilities on the element. */
+/* Display type: Archivo at 118% width, tight and confident. Size comes from utilities on the element. */
 .mk-display {
   font-family: var(--font-display);
-  letter-spacing: -0.04em;
+  font-stretch: 118%;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 0.95;
   text-wrap: balance;
   hanging-punctuation: first;
-  font-optical-sizing: auto;
 }
 
 /* The one orchestrated moment: the window rises and the output prints line by line, once. Nothing moves under reduced motion. */

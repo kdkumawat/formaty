@@ -1,17 +1,18 @@
-import Link from "next/link";
 import { KeyLink } from "./KeyLink";
-import { GRID, H1, LINK, WRAP } from "./ui";
+import { WRAP } from "./ui";
 
-/** The bookend: back on ink, one line and the amber key, laid out like the hero's head. The footer continues on the same ink. */
+/** The closing band: one slim row, the page's one amber action. */
 export function FinalCTA() {
   return (
-    <section data-mk-stage className="mk-ink border-t border-[var(--workspace-border)] bg-[var(--workspace-background)]">
-      <div className={`${WRAP} ${GRID} items-end !gap-y-6 py-[clamp(64px,8vw,112px)]`}>
-        <h2 className={`${H1} lg:col-span-7`}>Got something to paste?</h2>
-        <div className="flex flex-wrap items-center gap-x-7 gap-y-1 lg:col-span-5 lg:pb-1.5">
-          <KeyLink href="/playground">Open the playground</KeyLink>
-          <Link href="/tools" className={LINK}>Browse every tool</Link>
-        </div>
+    <section className="border-b border-[var(--workspace-border)]">
+      <div className={`${WRAP} flex flex-wrap items-center justify-between gap-x-10 gap-y-4 py-8`}>
+        <h2 className="mk-display text-[clamp(22px,calc(1rem+1vw),30px)] font-[650] leading-[1.1]">Got something to paste?</h2>
+        <KeyLink href="/playground">
+          Open the playground
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M5 12h14M13 6l6 6-6 6" />
+          </svg>
+        </KeyLink>
       </div>
     </section>
   );

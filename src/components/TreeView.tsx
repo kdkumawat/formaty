@@ -168,9 +168,16 @@ function Node({
     [path, value, onNotify],
   );
 
-  const branchClass = "border-[var(--workspace-border)]";
-  const keyClass = "font-medium text-[var(--workspace-text)]";
-  const text = "text-[var(--workspace-text)]";
+  const branchClass = "border-[var(--input)]";
+  const keyClass = "font-mono text-[var(--syn-key)]";
+  const text =
+    typeof value === "string"
+      ? "text-[var(--syn-string)]"
+      : typeof value === "number"
+        ? "text-[var(--syn-number)]"
+        : typeof value === "boolean" || value === null
+          ? "text-[var(--syn-bool)]"
+          : "text-[var(--workspace-text)]";
 
   const children: { key: string; val: JsonValue; isIndex: boolean }[] = [];
   if (canExpand && open) {
@@ -200,16 +207,16 @@ function Node({
     open;
 
   const rowHighlight = isCurrent
-    ? "rounded-md bg-amber-400/25 ring-1 ring-amber-400/40"
+    ? "rounded-md bg-selected text-selected-foreground"
     : isMatch
-      ? "rounded-md bg-amber-400/10"
+      ? "rounded-md bg-control-hover"
       : "";
 
   return (
     <div className={depth > 0 ? `ml-3 border-l pl-2.5 ${branchClass}` : ""}>
       <div
         data-path={path}
-        className={`group flex items-center gap-1.5 py-0.5 pl-0.5 leading-5 ${rowHighlight}`}
+        className={`group flex items-center gap-1.5 py-0.5 pl-0.5 leading-[1.6] ${rowHighlight}`}
       >
         {canExpand ? (
           <button
@@ -248,7 +255,7 @@ function Node({
           <Tooltip content="Copy value">
           <button
             type="button"
-            className={`min-w-0 truncate font-mono ${text} hover:text-[var(--workspace-text)]`}
+            className={`min-w-0 truncate font-mono ${text} hover:underline`}
             onClick={() => void copy("value")}
           >
             {prettyValue(value)}

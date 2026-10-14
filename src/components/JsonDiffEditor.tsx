@@ -249,6 +249,7 @@ export const JsonDiffEditor = forwardRef<JsonDiffEditorRef, JsonDiffEditorProps>
       fontFamily: "var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
       wordWrap,
       fontSize,
+      lineHeight: 1.6,
       originalEditable,
       // Keep the diff renderer's wrap in lockstep so both sides break lines
       // at the same points and corresponding rows stay aligned.
@@ -499,7 +500,7 @@ export const JsonDiffEditor = forwardRef<JsonDiffEditorRef, JsonDiffEditorProps>
 
   return (
     <div
-      className={`relative h-full min-h-0 overflow-hidden border ${outputPanelClass} ${className ?? ""}`}
+      className={`relative h-full min-h-0 overflow-hidden border [--vscode-sash-hoverBorder:var(--edge)] ${outputPanelClass} ${className ?? ""}`}
     >
       <DiffEditor
         height="100%"

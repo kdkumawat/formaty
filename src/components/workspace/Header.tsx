@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import {
   AdjustmentsHorizontalIcon,
+  ArrowsRightLeftIcon,
   BookOpenIcon,
   CodeBracketIcon,
   EllipsisHorizontalIcon,
@@ -11,6 +12,7 @@ import {
   PlayCircleIcon,
   QuestionMarkCircleIcon,
   ShareIcon,
+  WrenchScrewdriverIcon,
   XMarkIcon,
 } from "@heroicons/react/16/solid";
 import Link from "next/link";
@@ -31,6 +33,7 @@ import {
 import { cn } from "@/lib/utils";
 import { InlineRename } from "./InlineRename";
 import { NewTabMenu, type NewTabSpec } from "./NewTabMenu";
+import type { TabKind } from "./tabNames";
 
 export interface ChromeTab {
   id: string;
@@ -38,6 +41,8 @@ export interface ChromeTab {
   name: string;
   /** True when the user renamed this tab. */
   custom: boolean;
+  /** Tab kind for the leading glyph; defaults to transform. */
+  kind?: TabKind;
 }
 
 interface HeaderProps {
@@ -85,13 +90,13 @@ function TabButton({
     <div
       id={`tab-${tab.id}`}
       className={cn(
-        "group relative flex h-[30px] min-w-0 max-w-[180px] shrink-0 items-center rounded-t-md text-[13px] font-medium transition-colors max-[900px]:h-9",
+        "group relative flex h-8 min-w-0 max-w-[200px] shrink-0 items-center rounded-t-md text-[13px] transition-colors",
         // Renaming keeps the tab's exact size; an inset ring inside its own edge is the only cue.
         editing
-          ? "bg-[var(--workspace-panel)] text-[var(--workspace-text)] ring-[1.5px] ring-inset ring-[var(--focus)]"
+          ? "bg-selected text-selected-foreground ring-[1.5px] ring-inset ring-[var(--focus)]"
           : active
-          ? "bg-[var(--workspace-panel)] text-[var(--workspace-text)]"
-          : "text-[var(--workspace-text-muted)] hover:bg-[var(--workspace-panel)]/60 hover:text-[var(--workspace-text)]",
+          ? "bg-selected text-selected-foreground shadow-[inset_0_2px_0_var(--selected-fg)]"
+          : "text-[var(--workspace-text-muted)] hover:bg-control hover:text-[var(--workspace-text)]",
       )}
       onMouseDown={(e) => {
         if (e.button === 1) {
@@ -122,8 +127,9 @@ function TabButton({
           onKeyDown={(e) => {
             if (e.key === "F2") setEditing(true);
           }}
-          className="min-w-0 flex-1 rounded-t-md py-1 pl-2.5 pr-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]"
+          className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-t-md pl-2.5 pr-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]"
         >
+          <TabGlyph kind={tab.kind} />
           <TruncatedText>{tab.name}</TruncatedText>
         </button>
       )}
@@ -133,7 +139,8 @@ function TabButton({
         shortcut="⌥W"
         onClick={onClose}
         className={cn(
-          "mr-1 !size-6 min-w-0",
+          "mr-1 !size-5 min-w-0",
+          active && "!text-[var(--selected-fg)] hover:!bg-white/10",
           editing && "invisible",
           !active && "opacity-0 focus-visible:opacity-100 group-hover:opacity-100 max-[900px]:opacity-100",
         )}
@@ -144,10 +151,19 @@ function TabButton({
   );
 }
 
+/** 16px kind marker: the mono braces for Transform, an icon for Compare and Utils. */
+function TabGlyph({ kind = "transform" }: { kind?: TabKind }) {
+  return (
+    <span aria-hidden className="inline-flex size-4 shrink-0 items-center justify-center font-mono text-[12px] leading-none opacity-70 [&>svg]:size-4">
+      {kind === "compare" ? <ArrowsRightLeftIcon /> : kind === "utils" ? <WrenchScrewdriverIcon /> : "{}"}
+    </span>
+  );
+}
+
 export function Header(props: HeaderProps) {
   return (
-    <header className="flex h-9 shrink-0 items-end gap-1 px-3 max-[900px]:h-11">
-      <Link href="/" aria-label="Formaty home" className="mb-1 mr-1 flex h-7 shrink-0 items-center transition-opacity hover:opacity-80">
+    <header className="flex h-10 shrink-0 items-end gap-2 border-b border-[var(--workspace-border)] bg-[var(--workspace-background)] px-2">
+      <Link href="/" aria-label="Formaty home" className="flex size-8 shrink-0 items-center justify-center self-center rounded-md transition-opacity hover:opacity-80">
         <Logo size={20} />
       </Link>
 
@@ -168,24 +184,24 @@ export function Header(props: HeaderProps) {
           />
         ))}
       </div>
-      <div className="mb-px shrink-0">
+      <div className="shrink-0 self-center">
         <NewTabMenu onOpen={props.onNewTab} onReopen={props.onReopenTab} closedName={props.closedTabName} />
       </div>
 
       <span className="flex-1" />
 
-      <div className="mb-px flex shrink-0 items-center gap-1">
+      <div className="flex shrink-0 items-center gap-1 self-center">
         {/* Desktop cluster. Below 640px these triggers are hidden and the overflow menu drives the same panels. */}
         <div className="flex items-center gap-1 max-sm:hidden">
           <Button
             variant="secondary"
             data-tour="command-palette"
-            aria-label="Search every tool"
+            aria-label="Search or run"
             icon={<MagnifyingGlassIcon />}
-            className="w-[200px] justify-start max-[1000px]:w-9 max-[1000px]:px-0 max-[1000px]:[&>:not(:first-child)]:hidden"
+            className="w-[220px] justify-start max-[1000px]:w-9 max-[1000px]:px-0 max-[1000px]:[&>:not(:first-child)]:hidden"
             onClick={props.onOpenCommandPalette}
           >
-            <span className="min-w-0 flex-1 truncate text-left font-normal text-[var(--workspace-text-muted)]">Search every tool</span>
+            <span className="min-w-0 flex-1 truncate text-left font-normal text-[var(--workspace-text-muted)]">Search or run</span>
             <Kbd keys="⌘K" />
           </Button>
         </div>
@@ -237,7 +253,7 @@ export function Header(props: HeaderProps) {
             </MenuTrigger>
             <MenuContent align="end">
               <MenuItem icon={<MagnifyingGlassIcon />} onSelect={props.onOpenCommandPalette}>
-                Search every tool
+                Search or run
               </MenuItem>
               <MenuItem icon={<ShareIcon />} onSelect={() => props.onShareOpenChange(true)}>
                 Share

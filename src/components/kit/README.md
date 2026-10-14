@@ -39,7 +39,7 @@ Sizes everywhere: `sm` (default) is 28px on desktop and 36px below 900px, `md` 3
 ## Layout
 - `PaneHeader` `title?`, `left?`, `right?`: the 36px pane header; right slot wraps to its own row when tight. `<PaneHeader title="Input" right={<InputActions .../>} />`.
 - `InputActions` `samples?`, `onSample(id)`, `onTidy?`, `canTidy?`, `onClear?`, `canClear?`: renders Sample, Tidy, Clear in that order as icon-only buttons, tooltip as label (Sample opens a menu when there are several). Drop it into `PaneHeader right`.
-- `ResultActions` `children` (tool switches), `options` (node, e.g. an Options Menu), `onDownload?`, `canDownload?`, `copy?: CopyButtonProps`: renders switches, Options, Download, Copy in that order.
+- `ResultActions` `children` (tool switches), `options` (node, e.g. an Options Menu), `onDownload?`, `canDownload?`, `copy?: CopyButtonProps`: renders switches, Options, Download, Copy (amber) in that order.
 - `SidePanel` `trigger` (an IconButton or Button element), `title`, `footer?`, `open?`, `onOpenChange?`: 340px popover under the trigger, full-width sheet below 640px. Inside use `PanelGroup` (`title`) and `PanelRow` (`label`, `description?`, control as children).
 - `EmptyState` `title`, `description?`, `icon?`, `action?`. `StatusText` `tone: ok | bad | muted`.
 - `Kbd` `keys` in Mac notation (`⌘K`); shows `Ctrl+K` on Windows and Linux, hydration-safe.

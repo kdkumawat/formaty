@@ -115,7 +115,8 @@ export function JsonEditor({
           minimap: { enabled: false },
           fontFamily: "var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
           fontSize,
-          lineHeight: 20,
+          // Below 8 Monaco reads this as a multiple of fontSize; a fixed 20px squeezed the lines at larger font sizes.
+          lineHeight: 1.6,
           automaticLayout: true,
           padding: { top: 6, bottom: 6 },
           scrollBeyondLastLine: false,
