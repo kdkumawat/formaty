@@ -4,10 +4,12 @@ import nextTs from "eslint-config-next/typescript";
 
 const eslintConfig = [
   // Launch-video project has its own package.json and toolchain.
-  { ignores: ["video/**"] },
+  { ignores: ["video/**", ".og-gen/**"] },
   ...nextVitals,
   ...nextTs,
   {
+    // Scoped like the Next configs above: unscoped, ESLint applies these "react/*" rules to files where that plugin is not registered and aborts.
+    files: ["**/*.{js,jsx,mjs,ts,tsx,mts,cts}"],
     rules: {
       // React Compiler analysis rules are advisory and noisy for a hand-written codebase
       // (manual useMemo/useCallback + ref access during render). Keep them informative.

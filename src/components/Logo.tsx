@@ -1,21 +1,24 @@
 interface LogoProps {
   size?: number;
   className?: string;
+  /** Show the "formaty" wordmark beside the mark. */
+  wordmark?: boolean;
 }
 
-/** Brand mark (same geometry as public/logo.svg): an opening brace with an arrow leaving it. */
-export function Logo({ size = 24, className = "" }: LogoProps) {
-  return (
-    <svg viewBox="0 0 28 28" width={size} height={size} className={`inline-block shrink-0 ${className}`} aria-hidden>
-      <rect width="28" height="28" rx="8" fill="#F2B544" />
-      <path
-        d="M11.5 7c-2.2 0-3 1.1-3 3v1.6c0 1.5-.9 2.4-2.5 2.4 1.6 0 2.5.9 2.5 2.4V18c0 1.9.8 3 3 3M13.5 14h8.5M18.5 10.5 22 14l-3.5 3.5"
-        fill="none"
-        stroke="#1A1816"
-        strokeWidth={2.4}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+/** Brand mark: three rounded bars like pretty-printed code, the middle one indented. The one shared mark (app/icon.svg and public/logo.svg use the same geometry). */
+export function Logo({ size = 24, className = "", wordmark = false }: LogoProps) {
+  const mark = (
+    <svg viewBox="0 0 20 20" width={size} height={size} className={`inline-block shrink-0 ${wordmark ? "" : className}`} aria-hidden>
+      <rect x="2" y="2.5" width="16" height="3" rx="1.5" fill="#F2B544" />
+      <rect x="6" y="8.5" width="10" height="3" rx="1.5" fill="#F2B544" />
+      <rect x="2" y="14.5" width="13" height="3" rx="1.5" fill="#F2B544" />
     </svg>
+  );
+  if (!wordmark) return mark;
+  return (
+    <span className={`inline-flex items-center gap-2 ${className}`}>
+      {mark}
+      <span className="text-[17px] font-semibold tracking-[-0.02em] text-foreground">formaty</span>
+    </span>
   );
 }

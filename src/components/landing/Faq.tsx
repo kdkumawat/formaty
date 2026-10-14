@@ -1,5 +1,5 @@
 import { FaqList } from "./PageParts";
-import { GRID, H2, SPACE, SPACE_B, WRAP } from "./ui";
+import { H2, WRAP } from "./ui";
 
 /** Questions mirror the FAQPage JSON-LD in src/app/layout.tsx. Keep in sync. */
 const FAQS = [
@@ -23,10 +23,13 @@ const FAQS = [
 
 export function FaqSection() {
   return (
-    <section id="faq" className={`${WRAP} ${GRID} ${SPACE} ${SPACE_B}`}>
-      <h2 className={`${H2} lg:col-span-5`}>Before you paste</h2>
-      <div className="min-w-0 lg:col-span-7">
-        <FaqList items={FAQS} openFirst />
+    <section id="faq" className="border-b border-[var(--workspace-border)]">
+      <div className={`${WRAP} flex flex-col gap-6 py-14 min-[901px]:py-20`}>
+        <h2 className={H2}>Before you paste</h2>
+        <div className="grid gap-x-10 min-[901px]:grid-cols-2">
+          <FaqList items={FAQS.slice(0, 2)} />
+          <FaqList items={FAQS.slice(2)} />
+        </div>
       </div>
       <script
         type="application/ld+json"

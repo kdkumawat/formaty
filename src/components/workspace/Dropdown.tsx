@@ -60,8 +60,7 @@ export function Dropdown({
       const content = contentRef.current;
       if (!content) return;
       const selected =
-        content.querySelector<HTMLElement>('[data-selected="true"]') ??
-        content.querySelector<HTMLElement>('[class*="!bg-primary/12"]');
+        content.querySelector<HTMLElement>('[data-selected="true"]');
       selected?.scrollIntoView({ block: "nearest" });
     });
     return () => cancelAnimationFrame(frame);
@@ -96,7 +95,7 @@ export function Dropdown({
           className={cn(
             // Borderless by design - a soft shadow + hairline ring (Linear/Vercel-style).
             // Width is content-sized (w-max) by default; callers can cap it via maxWidth.
-            "z-[200] min-w-[9rem] rounded-md bg-popover p-1 text-popover-foreground shadow-xl shadow-black/15 dark:shadow-black/50 ring-1 ring-black/5 dark:ring-white/10",
+            "z-[200] min-w-[9rem] rounded-[10px] bg-popover p-1 text-popover-foreground shadow-menu",
             widthCls,
             "data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=open]:slide-in-from-top-1.5",
             contentClassName,

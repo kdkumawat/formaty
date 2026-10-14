@@ -22,7 +22,7 @@ export function PaneHeader({ title, left, right, className }: PaneHeaderProps) {
   return (
     <div
       className={cn(
-        "flex min-h-9 shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-[var(--workspace-border)] px-3 py-1",
+        "flex min-h-9 shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-[var(--workspace-border)] py-0.5 pl-2.5 pr-1.5",
         className,
       )}
     >
@@ -107,18 +107,18 @@ export interface ResultActionsProps {
   copy?: CopyButtonProps;
 }
 
-/** Result header actions in the fixed order: children, Options, Copy, Download. */
+/** Result header actions in the fixed order: children, Options, Download, Copy (the amber key). */
 export function ResultActions({ children, options, onDownload, canDownload = true, copy }: ResultActionsProps) {
   return (
     <>
       {children}
       {options}
-      {copy && <CopyButton {...copy} />}
       {onDownload && (
         <IconButton label="Download" disabled={!canDownload} onClick={onDownload}>
           <ArrowDownTrayIcon />
         </IconButton>
       )}
+      {copy && <CopyButton {...copy} />}
     </>
   );
 }

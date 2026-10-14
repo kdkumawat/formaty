@@ -1,14 +1,12 @@
 "use client";
 
-import { explainProblem } from "@/lib/formats/explain";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { detectFormat, getInputFormatLabel, parseInput, stringifyOutput, type FormatKind, type InputFormatKind } from "@/lib/formats";
+import { detectFormat, getInputFormatLabel, stringifyOutput, type FormatKind, type InputFormatKind } from "@/lib/formats";
 import { downloadText } from "@/components/compare/shared";
 import { Highlighted } from "@/components/Highlighted";
 import { langForOutput } from "@/lib/highlight";
-import { flattenJson, generateTypes, inferJsonSchema, minifyJson, removeEmptyDeep, unflattenJson, type JsonValue } from "@/lib/json/core";
-import { generateSql, type SqlDialect } from "@/lib/json/generate/sql";
+import type { JsonValue } from "@/lib/json/core";
 import { InputHeader, InputErrorStrip, OutputHeader } from "@/components/workspace/PaneHeaders";
 import {
   DEFAULT_LEARNED_CHIPS,
@@ -21,6 +19,7 @@ import {
 } from "@/components/workspace/constants";
 import type { WorkspaceState } from "@/lib/shareState";
 import { playHref } from "../live/playLink";
+import { DEFAULTS, run, type Opts } from "../live/runTransform";
 import { CodeInput } from "./CodeInput";
 import { DemoFooter } from "./Footer";
 
@@ -34,53 +33,9 @@ const SAMPLE = JSON.stringify(
   2,
 );
 
-interface Opts {
-  indent: number;
-  quote: "double" | "single";
-  sortKeys: boolean;
-  removeEmpty: boolean;
-  table: string;
-  dialect: SqlDialect;
-  typeName: string;
-}
-const DEFAULTS: Opts = { indent: 2, quote: "double", sortKeys: false, removeEmpty: false, table: "", dialect: "postgres", typeName: "" };
-
 type View = "raw" | "tree" | "graph" | "query" | "table";
 type Row = Record<string, JsonValue>;
 const isRow = (v: JsonValue): v is Row => !!v && typeof v === "object" && !Array.isArray(v);
-
-type Run = { ok: true; output: string; data: JsonValue } | { ok: false; error: string };
-
-/** The same pure functions the playground's worker calls. */
-function run(text: string, kind: InputFormatKind, sel: OutputId, o: Opts): Run {
-  try {
-    if (kind === "curl") throw new Error("A cURL command is sent from the playground, where it can be run and turned into code.");
-    let data: JsonValue;
-    try {
-      data = parseInput(text, kind);
-    } catch (e) {
-      // Same plain wording as the playground.
-      return { ok: false, error: explainProblem({ input: text, raw: e instanceof Error ? e.message : "", format: kind, forced: null }).message };
-    }
-    const [group, key] = sel.split(":");
-    let output: string;
-    if (group === "fmt") {
-      const d = o.removeEmpty ? removeEmptyDeep(data) : data;
-      output = stringifyOutput(d, key as FormatKind, { indentation: o.indent, quoteStyle: o.quote, sortKeys: o.sortKeys });
-    } else if (sel === "type:sql") {
-      output = generateSql(data, { dialect: o.dialect, tableName: o.table.trim() || undefined });
-    } else if (group === "type") {
-      output = generateTypes(data, key as Parameters<typeof generateTypes>[1], o.typeName.trim() || "JsonData");
-    } else if (sel === "op:schema") output = JSON.stringify(inferJsonSchema(data), null, 2);
-    else if (sel === "op:flatten") output = JSON.stringify(flattenJson(data), null, 2);
-    else if (sel === "op:unflatten") output = JSON.stringify(unflattenJson(data as Record<string, JsonValue>), null, 2);
-    else if (sel === "op:minify") output = minifyJson(data);
-    else throw new Error("This output needs more room. Open the playground to use it.");
-    return { ok: true, output, data };
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Could not read this input." };
-  }
-}
 
 function stateFor(sel: OutputId): Partial<WorkspaceState> {
   const [group, key] = sel.split(":");
@@ -125,7 +80,7 @@ export interface TransformPreset {
 }
 
 /** The playground's Transform tab: the real input and output headers over the real conversion functions. */
-export default function Transform({ preset = {}, hero = false }: { preset?: TransformPreset; hero?: boolean }) {
+export default function Transform({ preset = {} }: { preset?: TransformPreset }) {
   const router = useRouter();
   const [text, setText] = useState(preset.text ?? SAMPLE);
   const [override, setOverride] = useState<InputFormatKind | null>(preset.override ?? null);
@@ -237,17 +192,13 @@ export default function Transform({ preset = {}, hero = false }: { preset?: Tran
           onMoveToInput={() => load(output)}
           canDownload={!!output}
           onDownload={() => downloadText(`formaty.${ext}`, output)}
-          // On the landing hero the page's own key is the one amber action, so Copy is the quiet variant there.
-          copy={{ getText: () => output, disabled: !output, variant: hero ? "secondary" : "primary" }}
+          copy={{ getText: () => output, disabled: !output, variant: "primary" }}
         />
         {showTable ? (
           <Table rows={rows} />
         ) : (
           <pre role="group" tabIndex={0} aria-label="Output" className="m-0 min-h-0 flex-1 overflow-auto bg-[var(--workspace-panel)] px-3 py-2 font-mono text-[13px] leading-[1.6] whitespace-pre text-[var(--workspace-text)]">
-            {/* The hero prints the first result once on load (.mk-resolve only animates inside .mk-rise). */}
-            <span className={hero ? "mk-resolve block w-max min-w-full" : undefined}>
-              <Highlighted code={output} lang={langForOutput(sel)} />
-            </span>
+            <Highlighted code={output} lang={langForOutput(sel)} />
           </pre>
         )}
       </section>

@@ -1,18 +1,14 @@
-import { Hero, Convert, Generators, Compare, MoreTools, Privacy, FaqSection, FinalCTA, Footer, SiteHeader } from "@/components/landing";
+import { Capabilities, FaqSection, FinalCTA, Footer, Hero, Privacy, SiteHeader } from "@/components/landing";
 
 export function HomePage() {
   return (
     <div className="min-h-screen bg-[var(--workspace-background)] text-[var(--workspace-text)]">
-      {/* The hero carries the page's amber key, so the header's playground link starts plain. */}
-      <SiteHeader quiet />
+      <SiteHeader />
       <main id="main">
         <Hero />
-        <Convert />
-        <Generators />
-        <Compare />
-        <MoreTools />
-        <FaqSection />
+        <Capabilities />
         <Privacy />
+        <FaqSection />
         <FinalCTA />
       </main>
       <Footer />

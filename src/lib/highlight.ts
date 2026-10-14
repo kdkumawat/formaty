@@ -3,7 +3,7 @@
  * One tokenizer for every language; the kinds map onto the playground editor theme's token
  * colours (see TOKEN_COLORS in utils/monacoThemes.ts). Not a parser: good-enough lexing.
  */
-export type Kind = "plain" | "key" | "string" | "number" | "keyword" | "comment" | "punct";
+export type Kind = "plain" | "key" | "string" | "number" | "keyword" | "bool" | "comment" | "punct";
 export interface Token {
   text: string;
   kind: Kind;
@@ -73,7 +73,7 @@ const JSON_RULES: Rule[] = [
   [r(`${DQ}(?=\\s*:)`), "key"],
   [r(DQ), "string"],
   [r(NUM), "number"],
-  [r(String.raw`(?:true|false|null)\b`), "keyword"],
+  [r(String.raw`(?:true|false|null)\b`), "bool"],
   [r(String.raw`[{}\[\],:]`), "punct"],
 ];
 
@@ -84,7 +84,7 @@ const YAML_RULES: Rule[] = [
   [r(String.raw`[^\s#:'"\-\[\]{},|>][^:#\n]*?(?=:(?:\s|$))`), "key"],
   [r(`${DQ}|${SQ}`), "string"],
   [r(`${NUM}${YAML_END}`), "number"],
-  [r(`(?:true|false|null|yes|no|~)${YAML_END}`, "i"), "keyword"],
+  [r(`(?:true|false|null|yes|no|~)${YAML_END}`, "i"), "bool"],
   [r(String.raw`:(?=\s|$)|-(?=\s)|---|\.\.\.|[\[\]{},|>]`), "punct"],
   // A plain value after "key:" or "- ".
   [r(String.raw`[^\s#\[\]{}][^#\n]*?(?=\s+#|\s*$|\s*\n)`, "m"), "string", (c) => c.prev?.kind === "punct" && (c.prev.text === ":" || c.prev.text === "-")],
@@ -111,7 +111,7 @@ const TOML_RULES: Rule[] = [
   [r(String.raw`"""[\s\S]*?"""|'''[\s\S]*?'''|${DQ}|'[^'\n]*'`), "string"],
   [r(String.raw`\d{4}-\d\d-\d\d(?:[T ]\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)?)?`), "number"],
   [r(String.raw`[+-]?\d[\d_]*(?:\.\d+)?(?:[eE][+-]?\d+)?`), "number"],
-  [r(String.raw`(?:true|false|inf|nan)\b`), "keyword"],
+  [r(String.raw`(?:true|false|inf|nan)\b`), "bool"],
   [r(String.raw`[=\[\]{},]`), "punct"],
 ];
 
@@ -120,7 +120,7 @@ const CSV_RULES: Rule[] = [
   [r(String.raw`"(?:""|[^"])*"|[^,\r\n"]+`), "key", (c) => c.line === 0],
   [r(String.raw`"(?:""|[^"])*"`), "string"],
   [r(`${NUM}${CSV_END}`), "number"],
-  [r(`(?:true|false|null)${CSV_END}`), "keyword"],
+  [r(`(?:true|false|null)${CSV_END}`), "bool"],
   [r(","), "punct"],
 ];
 

@@ -1,12 +1,15 @@
 "use client";
 
-import React, { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import React, { useCallback, useDeferredValue, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { MagnifyingGlassIcon, XMarkIcon } from "@heroicons/react/16/solid";
 import { COMMAND_GROUPS } from "@/components/workspace/commandIcons";
 import { loadRecents, pushRecent, rank, saveRecents, RECENT_LIMIT } from "@/lib/commandSearch";
 import { isMacOS } from "@/lib/shortcuts";
 import { cn } from "@/lib/utils";
+import { Highlighted as Code } from "@/components/Highlighted";
+import type { CommandPreview } from "@/components/palette/preview";
+import { SCOPES, inScope, type Scope } from "@/components/palette/scope";
 
 export interface Command {
   id: string;
@@ -23,6 +26,10 @@ export interface Command {
   icon?: React.ReactNode;
   /** Second action on Cmd/Ctrl+Enter, shown in the footer while the command is active. */
   alt?: { label: string; action: () => void };
+  /** One-line explanation shown under the label and in the preview pane. */
+  description?: string;
+  /** Lazily builds a code sample for the preview pane; called only while this command is highlighted. */
+  preview?: () => CommandPreview | null;
 }
 
 /** Where the user is: ranks matching commands first and drives the Suggested section. */
@@ -61,7 +68,6 @@ interface Section {
 
 const muted = "text-[var(--workspace-text-muted)]";
 const SUGGESTED_LIMIT = 6;
-const EMPTY_TRIES = ["yaml", "uuid", "compare"];
 const visible = (c: Command) => !c.disabled || !!c.disabledReason;
 
 function build(commands: Command[], query: string, ctx: PaletteContext | undefined, recents: string[]): { sections: Section[]; flat: Row[] } {
@@ -113,10 +119,22 @@ function Highlighted({ text, indices }: { text: string; indices: number[] }) {
     let j = i;
     while (j < text.length && on.has(j) === hit) j++;
     const chunk = text.slice(i, j);
-    parts.push(hit ? <span key={i} className="font-semibold underline decoration-current/45 decoration-[1.5px] underline-offset-[3px]">{chunk}</span> : chunk);
+    parts.push(hit ? <span key={i} className="font-semibold">{chunk}</span> : chunk);
     i = j;
   }
   return <>{parts}</>;
+}
+
+/** Deferred so arrow-key and typing updates paint first; the sample follows. */
+function PreviewCode({ cmd }: { cmd: Command }) {
+  const deferred = useDeferredValue(cmd);
+  const sample = useMemo(() => deferred.preview?.() ?? null, [deferred]);
+  if (!sample || deferred !== cmd) return null;
+  return (
+    <pre className="m-0 max-h-full overflow-auto rounded-md border border-[var(--workspace-border)] bg-[var(--background)] p-2 font-mono text-[12px] leading-[1.6] whitespace-pre">
+      <Code code={sample.code} lang={sample.lang} />
+    </pre>
+  );
 }
 
 const noop = () => () => {};
@@ -153,8 +171,10 @@ const STYLE = `
 
 type Handle = { clear: () => boolean; ran: boolean };
 
-function Body({ onClose, commands, context, handle }: Omit<CommandPaletteProps, "open"> & { handle: React.MutableRefObject<Handle> }) {
+function Body({ onClose, commands: allCommands, context, handle }: Omit<CommandPaletteProps, "open"> & { handle: React.MutableRefObject<Handle> }) {
   const [query, setQuery] = useState("");
+  const [scope, setScope] = useState<Scope>("All");
+  const commands = useMemo(() => allCommands.filter((c) => inScope(c.category, scope)), [allCommands, scope]);
   const [active, setActive] = useState(0);
   const [stuck, setStuck] = useState(-1);
   const [recents] = useState(loadRecents);
@@ -275,8 +295,8 @@ function Body({ onClose, commands, context, handle }: Omit<CommandPaletteProps, 
   return (
     <div onKeyDown={onKeyDown}>
       <style>{STYLE}</style>
-      <div className="flex h-[52px] items-center gap-2.5 border-b border-[var(--workspace-border)] px-4">
-        <MagnifyingGlassIcon aria-hidden className="size-[18px] shrink-0 text-[var(--workspace-text)] opacity-70" />
+      <div className="flex h-12 items-center gap-2.5 border-b border-[var(--workspace-border)] px-4">
+        <MagnifyingGlassIcon aria-hidden className="size-4 shrink-0 text-[var(--workspace-text-muted)]" />
         {context && (
           <span className="inline-flex h-6 max-w-[42%] shrink-0 items-center truncate rounded-md bg-control px-2 text-[12px] font-medium text-[var(--workspace-text-muted)]">{context.label}</span>
         )}
@@ -315,33 +335,43 @@ function Body({ onClose, commands, context, handle }: Omit<CommandPaletteProps, 
         <Keys keys="Esc" className="max-sm:hidden" />
       </div>
 
+      <div role="group" aria-label="Scope" className="flex h-10 items-center gap-1.5 border-b border-[var(--workspace-border)] px-3">
+        {SCOPES.map((s) => (
+          <button
+            key={s}
+            type="button"
+            tabIndex={-1}
+            aria-pressed={scope === s}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => {
+              setScope(s);
+              setActive(0);
+              inputRef.current?.focus();
+            }}
+            className={cn(
+              "h-6 rounded-md border px-2.5 text-[12px] transition-colors duration-100",
+              scope === s
+                ? "border-selected-border bg-selected text-selected-foreground"
+                : "border-[var(--workspace-border)] text-[var(--workspace-text-muted)] hover:bg-control-hover",
+            )}
+          >
+            {s}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex h-[min(360px,calc(60dvh-120px))]">
       <div
         ref={listRef}
         id={`${uid}-list`}
         role="listbox"
         aria-label="Results"
         onScroll={onScroll}
-        className="relative h-[min(420px,calc(60dvh-96px))] overflow-y-auto overscroll-contain"
+        className="relative min-w-0 flex-1 overflow-y-auto overscroll-contain"
       >
         {sections.length === 0 ? (
-          <div role="presentation" className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-            <p className={cn("max-w-full break-words text-[13px]", muted)}>
-              Nothing matched “<span className="text-[var(--workspace-text)]">{q}</span>”
-            </p>
-            <div className="flex flex-wrap justify-center gap-1.5">
-              {EMPTY_TRIES.map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  tabIndex={-1}
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => change(t)}
-                  className="h-7 rounded-md bg-control px-2.5 text-[12px] text-[var(--workspace-text)] transition-colors duration-100 hover:bg-control-hover"
-                >
-                  Try “{t}”
-                </button>
-              ))}
-            </div>
+          <div role="presentation" className="flex h-full items-center justify-center px-6 text-center">
+            <p className={cn("max-w-full break-words text-[13px]", muted)}>{q ? `No commands match “${q}”` : "No commands here"}</p>
           </div>
         ) : (
           sections.map((s, si) => {
@@ -383,15 +413,14 @@ function Body({ onClose, commands, context, handle }: Omit<CommandPaletteProps, 
                         className={cn(
                           "group relative flex h-9 scroll-mb-2 scroll-mt-9 items-center gap-3 rounded-lg px-3 text-[13.5px] text-[var(--workspace-text)] [@media(pointer:coarse)]:h-10",
                           off ? "cursor-default" : "cursor-pointer",
-                          on && "bg-control-hover",
+                          on && "bg-control-hover shadow-[inset_0_0_0_1px_var(--workspace-border)]",
                         )}
                       >
-                        {on && <span aria-hidden className="absolute bottom-2 left-0 top-2 w-[3px] rounded-full bg-action" />}
                         <span
                           aria-hidden
                           className={cn(
-                            "grid size-6 shrink-0 place-items-center rounded-md bg-control transition-colors duration-100 [&>svg]:size-4 [&>svg]:opacity-70",
-                            on && "bg-brand text-brand-foreground [&>svg]:opacity-100",
+                            "grid size-4 shrink-0 place-items-center [&>svg]:size-4",
+                            on ? "text-[var(--workspace-text)]" : "text-[var(--workspace-text-muted)]",
                             off && "opacity-45",
                           )}
                         >
@@ -403,6 +432,7 @@ function Body({ onClose, commands, context, handle }: Omit<CommandPaletteProps, 
                         {right && <span className={cn("shrink-0 text-[12px]", muted)}>{right}</span>}
                         {r.group && <span className={cn("shrink-0 text-[12px] opacity-80 max-sm:hidden", muted)}>{r.group}</span>}
                         {cmd.shortcut && !off && <Keys keys={cmd.shortcut} className="max-sm:hidden" />}
+                        {on && !off && !cmd.shortcut && <Keys keys="↵" className="max-sm:hidden" />}
                       </div>
                     );
                   })}
@@ -413,17 +443,37 @@ function Body({ onClose, commands, context, handle }: Omit<CommandPaletteProps, 
         )}
       </div>
 
+      <aside aria-label="Preview" className="flex w-[40%] shrink-0 flex-col border-l border-[var(--workspace-border)] bg-[var(--sunk)] max-[600px]:hidden">
+        <div className={cn("flex h-8 shrink-0 items-center truncate border-b border-[var(--workspace-border)] px-3 text-[12px]", muted)}>
+          {cur ? `Preview · ${cur.cmd.label}` : "Preview"}
+        </div>
+        {cur && (
+          <div className="min-h-0 flex-1 space-y-3 overflow-auto p-3 text-[13px]">
+            <p className="text-[var(--workspace-text)]">{cur.cmd.description ?? `${cur.cmd.category}: ${cur.cmd.label}.`}</p>
+            {cur.cmd.preview && <PreviewCode cmd={cur.cmd} />}
+            <p className={cn("text-[12px]", muted)}>
+              {cur.cmd.category}
+              {cur.cmd.badge ? ` · ${cur.cmd.badge}` : ""}
+            </p>
+            {cur.cmd.shortcut && (
+              <p className={cn("flex items-center gap-2 text-[12px]", muted)}>
+                Shortcut <Keys keys={cur.cmd.shortcut} />
+              </p>
+            )}
+          </div>
+        )}
+      </aside>
+      </div>
+
       <div role="status" aria-live="polite" className="sr-only">
         {q ? (flat.length ? `${flat.length} ${flat.length === 1 ? "result" : "results"}` : "No results") : ""}
       </div>
 
-      <div className={cn("flex h-10 items-center gap-4 border-t border-[var(--workspace-border)] px-4 text-[12px]", muted)}>
-        <span className="min-w-0 flex-1 truncate">{cur ? <span className="text-[var(--workspace-text)]">{cur.cmd.label}</span> : "No command selected"}</span>
-        <span className="flex shrink-0 items-center gap-4 max-sm:hidden">
-          <span className="inline-flex items-center gap-1.5"><Keys keys="↑↓" /> Navigate</span>
-          <span className="inline-flex items-center gap-1.5"><Keys keys="↵" /> Run</span>
-          {alt && <span className="inline-flex items-center gap-1.5"><Keys keys="⌘↵" /> {alt.label}</span>}
-        </span>
+      <div className={cn("flex h-9 items-center gap-4 border-t border-[var(--workspace-border)] px-3 text-[12px] whitespace-nowrap", muted)}>
+        <span className="inline-flex items-center gap-1.5"><Keys keys="↑↓" /> Navigate</span>
+        <span className="inline-flex items-center gap-1.5"><Keys keys="↵" /> Run</span>
+        {alt && <span className="inline-flex items-center gap-1.5 max-sm:hidden"><Keys keys="⌘↵" /> {alt.label}</span>}
+        <span className="inline-flex items-center gap-1.5"><Keys keys="Esc" /> Close</span>
       </div>
     </div>
   );
@@ -441,7 +491,7 @@ export function CommandPalette({ open, onClose, ...rest }: CommandPaletteProps) 
       }}
     >
       <Dialog.Portal>
-        <Dialog.Overlay className="cmdk-scrim fixed inset-0 z-[200] bg-black/45 backdrop-blur-[3px]" />
+        <Dialog.Overlay className="cmdk-scrim fixed inset-0 z-[200] bg-black/60" />
         <Dialog.Content
           ref={content}
           aria-describedby={undefined}
@@ -455,7 +505,7 @@ export function CommandPalette({ open, onClose, ...rest }: CommandPaletteProps) 
             if (handle.current.ran && a && a !== document.body && !content.current?.contains(a)) e.preventDefault();
             handle.current.ran = false;
           }}
-          className="cmdk-surface fixed inset-x-0 top-[6vh] z-[201] mx-auto w-[640px] max-w-[calc(100vw-32px)] origin-top overflow-hidden rounded-2xl bg-popover/[0.97] text-[var(--workspace-text)] shadow-[0_0_0_1px_var(--workspace-border),inset_0_1px_0_rgba(255,255,255,.05),0_2px_6px_rgba(0,0,0,.08),0_16px_40px_-8px_rgba(0,0,0,.22),0_40px_90px_-12px_rgba(0,0,0,.35)] outline-none backdrop-blur-xl sm:top-[18vh]"
+          className="cmdk-surface fixed inset-x-0 top-[6vh] z-[201] mx-auto w-[760px] max-w-[calc(100vw-16px)] origin-top overflow-hidden rounded-xl bg-popover text-[var(--workspace-text)] shadow-menu outline-none sm:top-[12vh]"
         >
           <Dialog.Title className="sr-only">Search every tool</Dialog.Title>
           <Body onClose={onClose} handle={handle} {...rest} />

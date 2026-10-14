@@ -44,6 +44,9 @@ import { cn } from "@/lib/utils";
 import type { OutputId } from "./constants";
 import { OutputPicker } from "./OutputPicker";
 
+/** Formats are named by a mono glyph, never a colour. */
+export const FORMAT_GLYPH: Record<InputFormatKind, string> = { json: "{}", xml: "<>", yaml: ":-", toml: "[]", csv: ",,", curl: "$_" };
+
 const READ_AS: Array<[InputFormatKind, string]> = [
   ["json", "JSON"],
   ["xml", "XML"],
@@ -70,6 +73,8 @@ export const INPUT_SAMPLES: Array<SampleOption & { description: string }> = [
 interface InputHeaderProps {
   /** Format the input is read as right now, e.g. "JSON". */
   formatLabel: string;
+  /** The same format as an id, for its glyph. */
+  detected?: InputFormatKind;
   hasInput: boolean;
   onClear: () => void;
   override: InputFormatKind | null;
@@ -93,8 +98,8 @@ interface InputHeaderProps {
  */
 export function InputHeader(p: InputHeaderProps) {
   const options = [
-    { value: "auto", label: `Auto: ${p.formatLabel}` },
-    ...READ_AS.map(([value, label]) => ({ value, label })),
+    { value: "auto", label: `${FORMAT_GLYPH[p.detected ?? READ_AS.find(([, l]) => l === p.formatLabel)?.[0] ?? "json"]} ${p.formatLabel}` },
+    ...READ_AS.map(([value, label]) => ({ value, label: `${FORMAT_GLYPH[value]} ${label}` })),
   ];
   const forced = p.override !== null;
   return (
@@ -104,13 +109,14 @@ export function InputHeader(p: InputHeaderProps) {
         <>
           <h2 className="shrink-0 text-[14px] font-semibold text-[var(--workspace-text)] @max-[290px]:hidden">Input</h2>
           <Select
-            label="Read as"
+            label={forced ? "Read as" : "auto-detected"}
+            aria-label="Read input as"
             options={options}
             value={p.override ?? "auto"}
             onChange={(v) => p.onOverride(v === "auto" ? null : (v as InputFormatKind))}
             // A forced format is filled ink (selected), so it never passes for Auto.
             variant={forced ? "selected" : "secondary"}
-            className={cn("@max-[380px]:[&>span:first-child]:hidden", forced && "[&>span:first-child]:!text-current [&>span:first-child]:opacity-70")}
+            className={cn("font-mono text-[11.5px] @max-[380px]:[&>span:first-child]:hidden [&>span:first-child]:font-sans", forced && "[&>span:first-child]:!text-current [&>span:first-child]:opacity-70")}
           />
           <div className="ml-auto flex shrink-0 items-center gap-1">
             <IconButton
@@ -262,14 +268,13 @@ interface OutputHeaderProps {
   copy: CopyButtonProps;
 }
 
-/** Labels show only on very wide screens; below that the switch is icons with tooltips so the header stays one row. */
-const viewLabel = (text: string) => <span className="hidden min-[1680px]:inline">{text}</span>;
-const VIEWS: Array<{ value: View; label: ReactNode; icon: ReactNode; "aria-label": string }> = [
-  { value: "raw", label: viewLabel("Text"), icon: <DocumentTextIcon />, "aria-label": "Text" },
-  { value: "tree", label: viewLabel("Tree"), icon: <ListBulletIcon />, "aria-label": "Tree" },
-  { value: "graph", label: viewLabel("Graph"), icon: <CubeTransparentIcon />, "aria-label": "Graph" },
-  { value: "query", label: viewLabel("Query"), icon: <FunnelIcon />, "aria-label": "Query" },
-  { value: "table", label: viewLabel("Table"), icon: <TableCellsIcon />, "aria-label": "Table" },
+/** Icon-only until chosen: the selected segment shows its label, the others keep it for screen readers and the tooltip. */
+const VIEWS: Array<{ value: View; text: string; icon: ReactNode }> = [
+  { value: "raw", text: "Text", icon: <DocumentTextIcon /> },
+  { value: "tree", text: "Tree", icon: <ListBulletIcon /> },
+  { value: "graph", text: "Graph", icon: <CubeTransparentIcon /> },
+  { value: "query", text: "Query", icon: <FunnelIcon /> },
+  { value: "table", text: "Table", icon: <TableCellsIcon /> },
 ];
 
 const keepOpen = (e: Event) => e.preventDefault();
@@ -279,12 +284,15 @@ export function OutputHeader(p: OutputHeaderProps) {
   const [compact, setCompact] = useState(false);
   // The status sentence only fits beside the chips and actions in a wide pane; otherwise it is a dot with a tooltip.
   const [roomy, setRoomy] = useState(false);
+  // Under ~640px the chips and the view control each fold into one dropdown, so the header stays on one row.
+  const [narrow, setNarrow] = useState(false);
   useEffect(() => {
     const el = rootRef.current;
     if (!el) return;
     const ro = new ResizeObserver(([entry]) => {
       setCompact(entry.contentRect.width < 860);
       setRoomy(entry.contentRect.width >= 1180);
+      setNarrow(entry.contentRect.width < 640);
     });
     ro.observe(el);
     return () => ro.disconnect();
@@ -303,7 +311,7 @@ export function OutputHeader(p: OutputHeaderProps) {
     <StatusText tone="muted">{statusText}</StatusText>
   );
 
-  const optionsMenu = hasOptions ? (
+  const optionsMenu = hasOptions || (narrow && p.canMoveToInput) ? (
     <Menu>
       <MenuTrigger asChild>
         <IconButton label="Options">
@@ -349,13 +357,6 @@ export function OutputHeader(p: OutputHeaderProps) {
             <MenuCustom>
               <TextField aria-label="SQL table name" placeholder="Automatic" value={p.sqlTable} wrapperClassName="w-full" onChange={(e) => p.onSqlTable(e.target.value)} />
             </MenuCustom>
-            <MenuSeparator />
-            <MenuLabel>SQL dialect</MenuLabel>
-            <MenuRadioGroup value={p.sqlDialect} onValueChange={(v) => p.onSqlDialect(v as "sqlite" | "postgres" | "mysql")}>
-              <MenuRadioItem value="sqlite" onSelect={keepOpen}>SQLite</MenuRadioItem>
-              <MenuRadioItem value="postgres" onSelect={keepOpen}>PostgreSQL</MenuRadioItem>
-              <MenuRadioItem value="mysql" onSelect={keepOpen}>MySQL</MenuRadioItem>
-            </MenuRadioGroup>
           </>
         )}
         {p.isType && (
@@ -367,7 +368,8 @@ export function OutputHeader(p: OutputHeaderProps) {
           </>
         )}
         <MenuSeparator />
-        <MenuItem onSelect={p.onResetOptions}>Reset</MenuItem>
+        {narrow && p.canMoveToInput && <MenuItem onSelect={p.onMoveToInput}>Move to input</MenuItem>}
+        {hasOptions && <MenuItem onSelect={p.onResetOptions}>Reset</MenuItem>}
       </MenuContent>
     </Menu>
   ) : null;
@@ -375,9 +377,22 @@ export function OutputHeader(p: OutputHeaderProps) {
   return (
     <div ref={rootRef}>
       <PaneHeader
+        className={narrow ? "flex-nowrap [&>div:last-child]:flex-nowrap" : undefined}
         left={
           <>
-            <OutputPicker selected={p.selected} learned={p.learned} onSelect={p.onSelect} curl={p.curl} compact={compact} />
+            <OutputPicker selected={p.selected} learned={p.learned} onSelect={p.onSelect} curl={p.curl} compact={compact} collapsed={narrow} />
+            {p.isSql && (
+              <Select
+                aria-label="SQL dialect"
+                options={[
+                  { value: "postgres", label: "PostgreSQL" },
+                  { value: "mysql", label: "MySQL" },
+                  { value: "sqlite", label: "SQLite" },
+                ]}
+                value={p.sqlDialect}
+                onChange={(v) => p.onSqlDialect(v as "sqlite" | "postgres" | "mysql")}
+              />
+            )}
             {status}
           </>
         }
@@ -389,7 +404,7 @@ export function OutputHeader(p: OutputHeaderProps) {
             options={
               <>
                 {optionsMenu}
-                {p.canMoveToInput && (
+                {p.canMoveToInput && !narrow && (
                   <IconButton label="Move to input" onClick={p.onMoveToInput}>
                     <ArrowLeftEndOnRectangleIcon />
                   </IconButton>
@@ -397,9 +412,26 @@ export function OutputHeader(p: OutputHeaderProps) {
               </>
             }
           >
-            {p.isData && (
+            {p.isData && narrow && (
+              <span data-tour="view-switcher" className="shrink-0">
+                <Select
+                  aria-label="Output view"
+                  className="shrink-0"
+                  options={VIEWS.map((v) => ({ value: v.value, label: v.text, disabled: v.value !== "raw" && !p.canVisualize }))}
+                  value={p.view}
+                  onChange={(v) => p.onView(v as View)}
+                />
+              </span>
+            )}
+            {p.isData && !narrow && (
               <span data-tour="view-switcher">
-                <Segmented aria-label="Output view" value={p.view} onChange={p.onView} options={VIEWS.map((v) => ({ ...v, disabled: v.value !== "raw" && !p.canVisualize }))} />
+                <Segmented aria-label="Output view" value={p.view} onChange={p.onView} options={VIEWS.map((v) => ({
+                    value: v.value,
+                    icon: v.icon,
+                    label: v.value === p.view ? v.text : <span className="sr-only">{v.text}</span>,
+                    "aria-label": v.text,
+                    disabled: v.value !== "raw" && !p.canVisualize,
+                  }))} />
               </span>
             )}
           </ResultActions>

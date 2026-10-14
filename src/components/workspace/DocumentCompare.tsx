@@ -1,21 +1,18 @@
 "use client";
 
 import { createPortal } from "react-dom";
-import { ArrowsRightLeftIcon, ChevronDownIcon, ChevronUpIcon, Cog6ToothIcon } from "@heroicons/react/16/solid";
+import { ArrowsRightLeftIcon, ChevronDownIcon, ChevronUpIcon } from "@heroicons/react/16/solid";
 import type { DiffSummary, LineDiffStats } from "@/lib/json/diff";
 import {
   IconButton,
   InputActions,
-  Menu,
-  MenuCheckboxItem,
-  MenuContent,
-  MenuTrigger,
   ResultActions,
   Segmented,
   TruncatedText,
   type CopyFormat,
 } from "@/components/kit";
-import { RenameButton } from "@/components/compare/shared";
+import { FORMAT_GLYPH } from "@/components/workspace/PaneHeaders";
+import { CheckChip, RenameButton } from "@/components/compare/shared";
 
 export type DocView = "side" | "lines" | "fields";
 
@@ -47,6 +44,8 @@ interface DocumentHeaderProps {
   onCopyFormat: (id: string) => void;
   /** Saves the report. */
   onDownload: () => void;
+  /** Document language; "json" shows the `{} JSON` tag in each title. */
+  language?: string;
 }
 
 const COPY_FORMATS: CopyFormat[] = [
@@ -64,24 +63,39 @@ export function DocumentHeader(p: DocumentHeaderProps) {
   const status = [changed > 0 && `${changed.toLocaleString()} changed`, onlyA > 0 && `${onlyA.toLocaleString()} only in A`, onlyB > 0 && `${onlyB.toLocaleString()} only in B`]
     .filter(Boolean)
     .join(" · ");
-  return createPortal(
+  return (
+    <>
+      {createPortal(<DocumentControls {...p} status={status} />, p.host)}
+      {/* File titles: one cell per pane, side by side like the editor below. */}
+      {p.view === "side" && (
+        <div className="flex h-9 shrink-0 border-b border-[var(--workspace-border)]">
+          {(["left", "right"] as const).map((side) => (
+            <div key={side} className={`flex min-w-0 flex-1 items-center gap-2 px-2 ${side === "right" ? "border-l border-[var(--workspace-border)]" : ""}`}>
+              <RenameButton
+                dot={side === "left" ? "bg-side-a" : "bg-side-b"}
+                name={side === "left" ? p.leftName : p.rightName}
+                onRename={(el) => p.onRename(side, el)}
+                className="max-w-[60%]"
+              />
+              <span className="inline-flex h-[22px] shrink-0 items-center gap-1.5 rounded-sm border border-input px-[7px] font-mono text-[11.5px] text-[var(--workspace-text)]">
+                {p.language === "json" && <span aria-hidden className="text-[var(--workspace-text-muted)]">{FORMAT_GLYPH.json}</span>}
+                {p.language === "json" ? "JSON" : "Text"}
+              </span>
+              <span className="text-[12px] text-[var(--workspace-text-muted)]">{side === "left" ? "A" : "B"}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+function DocumentControls(p: DocumentHeaderProps & { status: string }) {
+  return (
     <div className="flex w-full min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-      {/* Right after the kind switch, where the list tools keep their matching options. */}
-      <Menu>
-        <MenuTrigger asChild>
-          <IconButton label="Comparison options" className="relative">
-            <Cog6ToothIcon />
-            {p.ignoreWhitespace && <span aria-hidden className="absolute right-1 top-1 size-1.5 rounded-full bg-action" />}
-          </IconButton>
-        </MenuTrigger>
-        <MenuContent align="start">
-          <MenuCheckboxItem checked={p.ignoreWhitespace} onCheckedChange={p.onIgnoreWhitespace} onSelect={(e) => e.preventDefault()}>
-            Ignore whitespace
-          </MenuCheckboxItem>
-        </MenuContent>
-      </Menu>
-      <RenameButton dot="bg-side-a" name={p.leftName} onRename={(el) => p.onRename("left", el)} className="max-w-[140px] text-[13px] font-medium" />
-      <RenameButton dot="bg-side-b" name={p.rightName} onRename={(el) => p.onRename("right", el)} className="max-w-[140px] text-[13px] font-medium" />
+      <CheckChip on={p.ignoreWhitespace} onToggle={() => p.onIgnoreWhitespace(!p.ignoreWhitespace)}>
+        Ignore whitespace
+      </CheckChip>
       <Segmented
         aria-label="Comparison view"
         tone="neutral"
@@ -95,7 +109,7 @@ export function DocumentHeader(p: DocumentHeaderProps) {
       />
       {p.hasContent && (
         <div className="min-w-0 flex-[1_1_6rem] text-[12px] tabular-nums text-[var(--workspace-text-muted)]">
-          <TruncatedText>{status || "No differences"}</TruncatedText>
+          <TruncatedText>{p.status || "No differences"}</TruncatedText>
         </div>
       )}
       <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-1">
@@ -113,8 +127,8 @@ export function DocumentHeader(p: DocumentHeaderProps) {
         <IconButton label="Previous change" disabled={!p.nav.total} onClick={p.onPrev}>
           <ChevronUpIcon />
         </IconButton>
-        <span aria-live="polite" className="min-w-[3rem] text-center text-[13px] tabular-nums text-[var(--workspace-text)]">
-          {p.nav.total ? `${p.nav.current} of ${p.nav.total}` : "0 of 0"}
+        <span aria-live="polite" className="min-w-[6.5rem] text-center text-[12px] tabular-nums text-[var(--workspace-text)]">
+          {p.nav.total ? `Change ${p.nav.current} of ${p.nav.total}` : "No changes"}
         </span>
         <IconButton label="Next change" disabled={!p.nav.total} onClick={p.onNext}>
           <ChevronDownIcon />
@@ -131,8 +145,7 @@ export function DocumentHeader(p: DocumentHeaderProps) {
           }}
         />
       </div>
-    </div>,
-    p.host,
+    </div>
   );
 }
 

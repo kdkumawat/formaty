@@ -70,7 +70,7 @@ export function ToolPage({ config }: { config: PageConfig }) {
   return (
     <div className="flex min-h-screen flex-col bg-[var(--workspace-background)] text-[var(--workspace-text)]">
       {/* The stage always carries an amber key here (the tool's Copy, or the page's own action), so the header link starts plain. */}
-      <SiteHeader quiet />
+      <SiteHeader />
       <main id="main" className="flex-1">
         <PageHero
           header={false}

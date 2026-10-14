@@ -169,6 +169,7 @@ export function TableView({ data, className = "", fontSize = 13, byteSize }: Tab
   // Word-wrap cell content. Off (default) keeps each cell to one line with
   // ellipsis + tooltip; on wraps long values inside the cell.
   const [wordWrap, setWordWrap] = useState(false);
+  const [selectedRow, setSelectedRow] = useState<number | null>(null);
 
   // Reset filters when drilling
   useEffect(() => {
@@ -176,6 +177,7 @@ export function TableView({ data, className = "", fontSize = 13, byteSize }: Tab
     setSortKey(null);
     setSortDir("asc");
     setQuery("");
+    setSelectedRow(null);
   }, [stack.length, current.data]);
 
   const visibleHeaders = useMemo(
@@ -275,9 +277,8 @@ export function TableView({ data, className = "", fontSize = 13, byteSize }: Tab
     });
   };
 
-  const cellClass =
-    "border border-[var(--workspace-border)] text-[var(--workspace-text)]";
-  const headerClass = "bg-[var(--workspace-background)] text-[var(--workspace-text)]";
+  const cellClass = "border-b border-[var(--workspace-border)]";
+  const headerClass = "bg-[var(--workspace-panel)] text-[var(--workspace-text-muted)]";
 
   return (
     <div className={`flex h-full min-h-0 flex-col overflow-hidden ${className ?? ""}`} style={{ fontSize }}>
@@ -348,13 +349,13 @@ export function TableView({ data, className = "", fontSize = 13, byteSize }: Tab
         ) : (
           <Table className="w-full border-collapse text-[length:inherit]">
             <TableHeader>
-              <TableRow className={cn(headerClass, "sticky top-0 z-10 hover:bg-[var(--workspace-background)]")}>
+              <TableRow className={cn(headerClass, "sticky top-0 z-10 shadow-[inset_0_-1px_0_var(--workspace-border)] hover:bg-[var(--workspace-panel)]")}>
                 {visibleHeaders.map((h) => (
-                  <TableHead key={h} className={`${cellClass} whitespace-nowrap p-0`}>
+                  <TableHead key={h} className={`whitespace-nowrap p-0 ${typeof base.rows[0]?.[h] === "number" ? "text-right" : ""}`}>
                     <Button
                       variant="ghost"
                       aria-label={`Sort by ${h}`}
-                      className="w-full justify-between rounded-none"
+                      className="w-full justify-between rounded-none !text-[var(--workspace-text-muted)]"
                       iconRight={sortKey === h ? (sortDir === "asc" ? <BarsArrowUpIcon /> : <BarsArrowDownIcon />) : <ChevronDownIcon />}
                       onClick={() => toggleSort(h)}
                     >
@@ -369,7 +370,7 @@ export function TableView({ data, className = "", fontSize = 13, byteSize }: Tab
                 <TableRow>
                   <TableCell
                     colSpan={visibleHeaders.length}
-                    className={`${cellClass} px-3 py-6 text-center text-[var(--workspace-text-muted)]`}
+                    className="px-3 py-6 text-center text-[var(--workspace-text-muted)]"
                   >
                     No rows match search
                   </TableCell>
@@ -378,9 +379,15 @@ export function TableView({ data, className = "", fontSize = 13, byteSize }: Tab
                 processed.map((row, i) => (
                   <TableRow
                     key={i}
-                    className={`${cellClass} ${
-                      i % 2 === 1 ? "bg-[var(--workspace-background)]" : "bg-transparent"
-                    }`}
+                    aria-selected={selectedRow === i}
+                    onClick={() => setSelectedRow(selectedRow === i ? null : i)}
+                    className={cn(
+                      cellClass,
+                      "cursor-default",
+                      selectedRow === i
+                        ? "bg-selected text-selected-foreground hover:bg-selected"
+                        : "text-[var(--workspace-text)] hover:bg-control",
+                    )}
                   >
                     {visibleHeaders.map((h) => {
                       const val = row[h];
@@ -395,7 +402,7 @@ export function TableView({ data, className = "", fontSize = 13, byteSize }: Tab
                               ? String(row.index)
                               : h;
                         return (
-                          <TableCell key={h} className={`${cellClass} max-w-[280px] px-1.5 py-0.5`}>
+                          <TableCell key={h} className="max-w-[280px] px-1.5 py-0.5">
                             <Tooltip content={`Open as table: ${nestedMeta(val)}`}>
                               <Button variant="secondary" icon={<TableCellsIcon />} className="max-w-full" onClick={() => drillInto(label, val)}>
                                 <span className="min-w-0 truncate font-mono">{display.length > 48 ? `${display.slice(0, 48)}…` : display}</span>
@@ -407,7 +414,14 @@ export function TableView({ data, className = "", fontSize = 13, byteSize }: Tab
                       }
 
                       return (
-                        <TableCell key={h} className={`${cellClass} max-w-[240px] px-2 py-1 font-mono align-top`}>
+                        <TableCell
+                          key={h}
+                          className={cn(
+                            "max-w-[240px] px-2 py-1 align-top font-mono leading-[1.6]",
+                            typeof val === "number" && "text-right tabular-nums",
+                            selectedRow !== i && (typeof val === "boolean" ? "text-[var(--syn-bool)]" : val === null ? "italic text-[var(--faint)]" : ""),
+                          )}
+                        >
                           {wordWrap ? (
                             <span className="block max-w-full whitespace-pre-wrap break-words">{display}</span>
                           ) : (

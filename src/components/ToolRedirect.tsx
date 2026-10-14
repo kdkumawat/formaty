@@ -21,7 +21,7 @@ export function ToolRedirect({ to, label }: { to: string; label: string }) {
 
   const href = to.startsWith("/") ? to : `/${to}`;
   return (
-    <div className="mk-ink flex min-h-screen flex-col bg-[var(--workspace-background)]">
+    <div className="flex min-h-screen flex-col bg-[var(--workspace-background)] text-[var(--workspace-text)]">
       <SiteHeader />
       <Stage>
         <main id="main" className={`${WRAP} flex min-h-[calc(100vh-var(--mk-header))] flex-col justify-center gap-4 pb-24`}>

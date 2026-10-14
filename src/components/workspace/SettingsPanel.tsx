@@ -118,7 +118,7 @@ export function SettingsPanel(p: SettingsPanelProps) {
               p.onClearCache();
             }}
           >
-            {confirmClear ? "Press again to wipe" : "Clear saved data"}
+            {confirmClear ? "Press again to wipe" : "Clear all data"}
           </Button>
         </div>
         <p className="pt-1 text-[12px] text-[var(--workspace-text-muted)]">Removes saved sessions, settings and offline data, then reloads.</p>

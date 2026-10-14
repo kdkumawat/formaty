@@ -1,12 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { MagnifyingGlassIcon } from "@heroicons/react/16/solid";
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { CheckIcon, ChevronDownIcon, MagnifyingGlassIcon } from "@heroicons/react/16/solid";
 import {
   Button,
+  Chip,
   EmptyState,
   InputActions,
+  Menu,
+  MenuContent,
+  MenuItem,
+  MenuTrigger,
   PaneHeader,
   ResultActions,
   RowCopy,
@@ -17,7 +22,6 @@ import {
   type CopyFormat,
   type InputActionsProps,
 } from "@/components/kit";
-import { HEIGHT, focusRing } from "@/components/kit/styles";
 import { cn } from "@/lib/utils";
 import {
   LIST_EXPORT_FORMATS,
@@ -124,8 +128,8 @@ export const editorClass =
 export function RenameButton({ dot, name, onRename, className }: { dot: string; name: string; onRename?: (el: HTMLElement) => void; className?: string }) {
   return (
     <Tooltip content="Rename">
-      <Button variant="ghost" className={cn("min-w-0 shrink px-1.5 text-[14px] font-semibold", className)} onClick={(e) => onRename?.(e.currentTarget)}>
-        <span aria-hidden className={`size-2.5 shrink-0 rounded-[3px] ${dot}`} />
+      <Button variant="ghost" className={cn("min-w-0 shrink px-1.5 text-[13px] font-medium", className)} onClick={(e) => onRename?.(e.currentTarget)}>
+        <span aria-hidden className={`size-1.5 shrink-0 rounded-full ${dot}`} />
         <span className="truncate">{name}</span>
       </Button>
     </Tooltip>
@@ -200,52 +204,90 @@ export function SplitBySelect({
   return <Select<ListDelimiter> label="Split by" options={options} value={value} onChange={onChange} />;
 }
 
-/**
- * Result tab: picks which items the result pane shows. The chosen one is a raised tile the colour of
- * the result pane; the count follows the name and is dimmed when it is zero. Omit `count` for a view
- * that is not a set of items (Summary).
- */
-export function Tile({
-  count,
-  label,
-  dot,
-  on,
-  onClick,
-}: {
-  count?: number;
-  label: string;
-  dot?: string;
-  on: boolean;
-  onClick: () => void;
-}) {
+/** Checkbox-look toggle chip (compare options): a 14px box that fills with ink when on. */
+export function CheckChip({ on, onToggle, children }: { on: boolean; onToggle: () => void; children: ReactNode }) {
   return (
-    <button
-      type="button"
-      aria-pressed={on}
-      onClick={onClick}
-      className={cn(
-        "inline-flex h-full shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[5px] px-2.5 text-[13px] transition-colors",
-        focusRing,
-        on
-          ? "bg-[var(--workspace-panel)] font-medium text-[var(--workspace-text)] shadow-[0_0_0_1px_var(--workspace-border),0_1px_2px_rgba(22,22,28,0.12)] dark:bg-control-hover dark:shadow-[0_0_0_1px_var(--input)]"
-          : "text-[var(--workspace-text-muted)] hover:bg-control-hover hover:text-[var(--workspace-text)]",
-      )}
-    >
-      {dot && <span aria-hidden className={`size-2 shrink-0 rounded-[2px] ${dot}`} />}
-      {label}
-      {count !== undefined && (
-        <span className={cn("tabular-nums", on ? "font-semibold" : "font-medium", count === 0 ? "opacity-50" : !on && "text-[var(--workspace-text)]")}>
-          {num(count)}
+    <Chip
+      on={on}
+      onClick={onToggle}
+      icon={
+        <span
+          aria-hidden
+          className={cn("flex size-3.5 items-center justify-center rounded-[4px]", on ? "bg-selected-foreground text-selected" : "border-[1.5px] border-edge")}
+        >
+          {on && <CheckIcon className="size-3" />}
         </span>
-      )}
-    </button>
+      }
+    >
+      {children}
+    </Chip>
   );
 }
 
-/** One track holding the result tabs; scrolls sideways when they do not fit. With a host (the Compare bar) it renders there, above the result pane. */
+export interface ResultTab<T extends string = string> {
+  value: T;
+  label: string;
+  /** Omit for a view that is not a set of items (Summary). */
+  count?: number;
+  /** Colour dot class for a side. */
+  dot?: string;
+}
+
+/**
+ * Bucket picker of a result pane: the main buckets as ink segments with their counts, the rest under a
+ * "More" menu (which wears the selection when one of its items is active).
+ */
+export function ResultTabs<T extends string>({ tabs, more = [], value, onChange, label = "Which items" }: { tabs: ResultTab<T>[]; more?: ResultTab<T>[]; value: T; onChange: (v: T) => void; label?: string }) {
+  const inMore = more.find((t) => t.value === value);
+  const body = (t: ResultTab<T>) => (
+    <>
+      {t.dot && <span aria-hidden className={`size-1.5 shrink-0 rounded-full ${t.dot}`} />}
+      {t.label}
+      {t.count !== undefined && <span className={cn("font-mono text-[12px] tabular-nums", t.count === 0 ? "opacity-50" : "opacity-70")}>{num(t.count)}</span>}
+    </>
+  );
+  return (
+    <div role="group" aria-label={label} className="flex min-w-0 items-center gap-1 overflow-x-auto [scrollbar-width:none]">
+      {tabs.map((t) => (
+        <Button key={t.value} variant={t.value === value ? "selected" : "ghost"} aria-pressed={t.value === value} onClick={() => onChange(t.value)} className="shrink-0 whitespace-nowrap">
+          {body(t)}
+        </Button>
+      ))}
+      {more.length > 0 && (
+        <Menu>
+          <MenuTrigger asChild>
+            <Button variant={inMore ? "selected" : "ghost"} iconRight={<ChevronDownIcon />} className="shrink-0 whitespace-nowrap">
+              {inMore ? body(inMore) : "More"}
+            </Button>
+          </MenuTrigger>
+          <MenuContent align="start">
+            {more.map((t) => (
+              <MenuItem key={t.value} selected={t.value === value} hint={t.count !== undefined ? num(t.count) : undefined} onSelect={() => onChange(t.value)}>
+                {t.label}
+              </MenuItem>
+            ))}
+          </MenuContent>
+        </Menu>
+      )}
+    </div>
+  );
+}
+
+/** One result tab (kept for the landing demo; the workspace uses ResultTabs). */
+export function Tile({ count, label, dot, on, onClick }: { count?: number; label: string; dot?: string; on: boolean; onClick: () => void }) {
+  return (
+    <Button variant={on ? "selected" : "ghost"} aria-pressed={on} onClick={onClick} className="shrink-0 whitespace-nowrap">
+      {dot && <span aria-hidden className={`size-1.5 shrink-0 rounded-full ${dot}`} />}
+      {label}
+      {count !== undefined && <span className={cn("font-mono text-[12px] tabular-nums", count === 0 ? "opacity-50" : "opacity-70")}>{num(count)}</span>}
+    </Button>
+  );
+}
+
+/** A group of Tiles; with a host element it renders there (the landing demo's toolbar). */
 export function TileRow({ label, host, children }: { label: string; host?: HTMLElement | null; children: ReactNode }) {
   const track = (
-    <div role="group" aria-label={label} className={cn("inline-flex max-w-full items-stretch gap-0.5 overflow-x-auto rounded-md bg-control p-0.5 [scrollbar-width:none]", HEIGHT.sm)}>
+    <div role="group" aria-label={label} className="inline-flex max-w-full items-center gap-1 overflow-x-auto [scrollbar-width:none]">
       {children}
     </div>
   );
@@ -283,7 +325,9 @@ export function ResultView({
   showCounts = false,
   empty,
   emptyTitle = "Nothing here yet",
-  copyVariant,
+  tabs,
+  info,
+  sides,
 }: {
   items: ListItem[];
   format: ListExportFormat;
@@ -296,8 +340,12 @@ export function ResultView({
   showCounts?: boolean;
   empty: ReactNode;
   emptyTitle?: string;
-  /** "secondary" where the page around the result already has its one amber action. */
-  copyVariant?: "primary" | "secondary";
+  /** Bucket picker for the header's left side. */
+  tabs?: ReactNode;
+  /** Sentence for the info row, e.g. "5 of 10 unique values · from A and B"; `{n}` shows the current row count. */
+  info?: string;
+  /** Keys present in A and in B: each row gets a dot per side in the gutter. */
+  sides?: { a: Set<string>; b: Set<string> };
 }) {
   const [find, setFind] = useState("");
   const [shown, setShown] = useState(PAGE);
@@ -314,16 +362,8 @@ export function ResultView({
     return SORT_OPTIONS.filter((o) => o.value !== "frequency" || counted || sort === "frequency");
   }, [items, sort]);
 
-  // Only the first few rows are formatted for the preview; the full text is built on demand.
-  const preview = useMemo(() => formatListItems(rows.slice(0, 4), format).replace(/\s*\n\s*/g, " ⏎ "), [rows, format]);
   const fullText = (f: ListExportFormat = format) => formatListItems(rows, f);
-
-  // Long values get one column so they can be read; short ones pack into a grid.
-  const wide = useMemo(() => {
-    const end = Math.min(rows.length, shown);
-    for (let i = 0; i < end; i++) if (rows[i].value.length > 32) return true;
-    return false;
-  }, [rows, shown]);
+  const formatOptions = useMemo(() => LIST_COPY_FORMATS.map((f) => ({ value: f.id as ListExportFormat, label: f.label, hint: f.hint, group: f.group ?? "More" })), []);
 
   const n = rows.length;
   const filtered = !!find.trim();
@@ -331,50 +371,49 @@ export function ResultView({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <PaneHeader
-        left={
-          <>
-            <TextField
-              aria-label="Find in result"
-              placeholder="Find in result"
-              icon={<MagnifyingGlassIcon />}
-              value={find}
-              onChange={(e) => setFind(e.target.value)}
-              onClear={() => setFind("")}
-              wrapperClassName="w-44 max-[900px]:w-full max-[900px]:flex-1"
-            />
-            <Select<ListSortMode> label="Sort" width={172} options={sortOptions} value={sort} onChange={onSort} />
-            <div className="min-w-0 flex-1 basis-32 font-mono max-sm:hidden text-[12px] text-[var(--workspace-text-muted)]">
-              <TruncatedText>
-                {n > 0 ? `${filtered ? `${num(n)} matching. ` : ""}Copies as: ${preview}${n > 4 ? " ..." : ""}` : "Nothing to copy"}
-              </TruncatedText>
-            </div>
-          </>
-        }
+        className="flex-nowrap max-[900px]:flex-wrap"
+        left={<div className="min-w-0 flex-1">{tabs}</div>}
         right={
-          <ResultActions
-            onDownload={() => downloadText(`${fileBase}.${listExportExtension(format)}`, fullText())}
-            canDownload={n > 0}
-            copy={{
-              getText: (f) => fullText((f as ListExportFormat | undefined) ?? format),
-              formats: LIST_COPY_FORMATS,
-              format,
-              onFormatChange: (id) => onFormat(id as ListExportFormat),
-              disabled: n === 0,
-              variant: copyVariant,
-            }}
-          />
+          <div className="flex shrink-0 flex-nowrap items-center gap-1">
+            <ResultActions
+              onDownload={() => downloadText(`${fileBase}.${listExportExtension(format)}`, fullText())}
+              canDownload={n > 0}
+              copy={{ getText: () => fullText(), disabled: n === 0 }}
+            >
+              <Select<ListExportFormat> aria-label="Export format" width={176} options={formatOptions} value={format} onChange={onFormat} />
+            </ResultActions>
+          </div>
         }
       />
+      <div className="flex min-h-7 shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-[var(--workspace-border)] px-3 py-0.5 text-[12px] text-[var(--workspace-text-muted)]">
+        <span className="min-w-0 flex-1 tabular-nums">{filtered ? `${num(n)} matching` : info ?? `${num(n)} ${n === 1 ? "value" : "values"}`}</span>
+        <TextField
+          aria-label="Find in result"
+          placeholder="Find in result"
+          icon={<MagnifyingGlassIcon />}
+          value={find}
+          onChange={(e) => setFind(e.target.value)}
+          onClear={() => setFind("")}
+          wrapperClassName="w-40"
+        />
+        <Select<ListSortMode> aria-label="Sort" label="Sort" width={160} options={sortOptions} value={sort} onChange={onSort} />
+      </div>
 
       {n === 0 ? (
         <EmptyState title={filtered ? "Nothing matches your search" : emptyTitle} description={filtered ? undefined : empty} />
       ) : (
         <div className="min-h-0 flex-1 overflow-auto px-3 pb-2 pt-1">
-          <div className="grid gap-x-6" style={{ gridTemplateColumns: wide ? "minmax(0, 1fr)" : "repeat(auto-fill, minmax(min(100%, 300px), 1fr))" }}>
+          <div className="grid gap-x-6" style={{ gridTemplateColumns: "minmax(0, 1fr)" }}>
             {rows.slice(0, shown).map((it, i) => (
               <RowCopy key={`${it.key}-${i}`} text={it.value} className="px-1">
                 <span className="flex items-center gap-2">
-                  <span aria-hidden className="w-8 shrink-0 font-sans text-[12px] tabular-nums text-[var(--workspace-text-muted)]">{i + 1}</span>
+                  <span aria-hidden className="w-8 shrink-0 text-right font-mono text-[13px] tabular-nums text-faint">{i + 1}</span>
+                  {sides && (
+                    <span aria-hidden className="flex shrink-0 gap-0.5">
+                      <span className={cn("size-1.5 rounded-full", sides.a.has(it.key) ? "bg-side-a" : "bg-transparent")} />
+                      <span className={cn("size-1.5 rounded-full", sides.b.has(it.key) ? "bg-side-b" : "bg-transparent")} />
+                    </span>
+                  )}
                   <TruncatedText className="min-w-0 flex-1 font-mono leading-[1.6]">{it.value}</TruncatedText>
                   {showCounts && (
                     <span className="w-12 shrink-0 text-right font-sans text-[12px] tabular-nums text-[var(--workspace-text-muted)]">

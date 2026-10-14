@@ -12,14 +12,14 @@ const PRESS = "active:translate-y-[0.5px] motion-reduce:active:translate-y-0";
 const VARIANT: Record<ButtonVariant, string> = {
   primary: cn("key-action font-[560]", PRESS),
   secondary: cn(
-    "bg-control text-[var(--workspace-text)] live:hover:bg-control-hover data-[state=open]:bg-control-hover live:active:bg-[color-mix(in_srgb,var(--control-hover),var(--workspace-text)_8%)]",
+    "bg-control text-[var(--workspace-text)] ring-1 ring-inset ring-[var(--input)] live:hover:bg-control-hover data-[state=open]:bg-control-hover live:active:bg-[color-mix(in_srgb,var(--control-hover),var(--workspace-text)_8%)]",
     PRESS,
   ),
   ghost: cn(
     "bg-transparent text-[var(--workspace-text)] live:hover:bg-control data-[state=open]:bg-control live:active:bg-control-hover",
     PRESS,
   ),
-  selected: cn("key-ink font-[520]", PRESS),
+  selected: cn("bg-selected text-selected-foreground ring-1 ring-inset ring-selected-border font-[520] shadow-[0_1px_2px_rgba(17,18,20,0.08)] dark:shadow-none", PRESS),
   danger: cn(
     "bg-bad-bg text-bad live:hover:bg-[color-mix(in_srgb,var(--bad-bg),var(--bad)_10%)] live:active:bg-[color-mix(in_srgb,var(--bad-bg),var(--bad)_18%)]",
     PRESS,

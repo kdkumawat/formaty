@@ -50,7 +50,7 @@ export function ListEditor({
       </div>
       {!value && (
         <>
-          <p className="pointer-events-none absolute left-3 top-[7px] font-mono text-[13px] leading-5 text-[var(--workspace-text-muted)]">{placeholder}</p>
+          <p className="pointer-events-none absolute left-3 top-[7px] font-mono text-[13px] leading-[1.6] text-[var(--workspace-text-muted)]">{placeholder}</p>
           {hint && <p className="pointer-events-none absolute inset-x-3 bottom-2 text-[12px] text-[var(--workspace-text-muted)]">{hint}</p>}
         </>
       )}

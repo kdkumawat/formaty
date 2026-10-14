@@ -2,14 +2,15 @@
    Used by every Dropdown in the workspace, OutputActionBar, and ListComparePanel. */
 
 export const menuItemClass =
-  "inline-flex w-full cursor-pointer items-center gap-2 h-7 rounded px-2 text-left text-[13px] font-medium whitespace-nowrap text-[var(--workspace-text)] transition-colors hover:bg-accent focus-visible:bg-accent data-[highlighted]:bg-accent outline-none data-[disabled]:pointer-events-none disabled:opacity-40 data-[disabled]:opacity-40";
+  "inline-flex w-full cursor-pointer items-center gap-2 h-7 rounded-md px-2 text-left text-[13px] font-normal whitespace-nowrap text-[var(--workspace-text)] transition-colors hover:bg-control-hover focus-visible:bg-control-hover data-[highlighted]:bg-control-hover outline-none data-[disabled]:pointer-events-none disabled:opacity-40 data-[disabled]:opacity-40";
 
-export const menuItemActiveClass = "!bg-primary/12 !text-primary hover:!bg-primary/15";
+/** Selected row: ink semibold plus the check, no tint. */
+export const menuItemActiveClass = "font-[520]";
 
 /** Grouped section label inside dropdown menus. */
 export function menuSectionLabel(text: string) {
   return (
-    <p className="px-2 pb-0.5 pt-1.5 text-xs font-medium text-[var(--workspace-text-muted)]">
+    <p className="px-2 pb-1 pt-2 text-[12px] font-medium text-[var(--workspace-text-muted)]">
       {text}
     </p>
   );

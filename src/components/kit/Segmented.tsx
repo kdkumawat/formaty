@@ -60,7 +60,7 @@ export function Segmented<T extends string = string>({
     <div
       role="radiogroup"
       aria-label={ariaLabel}
-      className={cn("inline-flex shrink-0 items-stretch gap-0.5 rounded-md bg-control p-0.5 shadow-[inset_0_1px_1px_rgb(26_24_22/0.06)]", HEIGHT[size], className)}
+      className={cn("inline-flex shrink-0 items-stretch gap-0.5 rounded-md bg-control p-0.5 ring-1 ring-inset ring-[var(--input)]", HEIGHT[size], className)}
     >
       {options.map((o, i) => {
         const on = o.value === value;
@@ -83,7 +83,7 @@ export function Segmented<T extends string = string>({
               size === "lg" && "px-3 text-[15px]",
               on
                 ? tone === "brand"
-                  ? "key-ink font-[520] active:translate-y-[0.5px]"
+                  ? "bg-selected text-selected-foreground ring-1 ring-inset ring-selected-border font-[520] shadow-[0_1px_2px_rgba(17,18,20,0.08)] dark:shadow-none"
                   : "key-tile font-[520]"
                 : "text-[var(--workspace-text)] live:hover:bg-control-hover live:active:bg-[color-mix(in_srgb,var(--control-hover),var(--workspace-text)_8%)]",
             )}
@@ -117,5 +117,5 @@ export interface ChipProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>,
 
 /** Toggle chip (output picker): rest bg-control, on bg-brand. Carries aria-pressed. */
 export const Chip = forwardRef<HTMLButtonElement, ChipProps>(function Chip({ on, size = "sm", ...props }, ref) {
-  return <Button ref={ref} variant={on ? "selected" : "secondary"} size={size} aria-pressed={on} {...props} />;
+  return <Button ref={ref} variant={on ? "selected" : "ghost"} size={size} aria-pressed={on} {...props} className={cn(!on && "text-[var(--workspace-text-muted)] live:hover:bg-control-hover", props.className)} />;
 });

@@ -35,7 +35,6 @@ function Tab({ id, label, active, onClick }: DemoTab & { active: boolean; onClic
 }
 
 const HEIGHT = {
-  hero: "h-[520px] min-[901px]:h-[clamp(320px,calc(100svh-372px),460px)]",
   tall: "h-[560px] min-[901px]:h-[440px]",
   short: "h-[520px] min-[901px]:h-[380px]",
 };
@@ -55,8 +54,8 @@ export function DemoWindow({
   tabs: DemoTab[];
   active: string;
   onPick: (id: string) => void;
-  /** Working height on desktop. "hero" follows the viewport height so the whole window is above the fold; "short" fits a static example. */
-  size?: "hero" | "tall" | "short";
+  /** Working height on desktop; "short" fits a static example. */
+  size?: "tall" | "short";
   children: ReactNode;
 }) {
   // Until the visitor clicks into the demo, the wheel scrolls the page, not the panes under the pointer.

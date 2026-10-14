@@ -1,25 +1,12 @@
 "use client";
 
-import { useSyncExternalStore, type ReactElement, type ReactNode } from "react";
-import * as P from "@radix-ui/react-popover";
+import { type ReactElement, type ReactNode } from "react";
+import * as D from "@radix-ui/react-dialog";
 import { XMarkIcon } from "@heroicons/react/16/solid";
 import { cn } from "@/lib/utils";
 import { IconButton } from "./Button";
 import { usePortalContainer } from "./portal";
 import { mutedText, surface } from "./styles";
-
-const query = "(max-width: 639px)";
-const subscribe = (cb: () => void) => {
-  const mq = window.matchMedia(query);
-  mq.addEventListener("change", cb);
-  return () => mq.removeEventListener("change", cb);
-};
-const useNarrow = () =>
-  useSyncExternalStore(
-    subscribe,
-    () => window.matchMedia(query).matches,
-    () => false,
-  );
 
 export interface SidePanelProps {
   /** The trigger element (e.g. an IconButton); it must forward its ref and spread props. */
@@ -33,51 +20,44 @@ export interface SidePanelProps {
   className?: string;
 }
 
-/** Floating panel under a top-bar trigger: 340px, right-aligned, internal scroll. Below 640px it is a full-width sheet from the top with 12px margins. */
+/** Right sheet under the 40px app header: 360px, hairline left edge, internal scroll, no scrim. Below 640px it fills the width. Closes on Esc or a click outside. */
 export function SidePanel({ trigger, title, children, footer, open, onOpenChange, className }: SidePanelProps) {
-  const narrow = useNarrow();
   const container = usePortalContainer();
   return (
-    <P.Root open={open} onOpenChange={onOpenChange}>
-      {narrow && (
-        <P.Anchor asChild>
-          <div aria-hidden className="pointer-events-none fixed inset-x-3 top-3 h-0" />
-        </P.Anchor>
-      )}
-      <P.Trigger asChild>{trigger}</P.Trigger>
-      <P.Portal container={container}>
-        <P.Content
-          // Focus the panel itself on open: focusing the close button would pop its tooltip.
+    <D.Root open={open} onOpenChange={onOpenChange} modal={false}>
+      <D.Trigger asChild>{trigger}</D.Trigger>
+      <D.Portal container={container}>
+        <D.Content
+          // Focus the sheet itself on open: focusing the close button would pop its tooltip.
           tabIndex={-1}
           onOpenAutoFocus={(e) => {
             e.preventDefault();
             (e.currentTarget as HTMLElement).focus();
           }}
-          align={narrow ? "center" : "end"}
-          side="bottom"
-          sideOffset={narrow ? 0 : 8}
-          collisionPadding={12}
-          aria-label={title}
+          // The trigger toggles the sheet itself; do not let "outside" close then reopen it.
+          onInteractOutside={(e) => {
+            if ((e.target as HTMLElement | null)?.closest?.("[data-radix-popper-content-wrapper], [role='menu'], [role='dialog']")) e.preventDefault();
+          }}
+          aria-describedby={undefined}
           className={cn(
             surface,
-            "flex max-h-[calc(100dvh-64px)] w-[340px] flex-col rounded-xl",
-            "max-sm:w-[calc(100vw-24px)]",
+            "fixed bottom-0 right-0 top-10 flex w-[360px] max-w-full flex-col border-l border-[var(--workspace-border)] shadow-[var(--raised-inset),-1px_0_0_var(--workspace-border),var(--menu-shadow)] max-sm:w-full",
             className,
           )}
         >
-          <div className="flex h-10 shrink-0 items-center justify-between pl-3 pr-1.5">
-            <h2 className="text-[14px] font-semibold text-[var(--workspace-text)]">{title}</h2>
-            <P.Close asChild>
+          <div className="flex h-12 shrink-0 items-center justify-between pl-4 pr-2.5">
+            <D.Title className="text-[14px] font-semibold text-[var(--workspace-text)]">{title}</D.Title>
+            <D.Close asChild>
               <IconButton label="Close" shortcut="Esc">
                 <XMarkIcon />
               </IconButton>
-            </P.Close>
+            </D.Close>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">{children}</div>
-          {footer && <div className="shrink-0 border-t border-[var(--workspace-border)] px-3 py-2">{footer}</div>}
-        </P.Content>
-      </P.Portal>
-    </P.Root>
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">{children}</div>
+          {footer && <div className="shrink-0 border-t border-[var(--workspace-border)] px-4 py-2">{footer}</div>}
+        </D.Content>
+      </D.Portal>
+    </D.Root>
   );
 }
 

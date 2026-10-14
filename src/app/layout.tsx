@@ -1,10 +1,11 @@
 import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 import { MotionConfig } from "framer-motion";
-import { Bricolage_Grotesque, Geist, JetBrains_Mono } from "next/font/google";
+import { Archivo, Geist, JetBrains_Mono } from "next/font/google";
 import { ConsentBanner } from "@/components/ConsentBanner";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 import { UpdateToast } from "@/components/UpdateToast";
+import { DARK_THEME_CSS, LIGHT_THEME_CSS } from "@/lib/utils/themeTokens";
 import "./globals.css";
 
 const geist = Geist({
@@ -21,9 +22,11 @@ const jetbrainsMono = JetBrains_Mono({
   preload: false, // only the editor/code blocks use it
 });
 
-const bricolage = Bricolage_Grotesque({
+// Variable font with the width axis: headings use font-stretch 118%.
+const archivo = Archivo({
   subsets: ["latin"],
-  variable: "--font-bricolage",
+  axes: ["wdth"],
+  variable: "--font-archivo",
   display: "swap",
 });
 
@@ -34,8 +37,8 @@ export const viewport: Viewport = {
   viewportFit: "cover",
   colorScheme: "dark light",
   themeColor: [
-    { media: "(prefers-color-scheme: dark)", color: "#0C0B0A" },
-    { media: "(prefers-color-scheme: light)", color: "#F5F4F2" },
+    { media: "(prefers-color-scheme: dark)", color: "#0A0B0C" },
+    { media: "(prefers-color-scheme: light)", color: "#F6F6F4" },
   ],
 };
 
@@ -213,12 +216,12 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${geist.variable} ${jetbrainsMono.variable} ${bricolage.variable}`}
+      className={`${geist.variable} ${jetbrainsMono.variable} ${archivo.variable}`}
     >
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){var t=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";try{var s=localStorage.getItem("formaty-session");if(s){var d=JSON.parse(s);if(d.themeMode==="dark"||d.themeMode==="light")t=d.themeMode;else if(d.themeMode==="system")t=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"}}catch(e){}document.documentElement.setAttribute("data-theme",t);var e=document.createElement("style");e.id="formaty-theme-inline";e.textContent=t==="dark"?"html,body{--background:#0C0B0A;--foreground:#F2F0ED;--card:#141312;--card-foreground:#F2F0ED;--popover:#1A1917;--popover-foreground:#F2F0ED;--border:#2A2826;--input:#3D3A36;--muted:#0F0E0D;--muted-foreground:#A8A39C;--accent:#242220;--accent-foreground:#F2F0ED;--secondary:#1E1C1A;--secondary-foreground:#F2F0ED;--primary:#F2F0ED;--ring:#F2F0ED;--destructive:oklch(0.64 0.2 25);--workspace-background:#0C0B0A;--workspace-panel:#141312;--workspace-border:#2A2826;--workspace-text:#F2F0ED;--workspace-text-muted:#A8A39C}":"html,body{--background:#F5F4F2;--foreground:#1A1816;--card:#ffffff;--card-foreground:#1A1816;--popover:#ffffff;--popover-foreground:#1A1816;--border:#E7E5E1;--input:#D2CFC9;--muted:#F8F7F5;--muted-foreground:#5E5A55;--accent:#EDEBE7;--accent-foreground:#1A1816;--secondary:#F8F7F5;--secondary-foreground:#1A1816;--primary:#1A1816;--ring:#1A1816;--destructive:oklch(0.58 0.23 25);--workspace-background:#F5F4F2;--workspace-panel:#ffffff;--workspace-border:#E7E5E1;--workspace-text:#1A1816;--workspace-text-muted:#5E5A55}";document.head.appendChild(e)})();`,
+            __html: `(function(){var t=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";try{var s=localStorage.getItem("formaty-session");if(s){var d=JSON.parse(s);if(d.themeMode==="dark"||d.themeMode==="light")t=d.themeMode;else if(d.themeMode==="system")t=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"}}catch(e){}document.documentElement.setAttribute("data-theme",t);var e=document.createElement("style");e.id="formaty-theme-inline";e.textContent=t==="dark"?${JSON.stringify(DARK_THEME_CSS)}:${JSON.stringify(LIGHT_THEME_CSS)};document.head.appendChild(e)})();`,
           }}
         />
       </head>
