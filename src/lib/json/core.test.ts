@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { generateOpenApiSpec, searchJson, toHtmlTable, toMarkdownTable } from "./core";
+import { generateOpenApiSpec, generateTypes, searchJson, toHtmlTable, toMarkdownTable } from "./core";
 
 describe("toMarkdownTable", () => {
   it("renders an array of objects", () => {
@@ -105,5 +105,16 @@ describe("searchJson", () => {
 
   it("handles empty query", () => {
     expect(searchJson(data, "", "value", false)).toHaveLength(0);
+  });
+});
+
+describe("generateTypes", () => {
+  it("types a root array of records by its first record", () => {
+    const list = [
+      { id: 1, email: "a@b.com" },
+      { id: 2, email: "c@d.com" },
+    ];
+    expect(generateTypes(list, "typescript", "User")).toBe("export interface User {\n  id: number;\n  email: string;\n}");
+    expect(generateTypes(list, "go", "User")).toContain("type User struct {");
   });
 });

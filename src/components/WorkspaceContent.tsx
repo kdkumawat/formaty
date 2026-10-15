@@ -2024,15 +2024,8 @@ export function WorkspaceContent({
             if (op === "diff" || op === "utils" || (op && STICKY_OPS.includes(op))) return op;
             return null;
           });
-          if (
-            rightView === "raw" && // only switch to table when the view is still the default — don't clobber inherited view choices
-            convertToFormat !== "csv" && // never yank CSV output away from Raw
-            Array.isArray(json) &&
-            json.length > 0 &&
-            json.every((x) => x !== null && typeof x === "object" && !Array.isArray(x))
-          ) {
-            setRightView("table");
-          }
+          // A list of records switching to Table is the auto-table effect's job: it does it once per
+          // data shape, so picking Text afterwards sticks.
         })
         .catch(() => { /* validation shows invalid */ })
         .finally(() => setBusy(false));

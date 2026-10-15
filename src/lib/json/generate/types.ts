@@ -73,7 +73,9 @@ export function generateTypeScript(input: JsonValue, rootName = "JsonData"): str
     lines.push("");
   };
 
-  walk(input, rootName);
+  // A root array of records (an API list response) is typed by its first record, like nested arrays.
+  const root = Array.isArray(input) && input[0] && typeof input[0] === "object" ? input[0] : input;
+  walk(root, rootName);
   return lines.join("\n").trim();
 }
 
