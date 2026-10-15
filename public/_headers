@@ -1,0 +1,6 @@
+# The Cloudflare Pages default host and preview deploys duplicate formaty.dev; keep them out of the index.
+https://formaty.pages.dev/*
+  X-Robots-Tag: noindex
+
+https://:version.formaty.pages.dev/*
+  X-Robots-Tag: noindex
