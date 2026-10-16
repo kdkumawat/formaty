@@ -236,7 +236,7 @@ export function RowCopy({ text, onCopy, disabled, className, children }: RowCopy
       )}
     >
       <span className="min-w-0 flex-1 truncate">{children}</span>
-      <span className={cn("grid shrink-0 text-[12px] font-medium", mutedText)}>
+      <span className={cn("grid shrink-0 font-sans text-[12px] font-medium", mutedText)}>
         <span
           className={cn(
             "col-start-1 row-start-1 text-right transition-opacity",

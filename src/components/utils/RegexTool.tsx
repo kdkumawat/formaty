@@ -5,26 +5,33 @@ import { regexTest, utilPlaceholder, UTIL_SAMPLES } from "@/lib/utils/devtools";
 import { selectFieldAll, type UtilToolState } from "@/components/utils/state";
 import { Cog6ToothIcon } from "@heroicons/react/16/solid";
 import {
-  CopyButton, EmptyState, IconButton, InputActions, Menu, MenuCheckboxItem, MenuContent, MenuItem, MenuLabel,
+  Chip, CopyButton, EmptyState, IconButton, InputActions, Menu, MenuCheckboxItem, MenuContent, MenuItem, MenuLabel,
   MenuSeparator, MenuTrigger, PaneHeader, ResultActions, RowCopy, TextField,
 } from "@/components/kit";
 import { editorClass } from "@/components/compare/shared";
 
-/** Quick regex presets: common patterns users reach for often. */
-const REGEX_PRESETS: Array<{ label: string; pattern: string; flags?: string; hint: string }> = [
-  { label: "Between two strings", pattern: "(?<=START)(.*?)(?=END)", flags: "gs", hint: "Anything between two strings. Replace START and END." },
-  { label: "Email", pattern: "\\b[\\w.-]+@[\\w.-]+\\.\\w+\\b", hint: "Email addresses" },
-  { label: "URL", pattern: "https?:\\/\\/[^\\s]+", hint: "HTTP and HTTPS URLs" },
-  { label: "IPv4", pattern: "\\b\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\b", hint: "IPv4 addresses" },
-  { label: "Phone (US)", pattern: "\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}", hint: "US phone numbers" },
-  { label: "Date", pattern: "\\d{4}-\\d{2}-\\d{2}", hint: "YYYY-MM-DD dates" },
-  { label: "Quoted", pattern: '"([^"]*)"', hint: "Double-quoted strings (capture group)" },
-  { label: "HTML tag", pattern: "<[^>]+>", flags: "g", hint: "HTML tags" },
-  { label: "Numbers", pattern: "\\b\\d+\\.\\d*\\b", flags: "g", hint: "Decimal numbers" },
-  { label: "Words", pattern: "\\b\\w+\\b", flags: "g", hint: "Whole words" },
-  { label: "Lines", pattern: "^.+$", flags: "gm", hint: "Non-empty lines" },
-  { label: "Whitespace", pattern: "\\s+", flags: "g", hint: "Whitespace runs" },
+const LOG_SAMPLE =
+  "2026-03-09 10:42:17 INFO  user=ada@example.com ip=192.168.1.24 GET https://api.example.com/v1/orders?id=4821 200 38ms\n" +
+  "2026-03-09 10:42:19 WARN  user=bob@example.org ip=10.0.0.7 POST https://api.example.com/v1/pay 402 112ms\n" +
+  '2026-03-09 10:43:02 ERROR user=carol@example.net ip=172.16.4.9 msg="card declined" trace=550e8400-e29b-41d4-a716-446655440000';
+
+/** Handy patterns, shown as one-click chips. Each brings text it matches when the current text is a sample. */
+const REGEX_PRESETS: Array<{ label: string; pattern: string; flags?: string; sample?: string }> = [
+  { label: "Email", pattern: "[\\w.+-]+@[\\w-]+\\.[\\w.-]+" },
+  { label: "URL", pattern: "https?:\\/\\/[^\\s\"']+" },
+  { label: "IPv4", pattern: "\\b(?:\\d{1,3}\\.){3}\\d{1,3}\\b" },
+  { label: "UUID", pattern: "\\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\b", flags: "gi" },
+  { label: "Date", pattern: "\\b(\\d{4})-(\\d{2})-(\\d{2})\\b" },
+  { label: "Time", pattern: "\\b([01]\\d|2[0-3]):([0-5]\\d)(?::([0-5]\\d))?\\b" },
+  { label: "Key=value", pattern: "(\\w+)=(\"[^\"]*\"|\\S+)" },
+  { label: "Quoted", pattern: "\"([^\"]*)\"" },
+  { label: "Numbers", pattern: "-?\\b\\d+(?:\\.\\d+)?\\b" },
+  { label: "Hex color", pattern: "#(?:[0-9a-f]{3}){1,2}\\b", flags: "gi", sample: "Brand #F2B544, ink #111214, paper #fff and a broken #12345." },
+  { label: "HTML tag", pattern: "<\\/?([a-z][\\w-]*)[^>]*>", flags: "gi", sample: '<p class="lead">Hello <b>world</b><br/></p>' },
+  { label: "Blank lines", pattern: "^\\s*$", flags: "gm", sample: "first\n\n   \nsecond\n\nthird" },
+  { label: "Between", pattern: "(?<=\\[)(.*?)(?=\\])", sample: "Tags: [alpha] [beta release] [v2]" },
 ];
+const SAMPLE_TEXTS = new Set([UTIL_SAMPLES.regex, LOG_SAMPLE, ...REGEX_PRESETS.map((p) => p.sample)]);
 
 const FLAGS: Array<[string, string]> = [
   ["i", "Ignore case"],
@@ -65,7 +72,12 @@ export function RegexTool({ state, patch }: { state: UtilToolState; patch: (p: P
   const toggle = (f: string, on: boolean) => patch({ regexFlags: on ? flags + f : flags.replaceAll(f, "") });
   const matchTexts = result.matches.map((m) => m.match).join("\n");
 
-  const resetOptions = () => patch({ regexFlags: "g", regexReplace: "" });
+  // A preset brings text it matches, but never replaces text the user typed.
+  const applyPreset = (p: (typeof REGEX_PRESETS)[number]) => {
+    const keepText = text.trim() && !SAMPLE_TEXTS.has(text);
+    patch({ regexPattern: p.pattern, regexFlags: p.flags ?? "g", ...(keepText ? {} : { input: p.sample ?? LOG_SAMPLE }) });
+  };
+  const resetOptions =() => patch({ regexFlags: "g", regexReplace: "" });
   const panel = "bg-sunk px-2.5 py-1.5 font-mono text-[13px] leading-[1.6] text-[var(--workspace-text)]";
 
   return (
@@ -75,11 +87,6 @@ export function RegexTool({ state, patch }: { state: UtilToolState; patch: (p: P
           title="Pattern"
           right={
             <InputActions
-              samples={REGEX_PRESETS.map((p) => ({ id: p.label, label: p.label }))}
-              onSample={(id) => {
-                const p = REGEX_PRESETS.find((x) => x.label === id);
-                if (p) patch({ regexPattern: p.pattern, regexFlags: p.flags ?? "g" });
-              }}
               onClear={() => patch({ regexPattern: "" })}
               canClear={!!pattern}
             />
@@ -105,6 +112,14 @@ export function RegexTool({ state, patch }: { state: UtilToolState; patch: (p: P
             placeholder="Replace with, e.g. $1 at $2"
             spellCheck={false}
           />
+          <div role="group" aria-label="Handy patterns" className="-mx-1 flex flex-wrap items-center gap-1">
+            <span className="px-1 text-[12px] text-[var(--workspace-text-muted)]">Patterns</span>
+            {REGEX_PRESETS.map((p) => (
+              <Chip key={p.label} on={pattern === p.pattern} onClick={() => applyPreset(p)}>
+                {p.label}
+              </Chip>
+            ))}
+          </div>
         </div>
         <PaneHeader
           className="border-t"

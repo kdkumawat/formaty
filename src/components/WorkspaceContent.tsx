@@ -123,7 +123,7 @@ import { themeInlineCss } from "@/lib/utils/themeTokens";
 import type { Command } from "@/components/CommandPalette";
 import { describeCommand } from "@/components/palette/describe";
 import { previewOutput } from "@/components/palette/preview";
-import { isEditableTarget } from "@/lib/shortcuts";
+import { isEditableTarget, isPlainTextField } from "@/lib/shortcuts";
 import { Toaster, toast } from "@/components/Toast";
 import type { JsonValue, TypeTargetLanguage } from "@/lib/json/core";
 
@@ -278,6 +278,7 @@ export function WorkspaceContent({
   const [themeSynced, setThemeSynced] = useState(false);
   const [split, setSplit] = useState(41);
   const startResize = useCallback(() => setIsResizing(true), []);
+  const nudgeSplit = useCallback((delta: number) => setSplit((s) => Math.max(25, Math.min(60, s + delta))), []);
   const [isResizing, setIsResizing] = useState(false);
   const [schemaInput, setSchemaInput] = useState("");
   const [diffLeftInput, setDiffLeftInput] = useState("");
@@ -345,6 +346,22 @@ export function WorkspaceContent({
   const [lastExecutedCurlInput, setLastExecutedCurlInput] = useState("");
   /** SQL dialect used by the JSON → SQL type generator. */
   const [sqlDialect, setSqlDialect] = useState<SqlDialect>("sqlite");
+  // The SQL dialect is a standing preference: remembered across reloads, the same in every tab.
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("formaty-sql-dialect");
+      if (saved === "sqlite" || saved === "postgres" || saved === "mysql") setSqlDialect(saved);
+    } catch {
+      /* storage blocked */
+    }
+  }, []);
+  useEffect(() => {
+    try {
+      localStorage.setItem("formaty-sql-dialect", sqlDialect);
+    } catch {
+      /* storage blocked */
+    }
+  }, [sqlDialect]);
   const [, setDiffPathFilter] = useState<"all" | "added" | "removed" | "changed">("all");
   const [diffLineStats, setDiffLineStats] = useState<LineDiffStats | null>(null);
   const [diffNav, setDiffNav] = useState<DiffNavState>({ current: 0, total: 0 });
@@ -594,6 +611,46 @@ export function WorkspaceContent({
       }
     }
   };
+  /** Tabs and snapshots carried by a shared link. Links from before tab snapshots carry one tab's fields at the top level. */
+  const sharedTabEntries = (st: WorkspaceState): Array<{ tab: Tab; snap: TabSnapshot }> => {
+    if (Array.isArray(st.tabs) && st.tabs.length && st.tabSnapshots && typeof st.tabSnapshots === "object") {
+      const snaps = st.tabSnapshots as Record<string, Partial<TabSnapshot>>;
+      return st.tabs
+        .filter((t) => snaps[t.id] && typeof snaps[t.id] === "object")
+        .map((t) => {
+          const raw = upgradeListOptions({ ...snaps[t.id] } as Partial<TabSnapshot> & { listCompareOptions?: Partial<ListParseOptions> }, st.listOptionsVersion);
+          const snap = { ...emptyTabSnapshot(), ...raw } as TabSnapshot;
+          if (isStaleDiffOutput(snap.output)) snap.output = "";
+          if (!snap.undoStack?.length) snap.undoStack = [snap.input];
+          return { tab: { id: t.id, label: t.label, num: t.num, renamed: t.renamed, leftLabel: t.leftLabel, rightLabel: t.rightLabel }, snap };
+        });
+    }
+    const compare = st.activeOperation === "diff" || !!(st.diffLeftInput || st.diffRightInput);
+    const ol = (st.outputLanguage ?? st.outputFormat ?? "json") as OutputLanguage;
+    const snap: TabSnapshot = {
+      ...emptyTabSnapshot(),
+      input: st.input ?? "",
+      undoStack: [st.input ?? ""],
+      output: st.output ?? "",
+      outputLanguage: ol,
+      outputExt: EXT_BY_FORMAT[ol as FormatKind] ?? TYPE_LANGUAGES.find((t) => t.id === ol)?.ext ?? "json",
+      activeOperation: compare ? "diff" : ((st.activeOperation as OperationAction) ?? "format"),
+      convertToFormat: st.convertToFormat ?? "json",
+      typeLanguage: st.typeLanguage ?? "typescript",
+      rightView: st.viewMode ?? "raw",
+      diffLeftInput: st.diffLeftInput ?? "",
+      diffRightInput: st.diffRightInput ?? "",
+      diffKind: st.diffKind ?? "document",
+      listCompareOptions: { ...DEFAULT_LIST_PARSE_OPTIONS, ...st.listCompareOptions },
+      csvColumn: st.csvColumn ?? null,
+      queryText: st.queryText ?? "",
+      compareActiveBucket: st.compareActiveBucket,
+      isOutputMaximized: compare,
+    };
+    if (!snap.input.trim() && !snap.diffLeftInput.trim() && !snap.diffRightInput.trim()) return [];
+    return [{ tab: { id: "shared", label: "Shared", num: 0, leftLabel: st.leftLabel, rightLabel: st.rightLabel }, snap }];
+  };
+  const pendingShareRef = useRef<WorkspaceState | null>(null);
   const tabSnapshotsRef = useRef<Map<string, TabSnapshot>>(new Map());
   const diffDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sessionRestoredRef = useRef(false);
@@ -1050,6 +1107,7 @@ export function WorkspaceContent({
 
       // ⌘Y — redo input history (⌘⇧Z is handled in the core handler below).
       if (mod && !event.shiftKey && event.key.toLowerCase() === "y") {
+        if (isPlainTextField(event.target)) return;
         event.preventDefault();
         if (isUtilsMode) shortcutActionsRef.current.moveUtilsHistory(1);
         else shortcutActionsRef.current.moveHistory(1);
@@ -1090,7 +1148,6 @@ export function WorkspaceContent({
 
   const addTab = (overrides?: Partial<TabSnapshot>) => {
     trackEvent("tab_add");
-    setSplit(41);
     tabSnapshotsRef.current.set(activeTabId, captureTabSnapshot());
     tabCounterRef.current += 1;
     const newId = `t${tabCounterRef.current}`;
@@ -1508,105 +1565,10 @@ export function WorkspaceContent({
     const state = hash ? decodeState(hash) : null;
     if (state) {
       if (shared) isViewingSharedRef.current = true;
-      const hs = upgradeListOptions(state, state.listOptionsVersion) as WorkspaceState & { tabs?: Tab[]; activeTabId?: string; showTabs?: boolean; tabSnapshots?: Record<string, TabSnapshot> };
-      if (Array.isArray(hs.tabs) && hs.tabs.length > 0 && hs.tabSnapshots && typeof hs.tabSnapshots === "object") {
-        const migrated: Tab[] = hs.tabs.map((t: Tab, i: number) => ({
-          ...t,
-          num: (t as Partial<Tab>).num ?? (Number(String((t as Partial<Tab>).label ?? "").replace(/\D/g, "")) || i + 1),
-          renamed: Boolean((t as Partial<Tab>).renamed),
-        }));
-        setTabs(migrated);
-        tabCounterRef.current = Math.max(0, ...migrated.map((t: Tab) => t.num));
-        const activeId = hs.activeTabId && migrated.some((t: Tab) => t.id === hs.activeTabId) ? hs.activeTabId : migrated[0].id;
-        setActiveTabId(activeId);
-        const map = new Map<string, TabSnapshot>();
-        for (const [k, v] of Object.entries(hs.tabSnapshots)) {
-          if (v && typeof v === "object") {
-            const snap = upgradeListOptions({ ...(v as object) } as { output?: string; listCompareOptions?: Partial<ListParseOptions> }, hs.listOptionsVersion);
-            if (isStaleDiffOutput(snap.output)) snap.output = "";
-            map.set(k, snap as TabSnapshot);
-          }
-        }
-        tabSnapshotsRef.current = map;
-        const activeSnap = map.get(activeId) as TabSnapshot | undefined;
-        if (activeSnap) {
-          historyLock.current = true;
-          applyTabSnapshot(activeSnap);
-          if (activeSnap.listCompareOptions) setListCompareOptions((prev) => ({ ...prev, ...activeSnap.listCompareOptions }));
-          if (activeSnap.csvColumn) setCsvColumn(activeSnap.csvColumn);
-          if (activeSnap.queryText) setQueryText(activeSnap.queryText);
-          if (activeSnap.compareActiveBucket) setActiveBucket(activeSnap.compareActiveBucket);
-          if (activeSnap.utilTab) setUtilTab(activeSnap.utilTab as UtilTab);
-          setTimeout(() => { historyLock.current = false; }, 0);
-        }
-        if (hs.diffKind) setDiffKind(hs.diffKind as "document" | "list" | "single");
-        if (hs.listCompareOptions) setListCompareOptions((prev) => ({ ...prev, ...hs.listCompareOptions }));
-        if (hs.csvColumn) setCsvColumn(hs.csvColumn);
-        if (hs.queryText) setQueryText(hs.queryText);
-        if (hs.compareActiveBucket) setActiveBucket(hs.compareActiveBucket);
-        if (hs.utilTab) setUtilTab(hs.utilTab as UtilTab);
-        if (typeof hs.split === "number") setSplit(Math.max(25, Math.min(60, hs.split)));
-        sessionRestoredRef.current = true;
-        return;
-      }
-      if (state.input) {
-        setInput(state.input);
-        setUndoStack([state.input]);
-        setUndoIndex(0);
-      }
-      if (state.convertToFormat && FORMAT_KINDS.includes(state.convertToFormat))
-        setConvertToFormat(state.convertToFormat);
-      if (typeof state.liveTransform === "boolean") setLiveTransform(state.liveTransform);
-      if (state.output) {
-        setOutput(state.output);
-        if (state.outputLanguage) {
-          const ol = state.outputLanguage;
-          if (["json", "xml", "yaml", "toml", "csv"].includes(ol)) {
-            setOutputExt(EXT_BY_FORMAT[ol as FormatKind]);
-            setOutputLanguage(ol as OutputLanguage);
-          } else {
-            const ext = TYPE_LANGUAGES.find((t) => t.id === ol)?.ext ?? "ts";
-            setOutputExt(ext);
-            setOutputLanguage(ol as OutputLanguage);
-          }
-        } else if (state.outputFormat) {
-          setOutputExt(EXT_BY_FORMAT[state.outputFormat]);
-          setOutputLanguage(state.outputFormat);
-        }
-        try {
-          if (state.outputFormat === "json" || !state.outputFormat) {
-            setParsedOutput(JSON.parse(state.output) as JsonValue);
-          } else if (state.outputFormat && state.output) {
-            const out = state.output;
-            const fmt = state.outputFormat;
-            void import("@/lib/formats").then(({ parseInput }) => {
-              setParsedOutput(parseInput(out, fmt));
-            });
-          }
-        } catch {
-          setParsedOutput(null);
-        }
-      }
-      if (state.typeLanguage) setTypeLanguage(state.typeLanguage);
-      if (state.viewMode) setRightView(state.viewMode);
-      if (typeof state.split === "number") setSplit(Math.max(25, Math.min(60, state.split)));
-      if (state.diffKind) setDiffKind(state.diffKind as "document" | "list" | "single");
-      if (state.diffLeftInput) setDiffLeftInput(state.diffLeftInput);
-      if (state.diffRightInput) setDiffRightInput(state.diffRightInput);
-      if (state.listCompareOptions) setListCompareOptions((prev) => ({ ...prev, ...upgradeListOptions(state, state.listOptionsVersion).listCompareOptions }));
-      if (state.csvColumn) setCsvColumn(state.csvColumn);
-      if (state.queryText) setQueryText(state.queryText);
-      if (state.compareActiveBucket) setActiveBucket(state.compareActiveBucket);
-      if (state.utilTab) setUtilTab(state.utilTab as UtilTab);
-      if (state.leftLabel || state.rightLabel) {
-        setTabs((prev) => prev.map((t) => (t.id === activeTabId
-          ? { ...t, leftLabel: state.leftLabel, rightLabel: state.rightLabel }
-          : t)));
-      }
-      if (state.activeOperation === "diff" || state.activeOperation === "utils") setIsOutputMaximized(true);
-      else setActiveOperation((state.activeOperation as OperationAction) ?? null);
-      if (state.input || state.diffLeftInput || state.diffRightInput) sessionRestoredRef.current = true;
-      return;
+      // A shared link opens as extra tab(s) on top of the visitor's own saved tabs (merged by the
+      // effect below once the session has loaded), never in place of them.
+      pendingShareRef.current = upgradeListOptions(state, state.listOptionsVersion);
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
     }
     // The saved session loads once. Re-running (Fast Refresh, search-param change) would put
     // the last debounced save over live tabs and replace the in-memory snapshot map.
@@ -1712,6 +1674,55 @@ export function WorkspaceContent({
     // user edits. `executeOperation` is also referenced here (tool-preset restore).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, pathname]);
+
+  /**
+   * Adds a shared link's tabs and switches to the first. `live` is true when the workspace is already in
+   * use (a link pasted into an open playground): the current tab is saved first. Without a saved session
+   * the shared tabs replace the blank starter tab.
+   */
+  const openShared = (shared: WorkspaceState, live: boolean) => {
+    const entries = sharedTabEntries(shared);
+    if (!entries.length) return;
+    if (live) tabSnapshotsRef.current.set(activeTabId, captureTabSnapshot());
+    const keep = live || sessionRestoredRef.current;
+    let counter = keep ? tabCounterRef.current : 0;
+    const added = entries.map(({ tab, snap }) => {
+      counter += 1;
+      const id = `t${counter}`;
+      tabSnapshotsRef.current.set(id, snap);
+      return { ...tab, id, num: counter, label: tab.renamed ? tab.label : `T${counter}` };
+    });
+    tabCounterRef.current = counter;
+    if (!keep) tabSnapshotsRef.current.forEach((_, id) => !added.some((t) => t.id === id) && tabSnapshotsRef.current.delete(id));
+    setTabs((prev) => (keep ? [...prev, ...added] : added));
+    setActiveTabId(added[0].id);
+    historyLock.current = true;
+    applyTabSnapshot(tabSnapshotsRef.current.get(added[0].id)!);
+    setTimeout(() => { historyLock.current = false; }, 0);
+    sessionRestoredRef.current = true;
+    toast({ message: added.length === 1 ? "Opened the shared tab" : `Opened ${added.length} shared tabs`, type: "info" });
+  };
+  const openSharedRef = useRef(openShared);
+  openSharedRef.current = openShared;
+
+  // A link opened in a new page: the restore effect above parked it until the saved session loaded.
+  useEffect(() => {
+    const shared = pendingShareRef.current;
+    pendingShareRef.current = null;
+    if (shared) openSharedRef.current(shared, false);
+  }, []);
+
+  // A link pasted into the address bar of an open playground only changes the hash.
+  useEffect(() => {
+    const onHash = () => {
+      const state = decodeState(window.location.hash.slice(1));
+      if (!state) return;
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+      openSharedRef.current(upgradeListOptions(state, state.listOptionsVersion), true);
+    };
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
 
   useEffect(() => {
     if (isViewingSharedRef.current) return;
@@ -2053,7 +2064,7 @@ export function WorkspaceContent({
       });
     }, 400);
     return () => clearTimeout(id);
-  }, [input, activeOperation, typeLanguage, typeName, sqlTable]);
+  }, [input, activeOperation, typeLanguage, typeName, sqlTable, sqlDialect]);
 
 
 
@@ -2806,21 +2817,25 @@ export function WorkspaceContent({
       leftLabel: !includeAllTabs ? tabs.find((t) => t.id === activeTabId)?.leftLabel : undefined,
       rightLabel: !includeAllTabs ? tabs.find((t) => t.id === activeTabId)?.rightLabel : undefined,
     };
-    if (includeAllTabs) {
-      const all: Record<string, TabSnapshot> = {};
-      tabSnapshotsRef.current.forEach((snap, id) => {
-        all[id] = {
-          ...snap,
-          output: cleanSessionOutput(snap.output),
-          parsedOutput: snap.parsedOutput,
-        };
-      });
-      workspaceState.tabs = tabs;
-      workspaceState.activeTabId = activeTabId;
-      workspaceState.showTabs = true;
-      workspaceState.tabSnapshots = all;
+    // Every link carries tab snapshots, so a Compare or Utils tab opens as itself. Undo history and the
+    // parsed output are left out: the first is private and long, the second is rebuilt on open.
+    const lean = (snap: TabSnapshot): TabSnapshot => ({ ...snap, output: cleanSessionOutput(snap.output), parsedOutput: null, undoStack: [snap.input], undoIndex: 0, error: null });
+    const shared = includeAllTabs ? tabs : tabs.filter((t) => t.id === activeTabId);
+    const all: Record<string, TabSnapshot> = {};
+    for (const t of shared) {
+      const snap = tabSnapshotsRef.current.get(t.id);
+      if (snap) all[t.id] = lean(snap);
     }
+    workspaceState.tabs = shared;
+    workspaceState.activeTabId = activeTabId;
+    workspaceState.tabSnapshots = all;
     return workspaceState;
+  };
+
+  /** Hash links carry only the tabs: the top-level copies of the active tab would double the length. */
+  const buildShareHash = (allTabs: boolean) => {
+    const { tabs: sharedTabs, activeTabId: sharedActive, tabSnapshots, listOptionsVersion } = buildShareState(allTabs);
+    return encodeState({ input: "", listOptionsVersion, tabs: sharedTabs, activeTabId: sharedActive, tabSnapshots });
   };
 
   /** The only path that uploads workspace data. Called from the Share dialog's explicit button. */
@@ -3246,6 +3261,8 @@ export function WorkspaceContent({
           pasteFromClipboard();
         }
       }
+      // Undo in a plain text field is that field's own (native) undo.
+      if (event.key.toLowerCase() === "z" && isPlainTextField(event.target)) return;
       if (event.key.toLowerCase() === "z" && !event.shiftKey) {
         event.preventDefault();
         if (isUtilsMode) moveUtilsHistory(-1);
@@ -3310,13 +3327,11 @@ export function WorkspaceContent({
   };
 
   /** Pipe a query result (or any text) into List Compare for ID extraction / SQL. */
+  /** Opens the text in a new list Compare tab, so this tab stays as it was and is one click away. */
   const openInListCompare = (text: string) => {
-    if (!isDiffMode) runOperation("diff");
-    setDiffKind("list");
-    setDiffLeftInput(text);
-    setDiffRightInput("");
+    addTab({ activeOperation: "diff", isOutputMaximized: true, diffKind: "list", diffLeftInput: text, diffRightInput: "" });
     setListCompareExport(null);
-    toast({ message: "Opened in List Compare — pick a bucket, then copy SQL" });
+    toast({ message: "Opened in a new Compare tab. Your query tab is still open." });
   };
 
   /** One-click recipes compose existing workspace actions (see src/lib/presets.ts). */
@@ -4223,7 +4238,7 @@ export function WorkspaceContent({
             <SharePanel
               open={shareOpen}
               tabCount={tabs.length}
-              buildHash={(allTabs) => encodeState(buildShareState(allTabs))}
+              buildHash={buildShareHash}
               onUpload={uploadShare}
               sharedUrl={sharedLinkUrl}
               onDeleteShared={deleteShared}
@@ -4422,11 +4437,22 @@ export function WorkspaceContent({
           <div
             role="separator"
             aria-orientation="vertical"
-            className="group relative flex shrink-0 cursor-col-resize items-stretch justify-center"
+            aria-label="Resize input and output"
+            aria-valuenow={split}
+            aria-valuemin={25}
+            aria-valuemax={60}
+            tabIndex={0}
+            className="group relative flex shrink-0 cursor-col-resize items-stretch justify-center outline-none"
             style={{ width: 8, zIndex: 10 }}
             onMouseDown={() => setIsResizing(true)}
+            onKeyDown={(e) => {
+              if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+                e.preventDefault();
+                nudgeSplit((e.key === "ArrowLeft" ? -1 : 1) * (e.shiftKey ? 10 : 2));
+              }
+            }}
           >
-            <div className="pointer-events-none absolute inset-y-2 left-1/2 w-0.5 -translate-x-1/2 rounded-full bg-transparent transition-colors group-hover:bg-[var(--workspace-text-muted)] group-active:bg-[var(--workspace-text)]" />
+            <div className="pointer-events-none absolute inset-y-2 left-1/2 w-0.5 -translate-x-1/2 rounded-full bg-transparent transition-colors group-hover:bg-[var(--workspace-text-muted)] group-focus-visible:bg-[var(--focus)] group-active:bg-[var(--workspace-text)]" />
           </div>
         )}
                 {showOutputPane && (
@@ -4475,6 +4501,7 @@ export function WorkspaceContent({
                     toolbarHost={listToolbarHost}
                     split={split}
                     onResizeStart={startResize}
+                    onNudgeSplit={nudgeSplit}
                     onExportChange={setListCompareExport}
                     fontSize={editorFontSize}
                     options={listCompareOptions}
@@ -4496,6 +4523,7 @@ export function WorkspaceContent({
                     toolbarHost={listToolbarHost}
                     split={split}
                     onResizeStart={startResize}
+                    onNudgeSplit={nudgeSplit}
                     onExportChange={setListCompareExport}
                     fontSize={editorFontSize}
                     options={listCompareOptions}

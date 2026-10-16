@@ -15,7 +15,8 @@ import { CheckIcon, MinusIcon, PlusIcon, XMarkIcon } from "@heroicons/react/16/s
 import { cn } from "@/lib/utils";
 import { focusRing, HEIGHT, mutedText, type KitSize } from "./styles";
 
-const fieldFocus = "focus-within:ring-2 focus-within:ring-[var(--focus)] focus-within:ring-offset-1 focus-within:ring-offset-[var(--workspace-panel)]";
+/** Fields share the buttons' hairline; focus turns it amber and thickens it to 2px, the same weight as the button focus ring. */
+const fieldFocus = "focus-within:border-[var(--focus)] focus-within:ring-1 focus-within:ring-[var(--focus)]";
 
 export interface TextFieldProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "size"> {
   size?: KitSize;
@@ -34,7 +35,7 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(function T
   return (
     <div
       className={cn(
-        "relative inline-flex items-center rounded-md border border-edge bg-control transition-colors duration-[120ms] hover:bg-control-hover focus-within:border-[var(--focus)] has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-45 has-[:disabled]:hover:bg-control",
+        "relative inline-flex items-center rounded-md border border-[var(--input)] bg-control transition-colors duration-[120ms] hover:bg-control-hover has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-45 has-[:disabled]:hover:bg-control",
         fieldFocus,
         HEIGHT[size],
         wrapperClassName,
@@ -118,7 +119,7 @@ export function NumberField({
   return (
     <div
       className={cn(
-        "inline-flex shrink-0 items-center gap-0.5 rounded-md border border-edge bg-sunk p-0.5 text-[13px]",
+        "inline-flex shrink-0 items-center gap-0.5 rounded-md border border-[var(--input)] bg-sunk p-0.5 text-[13px]",
         disabled && "opacity-45",
         HEIGHT[size],
         className,
@@ -150,7 +151,7 @@ export function NumberField({
           }
         }}
         className={cn(
-          "h-full w-9 min-w-0 bg-transparent text-center font-[500] tabular-nums text-[var(--workspace-text)] outline-none focus-visible:rounded-md focus-visible:ring-2 focus-visible:ring-[var(--focus)]",
+          "h-full w-9 min-w-0 bg-transparent text-center font-[500] tabular-nums text-[var(--workspace-text)] outline-none focus-visible:rounded-md focus-visible:ring-1 focus-visible:ring-[var(--focus)]",
         )}
       />
       <button type="button" aria-label="Increase" disabled={disabled || value >= max} onClick={() => bump(step)} className={btn}>

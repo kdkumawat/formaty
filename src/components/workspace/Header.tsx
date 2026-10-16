@@ -151,11 +151,21 @@ function TabButton({
   );
 }
 
-/** 16px kind marker: the mono braces for Transform, an icon for Compare and Utils. */
+/** Braces drawn at the 16px solid icons' weight, so Transform's marker matches the Compare and Utils icons beside it. */
+function BracesGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M8 4c-2 0-3 1-3 3v3c0 1.5-.5 2.5-2 3 1.5.5 2 1.5 2 3v3c0 2 1 3 3 3" />
+      <path d="M16 4c2 0 3 1 3 3v3c0 1.5.5 2.5 2 3-1.5.5-2 1.5-2 3v3c0 2-1 3-3 3" />
+    </svg>
+  );
+}
+
+/** 16px kind marker: braces for Transform, an icon for Compare and Utils, all the same size and weight. */
 function TabGlyph({ kind = "transform" }: { kind?: TabKind }) {
   return (
-    <span aria-hidden className="inline-flex size-4 shrink-0 items-center justify-center font-mono text-[12px] leading-none opacity-70 [&>svg]:size-4">
-      {kind === "compare" ? <ArrowsRightLeftIcon /> : kind === "utils" ? <WrenchScrewdriverIcon /> : "{}"}
+    <span aria-hidden className="inline-flex size-4 shrink-0 items-center justify-center opacity-70 [&>svg]:size-4">
+      {kind === "compare" ? <ArrowsRightLeftIcon /> : kind === "utils" ? <WrenchScrewdriverIcon /> : <BracesGlyph />}
     </span>
   );
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { UtilTab } from "@/lib/utils/devtools";
-import { TOOL_META, detectReadings, looksEncoded, toolReadings } from "./readings";
+import { TOOL_META, colorTokens, detectReadings, looksEncoded, toolReadings } from "./readings";
 
 const JWT =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
@@ -39,6 +39,19 @@ describe("detectReadings", () => {
     expect(detectReadings("0 9 * * 1-5")).toHaveLength(1);
     expect(detectReadings('{"a":1}')).toHaveLength(1);
     expect(detectReadings("#F2B544").every((x) => x.open === "color")).toBe(true);
+  });
+  it("reads several colours as one group each", () => {
+    const r = detectReadings("#abc\n#aaa");
+    expect(r.every((x) => x.open === "color")).toBe(true);
+    expect([...new Set(r.map((x) => x.group))]).toEqual(["#abc", "#aaa"]);
+    expect(r.find((x) => x.group === "#aaa" && x.label === "HEX")?.value).toBe("#aaaaaa");
+    expect(toolReadings("color", "#F2B544\n#F2B544", "encode")[0].value).toBe("#f2b544");
+    expect(detectReadings("#F2B544")[0].group).toBe("Color");
+    expect(colorTokens("#abc, #aaa\nrgb(1, 2, 3), hsl(10 20% 30%)\n\n red;blue")).toEqual(["#abc", "#aaa", "rgb(1, 2, 3)", "hsl(10 20% 30%)", "red", "blue"]);
+  });
+  it("does not read five plain words as cron", () => {
+    expect(detectReadings("asdfa asdfa ssadf asdfas sadf").some((x) => x.open === "cron")).toBe(false);
+    expect(detectReadings("0 9 * JAN-MAR MON#1")[0].open).toBe("cron");
   });
   it("reads a unix timestamp", () => {
     expect(detectReadings("1516239022").some((x) => x.label === "Unix timestamp")).toBe(true);

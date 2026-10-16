@@ -8,10 +8,8 @@ import {
   ChevronRightIcon,
   ComputerDesktopIcon,
   MoonIcon,
-  PlusIcon,
   ShareIcon,
   SunIcon,
-  XMarkIcon,
 } from "@heroicons/react/16/solid";
 import { Toaster, toast } from "@/components/Toast";
 import {
@@ -50,6 +48,9 @@ const COPY_FORMATS: CopyFormat[] = [
   { id: "unix", label: "Unix seconds", group: "Timestamp" },
   { id: "unixms", label: "Unix milliseconds", group: "Timestamp" },
 ];
+
+const longDate = (ms: number, timeZone: string) =>
+  new Intl.DateTimeFormat("en-US", { timeZone, weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(new Date(ms));
 
 type DstNotice =
   | { kind: "nonexistent"; message: string; nearestEpochMs: number }
@@ -102,10 +103,6 @@ export function InstantApp({
   const [showSeconds, setShowSeconds] = useState(false);
   const [timeFormat, setTimeFormat] = useState<TimeFormat>("12h");
   const [hoverInstant, setHoverInstant] = useState<number | null>(null);
-  /** Drag-and-drop reorder state for the location chips. Tracks the chip
-   *  being dragged and the chip currently under the cursor. */
-  const [dragSrcId, setDragSrcId] = useState<string | null>(null);
-  const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [nowInstant, setNowInstant] = useState(() => Date.now());
   const [pickerOpen, setPickerOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -398,13 +395,11 @@ export function InstantApp({
         e.preventDefault();
         setPickerOpen(true);
       }
-      if (e.key === "ArrowLeft") {
+      // ← → an hour, Shift a day, Alt 15 minutes (the same steps as a focused strip).
+      if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
         e.preventDefault();
-        commitInstant(selectedInstant - (e.shiftKey ? 60 : 15) * 60 * 1000);
-      }
-      if (e.key === "ArrowRight") {
-        e.preventDefault();
-        commitInstant(selectedInstant + (e.shiftKey ? 60 : 15) * 60 * 1000);
+        const step = e.shiftKey ? 24 * 60 : e.altKey ? 15 : 60;
+        commitInstant(selectedInstant + (e.key === "ArrowLeft" ? -1 : 1) * step * 60 * 1000);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -597,6 +592,17 @@ export function InstantApp({
     applyWallInZone(primaryTimezone, y, m, d, h, min);
   };
 
+  /** Home row: the big clock and every row's offset are measured from it. It moves to the top. */
+  const makePrimary = (id: string) => {
+    const loc = locations.find((l) => l.id === id);
+    if (!loc || loc.isPrimary) return;
+    setPrimaryTimezone(loc.iana);
+    setLocations((prev) => {
+      const next = prev.map((l) => ({ ...l, isPrimary: l.id === id }));
+      return [...next.filter((l) => l.isPrimary), ...next.filter((l) => !l.isPrimary)];
+    });
+  };
+
   if (!ready || !primary) {
     return (
       <div
@@ -665,51 +671,46 @@ export function InstantApp({
             />
           </form>
           <div className="flex flex-wrap items-center gap-2 min-[901px]:ml-auto">
-            <NumberField
-              label="Days"
-              min={1}
-              max={14}
-              value={spanHours / 24}
-              onChange={(n) => setSpanHours((n * 24) as TimelineSpanHours)}
-            />
-            <Segmented<TimeFormat>
-              aria-label="Clock format"
-              value={timeFormat}
-              onChange={setTimeFormat}
-              options={[
-                { value: "12h", label: "12h" },
-                { value: "24h", label: "24h" },
-              ]}
-            />
-            <Chip on={showSeconds} onClick={() => setShowSeconds((s) => !s)}>
-              Seconds
-            </Chip>
-            <Tooltip content="Snap to the current moment" shortcut="N">
-              <Button variant={isLive ? "selected" : "secondary"} onClick={goNow} aria-label="Snap to the current moment">
-                <span aria-hidden className={`size-1.5 rounded-full bg-current ${isLive ? "animate-pulse" : "opacity-60"}`} />
-                {isLive ? "Live" : "Now"}
-              </Button>
-            </Tooltip>
+            {/* Display options: inline only on the standalone page; in the workspace they live in Settings. */}
+            {!embedded && (
+              <>
+                <NumberField
+                  label="Days"
+                  min={1}
+                  max={14}
+                  value={spanHours / 24}
+                  onChange={(n) => setSpanHours((n * 24) as TimelineSpanHours)}
+                />
+                <Segmented<TimeFormat>
+                  aria-label="Clock format"
+                  value={timeFormat}
+                  onChange={setTimeFormat}
+                  options={[
+                    { value: "12h", label: "12h" },
+                    { value: "24h", label: "24h" },
+                  ]}
+                />
+                <Chip on={showSeconds} onClick={() => setShowSeconds((s) => !s)}>
+                  Seconds
+                </Chip>
+              </>
+            )}
             <div className="flex items-center gap-0.5">
-              <Tooltip content="Back 1 day" shortcut="⇧←">
-                <Button aria-label="Step back 1 day" icon={<ChevronLeftIcon />} onClick={() => commitInstant(selectedInstant - 24 * 3600 * 1000)}>
-                  1d
-                </Button>
-              </Tooltip>
               <Tooltip content="Back 1 hour" shortcut="←">
-                <Button aria-label="Step back 1 hour" icon={<ChevronLeftIcon />} onClick={() => commitInstant(selectedInstant - 3600 * 1000)}>
-                  1h
+                <IconButton label="Back 1 hour" onClick={() => commitInstant(selectedInstant - 3600 * 1000)}>
+                  <ChevronLeftIcon />
+                </IconButton>
+              </Tooltip>
+              <Tooltip content="Snap to the current moment" shortcut="N">
+                <Button variant={isLive ? "selected" : "secondary"} onClick={goNow} aria-label="Snap to the current moment">
+                  <span aria-hidden className={`size-1.5 rounded-full ${isLive ? "animate-pulse bg-ok" : "bg-current opacity-60"}`} />
+                  {isLive ? "Live" : "Now"}
                 </Button>
               </Tooltip>
               <Tooltip content="Forward 1 hour" shortcut="→">
-                <Button aria-label="Step forward 1 hour" iconRight={<ChevronRightIcon />} onClick={() => commitInstant(selectedInstant + 3600 * 1000)}>
-                  1h
-                </Button>
-              </Tooltip>
-              <Tooltip content="Forward 1 day" shortcut="⇧→">
-                <Button aria-label="Step forward 1 day" iconRight={<ChevronRightIcon />} onClick={() => commitInstant(selectedInstant + 24 * 3600 * 1000)}>
-                  1d
-                </Button>
+                <IconButton label="Forward 1 hour" onClick={() => commitInstant(selectedInstant + 3600 * 1000)}>
+                  <ChevronRightIcon />
+                </IconButton>
               </Tooltip>
             </div>
             {!embedded && (
@@ -788,12 +789,14 @@ export function InstantApp({
         )}
 
         <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <p className="font-display text-3xl font-medium leading-none tracking-tight tabular-nums sm:text-4xl">
+          <div className="min-w-0">
+            <p className="font-display text-[34px] font-medium leading-none tracking-tight tabular-nums sm:text-[40px]">
               {formatLocalTime(primaryProj, timeFormat, showSeconds)}
             </p>
-            <p className="mt-1 text-[12px] tabular-nums text-[var(--workspace-text-muted)]">
-              UTC{primaryProj.offsetLabel} · {primaryProj.abbreviation}
+            <p className="mt-1.5 truncate text-[13px] tabular-nums text-[var(--workspace-text-muted)]">
+              <span className="font-medium text-[var(--workspace-text)]">{longDate(primaryProj.epochMs, primaryTimezone)}</span>
+              {" · "}
+              {primary.city} · UTC{primaryProj.offsetLabel} {primaryProj.abbreviation}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -818,104 +821,14 @@ export function InstantApp({
               <IconButton label="Previous day" variant="secondary" onClick={() => commitInstant(shiftLocalDate(selectedInstant, primaryTimezone, -1))}>
                 <ChevronLeftIcon />
               </IconButton>
-              <Button variant={isToday ? "selected" : "secondary"} aria-pressed={isToday} onClick={goNow}>
-                {isToday ? "Today" : "Go to today"}
+              <Button variant="secondary" disabled={isToday} onClick={goNow} className="min-w-[4.5rem]">
+                Today
               </Button>
               <IconButton label="Next day" variant="secondary" onClick={() => commitInstant(shiftLocalDate(selectedInstant, primaryTimezone, 1))}>
                 <ChevronRightIcon />
               </IconButton>
             </div>
           </div>
-        </div>
-
-        {/* Location chips + add button. Click a chip to make it primary; drag to reorder. */}
-        <div className="mb-3 flex flex-wrap items-center gap-1.5">
-          {locations.map((loc) => {
-            const proj = projections.find((p) => p.timeZone === loc.iana);
-            if (!proj) return null;
-            const isPrimary = loc.iana === primaryTimezone;
-            const diffMin = primaryProj.offsetMinutes - proj.offsetMinutes;
-            const diffHours = Math.round(diffMin / 60);
-            const diffLabel = isPrimary ? "you" : diffHours === 0 ? "same" : diffHours > 0 ? `+${diffHours}h` : `${diffHours}h`;
-            const rowTime = formatLocalTime(proj, timeFormat, showSeconds);
-            const setPrimary = () => {
-              if (isPrimary) return;
-              setPrimaryTimezone(loc.iana);
-              setLocations((prev) => {
-                const next = prev.map((l) => ({ ...l, isPrimary: l.iana === loc.iana }));
-                return [...next.filter((l) => l.isPrimary), ...next.filter((l) => !l.isPrimary)];
-              });
-            };
-            const isDragging = dragSrcId === loc.id;
-            const isDragOver = dragOverId === loc.id && dragSrcId !== loc.id;
-            return (
-              <div
-                key={loc.id}
-                draggable
-                onDragStart={(e) => {
-                  setDragSrcId(loc.id);
-                  setDragOverId(loc.id);
-                  e.dataTransfer.effectAllowed = "move";
-                  e.dataTransfer.setData("text/plain", loc.id);
-                }}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  e.dataTransfer.dropEffect = "move";
-                  if (dragOverId !== loc.id) setDragOverId(loc.id);
-                }}
-                onDragLeave={() => {
-                  if (dragOverId === loc.id) setDragOverId(null);
-                }}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  const srcId = e.dataTransfer.getData("text/plain") || dragSrcId;
-                  if (!srcId || srcId === loc.id) {
-                    setDragSrcId(null);
-                    setDragOverId(null);
-                    return;
-                  }
-                  setLocations((prev) => {
-                    const fromIdx = prev.findIndex((l) => l.id === srcId);
-                    const toIdx = prev.findIndex((l) => l.id === loc.id);
-                    if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return prev;
-                    const next = [...prev];
-                    const [moved] = next.splice(fromIdx, 1);
-                    next.splice(toIdx, 0, moved);
-                    return next;
-                  });
-                  setDragSrcId(null);
-                  setDragOverId(null);
-                }}
-                onDragEnd={() => {
-                  setDragSrcId(null);
-                  setDragOverId(null);
-                }}
-                className={`inline-flex cursor-grab items-center gap-0.5 rounded-md active:cursor-grabbing ${isDragging ? "opacity-50" : ""} ${
-                  isDragOver ? "ring-2 ring-[var(--focus)]" : ""
-                }`}
-              >
-                <Chip on={isPrimary} onClick={setPrimary} aria-label={isPrimary ? `Primary: ${loc.city}` : `Set ${loc.city} as primary`}>
-                  <span>{loc.city}</span>
-                  <span className="text-[12px] font-normal opacity-80">{diffLabel}</span>
-                  <span className="font-mono tabular-nums">{rowTime}</span>
-                </Chip>
-                {!isPrimary && locations.length > 1 && (
-                  <IconButton
-                    label={`Remove ${loc.city}`}
-                    onPointerDown={(e) => e.stopPropagation()}
-                    onClick={() => setLocations((prev) => prev.filter((l) => l.id !== loc.id || l.isPrimary))}
-                  >
-                    <XMarkIcon />
-                  </IconButton>
-                )}
-              </div>
-            );
-          })}
-          <Tooltip content="Add a location" shortcut="A" side="bottom">
-            <Button ref={locationButtonRef} variant="ghost" icon={<PlusIcon />} onClick={() => setPickerOpen(true)} aria-expanded={pickerOpen}>
-              Location
-            </Button>
-          </Tooltip>
         </div>
 
         {/* Stepper-style quick-nav lives in the workspace settings panel
@@ -948,6 +861,22 @@ export function InstantApp({
           onCommitRange={commitRange}
           onHoverInstant={setHoverInstant}
           onCopyRow={(text) => void copyText(text, "Copied")}
+          onSetPrimary={makePrimary}
+          onRemove={(id) => setLocations((prev) => prev.filter((l) => l.id !== id || l.isPrimary))}
+          onReorder={(fromId, toId) =>
+            setLocations((prev) => {
+              const from = prev.findIndex((l) => l.id === fromId);
+              const to = prev.findIndex((l) => l.id === toId);
+              if (from < 0 || to < 0 || from === to) return prev;
+              const next = [...prev];
+              const [moved] = next.splice(from, 1);
+              next.splice(to, 0, moved);
+              return next;
+            })
+          }
+          ref={locationButtonRef}
+          onAdd={() => setPickerOpen(true)}
+          addOpen={pickerOpen}
         />
       </main>
 

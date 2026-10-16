@@ -635,6 +635,8 @@ export function parseColor(input: string): ColorParts {
   } else {
     // CSS named color - render offscreen and read computed rgb
     if (typeof document !== "undefined") {
+      // An invalid value leaves the probe on its inherited color, which reads as black.
+      if (!CSS.supports("color", t)) throw new Error(`Unknown color "${t}"`);
       const probe = document.createElement("div");
       probe.style.color = t;
       probe.style.position = "absolute";
@@ -709,12 +711,38 @@ export function generateRandomLines(count: number, length: number, charset: "aln
 
 /* ── Cron explainer ── */
 
+const CRON_MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+const CRON_DAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+
+/** One cron field: lists of `*`, `?`, numbers in [lo, hi] or names, ranges `a-b`, steps `/n`, plus field-specific extras (L, W, #). */
+function validCronField(field: string, lo: number, hi: number, names?: string[], extra?: RegExp): boolean {
+  const value = (s: string) => (/^\d+$/.test(s) ? +s >= lo && +s <= hi : !!names?.includes(s.toUpperCase()));
+  return field.split(",").every((part) => {
+    const [base, step, ...more] = part.split("/");
+    if (more.length || (step !== undefined && !/^[1-9]\d*$/.test(step))) return false;
+    if (base === "*" || base === "?" || extra?.test(base)) return true;
+    const [a, b, ...over] = base.split("-");
+    return !over.length && value(a) && (b === undefined || value(b));
+  });
+}
+
 export function explainCron(expr: string): string {
   const fields = expr.trim().split(/\s+/);
   if (fields.length < 5 || fields.length > 6) {
     throw new Error("Cron needs 5 or 6 fields: min hour day month weekday [year]");
   }
   const [min, hour, dom, mon, dow, ...rest] = fields;
+  const checks: Array<[string, string, number, number, string[]?, RegExp?]> = [
+    [min, "minute", 0, 59],
+    [hour, "hour", 0, 23],
+    [dom, "day of month", 1, 31, undefined, /^(L|LW|L-\d{1,2}|\d{1,2}W)$/i],
+    [mon, "month", 1, 12, CRON_MONTHS],
+    [dow, "day of week", 0, 7, CRON_DAYS, /^(L|([0-7]|[a-z]{3})(L|#[1-5]))$/i],
+    ...(rest.length ? [[rest[0], "year", 1970, 2099] as [string, string, number, number]] : []),
+  ];
+  for (const [f, name, lo, hi, names, extra] of checks) {
+    if (!validCronField(f, lo, hi, names, extra)) throw new Error(`"${f}" is not a valid ${name} field`);
+  }
   const any = (f: string) => f === "*" || f === "?";
   const range = (f: string) => {
     const parts: string[] = [];

@@ -10,6 +10,8 @@ import { mutedText, type KitSize } from "./styles";
 export interface SelectOption<T extends string = string> {
   value: T;
   label: string;
+  /** Trigger text when this option is current, if it should differ from the menu label (e.g. Auto shows what it detected). */
+  display?: string;
   hint?: ReactNode;
   /** Options sharing a group name render under one muted label; ungrouped options come first. */
   group?: string;
@@ -82,7 +84,7 @@ export function Select<T extends string = string>({
           {label && <span className={cn("font-normal", mutedText)}>{label}</span>}
           <span className="grid min-w-0 text-left">
             {stack ? (
-              [...options.map((o) => ({ k: o.value, t: o.label })), ...(current ? [] : [{ k: "", t: placeholder }])].map(
+              [...options.map((o) => ({ k: o.value, t: o.display ?? o.label })), ...(current ? [] : [{ k: "", t: placeholder }])].map(
                 ({ k, t }) => (
                   <span key={k} className={cn("col-start-1 row-start-1 truncate", k !== (current ? value : "") && "invisible")}>
                     {t}
@@ -90,7 +92,7 @@ export function Select<T extends string = string>({
                 ),
               )
             ) : (
-              <span className="truncate">{current?.label ?? placeholder}</span>
+              <span className="truncate">{current ? current.display ?? current.label : placeholder}</span>
             )}
           </span>
         </Button>

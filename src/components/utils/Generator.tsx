@@ -148,7 +148,9 @@ export function Generator({ tool, state, patch, regenKey }: Props) {
   };
 
   const one = list.length === 1;
-  const colMin = tool === "password" ? Math.round(state.passwordLen * 8 + 110) : 340;
+  // Columns as wide as one value in the mono font (ch) plus the number and the Copy tag, so short values pack side by side and never wrap.
+  const chars = tool === "password" ? clamp(state.passwordLen, 8, 64) : plain ? 32 : 36;
+  const colMin = `calc(${chars}ch + 6.5rem)`;
   const noun = tool === "uuid" ? "UUID" : tool === "password" ? "password" : "paragraph";
   const legend =
     tool === "uuid"
@@ -257,8 +259,8 @@ export function Generator({ tool, state, patch, regenKey }: Props) {
         ) : (
           <>
             <div
-              className="grid"
-              style={{ gridTemplateColumns: one ? "minmax(0,1fr)" : `repeat(auto-fill, minmax(min(100%, ${colMin}px), 1fr))`, columnGap: 24 }}
+              className="grid font-mono"
+              style={{ gridTemplateColumns: one ? "minmax(0,1fr)" : `repeat(auto-fill, minmax(min(100%, ${colMin}), 1fr))`, columnGap: 24 }}
             >
               {list.slice(0, shown).map((v, i) => (
                 <RowCopy key={`${i}-${v}`} text={v} className="h-auto min-h-7 py-0.5 max-[900px]:h-auto max-[900px]:min-h-9">

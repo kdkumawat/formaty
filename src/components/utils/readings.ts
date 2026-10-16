@@ -29,6 +29,8 @@ export interface Reading {
   swatch?: string;
   open?: UtilTab;
   error?: boolean;
+  /** Section heading in Detect anything; consecutive rows sharing it render under one header. */
+  group?: string;
 }
 
 export type Dir = "encode" | "decode";
@@ -143,7 +145,13 @@ function numberReadings(input: string): Reading[] {
   ];
 }
 
-function colorReadings(input: string): Reading[] {
+/** Colors in the input, separated by new lines, commas, semicolons or spaces in any mix; rgb()/hsl() keep their inner commas. */
+export function colorTokens(input: string): string[] {
+  const tokens = input.match(/[a-z]+\([^)]*\)?|[^\s,;()]+/gi) ?? [];
+  return [...new Set(tokens)];
+}
+
+function colorRows(input: string): Reading[] {
   const c = parseColor(input);
   const swatch = /^#([0-9a-f]{6}|[0-9a-f]{8})$/i.test(c.hex) ? c.hex : undefined;
   return [
@@ -152,6 +160,19 @@ function colorReadings(input: string): Reading[] {
     { label: "HSL", value: c.hsl },
     { label: "CMYK", value: c.cmyk },
   ];
+}
+
+/** One color reads as plain rows; several read as one group per color, headed by the color as typed. */
+function colorReadings(input: string): Reading[] {
+  const tokens = colorTokens(input);
+  if (tokens.length <= 1) return colorRows(tokens[0] ?? input);
+  return tokens.flatMap((t) => {
+    try {
+      return colorRows(t).map((r) => ({ ...r, group: t }));
+    } catch (e) {
+      return [{ label: "Problem", value: msg(e), error: true, group: t }];
+    }
+  });
 }
 
 function urlReadings(input: string): Reading[] {
@@ -286,8 +307,9 @@ export function detectReadings(input: string): Reading[] {
     if (safe(() => cleanJson(t))) return [{ label: "Almost JSON, cleaned", value: cleanJson(t), open: "clean" }];
   }
 
-  if (COLOR.test(t) && safe(() => parseColor(t))) {
-    return colorReadings(t).map((r) => ({ ...r, label: `Color ${r.label}`, open: "color" as const }));
+  const colors = colorTokens(t);
+  if (colors.every((c) => COLOR.test(c) && safe(() => parseColor(c)))) {
+    return colorReadings(t).map((r) => ({ group: "Color", ...r, open: "color" as const }));
   }
 
   if (UUID.test(t)) {
@@ -338,12 +360,12 @@ export function detectReadings(input: string): Reading[] {
       const value = transformCase(t, mode);
       if (seen.has(value)) continue; // equals the input or an earlier row
       seen.add(value);
-      out.push({ label, value, open: "case" });
+      out.push({ label, value, open: "case", group: "Change case" });
     }
   }
-  out.push({ label: "Base64 encoded", value: toBase64(t), open: "base64" });
-  out.push({ label: "URL encoded", value: urlEncode(t), open: "url" });
+  out.push({ label: "Base64", value: toBase64(t), open: "base64", group: "Encode" });
+  out.push({ label: "URL", value: urlEncode(t), open: "url", group: "Encode" });
   const s = JSON.parse(textStats(input)) as Record<string, number>;
-  out.push({ label: "Size", value: `${s.characters} characters, ${s.words} words, ${s.lines} lines, ${s.bytes} bytes`, open: "stats" });
+  out.push({ label: "Size", value: `${s.characters} characters, ${s.words} words, ${s.lines} lines, ${s.bytes} bytes`, open: "stats", group: "About the text" });
   return out;
 }

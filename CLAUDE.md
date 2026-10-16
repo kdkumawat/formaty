@@ -70,18 +70,17 @@ Code layout under `src/lib/instant/`:
 - `parse.ts` — `parseInstantInput` — smart parser for Unix seconds/ms, ISO 8601, "10:30 Asia/Kolkata", "Mar 9 10:30", "10:30 UTC+05:30". Bare clock inputs default to **real today** (not the currently displayed day) so `10:30` always means "today at 10:30".
 - `url.ts` — URL query serialization for sharing an Instant state (`?at=…&tz=…&locations=…&fmt=…&sec=…`).
 - `timeline.ts` — `defaultWindow`, `maybePanWindow`, `hourMarkers` for the horizontal hour-strip board.
-- `sun.ts` — sunrise/sunset helpers (used by the TimelineBoard gradients).
 - `persist.ts` — localStorage prefs (`locations`, `primaryTimezone`, `timeFormat`, `showSeconds`, `spanHours`) + onboard flag.
 - `settingsBus.ts` — module-level pub/sub so the workspace settings panel (`SettingsPanel.tsx`, its Instant group shown while the Instant tool is open) can read and write Instant's `spanHours` / `timeFormat` / `showSeconds` without lifting state out of `InstantApp`. The standalone `/utils/instant` page renders the same controls inline (no duplicate gear) since it has no settings panel.
 - `locations.ts` — builders for `Location` from a catalog row, custom input, or IANA id.
 - `types.ts` — `Location`, `ZonedProjection`, `TimeFormat`, `TimelineSpanHours`, `InstantMode`.
 - `copy.ts` — clipboard text emitters (`copyHuman` builds the multi-zone summary).
 
-Components: `src/components/instant/InstantApp.tsx` (compact header with primary-location chip + unified smart input + hidden `<input type="datetime-local">` fallback + Now/Live pill + global OutputActionBar for copy/share/reset; primary moment + day nav with "Today" highlight; −1d/−1h/+1h/+1d quick-nav; range mode; location chips; inline display-options row on standalone; TimelineBoard), `src/components/instant/LocationPicker.tsx` (modal that surfaces countries first, then curated cities + the full IANA zone list grouped by region; matches by country, city, country code, or raw IANA id). The per-row `<input type="time">` and bottom Unix converter in the timeline board were removed — edit the displayed moment through the unified header input. `TimelineBoard.tsx` now has a hover-revealed copy icon per row (copies that row's wall time) and renders the primary location first.
+Components: `src/components/instant/InstantApp.tsx` (one toolbar row: unified smart input + hidden `<input type="datetime-local">` fallback, ‹ Live/Now › hour steps, and on the standalone page only the display options plus theme/share/reset/copy; then the hero clock with day nav and Instant/Range), `src/components/instant/LocationPicker.tsx` (modal that surfaces countries first, then curated cities + the full IANA zone list grouped by region; matches by country, city, country code, or raw IANA id). `TimelineBoard.tsx` is the only list of locations (there is no separate chip row): the home row first, per-row hover actions (copy, make home, remove), drag a row label to reorder, night shading and an amber working-hours bar on every strip, arrow keys on a focused strip, and the "Add location" button in its footer.
 
 ### Shareable state
 
-`src/lib/shareState.ts` serializes the workspace state (`WorkspaceState`) into a URL hash — `j:` + encoded JSON for small state, `e:` + lz-string for large. Shared links rehydrate state from the hash.
+`src/lib/shareState.ts` serializes the workspace state (`WorkspaceState`) into a URL hash — `j:` + encoded JSON for small state, `e:` + lz-string for large. Every link carries `tabs` + `tabSnapshots` (one tab or all), so Compare and Utils tabs open as themselves. Opening a link adds the shared tab(s) next to the visitor's saved session (`sharedTabEntries` + the merge effect after the restore effect in `WorkspaceContent.tsx`) and strips the hash; it never replaces their tabs. Short links (`src/lib/playgroundApi.ts`) only show when `FORMATY_API_URL` is set.
 
 ### State management & components
 

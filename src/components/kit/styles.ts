@@ -1,7 +1,7 @@
 /** Shared class strings for the kit. Internal: import components, not these. */
 
 export const focusRing =
-  "outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--workspace-panel)]";
+  "outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]";
 
 /** Control heights: sm is the dense default (28px, 36px below 900px for touch). */
 export const HEIGHT = {

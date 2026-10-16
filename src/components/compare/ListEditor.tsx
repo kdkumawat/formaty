@@ -31,7 +31,7 @@ export function ListEditor({
   onPaste?: (text: string) => void;
 }) {
   return (
-    <div className="relative min-h-[96px] flex-1 bg-[var(--workspace-panel)] focus-within:ring-2 focus-within:ring-inset focus-within:ring-[var(--focus)]">
+    <div className="relative min-h-[96px] flex-1 bg-[var(--workspace-panel)] focus-within:ring-1 focus-within:ring-inset focus-within:ring-[var(--focus)]">
       <div className="absolute inset-0">
         <JsonEditor
           value={value}
