@@ -635,6 +635,8 @@ export function parseColor(input: string): ColorParts {
   } else {
     // CSS named color - render offscreen and read computed rgb
     if (typeof document !== "undefined") {
+      // An invalid value leaves the probe on its inherited color, which reads as black.
+      if (!CSS.supports("color", t)) throw new Error(`Unknown color "${t}"`);
       const probe = document.createElement("div");
       probe.style.color = t;
       probe.style.position = "absolute";

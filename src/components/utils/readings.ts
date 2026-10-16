@@ -145,7 +145,17 @@ function numberReadings(input: string): Reading[] {
   ];
 }
 
-function colorReadings(input: string): Reading[] {
+/** Colors in the input: one per line, and lines without a function like rgb() may list several. */
+export function colorTokens(input: string): string[] {
+  const tokens = input
+    .split(/\r?\n/)
+    .flatMap((line) => (line.includes("(") ? [line] : line.split(/[\s,;]+/)))
+    .map((t) => t.trim())
+    .filter(Boolean);
+  return [...new Set(tokens)];
+}
+
+function colorRows(input: string): Reading[] {
   const c = parseColor(input);
   const swatch = /^#([0-9a-f]{6}|[0-9a-f]{8})$/i.test(c.hex) ? c.hex : undefined;
   return [
@@ -154,6 +164,19 @@ function colorReadings(input: string): Reading[] {
     { label: "HSL", value: c.hsl },
     { label: "CMYK", value: c.cmyk },
   ];
+}
+
+/** One color reads as plain rows; several read as one group per color, headed by the color as typed. */
+function colorReadings(input: string): Reading[] {
+  const tokens = colorTokens(input);
+  if (tokens.length <= 1) return colorRows(tokens[0] ?? input);
+  return tokens.flatMap((t) => {
+    try {
+      return colorRows(t).map((r) => ({ ...r, group: t }));
+    } catch (e) {
+      return [{ label: "Problem", value: msg(e), error: true, group: t }];
+    }
+  });
 }
 
 function urlReadings(input: string): Reading[] {
@@ -288,8 +311,9 @@ export function detectReadings(input: string): Reading[] {
     if (safe(() => cleanJson(t))) return [{ label: "Almost JSON, cleaned", value: cleanJson(t), open: "clean" }];
   }
 
-  if (COLOR.test(t) && safe(() => parseColor(t))) {
-    return colorReadings(t).map((r) => ({ ...r, label: `Color ${r.label}`, open: "color" as const }));
+  const colors = colorTokens(t);
+  if (colors.every((c) => COLOR.test(c) && safe(() => parseColor(c)))) {
+    return colorReadings(t).map((r) => ({ group: "Color", ...r, open: "color" as const }));
   }
 
   if (UUID.test(t)) {
