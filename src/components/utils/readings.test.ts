@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { UtilTab } from "@/lib/utils/devtools";
-import { TOOL_META, detectReadings, looksEncoded, toolReadings } from "./readings";
+import { TOOL_META, colorTokens, detectReadings, looksEncoded, toolReadings } from "./readings";
 
 const JWT =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
@@ -47,6 +47,7 @@ describe("detectReadings", () => {
     expect(r.find((x) => x.group === "#aaa" && x.label === "HEX")?.value).toBe("#aaaaaa");
     expect(toolReadings("color", "#F2B544\n#F2B544", "encode")[0].value).toBe("#f2b544");
     expect(detectReadings("#F2B544")[0].group).toBe("Color");
+    expect(colorTokens("#abc, #aaa\nrgb(1, 2, 3), hsl(10 20% 30%)\n\n red;blue")).toEqual(["#abc", "#aaa", "rgb(1, 2, 3)", "hsl(10 20% 30%)", "red", "blue"]);
   });
   it("does not read five plain words as cron", () => {
     expect(detectReadings("asdfa asdfa ssadf asdfas sadf").some((x) => x.open === "cron")).toBe(false);

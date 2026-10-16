@@ -145,13 +145,9 @@ function numberReadings(input: string): Reading[] {
   ];
 }
 
-/** Colors in the input: one per line, and lines without a function like rgb() may list several. */
+/** Colors in the input, separated by new lines, commas, semicolons or spaces in any mix; rgb()/hsl() keep their inner commas. */
 export function colorTokens(input: string): string[] {
-  const tokens = input
-    .split(/\r?\n/)
-    .flatMap((line) => (line.includes("(") ? [line] : line.split(/[\s,;]+/)))
-    .map((t) => t.trim())
-    .filter(Boolean);
+  const tokens = input.match(/[a-z]+\([^)]*\)?|[^\s,;()]+/gi) ?? [];
   return [...new Set(tokens)];
 }
 
