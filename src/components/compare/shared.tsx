@@ -122,7 +122,7 @@ export function downloadText(filename: string, text: string) {
 
 /** Flat text surface for input panes (the pane header provides the structure). */
 export const editorClass =
-  "min-h-[96px] flex-1 resize-none border-0 bg-[var(--workspace-panel)] px-3 py-2 font-mono text-[13px] leading-[1.6] text-[var(--workspace-text)] outline-none placeholder:text-[var(--workspace-text-muted)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--focus)]";
+  "min-h-[96px] flex-1 resize-none border-0 bg-[var(--workspace-panel)] px-3 py-2 font-mono text-[13px] leading-[1.6] text-[var(--workspace-text)] outline-none placeholder:text-[var(--workspace-text-muted)] focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-[var(--focus)]";
 
 /** A side's colour dot and name; click to rename. Used by the list pane headers and the document row. */
 export function RenameButton({ dot, name, onRename, className }: { dot: string; name: string; onRename?: (el: HTMLElement) => void; className?: string }) {
@@ -300,16 +300,27 @@ export const inputPaneClass =
 export const splitStyle = (split: number) => ({ "--split": `${split}%` }) as CSSProperties;
 
 /** Draggable divider between input and result, the same one the Transform panes use. Desktop only. */
-export function SplitHandle({ onResizeStart }: { onResizeStart?: () => void }) {
+export function SplitHandle({ onResizeStart, onNudge, value }: { onResizeStart?: () => void; onNudge?: (delta: number) => void; value?: number }) {
   return (
     <div
       role="separator"
       aria-orientation="vertical"
-      className="group relative hidden shrink-0 cursor-col-resize items-stretch justify-center min-[901px]:flex"
+      aria-label="Resize input and result"
+      aria-valuenow={value}
+      aria-valuemin={25}
+      aria-valuemax={60}
+      tabIndex={onNudge ? 0 : undefined}
+      className="group relative hidden shrink-0 cursor-col-resize items-stretch justify-center outline-none min-[901px]:flex"
       style={{ width: 9, marginLeft: -4, marginRight: -4, zIndex: 10 }}
       onMouseDown={onResizeStart}
+      onKeyDown={(e) => {
+        if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+          e.preventDefault();
+          onNudge?.((e.key === "ArrowLeft" ? -1 : 1) * (e.shiftKey ? 10 : 2));
+        }
+      }}
     >
-      <div className="pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-[var(--workspace-border)] transition-colors group-hover:bg-brand group-active:bg-brand" />
+      <div className="pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-[var(--workspace-border)] transition-colors group-hover:bg-brand group-focus-visible:w-0.5 group-focus-visible:bg-[var(--focus)] group-active:bg-brand" />
     </div>
   );
 }
@@ -363,10 +374,13 @@ export function ResultView({
   }, [items, sort]);
 
   const fullText = (f: ListExportFormat = format) => formatListItems(rows, f);
-  const formatOptions = useMemo(() => LIST_COPY_FORMATS.map((f) => ({ value: f.id as ListExportFormat, label: f.label, hint: f.hint, group: f.group ?? "More" })), []);
 
   const n = rows.length;
   const filtered = !!find.trim();
+  // Short values pack into columns sized to the longest one (in mono ch, plus number, dots, count and the Copy tag); long ones keep one column.
+  const longest = useMemo(() => items.slice(0, 2000).reduce((m, i) => Math.max(m, i.value.length), 0), [items]);
+  const colMin = `calc(${Math.max(longest, 6)}ch + ${6.5 + (sides ? 1 : 0) + (showCounts ? 3 : 0)}rem)`;
+  const columns = longest <= 48 ? `repeat(auto-fill, minmax(min(100%, ${colMin}), 1fr))` : "minmax(0, 1fr)";
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -378,10 +392,14 @@ export function ResultView({
             <ResultActions
               onDownload={() => downloadText(`${fileBase}.${listExportExtension(format)}`, fullText())}
               canDownload={n > 0}
-              copy={{ getText: () => fullText(), disabled: n === 0 }}
-            >
-              <Select<ListExportFormat> aria-label="Export format" width={176} options={formatOptions} value={format} onChange={onFormat} />
-            </ResultActions>
+              copy={{
+                getText: (f) => fullText((f as ListExportFormat | undefined) ?? format),
+                formats: LIST_COPY_FORMATS,
+                format,
+                onFormatChange: (id) => onFormat(id as ListExportFormat),
+                disabled: n === 0,
+              }}
+            />
           </div>
         }
       />
@@ -403,11 +421,11 @@ export function ResultView({
         <EmptyState title={filtered ? "Nothing matches your search" : emptyTitle} description={filtered ? undefined : empty} />
       ) : (
         <div className="min-h-0 flex-1 overflow-auto px-3 pb-2 pt-1">
-          <div className="grid gap-x-6" style={{ gridTemplateColumns: "minmax(0, 1fr)" }}>
+          <div className="grid gap-x-6 font-mono" style={{ gridTemplateColumns: columns }}>
             {rows.slice(0, shown).map((it, i) => (
               <RowCopy key={`${it.key}-${i}`} text={it.value} className="px-1">
                 <span className="flex items-center gap-2">
-                  <span aria-hidden className="w-8 shrink-0 text-right font-mono text-[13px] tabular-nums text-faint">{i + 1}</span>
+                  <span aria-hidden className="w-8 shrink-0 text-right font-mono text-[12px] tabular-nums text-faint">{i + 1}</span>
                   {sides && (
                     <span aria-hidden className="flex shrink-0 gap-0.5">
                       <span className={cn("size-1.5 rounded-full", sides.a.has(it.key) ? "bg-side-a" : "bg-transparent")} />

@@ -40,6 +40,10 @@ describe("detectReadings", () => {
     expect(detectReadings('{"a":1}')).toHaveLength(1);
     expect(detectReadings("#F2B544").every((x) => x.open === "color")).toBe(true);
   });
+  it("does not read five plain words as cron", () => {
+    expect(detectReadings("asdfa asdfa ssadf asdfas sadf").some((x) => x.open === "cron")).toBe(false);
+    expect(detectReadings("0 9 * JAN-MAR MON#1")[0].open).toBe("cron");
+  });
   it("reads a unix timestamp", () => {
     expect(detectReadings("1516239022").some((x) => x.label === "Unix timestamp")).toBe(true);
   });

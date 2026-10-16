@@ -98,7 +98,7 @@ interface InputHeaderProps {
  */
 export function InputHeader(p: InputHeaderProps) {
   const options = [
-    { value: "auto", label: `${FORMAT_GLYPH[p.detected ?? READ_AS.find(([, l]) => l === p.formatLabel)?.[0] ?? "json"]} ${p.formatLabel}` },
+    { value: "auto", label: "Auto-detect", display: `${FORMAT_GLYPH[p.detected ?? READ_AS.find(([, l]) => l === p.formatLabel)?.[0] ?? "json"]} ${p.formatLabel}` },
     ...READ_AS.map(([value, label]) => ({ value, label: `${FORMAT_GLYPH[value]} ${label}` })),
   ];
   const forced = p.override !== null;

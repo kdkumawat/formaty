@@ -29,6 +29,8 @@ export interface Reading {
   swatch?: string;
   open?: UtilTab;
   error?: boolean;
+  /** Section heading in Detect anything; consecutive rows sharing it render under one header. */
+  group?: string;
 }
 
 export type Dir = "encode" | "decode";
@@ -338,12 +340,12 @@ export function detectReadings(input: string): Reading[] {
       const value = transformCase(t, mode);
       if (seen.has(value)) continue; // equals the input or an earlier row
       seen.add(value);
-      out.push({ label, value, open: "case" });
+      out.push({ label, value, open: "case", group: "Change case" });
     }
   }
-  out.push({ label: "Base64 encoded", value: toBase64(t), open: "base64" });
-  out.push({ label: "URL encoded", value: urlEncode(t), open: "url" });
+  out.push({ label: "Base64", value: toBase64(t), open: "base64", group: "Encode" });
+  out.push({ label: "URL", value: urlEncode(t), open: "url", group: "Encode" });
   const s = JSON.parse(textStats(input)) as Record<string, number>;
-  out.push({ label: "Size", value: `${s.characters} characters, ${s.words} words, ${s.lines} lines, ${s.bytes} bytes`, open: "stats" });
+  out.push({ label: "Size", value: `${s.characters} characters, ${s.words} words, ${s.lines} lines, ${s.bytes} bytes`, open: "stats", group: "About the text" });
   return out;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, type ComponentPropsWithoutRef, type ReactNode } from "react";
+import { forwardRef, useCallback, type ComponentPropsWithoutRef, type ForwardedRef, type ReactNode } from "react";
 import * as DM from "@radix-ui/react-dropdown-menu";
 import { CheckIcon, ChevronRightIcon } from "@heroicons/react/16/solid";
 import { cn } from "@/lib/utils";
@@ -17,21 +17,43 @@ export const MenuSub = DM.Sub;
 
 const contentClass = cn(
   surface,
-  "min-w-[200px] max-h-[min(var(--radix-dropdown-menu-content-available-height),440px)] overflow-y-auto overflow-x-hidden rounded-[10px] p-1",
+  "min-w-[140px] max-h-[min(var(--radix-dropdown-menu-content-available-height),440px)] overflow-y-auto overflow-x-hidden rounded-[10px] p-1",
 );
+
+/**
+ * Ref for a menu panel: forwards the node and, when the panel mounts (each open), scrolls the current
+ * choice into view so long menus open at the selected row instead of the top.
+ */
+function useLandOnSelected(ref: ForwardedRef<HTMLDivElement>) {
+  return useCallback(
+    (node: HTMLDivElement | null) => {
+      if (typeof ref === "function") ref(node);
+      else if (ref) ref.current = node;
+      if (!node) return;
+      requestAnimationFrame(() => {
+        const sel = node.querySelector<HTMLElement>('[data-selected="true"], [role="menuitemradio"][data-state="checked"], [role="menuitemcheckbox"][data-state="checked"]');
+        if (!sel) return;
+        // Centre the row in the panel without scrolling the page.
+        node.scrollTop += sel.getBoundingClientRect().top - node.getBoundingClientRect().top - (node.clientHeight - sel.offsetHeight) / 2;
+      });
+    },
+    [ref],
+  );
+}
 
 export type MenuContentProps = ComponentPropsWithoutRef<typeof DM.Content>;
 
-/** Floating menu: min width 180px, scrolls past the available height. */
+/** Floating menu: min width 140px, scrolls past the available height. */
 export const MenuContent = forwardRef<HTMLDivElement, MenuContentProps>(function MenuContent(
   { className, align = "start", side = "bottom", sideOffset = 6, collisionPadding = 8, ...props },
   ref,
 ) {
   const container = usePortalContainer();
+  const land = useLandOnSelected(ref);
   return (
     <DM.Portal container={container}>
       <DM.Content
-        ref={ref}
+        ref={land}
         align={align}
         side={side}
         sideOffset={sideOffset}
@@ -50,10 +72,11 @@ export const MenuSubContent = forwardRef<HTMLDivElement, MenuSubContentProps>(fu
   ref,
 ) {
   const container = usePortalContainer();
+  const land = useLandOnSelected(ref);
   return (
     <DM.Portal container={container}>
       <DM.SubContent
-        ref={ref}
+        ref={land}
         sideOffset={sideOffset}
         collisionPadding={collisionPadding}
         className={cn(contentClass, className)}
@@ -108,7 +131,7 @@ export const MenuItem = forwardRef<HTMLDivElement, MenuItemProps>(function MenuI
   ref,
 ) {
   return (
-    <DM.Item ref={ref} className={cn(rowClass, selected && "font-[520]", className)} {...props}>
+    <DM.Item ref={ref} data-selected={selected ? "true" : undefined} className={cn(rowClass, selected && "font-[520]", className)} {...props}>
       {icon && <Icon>{icon}</Icon>}
       <span className="min-w-0 flex-1 truncate">{children}</span>
       <Tail hint={hint} shortcut={shortcut} />

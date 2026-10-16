@@ -47,7 +47,7 @@ export function ValueTool({ tool, state, patch, onOpen }: Props) {
     if (tool === "hash") return [{ label: "SHA-256", value: hashes.sha256 }, { label: "SHA-512", value: hashes.sha512 }, { label: "SHA-384", value: hashes.sha384 }, { label: "SHA-1", value: hashes.sha1 }];
     const first = base[0];
     if (first?.open && SPECIFIC.has(first.open)) return base;
-    return [...base, { label: "SHA-256", value: hashes.sha256 }];
+    return [...base, { label: "SHA-256", value: hashes.sha256, open: "hash", group: "About the text" }];
   }, [tool, input, dir, wantsHash, hashes]);
 
   // Keep the parent's copy/export text in step with what is shown.
@@ -119,7 +119,28 @@ export function ValueTool({ tool, state, patch, onOpen }: Props) {
           {showEmpty ? (
             <EmptyState title="Nothing to read yet" description="Paste a value on the left, or use Sample." />
           ) : (
-            rows.map((r, i) => {
+            sections(rows).map(({ group, open, items }, si) => (
+              <div key={`${group}-${si}`} className={group ? "pt-2" : undefined}>
+                {group && (
+                  <div className="flex h-7 items-center gap-2 px-2">
+                    <h3 className="text-[12px] font-medium text-[var(--workspace-text-muted)]">{group}</h3>
+                    {open && open !== tool && (
+                      <Button variant="ghost" className="-mr-2 ml-auto text-[12px] text-[var(--workspace-text-muted)]" onClick={() => onOpen(open, input)}>
+                        Open in {label(open)}
+                      </Button>
+                    )}
+                  </div>
+                )}
+                {items.map((r, i) => renderRow(r, i, !!open))}
+              </div>
+            ))
+          )}
+        </div>
+      </section>
+    </div>
+  );
+
+  function renderRow(r: Reading, i: number, openInHeader: boolean) {
               const body = (
                 <span className="grid min-w-0 grid-cols-1 gap-x-3 sm:grid-cols-[8rem_minmax(0,1fr)]">
                   <span className="font-semibold">{r.label}</span>
@@ -138,19 +159,29 @@ export function ValueTool({ tool, state, patch, onOpen }: Props) {
                       {body}
                     </RowCopy>
                   )}
-                  {r.open && r.open !== tool && (
+                  {r.open && r.open !== tool && !openInHeader && (
                     <Button variant="ghost" onClick={() => onOpen(r.open!, input)}>
                       Open in {label(r.open)}
                     </Button>
                   )}
                 </div>
               );
-            })
-          )}
-        </div>
-      </section>
-    </div>
-  );
+  }
+}
+
+/** Consecutive rows sharing a group; `open` is set when every row of a named group opens the same tool, so the header carries one "Open in" link. */
+function sections(rows: Reading[]) {
+  const out: Array<{ group?: string; open?: UtilTab; items: Reading[] }> = [];
+  for (const r of rows) {
+    const last = out[out.length - 1];
+    if (last && last.group === r.group) last.items.push(r);
+    else out.push({ group: r.group, items: [r] });
+  }
+  for (const s of out) {
+    const tools = new Set(s.items.map((r) => r.open));
+    if (s.group && tools.size === 1 && s.items[0].open) s.open = s.items[0].open;
+  }
+  return out;
 }
 
 /** Tidy for Clean JSON: apply the cleanup to the input itself. */

@@ -7,6 +7,7 @@ import { Button, EmptyState, PaneHeader, Select } from "@/components/kit";
 import { toast } from "@/components/Toast";
 import { ListEditor } from "@/components/compare/ListEditor";
 import { SummaryView } from "@/components/compare/SummaryView";
+import { uuidLists } from "@/components/compare/samples";
 import { InputFooter, ListPaneHeader, ResultView, SplitBySelect, ResultTab, ResultTabs, SplitHandle, inputPaneClass, num, splitStyle, useExportFormat } from "@/components/compare/shared";
 import {
   DEFAULT_LIST_PARSE_OPTIONS,
@@ -56,6 +57,8 @@ interface ListComparePanelProps {
   split?: number;
   /** Starts a drag of the divider between input and result. */
   onResizeStart?: () => void;
+  /** Moves the divider by this many percent (arrow keys on the focused divider). */
+  onNudgeSplit?: (delta: number) => void;
   /** CSV key column restored from a shared link. */
   initialCsvColumn?: string | null;
   /** Report the selected CSV column up so share links can preserve it. */
@@ -96,6 +99,16 @@ const BUCKET_SOURCE: Partial<Record<ListBucket, string>> = {
 
 const SAMPLES: Array<{ id: string; label: string; left: string; right: string }> = [
   {
+    id: "uuids",
+    label: "User UUIDs, 240 vs 220",
+    get left() {
+      return uuidLists().a.join("\n");
+    },
+    get right() {
+      return uuidLists().b.join("\n");
+    },
+  },
+  {
     id: "ids",
     label: "IDs with overlap",
     left: "user_1001\nuser_1002\nuser_1003\nuser_1002\nuser_1004\nuser_1005\nuser_1003\nuser_1006",
@@ -129,6 +142,7 @@ export function ListComparePanel({
   onCountsChange,
   split = 38,
   onResizeStart,
+  onNudgeSplit,
   initialCsvColumn,
   onCsvColumnChange,
   activeBucket,
@@ -315,10 +329,6 @@ export function ListComparePanel({
   const tabs = <ResultTabs tabs={mainTabs} more={moreTabs} value={activeBucket} onChange={setActiveBucket} />;
   const sides = useMemo(() => ({ a: new Set(result.left.items.map((i) => i.key)), b: new Set(result.right.items.map((i) => i.key)) }), [result]);
 
-  const repeatedIn = (["leftDupes", "rightDupes"] as const).map((b, i) => ({
-    value: b,
-    label: `${i === 0 ? leftLabel ?? "List A" : rightLabel ?? "List B"} ${num(st[b])}`,
-  }));
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
@@ -342,7 +352,7 @@ export function ListComparePanel({
             />
           </InputFooter>
         </div>
-        <SplitHandle onResizeStart={onResizeStart} />
+        <SplitHandle onResizeStart={onResizeStart} onNudge={onNudgeSplit} value={split} />
 
         {/* Result */}
         <section aria-label="Result" className="flex min-w-0 flex-1 flex-col bg-[var(--workspace-panel)] min-[901px]:min-h-0 min-[901px]:overflow-hidden">
@@ -365,9 +375,9 @@ export function ListComparePanel({
           ) : (
             <>
             {isSummary && <PaneHeader left={tabs} />}
-            {(csvColumns || dupeActive) && (
+            {csvColumns && (
               <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-[var(--workspace-border)] px-3 py-1">
-                {csvColumns && (
+                {(
                   <Select<string>
                     label="Match rows by column"
                     options={csvColumns.common.map((c) => ({ value: c, label: c }))}
@@ -377,9 +387,6 @@ export function ListComparePanel({
                       setActiveBucket("common");
                     }}
                   />
-                )}
-                {dupeActive && (
-                  <Select<"leftDupes" | "rightDupes"> label="Repeated in" options={repeatedIn} value={activeBucket as "leftDupes" | "rightDupes"} onChange={setActiveBucket} />
                 )}
               </div>
             )}

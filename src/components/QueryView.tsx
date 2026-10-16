@@ -144,7 +144,7 @@ export function QueryView({
           />
           <input
             aria-label="Query"
-            className="h-7 min-w-0 flex-1 rounded-md border border-[var(--input)] bg-[var(--workspace-background)] px-2 font-mono text-[13px] text-[var(--workspace-text)] outline-none placeholder:text-[var(--faint)] focus-visible:ring-2 focus-visible:ring-[var(--focus)] max-[900px]:h-9"
+            className="h-7 min-w-0 flex-1 rounded-md border border-[var(--input)] bg-[var(--workspace-background)] px-2 font-mono text-[13px] text-[var(--workspace-text)] outline-none placeholder:text-[var(--faint)] focus-visible:border-[var(--focus)] focus-visible:ring-1 focus-visible:ring-[var(--focus)] max-[900px]:h-9"
             placeholder={QUERY_LANGUAGES.find((l) => l.id === queryLang)?.placeholder}
             value={query}
             onChange={(e) => setQuery(e.target.value)}

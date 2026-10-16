@@ -122,7 +122,7 @@ export function defaultUtilToolState(tab: UtilTab): UtilToolState {
     pwSymbols: true,
     pwCount: 5,
     pwList: [],
-    regexPattern: "\\b(\\w+)@(\\w+)\\b",
+    regexPattern: "\\b(quick|lazy) (\\w+)",
     regexFlags: "g",
     loremUnit: "paragraphs",
     loremCount: 3,

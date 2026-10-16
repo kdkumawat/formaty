@@ -4,6 +4,7 @@ import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { CopyMinus } from "lucide-react";
 import { Button, EmptyState } from "@/components/kit";
 import { ListEditor } from "@/components/compare/ListEditor";
+import { orderIds, uuidLists } from "@/components/compare/samples";
 import {
   InputFooter,
   ListPaneHeader,
@@ -47,6 +48,8 @@ interface SingleListPanelProps {
   split?: number;
   /** Starts a drag of the divider between input and result. */
   onResizeStart?: () => void;
+  /** Moves the divider by this many percent (arrow keys on the focused divider). */
+  onNudgeSplit?: (delta: number) => void;
   /** Custom user label for the single list pane. */
   listLabel?: string;
   /** Trigger the inline rename editor for the list header. */
@@ -56,6 +59,20 @@ interface SingleListPanelProps {
 const TILE_STORAGE_KEY = "formaty-single-tile";
 
 const SAMPLES: Array<{ id: string; label: string; text: string }> = [
+  {
+    id: "orders",
+    label: "1,000 order numbers",
+    get text() {
+      return orderIds().join("\n");
+    },
+  },
+  {
+    id: "uuids",
+    label: "UUIDs with repeats",
+    get text() {
+      return uuidLists().a.join("\n");
+    },
+  },
   {
     id: "ids",
     label: "IDs with repeats",
@@ -93,6 +110,7 @@ export function SingleListPanel({
   onCountChange,
   split = 38,
   onResizeStart,
+  onNudgeSplit,
   listLabel,
   onStartListRename,
 }: SingleListPanelProps) {
@@ -215,7 +233,7 @@ export function SingleListPanel({
             )}
           </InputFooter>
         </section>
-        <SplitHandle onResizeStart={onResizeStart} />
+        <SplitHandle onResizeStart={onResizeStart} onNudge={onNudgeSplit} value={split} />
 
         <section aria-label="Result" className="flex min-w-0 flex-1 flex-col bg-[var(--workspace-panel)] min-[901px]:min-h-0 min-[901px]:overflow-hidden">
           {empty ? (

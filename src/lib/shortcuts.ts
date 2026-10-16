@@ -124,3 +124,8 @@ export function isEditableTarget(target: EventTarget | null): boolean {
     el.getAttribute?.("role") === "textbox"
   );
 }
+
+/** A text field outside Monaco (pattern, find, rename, list editor): undo there belongs to the field itself, not to the workspace history. */
+export function isPlainTextField(target: EventTarget | null): boolean {
+  return isEditableTarget(target) && !(target as HTMLElement).closest?.(".monaco-editor");
+}

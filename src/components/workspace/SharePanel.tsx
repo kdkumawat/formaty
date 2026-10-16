@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button, CopyButton, PanelGroup, Segmented, StatusText, TextField } from "@/components/kit";
 import { MAX_SHARE_HASH_CHARS, SHARE_TOO_LARGE } from "@/lib/shareState";
+import { SHORT_LINKS_ENABLED } from "@/lib/playgroundApi";
 
 interface SharePanelProps {
   /** True while the panel is open: the link is only encoded then. */
@@ -60,7 +61,7 @@ export function SharePanel({ open, tabCount, buildHash, onUpload, sharedUrl, onD
       )}
 
       <PanelGroup title="Link that carries the data">
-        <p className={muted}>Nothing is uploaded. The content is packed into the link itself, so the link is long.</p>
+        <p className={muted}>Nothing is uploaded. The content is packed into the link itself, so the link is long. Opening it adds the shared {allTabs ? "tabs" : "tab"} next to the recipient&apos;s own.</p>
         <div className="mt-2 flex items-center justify-between gap-2">
           <span className={`text-[12px] tabular-nums ${hashLink.tooLarge ? "text-bad" : "text-[var(--workspace-text-muted)]"}`}>
             {hashLink.tooLarge && !hashLink.chars ? "Too large" : `${hashLink.chars.toLocaleString()} characters`}
@@ -69,11 +70,12 @@ export function SharePanel({ open, tabCount, buildHash, onUpload, sharedUrl, onD
         </div>
         {hashLink.tooLarge && (
           <StatusText tone="bad" className="mt-1">
-            Too large for a link. Use a short link instead.
+            {SHORT_LINKS_ENABLED ? "Too large for a link. Use a short link instead." : tabCount > 1 && allTabs ? "Too large for a link. Share this tab only." : "Too large for a link. Download the file instead."}
           </StatusText>
         )}
       </PanelGroup>
 
+      {SHORT_LINKS_ENABLED && (
       <PanelGroup title="Short link">
         <p className={muted}>
           Uploads {allTabs ? `all ${tabCount} tabs` : "this tab"} to Formaty&apos;s server. This is the only action that sends your data anywhere.
@@ -116,6 +118,7 @@ export function SharePanel({ open, tabCount, buildHash, onUpload, sharedUrl, onD
           {uploadError && <StatusText tone="bad">{uploadError}</StatusText>}
         </div>
       </PanelGroup>
+      )}
     </div>
   );
 }

@@ -6,6 +6,9 @@ import type { ListBucket } from "./json/listCompare";
 
 const API_URL = process.env.FORMATY_API_URL ?? "";
 
+/** Short links need the Formaty API; builds without FORMATY_API_URL offer only the link that carries the data. */
+export const SHORT_LINKS_ENABLED = !!API_URL;
+
 /** Pick only defined keys from a record, returning a flat spreadable object. */
 function pickDefined(src: Record<string, unknown>, keys: string[]): Record<string, unknown> {
   const out: Record<string, unknown> = {};
