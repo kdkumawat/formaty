@@ -112,14 +112,12 @@ import { detectFormat, FORMAT_LABELS, getInputFormatLabel, parseInput, type Form
 import { ALL_TOOL_ROUTES, TOOL_PAGES, TOOL_PRESETS, type ToolRoute } from "@/lib/seo";
 import { executeCurlDetailed, parseCurl, type CurlExecutionResult } from "@/lib/curl/parseCurl";
 import { CURL_TARGETS, generateCurlCode, getCurlTarget, type CurlTargetId } from "@/lib/curl/codegen";
-import type { SqlDialect } from "@/lib/json/core";
 import { formatJson } from "@/lib/json/core";
 import { decodeState, encodeState, LIST_OPTIONS_VERSION, upgradeListOptions, type WorkspaceState } from "@/lib/shareState";
 import { HUGE_INPUT_BYTES, LARGE_INPUT_BYTES, WORKER_INPUT_CAP_BYTES } from "@/lib/io/size";
 import { readFileAsTextGuarded } from "@/lib/io/ingest";
 import { savePlayground, updatePlayground, deletePlayground } from "@/lib/playgroundApi";
 import { PRESETS, getPreset, type PresetId } from "@/lib/presets";
-import { themeInlineCss } from "@/lib/utils/themeTokens";
 import type { Command } from "@/components/CommandPalette";
 import { describeCommand } from "@/components/palette/describe";
 import { previewOutput } from "@/components/palette/preview";
@@ -164,48 +162,15 @@ import { GRAPH_COPY_OPTIONS } from "@/components/workspace/OutputActionBar";
 import { DocumentHeader, FieldTable } from "@/components/workspace/DocumentCompare";
 import { SettingsPanel } from "@/components/workspace/SettingsPanel";
 import { SharePanel } from "@/components/workspace/SharePanel";
+import { useWorkspaceTheme } from "@/hooks/workspace/useWorkspaceTheme";
+import { useViewportLayout } from "@/hooks/workspace/useViewportLayout";
+import { useWindowFullscreen } from "@/hooks/workspace/useWindowFullscreen";
+import { useSplitResize } from "@/hooks/workspace/useSplitResize";
+import { usePersistedSqlDialect } from "@/hooks/workspace/usePersistedSqlDialect";
+import { cleanSessionOutput, isStaleDiffOutput, STICKY_OPS } from "@/components/workspace/sessionOutput";
 
 
 
-
-/**
- * Detect leftover internal path-diff payloads that used to be written into the main
- * output panel (including concatenated duplicates stuck in localStorage).
- */
-function isStaleDiffOutput(text: string | null | undefined): boolean {
-  if (!text || !text.trim()) return false;
-  const t = text.trim();
-  if (t.includes("Structural path diff requires valid JSON")) return true;
-  if (t.includes('"leftValid"') && t.includes('"rightValid"') && t.includes('"note"')) return true;
-  // Former structural report shape written only for visual-diff bookkeeping
-  if (
-    t.includes('"summary"') &&
-    t.includes('"changes"') &&
-    (t.includes('"truncated"') || t.includes('"added"')) &&
-    t.includes('"path"') &&
-    t.includes('"change"')
-  ) {
-    // Heuristic: only treat as stale if it looks like our internal export (not user data)
-    try {
-      const first = t.startsWith("{") ? JSON.parse(t.slice(0, t.indexOf("}\n{") > 0 ? t.indexOf("}\n{") + 1 : undefined)) : null;
-      if (first && typeof first === "object" && first !== null && "summary" in first && "changes" in first) {
-        return true;
-      }
-    } catch {
-      /* fall through */
-    }
-  }
-  return false;
-}
-
-function cleanSessionOutput(text: string | null | undefined): string {
-  if (!text) return "";
-  return isStaleDiffOutput(text) ? "" : text;
-}
-
-
-/** Outputs that stay selected when the input changes: they re-run instead of falling back to a plain format. */
-const STICKY_OPS: OperationAction[] = ["generateTypes", "schema", "openapi", "validate", "flatten", "unflatten", "minify"];
 
 export interface WorkspaceContentProps {
   initialState?: import("@/lib/shareState").WorkspaceState;
@@ -273,13 +238,8 @@ export function WorkspaceContent({
   const [, setDroppedFile] = useState<{ name: string; size: number; format: string } | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const dragDepthRef = useRef(0);
-  const [themeMode, setThemeMode] = useState<ThemeMode>("system");
-  const [systemDark, setSystemDark] = useState(false);
-  const [themeSynced, setThemeSynced] = useState(false);
-  const [split, setSplit] = useState(41);
-  const startResize = useCallback(() => setIsResizing(true), []);
-  const nudgeSplit = useCallback((delta: number) => setSplit((s) => Math.max(25, Math.min(60, s + delta))), []);
-  const [isResizing, setIsResizing] = useState(false);
+  const { themeMode, setThemeMode, isDark, monacoTheme } = useWorkspaceTheme();
+  const { split, setSplit, startResize, nudgeSplit, splitContainerRef } = useSplitResize();
   const [schemaInput, setSchemaInput] = useState("");
   const [diffLeftInput, setDiffLeftInput] = useState("");
   const [diffRightInput, setDiffRightInput] = useState("");
@@ -308,9 +268,7 @@ export function WorkspaceContent({
   const [sharedLinkId, setSharedLinkId] = useState<string | null>(initialSharedLinkId ?? null);
   const [sharedLinkUrl, setSharedLinkUrl] = useState<string | null>(initialSharedLinkUrl ?? null);
   const [isOutputMaximized, setIsOutputMaximized] = useState(false);
-  const [isDesktopLayout, setIsDesktopLayout] = useState(true);
-  /** Viewport shorter than ~700px: stacked panes switch between Input and Output instead of scrolling. */
-  const [isShortViewport, setIsShortViewport] = useState(false);
+  const { isDesktopLayout, isShortViewport } = useViewportLayout();
   const [focusedPane, setFocusedPane] = useState<"input" | "output">("input");
   const [formatOptions, setFormatOptions] = useState<FormatOptions>(DEFAULT_FORMAT_OPTIONS);
   const [convertToFormat, setConvertToFormat] = useState<FormatKind>("json");
@@ -345,23 +303,7 @@ export function WorkspaceContent({
   /** Last input value actually executed - drives the "Press ⌘⏎ to run" hint. */
   const [lastExecutedCurlInput, setLastExecutedCurlInput] = useState("");
   /** SQL dialect used by the JSON → SQL type generator. */
-  const [sqlDialect, setSqlDialect] = useState<SqlDialect>("sqlite");
-  // The SQL dialect is a standing preference: remembered across reloads, the same in every tab.
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem("formaty-sql-dialect");
-      if (saved === "sqlite" || saved === "postgres" || saved === "mysql") setSqlDialect(saved);
-    } catch {
-      /* storage blocked */
-    }
-  }, []);
-  useEffect(() => {
-    try {
-      localStorage.setItem("formaty-sql-dialect", sqlDialect);
-    } catch {
-      /* storage blocked */
-    }
-  }, [sqlDialect]);
+  const [sqlDialect, setSqlDialect] = usePersistedSqlDialect();
   const [, setDiffPathFilter] = useState<"all" | "added" | "removed" | "changed">("all");
   const [diffLineStats, setDiffLineStats] = useState<LineDiffStats | null>(null);
   const [diffNav, setDiffNav] = useState<DiffNavState>({ current: 0, total: 0 });
@@ -369,7 +311,7 @@ export function WorkspaceContent({
   const [diffKind, setDiffKind] = useState<"document" | "list" | "single">("document");
   const [showHistoryPanel, setShowHistoryPanel] = useState(false);
   const [csvDelimiter, setCsvDelimiter] = useState(",");
-  const [isWindowFullscreen, setIsWindowFullscreen] = useState(false);
+  const { isWindowFullscreen, toggleWindowFullscreen } = useWindowFullscreen();
 
   // Multiple tabs
   const [tabs, setTabs] = useState<Tab[]>([{ id: "t1", label: "T1", num: 1 }]);
@@ -396,20 +338,6 @@ export function WorkspaceContent({
     setQuickTip(QUICK_TIPS[Math.floor(Math.random() * QUICK_TIPS.length)] ?? null);
   }, []);
 
-  const toggleWindowFullscreen = useCallback(() => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().then(() => setIsWindowFullscreen(true)).catch(() => {});
-    } else {
-      document.exitFullscreen().then(() => setIsWindowFullscreen(false)).catch(() => {});
-    }
-  }, []);
-
-  useEffect(() => {
-    const onFsChange = () => setIsWindowFullscreen(!!document.fullscreenElement);
-    document.addEventListener("fullscreenchange", onFsChange);
-    return () => document.removeEventListener("fullscreenchange", onFsChange);
-  }, []);
-
   const [inputValid, setInputValid] = useState<boolean | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [undoStack, setUndoStack] = useState<string[]>([""]);
@@ -434,7 +362,6 @@ export function WorkspaceContent({
   const [cursorPosition, setCursorPosition] = useState<{ line: number; column: number } | null>(null);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const historyLock = useRef(false);
-  const splitContainerRef = useRef<HTMLDivElement | null>(null);
   const prevBeforeDiffRef = useRef<{
     rightView: RightView;
     activeOperation: OperationAction | null;
@@ -693,10 +620,7 @@ export function WorkspaceContent({
     if (modalKind === "validate") return parseSchemaToObject(modalValue) !== null;
     return true;
   }, [modalKind, modalValue, parseSchemaToObject]);
-  const resolvedTheme: Exclude<ThemeMode, "system"> =
-    themeMode === "system" ? (systemDark ? "dark" : "light") : themeMode;
-  const isDark = resolvedTheme === "dark";
-  const monacoTheme = isDark ? "vs-dark" : "vs";
+
   const outputPanelClass = "border-[var(--workspace-border)] bg-[var(--workspace-panel)]";
   const canUndo = undoIndex > 0;
   const canRedo = undoIndex < undoStack.length - 1;
@@ -1116,7 +1040,7 @@ export function WorkspaceContent({
     };
     window.addEventListener("keydown", onKeyDown, { capture: true });
     return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
-  }, [modalKind, inputEmpty, output, parsedOutput, focusedPane, activeOperation, isUtilsMode, showTabs, tabs.length, rightView]);
+  }, [modalKind, inputEmpty, output, parsedOutput, focusedPane, activeOperation, isUtilsMode, showTabs, tabs.length, rightView, setThemeMode]);
 
   // Refresh the ref with fresh closures for functions declared later in this component,
   // so the shortcut handler above never calls a stale version.
@@ -1332,13 +1256,6 @@ export function WorkspaceContent({
 
   useEffect(() => {
     try {
-      const s = localStorage.getItem("formaty-session");
-      if (s) {
-        const d = JSON.parse(s) as { themeMode?: ThemeMode };
-        if (d.themeMode === "dark" || d.themeMode === "light" || d.themeMode === "system") setThemeMode(d.themeMode);
-      }
-    } catch {}
-    try {
       const learned = JSON.parse(localStorage.getItem("formaty-learned-chips") ?? "null") as OutputId[] | null;
       if (Array.isArray(learned) && learned.length > 0) setLearnedChips(learned.slice(0, 2));
     } catch {}
@@ -1347,40 +1264,6 @@ export function WorkspaceContent({
         setShowFirstRunHint(true);
       }
     } catch {}
-    setSystemDark(window.matchMedia("(prefers-color-scheme: dark)").matches);
-    setIsDesktopLayout(window.matchMedia("(min-width: 900px)").matches);
-    setIsShortViewport(window.matchMedia("(max-height: 699px)").matches);
-    setThemeSynced(true);
-  }, []);
-
-  useEffect(() => {
-    const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const onChange = (event: MediaQueryListEvent) => setSystemDark(event.matches);
-    media.addEventListener("change", onChange);
-    return () => media.removeEventListener("change", onChange);
-  }, []);
-
-  useEffect(() => {
-    if (!themeSynced) return;
-    document.documentElement.setAttribute("data-theme", resolvedTheme);
-    const style = document.getElementById("formaty-theme-inline");
-    if (style) {
-      style.textContent = themeInlineCss(resolvedTheme);
-    }
-  }, [resolvedTheme, themeSynced]);
-
-  useEffect(() => {
-    const media = window.matchMedia("(min-width: 900px)");
-    const onChange = (event: MediaQueryListEvent) => setIsDesktopLayout(event.matches);
-    media.addEventListener("change", onChange);
-    return () => media.removeEventListener("change", onChange);
-  }, []);
-
-  useEffect(() => {
-    const media = window.matchMedia("(max-height: 699px)");
-    const onChange = (event: MediaQueryListEvent) => setIsShortViewport(event.matches);
-    media.addEventListener("change", onChange);
-    return () => media.removeEventListener("change", onChange);
   }, []);
 
   // Layout effect: the saved session must be in state before the first paint (and before any
@@ -2067,31 +1950,6 @@ export function WorkspaceContent({
   }, [input, activeOperation, typeLanguage, typeName, sqlTable, sqlDialect]);
 
 
-
-  useEffect(() => {
-    if (!isResizing) return;
-
-    const onMouseMove = (event: MouseEvent) => {
-      const section = splitContainerRef.current;
-      if (!section) return;
-      const rect = section.getBoundingClientRect();
-      const nextSplit = ((event.clientX - rect.left) / rect.width) * 100;
-      setSplit(Math.max(25, Math.min(60, Math.round(nextSplit))));
-    };
-
-    const onMouseUp = () => setIsResizing(false);
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
-
-    return () => {
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
-    };
-  }, [isResizing]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -3532,7 +3390,7 @@ export function WorkspaceContent({
       ),
     );
     toast({ message: "Settings reset to default across all tabs" });
-  }, []);
+  }, [setSqlDialect]);
 
   /**
    * Wipe all local app state (localStorage + service-worker caches) and load fresh.
@@ -4444,7 +4302,7 @@ export function WorkspaceContent({
             tabIndex={0}
             className="group relative flex shrink-0 cursor-col-resize items-stretch justify-center outline-none"
             style={{ width: 8, zIndex: 10 }}
-            onMouseDown={() => setIsResizing(true)}
+            onMouseDown={startResize}
             onKeyDown={(e) => {
               if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
                 e.preventDefault();
