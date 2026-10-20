@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { CheckIcon, ChevronDownIcon, ExclamationTriangleIcon } from "@heroicons/react/16/solid";
+import { CheckIcon, ChevronDownIcon, ClipboardDocumentIcon, ExclamationTriangleIcon } from "@heroicons/react/16/solid";
 import { toast } from "@/components/Toast";
 import { cn } from "@/lib/utils";
 import { Button } from "./Button";
@@ -122,6 +122,7 @@ export function CopyButton({
     >
       <span className="grid">
         <Layer on={state === "idle"}>
+          <ClipboardDocumentIcon className="size-4" />
           <span>
             {label}
             {count !== undefined && <span className="ml-1.5 font-medium tabular-nums opacity-70">{count.toLocaleString()}</span>}
@@ -129,6 +130,7 @@ export function CopyButton({
         </Layer>
         {count !== undefined && countDigits !== undefined && (
           <Layer on={false}>
+            <ClipboardDocumentIcon className="size-4" />
             <span>
               {label}
               <span className="ml-1.5 font-medium tabular-nums">{"8".repeat(countDigits).replace(/\B(?=(\d{3})+$)/g, ",")}</span>
