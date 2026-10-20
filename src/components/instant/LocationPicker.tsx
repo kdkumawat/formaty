@@ -42,7 +42,7 @@ export function LocationPicker({ open, anchor, onClose, onPick, atInstant }: Loc
   // Anchor the popover to the trigger button. Recompute on scroll/resize so
   // the popover stays glued to the button when the sticky header moves.
   const popRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
+  const [pos, setPos] = useState<{ left: number; top?: number; bottom?: number; maxHeight: number } | null>(null);
   useLayoutEffect(() => {
     if (!open || !anchor) {
       setPos(null);
@@ -50,9 +50,19 @@ export function LocationPicker({ open, anchor, onClose, onPick, atInstant }: Loc
     }
     const update = () => {
       const r = anchor.getBoundingClientRect();
-      // Align the popover's right edge with the button's right edge so it
-      // grows leftward and stays on-screen for buttons near the viewport edge.
-      setPos({ top: r.bottom + 6, right: Math.max(8, window.innerWidth - r.right) });
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      // Start at the button's left edge, clamped so the whole popover stays on-screen.
+      const width = Math.min(384, vw - 16);
+      const left = Math.min(Math.max(8, r.left), vw - width - 8);
+      // Open below, or above when the button sits low (the Add button lives in the board footer).
+      const below = vh - r.bottom - 14;
+      const above = r.top - 14;
+      setPos(
+        below >= 480 || below >= above
+          ? { left, top: r.bottom + 6, maxHeight: below }
+          : { left, bottom: vh - r.top + 6, maxHeight: above },
+      );
     };
     update();
     window.addEventListener("scroll", update, true);
@@ -401,8 +411,8 @@ export function LocationPicker({ open, anchor, onClose, onPick, atInstant }: Loc
       ref={popRef}
       role="dialog"
       aria-label="Add location"
-      style={{ position: "fixed", top: pos.top, right: pos.right, zIndex: 60 }}
-      className="w-96 max-w-[calc(100vw-1rem)] overflow-hidden rounded-lg bg-popover text-[var(--workspace-text)] shadow-menu"
+      style={{ position: "fixed", left: pos.left, top: pos.top, bottom: pos.bottom, maxHeight: pos.maxHeight, zIndex: 60 }}
+      className="w-96 max-w-[calc(100vw-1rem)] overflow-y-auto rounded-lg bg-popover text-[var(--workspace-text)] shadow-menu"
     >
       <div className="border-b border-[var(--workspace-border)] p-2">
         <Segmented<"search" | "custom">
