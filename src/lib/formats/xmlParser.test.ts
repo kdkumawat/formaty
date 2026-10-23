@@ -31,6 +31,12 @@ describe("xml root handling", () => {
       '<?xml version="1.0" encoding="UTF-8"?>\n<root>\n  <a>1</a>\n  <b>2</b>\n</root>\n',
     );
   });
+  it("keeps values that would not print back identically as strings", () => {
+    expect(xmlAdapter.parse("<o><total>49.00</total><n>12</n><zip>007</zip><ok>true</ok></o>")).toEqual({
+      o: { total: "49.00", n: 12, zip: "007", ok: true },
+    });
+  });
+
   it("finds no declaration when absent", () => {
     expect(xmlDeclarationOf("<a/>")).toBeUndefined();
   });

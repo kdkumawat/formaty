@@ -4,7 +4,7 @@ import type { JsonValue } from "@/lib/json/core";
 import { toCsv } from "@/lib/json/core";
 
 /** Lossless inference: numbers only when they print back identically, exact lowercase booleans. */
-function inferCell(v: string): string | number | boolean {
+export function inferCell(v: string): string | number | boolean {
   if (v === "true") return true;
   if (v === "false") return false;
   const n = Number(v);

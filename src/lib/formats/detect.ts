@@ -10,6 +10,10 @@ export function detectFormat(input: string): InputFormatKind {
   const first = trimmed[0];
   const firstLine = trimmed.split("\n")[0].trim();
 
+  // These open with "[" or '"' like JSON, so they are checked before the JSON rule.
+  if (/^\[\[?[A-Za-z_][\w.-]*\]\]?$/.test(firstLine)) return "toml";
+  if (/^"(?:[^"]|"")*"\s*,/.test(firstLine)) return "csv";
+
   if (first === "{" || first === "[" || (first === '"' && trimmed.includes(":"))) {
     return "json";
   }
