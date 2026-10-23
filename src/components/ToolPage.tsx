@@ -9,6 +9,7 @@ import { TOOL_PRESETS, type ToolPageConfig, type ToolRoute } from "@/lib/seo";
 import type { UtilPageConfig } from "@/lib/seoUtils";
 import { UTIL_PAGES, getPageConfig } from "@/lib/seoUtils";
 import { INSTANT_PAGE } from "@/lib/seoInstant";
+import { GUIDES } from "@/lib/guides";
 
 type PageConfig = ToolPageConfig | UtilPageConfig;
 
@@ -27,15 +28,25 @@ function RelatedTools({ related }: { related: string[] }) {
     const c = isInstant ? INSTANT_PAGE : getPageConfig(route);
     if (!c) return [];
     const href = isInstant || route in UTIL_PAGES ? `/utils/${route}` : `/${route}`;
-    return [{ route, href, label: c.h1 }];
+    return [{ href, label: c.h1 }];
   });
+  return <LinkList title="Related tools" links={links} />;
+}
+
+/** Guides that list this tool among their related tools, so every guide gets a link from a tool page. */
+function RelatedGuides({ route }: { route: string }) {
+  const links = GUIDES.filter((g) => (g.relatedTools as string[]).includes(route)).map((g) => ({ href: `/guides/${g.slug}`, label: g.h1 }));
+  return <LinkList title="Guides" links={links} />;
+}
+
+function LinkList({ title, links }: { title: string; links: { href: string; label: string }[] }) {
   if (!links.length) return null;
   return (
     <section className={SECTION}>
-      <h2 className={H2_SM}>Related tools</h2>
+      <h2 className={H2_SM}>{title}</h2>
       <ul className="grid gap-x-8 sm:grid-cols-2">
         {links.map((l) => (
-          <li key={l.route} className="border-b border-[var(--workspace-border)]">
+          <li key={l.href} className="border-b border-[var(--workspace-border)]">
             <Link href={l.href} className={`${LINK} w-full`}>{l.label}</Link>
           </li>
         ))}
@@ -131,6 +142,7 @@ export function ToolPage({ config }: { config: PageConfig }) {
           )}
 
           <RelatedTools related={config.relatedTools} />
+          <RelatedGuides route={config.route} />
         </div>
 
         <PrivacyBand />
