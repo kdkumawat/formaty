@@ -3,10 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { ArrowPathIcon, Cog6ToothIcon } from "@heroicons/react/16/solid";
 import {
-  Button, Checkbox, IconButton, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, NumberField, PaneHeader,
+  Button, Checkbox, IconButton, Kbd, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, NumberField, PaneHeader,
   ResultActions, RowCopy, Select, TextField, TruncatedText, type CopyFormat,
 } from "@/components/kit";
-import { downloadText } from "@/components/compare/shared";
+import { SplitHandle, downloadText, inputPaneClass, resultPaneClass, splitRowClass, splitStyle } from "@/components/compare/shared";
+import { modEnterProps } from "@/hooks/modEnter";
 import {
   generateLorem,
   generatePassword,
@@ -68,9 +69,12 @@ interface Props {
   patch: (p: Partial<UtilToolState>) => void;
   regenKey: number;
   fontSize: number;
+  split: number;
+  onResizeStart?: () => void;
+  onNudgeSplit?: (delta: number) => void;
 }
 
-export function Generator({ tool, state, patch, regenKey }: Props) {
+export function Generator({ tool, state, patch, regenKey, split, onResizeStart, onNudgeSplit }: Props) {
   const [seed, setSeed] = useState(0);
   const [shown, setShown] = useState(PAGE);
 
@@ -162,8 +166,10 @@ export function Generator({ tool, state, patch, regenKey }: Props) {
         : "Select a paragraph to copy just that one.";
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-[var(--workspace-border)] px-3 py-2">
+    <div className={splitRowClass} {...modEnterProps(() => setSeed((n) => n + 1))}>
+      <section className={`${inputPaneClass} min-[901px]:overflow-auto`} style={splitStyle(split)} aria-label="Options">
+      <PaneHeader title="Options" />
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2">
         {tool === "uuid" && (
           <>
             <NumberField label="How many" min={1} max={1000} value={state.uuidCount} onChange={(n) => patch({ uuidCount: clamp(n, 1, 1000) })} />
@@ -198,7 +204,10 @@ export function Generator({ tool, state, patch, regenKey }: Props) {
         )}
         {tool === "lorem" && <NumberField label="Paragraphs" min={1} max={50} value={state.loremCount} onChange={(n) => patch({ loremCount: clamp(n, 1, 50) })} />}
       </div>
+      </section>
+      <SplitHandle onResizeStart={onResizeStart} onNudge={onNudgeSplit} value={split} />
 
+      <section className={resultPaneClass} aria-label="Generated">
       <PaneHeader
         title="Generated"
         left={
@@ -237,6 +246,7 @@ export function Generator({ tool, state, patch, regenKey }: Props) {
               disabled: list.length === 0,
             }}
           >
+            <Kbd keys="⌘↵" className="max-[900px]:hidden" />
             <Button icon={<ArrowPathIcon />} onClick={() => setSeed((n) => n + 1)}>
               Generate
             </Button>
@@ -244,7 +254,7 @@ export function Generator({ tool, state, patch, regenKey }: Props) {
         }
       />
       {state.error && <p className="px-3 pt-2 text-[13px] text-bad">{state.error}</p>}
-      <div className="min-h-0 flex-1 overflow-auto px-3 pb-3">
+      <div className="min-h-0 flex-1 overflow-auto px-3 pb-3 max-[900px]:px-1.5">
         <div className="py-1.5 text-[12px] text-[var(--workspace-text-muted)]">
           <TruncatedText>{legend}</TruncatedText>
         </div>
@@ -265,7 +275,7 @@ export function Generator({ tool, state, patch, regenKey }: Props) {
               {list.slice(0, shown).map((v, i) => (
                 <RowCopy key={`${i}-${v}`} text={v} className="h-auto min-h-7 py-0.5 max-[900px]:h-auto max-[900px]:min-h-9">
                   <span className="flex items-center gap-2">
-                    {!one && <span className="w-8 shrink-0 text-right font-sans text-[12px] tabular-nums text-[var(--workspace-text-muted)]">{i + 1}</span>}
+                    {!one && <span aria-hidden className="w-8 shrink-0 text-right font-sans max-[900px]:w-5 text-[12px] tabular-nums text-[var(--workspace-text-muted)]">{i + 1}</span>}
                     <span className="min-w-0 flex-1 whitespace-normal break-all font-mono leading-[1.6]">
                       {parts(tool, v, isV7).map(([t, cls], k) => (
                         <span key={k} className={cls}>{t}</span>
@@ -283,6 +293,7 @@ export function Generator({ tool, state, patch, regenKey }: Props) {
           </>
         )}
       </div>
+      </section>
     </div>
   );
 }

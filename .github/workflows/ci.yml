@@ -15,3 +15,16 @@ jobs:
       - run: bun run typecheck
       - run: bun run test
       - run: bun run build
+      - name: Playwright version
+        id: pw
+        run: echo "v=$(grep -o '"playwright@[0-9.]*"' bun.lock | head -1 | tr -d '"')" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        id: pwcache
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-${{ steps.pw.outputs.v }}
+      - run: bunx playwright install --with-deps chromium
+        if: steps.pwcache.outputs.cache-hit != 'true'
+      - run: bunx playwright install-deps chromium
+        if: steps.pwcache.outputs.cache-hit == 'true'
+      - run: bun run smoke

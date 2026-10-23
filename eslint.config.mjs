@@ -3,8 +3,7 @@ import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
 
 const eslintConfig = [
-  // Launch-video project has its own package.json and toolchain.
-  { ignores: ["video/**", ".og-gen/**"] },
+  { ignores: [".og-gen/**"] },
   ...nextVitals,
   ...nextTs,
   {

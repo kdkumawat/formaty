@@ -4,7 +4,8 @@ import { useMemo, useRef, useState } from "react";
 import { ChatBubbleLeftRightIcon, PaperAirplaneIcon, PlusIcon, XMarkIcon } from "@heroicons/react/16/solid";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { Button, IconButton, Select, TextField } from "@/components/kit";
+import { Button, IconButton, Kbd, Select, TextField } from "@/components/kit";
+import { modEnterProps } from "@/hooks/modEnter";
 import { toast } from "@/components/Toast";
 import {
   FEEDBACK_CATEGORIES,
@@ -165,7 +166,7 @@ export function FeedbackDialog({
     <>
       {triggerNode}
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-xl">
+        <DialogContent className="max-w-xl" {...modEnterProps(() => void handleSubmit(), validItems.length === 0 || submitting)}>
           <DialogHeader>
             <DialogTitle className="text-[14px]">Send feedback</DialogTitle>
             <DialogDescription className="text-[13px] leading-relaxed">
@@ -247,16 +248,18 @@ export function FeedbackDialog({
               )}
               Your current page and browser info are attached automatically. No account needed.
             </p>
-            <Button
-              variant="primary"
-              loading={submitting}
-              disabled={validItems.length === 0}
-              icon={<PaperAirplaneIcon />}
-              onClick={() => void handleSubmit()}
-              className="shrink-0"
-            >
-              {submitting ? "Sending" : `Send ${validItems.length} item${validItems.length === 1 ? "" : "s"}`}
-            </Button>
+            <div className="flex shrink-0 items-center gap-2">
+              <Kbd keys="⌘↵" className="max-sm:hidden" />
+              <Button
+                variant="primary"
+                loading={submitting}
+                disabled={validItems.length === 0}
+                icon={<PaperAirplaneIcon />}
+                onClick={() => void handleSubmit()}
+              >
+                {submitting ? "Sending" : `Send ${validItems.length} item${validItems.length === 1 ? "" : "s"}`}
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

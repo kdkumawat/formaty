@@ -66,7 +66,7 @@ export function ToolDemo(p: ToolDemoProps) {
     scene = <Transform preset={{ text: p.a, override: spec.override, sel: spec.sel }} />;
   } else if (spec.kind === "compare") {
     label = spec.mode === "single" ? "One list" : "Compare lists";
-    scene = <Compare full preset={{ kind: spec.mode, left: p.a, right: p.b, bucket: spec.bucket, format: spec.format }} />;
+    scene = <Compare preset={{ kind: spec.mode, left: p.a, right: p.b, bucket: spec.bucket, format: spec.format }} />;
   } else if (spec.kind === "util") {
     label = UTIL_TABS.find((t) => t.id === spec.util)?.label ?? "Utils";
     scene = <UtilsScene start={spec.util} />;
@@ -84,7 +84,7 @@ export function ToolDemo(p: ToolDemoProps) {
 
   return (
     <div>
-      <DemoWindow tabs={[{ id: "tool", label }]} active="tool" onPick={() => {}} size={spec.kind === "static" ? "short" : "tall"}>
+      <DemoWindow tabs={[{ id: "tool", label }]} active="tool" onPick={() => {}} size={spec.kind === "static" ? "short" : spec.kind === "compare" ? "grow" : "tall"}>
         <div role="tabpanel" id="demo-panel-tool" aria-labelledby="demo-tab-tool" className="flex min-h-0 flex-1 flex-col">
           {scene}
         </div>

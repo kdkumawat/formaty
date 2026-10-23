@@ -36,7 +36,7 @@ export const GUIDES: GuideConfig[] = [
       "Learn how to compare database records between production and staging: export both ID sets, find common, missing, and extra records, and copy the result as SQL. Free and local-first.",
     h1: "How to Compare Database Records Between Two Environments",
     intro:
-      "The fastest way to find which records differ between two databases is to compare their primary keys as lists. Export both ID columns, paste them into Formaty's list compare, and you instantly get common records, records only in one side, and duplicates - plus copy-ready SQL.",
+      "The fastest way to find which records differ between two databases is to compare their primary keys as lists. Export both ID columns, paste them into Formaty's list compare, and you instantly get common records, records only in A or only in B, and duplicates - plus copy-ready SQL.",
     steps: [
       {
         heading: "Export the ID column from each database",

@@ -285,7 +285,7 @@ Use cases: validating API contracts, documenting schemas, generating OpenAPI, on
 
 Use cases: feeding JSON into XML-based pipelines, SOAP integrations, legacy system compatibility, config file migration. Paste JSON, get valid XML. No server upload.`,
     inputExample: '{"root":{"id":1,"name":"test"}}',
-    outputExample: '<?xml version="1.0"?><root><id>1</id><name>test</name></root>',
+    outputExample: '<root>\n  <id>1</id>\n  <name>test</name>\n</root>',
     useCases: [
       "SOAP and legacy integrations",
       "Config migration to XML",
@@ -304,7 +304,7 @@ Use cases: feeding JSON into XML-based pipelines, SOAP integrations, legacy syst
 
 Use cases: migrating XML configs, consuming SOAP responses in JS/TS, normalizing data for APIs. Paste XML, get JSON. Runs locally.`,
     inputExample: '<?xml version="1.0"?><root><id>1</id><name>test</name></root>',
-    outputExample: '{"root":{"id":"1","name":"test"}}',
+    outputExample: '{"root":{"id":1,"name":"test"}}',
     useCases: [
       "Migrate XML configs to JSON",
       "Consume SOAP in JS/TS",
@@ -477,7 +477,7 @@ Use cases: importing spreadsheet data into apps, API payload creation, data pipe
     description:
       "Compare two lists online and find common, missing, and extra items. Free list comparison tool with SQL IN / NOT IN export. Runs locally - no data leaves your browser.",
     h1: "Compare Two Lists",
-    content: `Comparing two lists by eye is slow and error-prone, especially with hundreds of IDs. A list comparison tool computes the set operations for you: common items, items only in the left list, items only in the right list, union, and symmetric difference. It works the same for comparing two columns pasted from a spreadsheet or CSV export.
+    content: `Comparing two lists by eye is slow and error-prone, especially with hundreds of IDs. A list comparison tool computes the set operations for you: common items, items only in the left list, items only in the right list, and the merged union. It works the same for comparing two columns pasted from a spreadsheet or CSV export.
 
 This is the classic database debugging workflow: paste the result of SELECT id FROM table_a on the left and SELECT id FROM table_b on the right, then see exactly which records are missing or extra on each side. Duplicate detection and counts are built in.
 

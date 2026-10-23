@@ -8,7 +8,7 @@ import {
   Chip, CopyButton, EmptyState, IconButton, InputActions, Menu, MenuCheckboxItem, MenuContent, MenuItem, MenuLabel,
   MenuSeparator, MenuTrigger, PaneHeader, ResultActions, RowCopy, TextField,
 } from "@/components/kit";
-import { editorClass } from "@/components/compare/shared";
+import { SplitHandle, editorClass, inputPaneClass, resultPaneClass, splitRowClass, splitStyle } from "@/components/compare/shared";
 
 const LOG_SAMPLE =
   "2026-03-09 10:42:17 INFO  user=ada@example.com ip=192.168.1.24 GET https://api.example.com/v1/orders?id=4821 200 38ms\n" +
@@ -40,7 +40,7 @@ const FLAGS: Array<[string, string]> = [
   ["u", "Unicode"],
 ];
 
-export function RegexTool({ state, patch }: { state: UtilToolState; patch: (p: Partial<UtilToolState>) => void; fontSize?: number }) {
+export function RegexTool({ state, patch, split, onResizeStart, onNudgeSplit }: { state: UtilToolState; patch: (p: Partial<UtilToolState>) => void; fontSize?: number; split: number; onResizeStart?: () => void; onNudgeSplit?: (delta: number) => void }) {
   const { regexPattern: pattern, regexFlags: flags, input: text } = state;
   const repl = state.regexReplace ?? "";
 
@@ -81,8 +81,8 @@ export function RegexTool({ state, patch }: { state: UtilToolState; patch: (p: P
   const panel = "bg-sunk px-2.5 py-1.5 font-mono text-[13px] leading-[1.6] text-[var(--workspace-text)]";
 
   return (
-    <div className="grid min-h-0 flex-1 grid-cols-1 min-[901px]:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-      <section className="flex min-w-0 flex-col border-b border-[var(--workspace-border)] min-[901px]:overflow-auto min-[901px]:border-b-0 min-[901px]:border-r">
+    <div className={splitRowClass}>
+      <section className={`${inputPaneClass} min-[901px]:overflow-auto`} style={splitStyle(split)}>
         <PaneHeader
           title="Pattern"
           right={
@@ -143,8 +143,9 @@ export function RegexTool({ state, patch }: { state: UtilToolState; patch: (p: P
           spellCheck={false}
         />
       </section>
+      <SplitHandle onResizeStart={onResizeStart} onNudge={onNudgeSplit} value={split} />
 
-      <section className="flex min-h-0 min-w-0 flex-col" aria-live="polite">
+      <section className={resultPaneClass} aria-live="polite">
         <PaneHeader
           title="Matches"
           left={<span className="text-[12px] tabular-nums text-[var(--workspace-text-muted)]">{result.matches.length}</span>}
@@ -185,7 +186,7 @@ export function RegexTool({ state, patch }: { state: UtilToolState; patch: (p: P
               {result.matches.map((m, i) => (
                 <RowCopy key={i} text={m.match} className="h-auto min-h-7 items-start py-1 max-[900px]:h-auto">
                   <span className="flex gap-2">
-                    <span className="w-10 shrink-0 text-right font-mono text-[12px] tabular-nums text-[var(--workspace-text-muted)]">{m.index}</span>
+                    <span aria-hidden className="w-10 shrink-0 text-right font-mono text-[12px] tabular-nums text-[var(--workspace-text-muted)]">{m.index}</span>
                     <span className="min-w-0 flex-1 font-mono leading-[1.6]">
                       <span className="block whitespace-pre-wrap break-all">{m.match || "(empty)"}</span>
                       {m.groups.map((g, k) => (

@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Button, CopyButton, PanelGroup, Segmented, StatusText, TextField } from "@/components/kit";
+import { Button, CopyButton, Kbd, PanelGroup, Segmented, StatusText, TextField } from "@/components/kit";
 import { MAX_SHARE_HASH_CHARS, SHARE_TOO_LARGE } from "@/lib/shareState";
 import { SHORT_LINKS_ENABLED } from "@/lib/playgroundApi";
+import { toast } from "@/components/Toast";
+import { modEnterProps } from "@/hooks/modEnter";
 
 interface SharePanelProps {
   /** True while the panel is open: the link is only encoded then. */
@@ -45,8 +47,16 @@ export function SharePanel({ open, tabCount, buildHash, onUpload, sharedUrl, onD
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, allTabs]);
 
+  // Cmd/Ctrl+Enter copies the link that carries the data (the primary action here).
+  const copyHashLink = () => {
+    navigator.clipboard.writeText(hashLink.url).then(
+      () => toast({ message: "Link copied", type: "success" }),
+      () => toast({ message: "Could not copy the link", type: "error" }),
+    );
+  };
+
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-col gap-1" {...modEnterProps(copyHashLink, hashLink.tooLarge || !hashLink.url)}>
       {tabCount > 1 && (
         <Segmented
           aria-label="What to share"
@@ -66,7 +76,10 @@ export function SharePanel({ open, tabCount, buildHash, onUpload, sharedUrl, onD
           <span className={`text-[12px] tabular-nums ${hashLink.tooLarge ? "text-bad" : "text-[var(--workspace-text-muted)]"}`}>
             {hashLink.tooLarge && !hashLink.chars ? "Too large" : `${hashLink.chars.toLocaleString()} characters`}
           </span>
-          <CopyButton variant="secondary" label="Copy link" getText={() => hashLink.url} disabled={hashLink.tooLarge} />
+          <span className="flex items-center gap-2">
+            <Kbd keys="⌘↵" />
+            <CopyButton variant="secondary" label="Copy link" getText={() => hashLink.url} disabled={hashLink.tooLarge} />
+          </span>
         </div>
         {hashLink.tooLarge && (
           <StatusText tone="bad" className="mt-1">

@@ -1,3 +1,5 @@
+import { canonicalZone } from "./catalog";
+import { locationFromIana } from "./locations";
 import type { Location, TimeFormat, TimelineSpanHours } from "./types";
 
 const KEY = "formaty-instant-prefs";
@@ -25,6 +27,19 @@ export interface InstantTabSettings {
   mode: "instant" | "range";
   range: { start: number; end: number } | null;
   onboarded: boolean;
+}
+
+/** Upgrade saved legacy zone ids (Asia/Calcutta) to canonical ones, relabelling the city. */
+function canonicalizeSaved<T extends { locations: Location[]; primaryTimezone: string }>(s: T): T {
+  const seen = new Set<string>();
+  s.locations = s.locations.flatMap((l) => {
+    const iana = canonicalZone(l.iana);
+    if (seen.has(iana)) return [];
+    seen.add(iana);
+    return [iana === l.iana ? l : { ...locationFromIana(iana, l.isPrimary), id: l.id }];
+  });
+  s.primaryTimezone = canonicalZone(s.primaryTimezone);
+  return s;
 }
 
 function isValidTabSettings(parsed: unknown): parsed is InstantTabSettings {
@@ -55,7 +70,7 @@ export function loadPrefs(): InstantPrefs | null {
     if (parsed.spanHours !== 24 && parsed.spanHours !== 96) {
       parsed.spanHours = 24;
     }
-    return parsed;
+    return canonicalizeSaved(parsed);
   } catch {
     return null;
   }
@@ -101,7 +116,7 @@ export function loadTabSettings(tabId: string): InstantTabSettings | null {
     if (parsed.spanHours !== 24 && parsed.spanHours !== 96) {
       parsed.spanHours = 24;
     }
-    return parsed;
+    return canonicalizeSaved(parsed);
   } catch {
     return null;
   }

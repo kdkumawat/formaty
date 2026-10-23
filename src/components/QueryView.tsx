@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
-import { Button, Chip, Select, Tooltip } from "@/components/kit";
+import { Button, Chip, Kbd, Select, Tooltip } from "@/components/kit";
+import { modEnterProps } from "@/hooks/modEnter";
 import { JsonEditor } from "@/components/JsonEditor";
 import { runQuery, type QueryLanguage } from "@/lib/query/runQuery";
 import { formatJson } from "@/lib/json/core";
@@ -134,7 +135,7 @@ export function QueryView({
 
   return (
     <div className={`flex h-full flex-col overflow-hidden ${className}`}>
-      <div className="flex shrink-0 flex-col gap-2 border-b border-[var(--workspace-border)] px-3 py-2">
+      <div className="flex shrink-0 flex-col gap-2 border-b border-[var(--workspace-border)] px-3 py-2" {...modEnterProps(run)}>
         <div className="flex items-center gap-2">
           <Select
             aria-label="Query language"
@@ -153,6 +154,7 @@ export function QueryView({
             }}
             spellCheck={false}
           />
+          <Kbd keys="⌘↵" className="max-md:hidden" />
           <Button variant="secondary" onClick={run}>
             Run
           </Button>

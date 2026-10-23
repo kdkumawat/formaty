@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { ArrowUturnLeftIcon, ArrowUturnRightIcon, Cog6ToothIcon } from "@heroicons/react/16/solid";
+import { cn } from "@/lib/utils";
 import { DEFAULT_LIST_PARSE_OPTIONS, type ListParseOptions } from "@/lib/json/listCompare";
 import {
   Button,
@@ -22,7 +23,7 @@ import { COMPARE_KIND_LABELS, type CompareKind } from "./constants";
 
 const MAIN_TOGGLES = [
   ["trim", "Trim spaces"],
-  ["ignoreEmpty", "Skip blank items"],
+  ["ignoreEmpty", "Skip blank items", "Skip blanks"],
   ["caseInsensitive", "Ignore case"],
 ] as const;
 const MORE_TOGGLES = [
@@ -55,6 +56,7 @@ export function CompareBar({ kind, onKind, options, onOptions, setToolbarHost, a
         left={
           <>
             <Select<CompareKind>
+              className="max-[900px]:order-[-2]"
               aria-label="What to compare"
               value={kind}
               onChange={onKind}
@@ -62,14 +64,23 @@ export function CompareBar({ kind, onKind, options, onOptions, setToolbarHost, a
             />
             {isList && (
               <>
-                {MAIN_TOGGLES.map(([key, label]) => (
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 max-[900px]:order-2 max-[900px]:basis-full min-[901px]:contents">
+                {MAIN_TOGGLES.map(([key, label, short]) => (
                   <CheckChip key={key} on={Boolean(options[key])} onToggle={() => onOptions((p) => ({ ...p, [key]: !p[key] }))}>
-                    {label}
+                    {short ? (
+                      <>
+                        <span className="max-[900px]:hidden">{label}</span>
+                        <span className="min-[901px]:hidden">{short}</span>
+                      </>
+                    ) : (
+                      label
+                    )}
                   </CheckChip>
                 ))}
+                </div>
                 <Menu>
                   <MenuTrigger asChild>
-                    <IconButton label="More matching options" className="relative">
+                    <IconButton label="More matching options" className="relative max-[900px]:order-[-1]">
                       <Cog6ToothIcon />
                       {changed && <span aria-hidden className="absolute right-1 top-1 size-1.5 rounded-full bg-[var(--selected-fg)]" />}
                     </IconButton>
@@ -91,7 +102,7 @@ export function CompareBar({ kind, onKind, options, onOptions, setToolbarHost, a
                 </Menu>
               </>
             )}
-            <div ref={setToolbarHost} className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-1 empty:hidden max-[900px]:order-1 max-[900px]:basis-full" />
+            <div ref={setToolbarHost} className={cn("flex min-w-0 flex-1 flex-wrap items-center justify-end gap-1 empty:hidden", !isList && "max-[900px]:order-1 max-[900px]:basis-full")} />
           </>
         }
         right={actions}

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   analyzeSingleList,
   buildListSummary,
+  formatListSummary,
   cleanListInput,
   compareLists,
   compareListsCountAware,
@@ -77,8 +78,7 @@ describe("compareLists", () => {
     expect(r.leftOnly.map((i) => i.value)).toEqual(["a"]);
     expect(r.rightOnly.map((i) => i.value)).toEqual(["d"]);
     expect(r.union.length).toBe(4);
-    expect(r.symmetric.map((i) => i.value).sort()).toEqual(["a", "d"]);
-    expect(r.stats).toMatchObject({ common: 2, leftOnly: 1, rightOnly: 1, union: 4, symmetric: 2 });
+    expect(r.stats).toMatchObject({ common: 2, leftOnly: 1, rightOnly: 1, union: 4 });
   });
 
   it("detects duplicates per side", () => {
@@ -97,7 +97,6 @@ describe("compareLists", () => {
   it("is order-insensitive for buckets", () => {
     const r1 = compareLists("a\nb", "b\na", base);
     expect(r1.stats.common).toBe(2);
-    expect(r1.stats.symmetric).toBe(0);
   });
 
   it("supports case-insensitive matching without mutating display values", () => {
@@ -146,7 +145,6 @@ describe("compareListsCountAware", () => {
   it("keeps set behavior identical when counts match", () => {
     const r = compareListsCountAware("A\nA\nB", "A\nA\nB", base);
     expect(r.countDeltas).toEqual([]);
-    expect(r.stats.symmetric).toBe(0);
   });
 
   it("formats a human-readable delta summary", () => {
@@ -181,6 +179,31 @@ describe("buildListSummary", () => {
     expect(buildListSummary(r).text).toBe(
       ["In both (2)", "  b", "  c ×2 in A, ×1 in B", "", "Only in A (1)", "  a", "", "Only in B (1)", "  d", "", "Repeated in A (1)", "  c ×2"].join("\n"),
     );
+  });
+
+  it("uses the list names in labels and count notes", () => {
+    const r = compareLists("a\nb\nc\nc", "b\nc\nd", base);
+    const t = buildListSummary(r, { names: { left: "Production", right: "Staging" } }).text;
+    expect(t).toContain("Only in Production (1)");
+    expect(t).toContain("Only in Staging (1)");
+    expect(t).toContain("Repeated in Production (1)");
+    expect(t).toContain("c ×2 in Production, ×1 in Staging");
+  });
+
+  it("sorts the items inside each group, rows and text included", () => {
+    const r = compareLists("c\na\nb\nz", "b\nc\na", base);
+    const s = buildListSummary(r, { sort: "desc" });
+    expect(s.sections[0]!.items.map((i) => i.value)).toEqual(["c", "b", "a"]);
+    expect(s.sections[0]!.rows.map((x) => x.value)).toEqual(["c", "b", "a"]);
+    expect(s.text.startsWith("In both (3)\n  c\n  b\n  a")).toBe(true);
+  });
+
+  it("formats the report as Markdown and as JSON", () => {
+    const { sections } = buildListSummary(compareLists("a\nb\nc\nc", "b\nc\nd", base));
+    expect(formatListSummary(sections, "markdown")).toBe(
+      ["## In both (2)", "", "- b", "- c ×2 in A, ×1 in B", "", "## Only in A (1)", "", "- a", "", "## Only in B (1)", "", "- d", "", "## Repeated in A (1)", "", "- c ×2"].join("\n"),
+    );
+    expect(JSON.parse(formatListSummary(sections, "json"))).toEqual({ "In both": ["b", "c"], "Only in A": ["a"], "Only in B": ["d"], "Repeated in A": ["c"] });
   });
 
   it("keeps a value that contains a line break on one indented line", () => {

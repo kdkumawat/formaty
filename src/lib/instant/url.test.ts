@@ -156,3 +156,11 @@ describe("IANA zone search", () => {
     }
   });
 });
+
+describe("legacy zone ids in URLs", () => {
+  it("canonicalizes tz and locations", () => {
+    const q = parseInstantQuery(new URLSearchParams("tz=Asia%2FCalcutta&locations=Asia%2FCalcutta%2CUTC%2CAsia%2FKolkata"));
+    expect(q.tz).toBe("Asia/Kolkata");
+    expect(q.locations).toEqual(["Asia/Kolkata", "UTC"]);
+  });
+});

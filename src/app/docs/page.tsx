@@ -173,7 +173,7 @@ export default function DocsPage() {
               <Steps>
                 <>Paste the first list into <Ui>List A</Ui> and the second into <Ui>List B</Ui>. Click a name to rename it. <Ui>Use sample lists</Ui> fills both, and <Ui>Swap A and B</Ui> exchanges them.</>
                 <>Set <Ui>Split by</Ui> if the automatic choice is wrong: Auto, Comma, Semicolon, Pipe, Whitespace or JSON array. <Ui>Options</Ui> has Trim whitespace, Skip empty, Ignore case, Strip quotes, Normalize numbers and Auto-clean on paste.</>
-                <>Choose a result: <Ui>Only in A</Ui> (purple), <Ui>In both</Ui>, <Ui>Only in B</Ui> (teal), <Ui>In one only</Ui>, <Ui>All merged</Ui>, <Ui>Repeated</Ui> or <Ui>Summary</Ui>.</>
+                <>Choose a result: <Ui>Only in A</Ui> (purple), <Ui>In both</Ui>, <Ui>Only in B</Ui> (teal), <Ui>All merged</Ui>, <Ui>Repeated</Ui> or <Ui>Summary</Ui>.</>
                 <>Pick an export format and copy or download. Formats include Newline separated, Comma + space, SQL IN, SQL NOT IN, SQL VALUES rows, JSON array, CSV quoted, Markdown table and Go slice; <Ui>More</Ui> lists the others.</>
               </Steps>
               <P>

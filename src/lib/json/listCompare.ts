@@ -35,7 +35,6 @@ export type ListBucket =
   | "leftOnly"
   | "rightOnly"
   | "union"
-  | "symmetric"
   | "leftDupes"
   | "rightDupes"
   | "changed"
@@ -78,7 +77,6 @@ export interface ListCompareResult {
   leftOnly: ListItem[];
   rightOnly: ListItem[];
   union: ListItem[];
-  symmetric: ListItem[];
   leftDupes: ListItem[];
   rightDupes: ListItem[];
   /** Keys present on both sides whose full row/record differs (CSV column compare). */
@@ -88,7 +86,6 @@ export interface ListCompareResult {
     leftOnly: number;
     rightOnly: number;
     union: number;
-    symmetric: number;
     leftDupes: number;
     rightDupes: number;
     changed: number;
@@ -428,7 +425,6 @@ export function compareLists(
     }
   }
 
-  const symmetric = [...leftOnly, ...rightOnly];
   const leftDupes = left.items.filter((i) => i.count > 1);
   const rightDupes = right.items.filter((i) => i.count > 1);
 
@@ -439,7 +435,6 @@ export function compareLists(
     leftOnly,
     rightOnly,
     union,
-    symmetric,
     leftDupes,
     rightDupes,
     // Filled by CSV column compare (row-level changes); empty for plain lists.
@@ -449,7 +444,6 @@ export function compareLists(
       leftOnly: leftOnly.length,
       rightOnly: rightOnly.length,
       union: union.length,
-      symmetric: symmetric.length,
       leftDupes: leftDupes.length,
       rightDupes: rightDupes.length,
       changed: 0,
@@ -607,8 +601,6 @@ export function getBucketItems(result: ListCompareResult, bucket: ListBucket): L
       return result.rightOnly;
     case "union":
       return result.union;
-    case "symmetric":
-      return result.symmetric;
     case "leftDupes":
       return result.leftDupes;
     case "rightDupes":
@@ -831,18 +823,31 @@ export const BUCKET_LABELS: Record<ListBucket, string> = {
   leftOnly: "Only in A",
   rightOnly: "Only in B",
   union: "All merged",
-  symmetric: "In one only",
   leftDupes: "Repeated in A",
   rightDupes: "Repeated in B",
   changed: "Changed",
   summary: "Summary",
 };
 
+/** A side's name shortened for tight UI (tab labels, row notes). */
+export const shortName = (n: string, max = 16) => (n.length > max ? `${n.slice(0, max - 1).trimEnd()}…` : n);
+
+/** Bucket labels with the sides' own names ("A" / "B" when not renamed). */
+export function bucketLabels(names: { left?: string; right?: string } = {}): Record<ListBucket, string> {
+  const a = names.left?.trim() || "A";
+  const b = names.right?.trim() || "B";
+  return { ...BUCKET_LABELS, leftOnly: `Only in ${a}`, rightOnly: `Only in ${b}`, leftDupes: `Repeated in ${a}`, rightDupes: `Repeated in ${b}` };
+}
+
 export interface ListSummaryOptions {
+  /** Names of the two lists, used in labels and notes. Default "A" / "B". */
+  names?: { left?: string; right?: string };
   /** Include the Changed section (CSV column-compare mode). Default true. */
   includeChanged?: boolean;
   /** Show inline count-delta notes in the Common section. Default true. */
   showCountDeltas?: boolean;
+  /** Order of the items inside each section. Default "none" (as found). */
+  sort?: ListSortMode;
 }
 
 export interface ListSummarySection {
@@ -851,7 +856,7 @@ export interface ListSummarySection {
   count: number;
   items: ListItem[];
   /** One entry per item, in the same order: the value on a single line, plus a short note such as "×2 in A, ×1 in B". */
-  rows: Array<{ value: string; note: string }>;
+  rows: Array<{ value: string; note: string; shortNote: string }>;
 }
 
 export interface ListSummary {
@@ -877,39 +882,54 @@ export function buildListSummary(
   const showCountDeltas = options.showCountDeltas ?? true;
   const countDeltas = showCountDeltas ? computeCountDeltas(result) : [];
   const deltaByKey = new Map(countDeltas.map((d) => [d.key, d]));
+  const labels = bucketLabels(options.names);
+  const nameA = options.names?.left?.trim() || "A";
+  const nameB = options.names?.right?.trim() || "B";
 
   const all: Array<Omit<ListSummarySection, "rows">> = [
-    { bucket: "common", label: BUCKET_LABELS.common, count: result.common.length, items: result.common },
-    { bucket: "leftOnly", label: BUCKET_LABELS.leftOnly, count: result.leftOnly.length, items: result.leftOnly },
-    { bucket: "rightOnly", label: BUCKET_LABELS.rightOnly, count: result.rightOnly.length, items: result.rightOnly },
+    { bucket: "common", label: labels.common, count: result.common.length, items: result.common },
+    { bucket: "leftOnly", label: labels.leftOnly, count: result.leftOnly.length, items: result.leftOnly },
+    { bucket: "rightOnly", label: labels.rightOnly, count: result.rightOnly.length, items: result.rightOnly },
     ...(result.leftDupes.length > 0
-      ? [{ bucket: "leftDupes" as const, label: BUCKET_LABELS.leftDupes, count: result.leftDupes.length, items: result.leftDupes }]
+      ? [{ bucket: "leftDupes" as const, label: labels.leftDupes, count: result.leftDupes.length, items: result.leftDupes }]
       : []),
     ...(result.rightDupes.length > 0
-      ? [{ bucket: "rightDupes" as const, label: BUCKET_LABELS.rightDupes, count: result.rightDupes.length, items: result.rightDupes }]
+      ? [{ bucket: "rightDupes" as const, label: labels.rightDupes, count: result.rightDupes.length, items: result.rightDupes }]
       : []),
     ...(includeChanged && result.changed.length > 0
-      ? [{ bucket: "changed" as const, label: BUCKET_LABELS.changed, count: result.changed.length, items: result.changed }]
+      ? [{ bucket: "changed" as const, label: labels.changed, count: result.changed.length, items: result.changed }]
       : []),
   ];
   const sections: ListSummarySection[] = all
     .filter((s) => s.count > 0)
+    .map((s) => ({ ...s, items: sortListItems(s.items, options.sort ?? "none") }))
     .map((s) => ({
       ...s,
       rows: s.items.map((item) => {
         const d = deltaByKey.get(item.key);
-        const note =
-          s.bucket === "common" && d ? `×${d.left} in A, ×${d.right} in B` : s.bucket === "leftDupes" || s.bucket === "rightDupes" ? `×${item.count}` : "";
+        const delta = (a: string, b: string) => `×${d?.left} in ${a}, ×${d?.right} in ${b}`;
+        const dupe = s.bucket === "leftDupes" || s.bucket === "rightDupes";
+        const note = s.bucket === "common" && d ? delta(nameA, nameB) : dupe ? `×${item.count}` : "";
+        const shortNote = s.bucket === "common" && d ? delta(shortName(nameA, 10), shortName(nameB, 10)) : note;
         // One item per line, always: a value holding a line break would break the indent.
-        return { value: item.value.replace(/\s*\r?\n\s*/g, " "), note };
+        return { value: item.value.replace(/\s*\r?\n\s*/g, " "), note, shortNote };
       }),
     }));
 
-  const text = sections
-    .map((s) => `${s.label} (${s.count})\n${s.rows.map((r) => `  ${r.value}${r.note && ` ${r.note}`}`).join("\n")}`)
-    .join("\n\n");
+  return { sections, text: formatListSummary(sections), countDeltas };
+}
 
-  return { sections, text, countDeltas };
+export type ListSummaryFormat = "text" | "markdown" | "json";
+
+/**
+ * Summary sections as text. "text": a "Label (count)" line per section, then its rows indented two spaces.
+ * "markdown": a heading per section and a bullet per row. "json": `{ label: values[] }`, notes left out.
+ */
+export function formatListSummary(sections: ListSummarySection[], format: ListSummaryFormat = "text"): string {
+  if (format === "json") return JSON.stringify(Object.fromEntries(sections.map((s) => [s.label, s.items.map((i) => i.value)])), null, 2);
+  const line = (r: { value: string; note: string }) => `${r.value}${r.note && ` ${r.note}`}`;
+  if (format === "markdown") return sections.map((s) => `## ${s.label} (${s.count})\n\n${s.rows.map((r) => `- ${line(r)}`).join("\n")}`).join("\n\n");
+  return sections.map((s) => `${s.label} (${s.count})\n${s.rows.map((r) => `  ${line(r)}`).join("\n")}`).join("\n\n");
 }
 
 export interface SqlClauseOptions {

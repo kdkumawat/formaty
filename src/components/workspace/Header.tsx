@@ -50,6 +50,8 @@ interface HeaderProps {
   activeTabId: string;
   onSwitchTab: (id: string) => void;
   onCloseTab: (id: string) => void;
+  /** Move tab `fromId` to the position of `toId`. */
+  onReorderTab: (fromId: string, toId: string) => void;
   /** Called with a new, non-empty name. An empty name or Escape leaves the tab as it was. */
   onRenameTab: (id: string, name: string) => void;
   onNewTab: (spec: NewTabSpec) => void;
@@ -73,12 +75,26 @@ function TabButton({
   onSwitch,
   onClose,
   onRename,
+  onMove,
+  dragState,
+  onDragStart,
+  onDragEnd,
+  onDragOver,
+  onDropOn,
 }: {
   tab: ChromeTab;
   active: boolean;
   onSwitch: () => void;
   onClose: () => void;
   onRename: (name: string) => void;
+  /** Keyboard reorder: -1 left, 1 right. */
+  onMove: (dir: -1 | 1) => void;
+  /** Drop-line side while another tab is dragged over this one. */
+  dragState: "from" | "before" | "after" | null;
+  onDragStart: () => void;
+  onDragEnd: () => void;
+  onDragOver: () => void;
+  onDropOn: () => void;
 }) {
   const [editing, setEditing] = useState(false);
 
@@ -88,16 +104,33 @@ function TabButton({
 
   return (
     <div
+      role="presentation"
       id={`tab-${tab.id}`}
       className={cn(
         "group relative flex h-8 min-w-0 max-w-[200px] shrink-0 items-center rounded-t-md text-[13px] transition-colors",
         // Renaming keeps the tab's exact size; an inset ring inside its own edge is the only cue.
+        dragState === "from" && "opacity-50",
         editing
           ? "bg-selected text-selected-foreground ring-[1.5px] ring-inset ring-[var(--focus)]"
           : active
           ? "bg-selected text-selected-foreground shadow-[inset_0_2px_0_var(--selected-fg)]"
           : "text-[var(--workspace-text-muted)] hover:bg-control hover:text-[var(--workspace-text)]",
       )}
+      draggable={!editing}
+      onDragStart={(e) => {
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", tab.id);
+        onDragStart();
+      }}
+      onDragEnd={onDragEnd}
+      onDragOver={(e) => {
+        e.preventDefault();
+        onDragOver();
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        onDropOn();
+      }}
       onMouseDown={(e) => {
         if (e.button === 1) {
           e.preventDefault();
@@ -105,6 +138,9 @@ function TabButton({
         }
       }}
     >
+      {(dragState === "before" || dragState === "after") && (
+        <div aria-hidden className={cn("pointer-events-none absolute inset-y-1 z-20 w-0.5 rounded bg-[var(--focus)]", dragState === "before" ? "-left-[3px]" : "-right-[3px]")} />
+      )}
       {editing ? (
         <div className="grid min-w-0 flex-1 py-1 pl-2.5 pr-1">
           <InlineRename
@@ -126,17 +162,24 @@ function TabButton({
           onDoubleClick={() => setEditing(true)}
           onKeyDown={(e) => {
             if (e.key === "F2") setEditing(true);
+            if (e.key === "Delete") onClose();
+            if (e.altKey && e.shiftKey && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+              e.preventDefault();
+              onMove(e.key === "ArrowLeft" ? -1 : 1);
+            }
           }}
-          className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-t-md pl-2.5 pr-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]"
+          className="flex h-full min-w-0 flex-1 cursor-grab items-center gap-2 rounded-t-md pl-2.5 pr-1 text-left outline-none active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-[var(--focus)]"
         >
           <TabGlyph kind={tab.kind} />
           <TruncatedText>{tab.name}</TruncatedText>
         </button>
       )}
-      {/* Stays in the layout while renaming (just hidden) so the tab keeps its width. */}
+      {/* Stays in the layout while renaming (just hidden) so the tab keeps its width. A tablist may only own tabs, so this is a pointer affordance; keyboard users close with Delete or ⌥W. */}
       <IconButton
         label="Close tab"
         shortcut="⌥W"
+        aria-hidden
+        tabIndex={-1}
         onClick={onClose}
         className={cn(
           "mr-1 !size-5 min-w-0",
@@ -171,6 +214,16 @@ function TabGlyph({ kind = "transform" }: { kind?: TabKind }) {
 }
 
 export function Header(props: HeaderProps) {
+  // Same native drag-and-drop as the Instant timeline rows (TimelineBoard): `from` is the dragged tab, `over` the one under the pointer.
+  const [drag, setDrag] = useState<{ from: string; over: string } | null>(null);
+  const idx = (id: string) => props.tabs.findIndex((t) => t.id === id);
+  const moveTab = (id: string, dir: -1 | 1) => {
+    const to = props.tabs[idx(id) + dir];
+    if (!to) return;
+    props.onReorderTab(id, to.id);
+    // Moving a node in the DOM drops focus; put it back on the moved tab.
+    requestAnimationFrame(() => document.querySelector<HTMLElement>(`#tab-${id} [role="tab"]`)?.focus());
+  };
   return (
     <header className="flex h-10 shrink-0 items-end gap-2 border-b border-[var(--workspace-border)] bg-[var(--workspace-background)] px-2">
       <Link href="/" aria-label="Formaty home" className="flex size-8 shrink-0 items-center justify-center self-center rounded-md transition-opacity hover:opacity-80">
@@ -181,7 +234,7 @@ export function Header(props: HeaderProps) {
         role="tablist"
         aria-label="Open tabs"
         data-tour="tab-bar"
-        className="flex min-w-0 items-end gap-0.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="flex min-w-0 items-end gap-0.5 overflow-x-auto scroll-px-6 [scrollbar-width:none] max-[900px]:[mask-image:linear-gradient(to_right,transparent,#000_14px,#000_calc(100%-14px),transparent)] [&::-webkit-scrollbar]:hidden"
       >
         {props.tabs.map((tab) => (
           <TabButton
@@ -191,6 +244,23 @@ export function Header(props: HeaderProps) {
             onSwitch={() => props.onSwitchTab(tab.id)}
             onClose={() => props.onCloseTab(tab.id)}
             onRename={(name) => props.onRenameTab(tab.id, name)}
+            onMove={(dir) => moveTab(tab.id, dir)}
+            dragState={
+              !drag
+                ? null
+                : drag.from === tab.id
+                ? "from"
+                : drag.over === tab.id
+                ? idx(drag.from) < idx(tab.id) ? "after" : "before"
+                : null
+            }
+            onDragStart={() => setDrag({ from: tab.id, over: tab.id })}
+            onDragEnd={() => setDrag(null)}
+            onDragOver={() => drag && drag.over !== tab.id && setDrag({ ...drag, over: tab.id })}
+            onDropOn={() => {
+              if (drag && drag.from !== tab.id) props.onReorderTab(drag.from, tab.id);
+              setDrag(null);
+            }}
           />
         ))}
       </div>
@@ -206,13 +276,13 @@ export function Header(props: HeaderProps) {
           <Button
             variant="secondary"
             data-tour="command-palette"
-            aria-label="Search or run"
             icon={<MagnifyingGlassIcon />}
-            className="w-[220px] justify-start max-[1000px]:w-9 max-[1000px]:px-0 max-[1000px]:[&>:not(:first-child)]:hidden"
+            className="w-[220px] justify-start max-[1000px]:w-9 max-[1000px]:px-0"
             onClick={props.onOpenCommandPalette}
           >
-            <span className="min-w-0 flex-1 truncate text-left font-normal text-[var(--workspace-text-muted)]">Search or run</span>
-            <Kbd keys="⌘K" />
+            {/* The label stays the accessible name (sr-only when the button shrinks to an icon), so it always matches what is shown. */}
+            <span className="min-w-0 flex-1 truncate text-left font-normal text-[var(--workspace-text-muted)] max-[1000px]:sr-only">Search or run</span>
+            <Kbd keys="⌘K" className="max-[1000px]:hidden" />
           </Button>
         </div>
         <SidePanel

@@ -12,7 +12,6 @@ export const COMPARE_BUCKETS: readonly ListBucket[] = [
   "leftOnly",
   "rightOnly",
   "union",
-  "symmetric",
   "leftDupes",
   "rightDupes",
   "changed",

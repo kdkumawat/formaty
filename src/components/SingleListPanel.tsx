@@ -2,7 +2,7 @@
 
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { CopyMinus } from "lucide-react";
-import { Button, EmptyState } from "@/components/kit";
+import { Button, EmptyState, IconButton } from "@/components/kit";
 import { ListEditor } from "@/components/compare/ListEditor";
 import { orderIds, uuidLists } from "@/components/compare/samples";
 import {
@@ -13,6 +13,8 @@ import {
   SplitHandle,
   ResultTabs,
   inputPaneClass,
+  resultPaneClass,
+  splitRowClass,
   splitStyle,
   useExportFormat,
 } from "@/components/compare/shared";
@@ -186,7 +188,7 @@ export function SingleListPanel({
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
-      <div className="flex min-h-0 flex-1 flex-col overflow-auto min-[901px]:flex-row min-[901px]:overflow-hidden">
+      <div className={splitRowClass}>
         <section
           aria-label={name}
           className={`min-h-[200px] ${inputPaneClass}`}
@@ -227,15 +229,15 @@ export function SingleListPanel({
               texts={[dValue]}
             />
             {analysis.duplicateKeys > 0 && (
-              <Button variant="ghost" className="ml-auto" icon={<CopyMinus />} onClick={removeRepeats}>
-                Remove repeats
-              </Button>
+              <IconButton label="Remove repeats" className="ml-auto" onClick={removeRepeats}>
+                <CopyMinus />
+              </IconButton>
             )}
           </InputFooter>
         </section>
         <SplitHandle onResizeStart={onResizeStart} onNudge={onNudgeSplit} value={split} />
 
-        <section aria-label="Result" className="flex min-w-0 flex-1 flex-col bg-[var(--workspace-panel)] min-[901px]:min-h-0 min-[901px]:overflow-hidden">
+        <section aria-label="Result" className={resultPaneClass}>
           {empty ? (
             <div className="flex min-h-[240px] flex-1 items-center justify-center">
               <EmptyState

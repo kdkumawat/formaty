@@ -41,12 +41,17 @@ export function autoTabName(f: TabFacts): string {
   return from === to ? `Format ${from}` : `${from} to ${to}`;
 }
 
-/** Add " 2", " 3" to repeated names, in tab order. */
-export function numberDuplicates(names: string[]): string[] {
+/** Add " 2", " 3" to repeated names, counting in `order` (creation sequence) so moving a tab never renames it. Defaults to tab order. */
+export function numberDuplicates(names: string[], order: number[] = names.map((_, i) => i)): string[] {
   const seen = new Map<string, number>();
-  return names.map((n) => {
-    const count = (seen.get(n) ?? 0) + 1;
-    seen.set(n, count);
-    return count > 1 ? `${n} ${count}` : n;
-  });
+  const out = [...names];
+  names
+    .map((_, i) => i)
+    .sort((a, b) => order[a] - order[b])
+    .forEach((i) => {
+      const count = (seen.get(names[i]) ?? 0) + 1;
+      seen.set(names[i], count);
+      if (count > 1) out[i] = `${names[i]} ${count}`;
+    });
+  return out;
 }

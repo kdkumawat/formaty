@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
  */
 export function KeyLink({ href, className, children }: { href: string; className?: string; children: React.ReactNode }) {
   return (
-    <Button asChild variant="primary" size="lg" className={cn("h-12 rounded-[10px] px-6 text-base font-semibold", className)}>
+    <Button asChild variant="primary" size="lg" className={cn("h-auto min-h-12 max-w-full whitespace-normal rounded-[10px] px-6 py-2 text-center text-base font-semibold", className)}>
       <Link href={href}>
         {children}
       </Link>

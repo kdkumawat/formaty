@@ -4,7 +4,7 @@ export function inferJsonSchema(input: JsonValue): JsonValue {
   if (Array.isArray(input)) {
     return {
       type: "array",
-      items: input.length ? inferJsonSchema(input[0]) : {},
+      items: input.length ? inferJsonSchema(mergeSamples(input)) : {},
     };
   }
   if (input === null) {
@@ -24,7 +24,31 @@ export function inferJsonSchema(input: JsonValue): JsonValue {
       additionalProperties: true,
     };
   }
+  if (typeof input === "number" && Number.isInteger(input)) return { type: "integer" };
   return { type: typeof input };
+}
+
+/**
+ * Collapse sibling samples into one representative value: object keys are unioned,
+ * numbers stay integer only if every sample is, anything else takes the first sample.
+ */
+export function mergeSamples(values: JsonValue[]): JsonValue {
+  const vals = values.filter((v) => v !== undefined);
+  const isObj = (v: JsonValue) => !!v && typeof v === "object" && !Array.isArray(v);
+  if (vals.every((v) => typeof v === "number")) {
+    return vals.every((v) => Number.isInteger(v)) ? vals[0] : 0.5;
+  }
+  if (vals.every(Array.isArray)) return (vals as JsonValue[][]).flat();
+  if (vals.every(isObj)) {
+    const keys = [...new Set(vals.flatMap((v) => Object.keys(v as object)))];
+    return Object.fromEntries(
+      keys.map((k) => [
+        k,
+        mergeSamples(vals.filter((v) => k in (v as object)).map((v) => (v as Record<string, JsonValue>)[k])),
+      ]),
+    );
+  }
+  return vals[0];
 }
 
 /**

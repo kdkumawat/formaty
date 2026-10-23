@@ -10,8 +10,8 @@ import type { Monaco } from "@monaco-editor/react";
  * (lib/highlight.ts) still maps them to keyword.
  */
 export const TOKEN_COLORS = {
-  dark: { key: "ECEDEF", string: "A8D88F", number: "F4A97F", bool: "7DB8FF", keyword: "C9A2FF", comment: "6E7178", punct: "6E7178" },
-  light: { key: "111214", string: "2F7A1F", number: "B4531B", bool: "1F5FBF", keyword: "6A3FC8", comment: "8A8C90", punct: "8A8C90" },
+  dark: { key: "ECEDEF", string: "A8D88F", number: "F4A97F", bool: "7DB8FF", keyword: "C9A2FF", comment: "8A8D94", punct: "6E7178" },
+  light: { key: "111214", string: "2F7A1F", number: "B4531B", bool: "1F5FBF", keyword: "6A3FC8", comment: "666A70", punct: "8A8C90" },
 } as const;
 const D = TOKEN_COLORS.dark;
 const L = TOKEN_COLORS.light;

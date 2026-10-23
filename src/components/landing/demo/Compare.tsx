@@ -2,20 +2,27 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
+import { useSplitResize } from "@/hooks/workspace/useSplitResize";
 import { ArrowsRightLeftIcon } from "@heroicons/react/16/solid";
-import { Button, PaneHeader, ResultActions } from "@/components/kit";
+import { IconButton } from "@/components/kit";
 import {
+  BUCKET_SOURCE,
   InputFooter,
+  num,
   ListPaneHeader,
   ResultView,
   SplitBySelect,
-  Tile,
-  TileRow,
-  downloadText,
+  ResultTabs,
+  type ResultTab,
   editorClass,
   inputPaneClass,
+  paneCardClass,
+  resultPaneClass,
+  SplitHandle,
+  splitRowClass,
   splitStyle,
 } from "@/components/compare/shared";
+import { SummaryView } from "@/components/compare/SummaryView";
 import { CompareBar } from "@/components/workspace/CompareBar";
 import type { CompareKind } from "@/components/workspace/constants";
 import { compareCsvByColumn, detectCsvColumns, pickDefaultColumn } from "@/lib/json/csvCompare";
@@ -31,11 +38,11 @@ import {
   type ListExportFormat,
   type ListParseOptions,
   type ListSortMode,
+  type ListSummaryFormat,
 } from "@/lib/json/listCompare";
 import { playHref } from "../live/playLink";
 import { DemoFooter } from "./Footer";
 
-const SPLIT = 40;
 const LEFT = "user_1001\nuser_1002\nuser_1003\nuser_1004\nuser_1005\nuser_1006";
 const RIGHT = "user_1002\nuser_1003\nuser_1004\nuser_1006\nuser_1007";
 
@@ -52,10 +59,10 @@ type SingleTile = "distinct" | "once" | "repeated";
 
 /**
  * The playground's list compare: the real bar, headers, tabs and result list over the same functions.
- * `full` shows every result tab (the narrow scene keeps four).
  */
-export default function Compare({ preset = {}, full = false }: { preset?: ComparePreset; full?: boolean }) {
+export default function Compare({ preset = {} }: { preset?: ComparePreset }) {
   const router = useRouter();
+  const { split, startResize, nudgeSplit, splitContainerRef } = useSplitResize(40);
   const [kind, setKind] = useState<CompareKind>(preset.kind === "single" ? "single" : "list");
   const [left, setLeft] = useState(preset.left ?? LEFT);
   const [right, setRight] = useState(preset.right ?? RIGHT);
@@ -64,7 +71,9 @@ export default function Compare({ preset = {}, full = false }: { preset?: Compar
   const [options, setOptions] = useState<ListParseOptions>(DEFAULT_LIST_PARSE_OPTIONS);
   const [format, setFormat] = useState<ListExportFormat>(preset.format ?? "newline");
   const [sort, setSort] = useState<ListSortMode>(kind === "single" ? "none" : "asc");
-  const [host, setHost] = useState<HTMLElement | null>(null);
+  const [closed, setClosed] = useState<string[]>([]);
+  const [find, setFind] = useState("");
+  const [summaryFormat, setSummaryFormat] = useState<ListSummaryFormat>("text");
 
   const single = kind === "single";
   const sample = () => {
@@ -84,10 +93,9 @@ export default function Compare({ preset = {}, full = false }: { preset?: Compar
   }, [left, right, options, column]);
   const analysis = useMemo(() => analyzeSingleList(left, options), [left, options]);
   const st = result.stats;
-  const dupes = st.leftDupes + st.rightDupes;
   const summary = useMemo(
-    () => (bucket === "summary" ? buildListSummary(result, { includeChanged: !!column }) : null),
-    [bucket, result, column],
+    () => (bucket === "summary" ? buildListSummary(result, { includeChanged: !!column, showCountDeltas: true, sort }) : null),
+    [bucket, result, column, sort],
   );
   const items = useMemo(() => {
     if (single) return sortListItems(tile === "repeated" ? analysis.duplicates : tile === "once" ? analysis.once : analysis.unique, sort);
@@ -112,27 +120,46 @@ export default function Compare({ preset = {}, full = false }: { preset?: Compar
     </section>
   );
 
-  const tab = (b: ListBucket, label: string, count: number | undefined, dot?: string) => (
-    <Tile key={b} count={count} label={label} dot={dot} on={bucket === b} onClick={() => setBucket(b)} />
+  const t = (value: ListBucket, label: string, count?: number, fold?: number): ResultTab<ListBucket> => ({ value, label, count, fold });
+  // The workspace's tab model: main buckets, then the rest under More.
+  const tabs = single ? (
+    <ResultTabs
+      value={tile}
+      onChange={setTile}
+      tabs={[
+        { value: "distinct", label: "Distinct", count: analysis.uniqueCount },
+        { value: "once", label: "Appear once", count: analysis.onceCount },
+        { value: "repeated", label: "Repeated", count: analysis.duplicateKeys },
+      ]}
+    />
+  ) : (
+    <ResultTabs
+      value={bucket}
+      onChange={setBucket}
+      tabs={[t("common", "In both", st.common), t("leftOnly", "Only in A", st.leftOnly, 4), t("rightOnly", "Only in B", st.rightOnly, 3), t("union", "All merged", st.union, 1), t("summary", "Summary")]}
+      more={[t("leftDupes", "Repeated in A", st.leftDupes), t("rightDupes", "Repeated in B", st.rightDupes), ...(column || st.changed > 0 ? [t("changed", "Changed", st.changed)] : [])]}
+    />
   );
   const playState = single
     ? { activeOperation: "diff" as const, diffKind: "single" as const, diffLeftInput: left }
     : { activeOperation: "diff" as const, diffKind: "list" as const, diffLeftInput: left, diffRightInput: right, compareActiveBucket: bucket };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col gap-2 bg-[var(--workspace-background)] p-2">
+      <div className={`${paneCardClass} shrink-0`}>
       <CompareBar
         kind={kind}
         // Two documents has its own screen in the playground.
         onKind={(k) => (k === "document" ? router.push(playHref({ activeOperation: "diff", diffKind: k, diffLeftInput: left, diffRightInput: right })) : setKind(k))}
         options={options}
         onOptions={setOptions}
-        setToolbarHost={setHost}
-        split={SPLIT}
+        setToolbarHost={() => {}}
+        split={split}
         actions={null}
       />
-      <div className="flex min-h-0 flex-1 flex-col overflow-auto min-[901px]:flex-row min-[901px]:overflow-hidden">
-        <div className={inputPaneClass} style={splitStyle(SPLIT)}>
+      </div>
+      <div ref={splitContainerRef} className={splitRowClass}>
+        <div className={inputPaneClass} style={splitStyle(split)}>
           {single ? pane(left, setLeft, "bg-[var(--workspace-text-muted)]", "List", analysis.rawCount, true) : (
             <>
               {pane(left, setLeft, "bg-side-a", "List A", result.left.rawCount, true)}
@@ -143,52 +170,25 @@ export default function Compare({ preset = {}, full = false }: { preset?: Compar
             <SplitBySelect value={options.delimiter} onChange={(delimiter) => setOptions((p) => ({ ...p, delimiter }))} texts={single ? [left] : [left, right]} />
             {column && !single && <span className="text-[12px] text-[var(--workspace-text-muted)]">Rows matched on {column}</span>}
             {!single && (
-              <Button
-                variant="ghost"
+              <IconButton
+                label="Swap A and B"
                 className="ml-auto"
-                icon={<ArrowsRightLeftIcon />}
                 onClick={() => {
                   setLeft(right);
                   setRight(left);
                 }}
               >
-                Swap A and B
-              </Button>
+                <ArrowsRightLeftIcon />
+              </IconButton>
             )}
           </InputFooter>
         </div>
-        <section aria-label="Result" className="flex min-h-[280px] min-w-0 flex-1 flex-col bg-[var(--workspace-panel)] min-[901px]:min-h-0 min-[901px]:overflow-hidden">
-          <TileRow label="Which items" host={host}>
-            {single ? (
-              <>
-                <Tile count={analysis.uniqueCount} label="Distinct" on={tile === "distinct"} onClick={() => setTile("distinct")} />
-                <Tile count={analysis.onceCount} label="Appear once" on={tile === "once"} onClick={() => setTile("once")} />
-                <Tile count={analysis.duplicateKeys} label="Repeated" on={tile === "repeated"} onClick={() => setTile("repeated")} />
-              </>
-            ) : (
-              <>
-                {tab("leftOnly", "Only in A", st.leftOnly, "bg-side-a")}
-                {tab("common", "In both", st.common, "bg-brand")}
-                {tab("rightOnly", "Only in B", st.rightOnly, "bg-side-b")}
-                {full && tab("symmetric", "In one only", st.symmetric)}
-                {tab("union", "All merged", st.union)}
-                {full && tab(st.leftDupes ? "leftDupes" : "rightDupes", "Repeated", dupes)}
-                {full && column && tab("changed", "Changed", st.changed)}
-                {full && tab("summary", "Summary", undefined)}
-              </>
-            )}
-          </TileRow>
+        <SplitHandle onResizeStart={startResize} onNudge={nudgeSplit} value={split} />
+        <section aria-label="Result" className={resultPaneClass}>
           {summary ? (
-            <div className="flex min-h-0 flex-1 flex-col">
-              <PaneHeader
-                right={<ResultActions onDownload={() => downloadText("formaty-list-summary.txt", summary.text)} canDownload={!!summary.text} copy={{ getText: () => summary.text, disabled: !summary.text }} />}
-              />
-              <pre role="group" tabIndex={0} aria-label="Summary" className="m-0 min-h-0 flex-1 overflow-auto px-3 py-2 font-mono text-[13px] leading-[1.6]">
-                {summary.text || "Paste two lists to see a summary."}
-              </pre>
-            </div>
+            <SummaryView summary={summary} closed={closed} onClosedChange={setClosed} tabs={tabs} find={find} onFind={setFind} sort={sort} onSort={setSort} format={summaryFormat} onFormat={setSummaryFormat} />
           ) : (
-            <ResultView items={items} format={format} onFormat={setFormat} sort={sort} onSort={setSort} fileBase={`formaty-list-${single ? tile : bucket}`} showCounts={single} empty="No items here." />
+            <ResultView tabs={tabs} info={single ? undefined : `${num(items.length)} of ${num(st.union)} unique values · ${BUCKET_SOURCE[bucket] ?? "from A and B"}`} items={items} format={format} onFormat={setFormat} sort={sort} onSort={setSort} find={find} onFind={setFind} fileBase={`formaty-list-${single ? tile : bucket}`} showCounts={single} empty="No items here." />
           )}
         </section>
       </div>

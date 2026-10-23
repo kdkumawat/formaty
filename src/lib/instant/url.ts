@@ -1,4 +1,5 @@
 import { Temporal } from "temporal-polyfill";
+import { canonicalZone } from "./catalog";
 import type { TimeFormat } from "./types";
 
 export interface InstantQuery {
@@ -74,13 +75,15 @@ export function parseInstantQuery(params: URLSearchParams): InstantQuery {
   const end = parseIsoOrDate(params.get("end"));
 
   const tzRaw = params.get("tz");
-  const tz = tzRaw && isIana(tzRaw) ? tzRaw : null;
+  const tz = tzRaw && isIana(tzRaw) ? canonicalZone(tzRaw) : null;
 
   const locRaw = params.get("locations") ?? "";
   const locations = locRaw
     .split(",")
     .map((s) => s.trim())
-    .filter((s) => s && isIana(s));
+    .filter((s) => s && isIana(s))
+    .map(canonicalZone)
+    .filter((s, i, a) => a.indexOf(s) === i);
 
   const fmtRaw = params.get("fmt");
   const fmt = fmtRaw === "12h" || fmtRaw === "24h" ? fmtRaw : null;

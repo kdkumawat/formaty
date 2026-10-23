@@ -702,7 +702,7 @@ export function InstantApp({
                 </IconButton>
               </Tooltip>
               <Tooltip content="Snap to the current moment" shortcut="N">
-                <Button variant={isLive ? "selected" : "secondary"} onClick={goNow} aria-label="Snap to the current moment">
+                <Button variant={isLive ? "selected" : "secondary"} onClick={goNow}>
                   <span aria-hidden className={`size-1.5 rounded-full ${isLive ? "animate-pulse bg-ok" : "bg-current opacity-60"}`} />
                   {isLive ? "Live" : "Now"}
                 </Button>

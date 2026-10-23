@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { searchZoneAbbreviations, zoneByAbbreviation } from "./catalog";
+import { canonicalZone, resolveZoneToken, searchIanaZones, searchZoneAbbreviations, zoneByAbbreviation } from "./catalog";
 
 describe("zoneByAbbreviation", () => {
   it("maps PDT to America/Los_Angeles", () => {
@@ -34,5 +34,33 @@ describe("searchZoneAbbreviations", () => {
 
   it("returns nothing for an empty query", () => {
     expect(searchZoneAbbreviations("")).toEqual([]);
+  });
+});
+
+describe("canonicalZone", () => {
+  it.each([
+    ["Asia/Calcutta", "Asia/Kolkata"],
+    ["asia/saigon", "Asia/Ho_Chi_Minh"],
+    ["Asia/Katmandu", "Asia/Kathmandu"],
+    ["Asia/Rangoon", "Asia/Yangon"],
+    ["Europe/Kiev", "Europe/Kyiv"],
+    ["America/Buenos_Aires", "America/Argentina/Buenos_Aires"],
+    ["Asia/Dacca", "Asia/Dhaka"],
+    ["Asia/Thimbu", "Asia/Thimphu"],
+    ["Pacific/Truk", "Pacific/Chuuk"],
+    ["Atlantic/Faeroe", "Atlantic/Faroe"],
+    ["America/Godthab", "America/Nuuk"],
+    ["Asia/Ulan_Bator", "Asia/Ulaanbaatar"],
+    ["US/Pacific", "America/Los_Angeles"],
+    ["Europe/Paris", "Europe/Paris"],
+  ])("%s -> %s", (from, to) => {
+    expect(canonicalZone(from)).toBe(to);
+  });
+
+  it("resolveZoneToken and zone search never surface legacy ids", () => {
+    expect(resolveZoneToken("Asia/Calcutta")).toBe("Asia/Kolkata");
+    expect(resolveZoneToken("Europe/Kiev")).toBe("Europe/Kyiv");
+    expect(searchIanaZones("calcutta").some((r) => r.iana === "Asia/Calcutta")).toBe(false);
+    expect(searchIanaZones("kolkata")[0].iana).toBe("Asia/Kolkata");
   });
 });
