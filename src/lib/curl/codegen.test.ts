@@ -31,6 +31,14 @@ describe("curl codegen", () => {
     expect(code).toContain('"name": "A"');
   });
 
+  it("emits a balanced Python dict with Python literals for a JSON body", () => {
+    const parsed = parseCurl(
+      `curl -X POST "https://api.example.com/posts" -H "Content-Type: application/json" -d '{"title":"Hi","done":false,"tags":["a"],"meta":null}'`,
+    );
+    const code = generateCurlCode(parsed, "python");
+    expect(code).toContain('    json={\n        "title": "Hi",\n        "done": False,\n        "tags": [\n            "a"\n        ],\n        "meta": None\n    },\n)');
+  });
+
   it("generates Go code with headers", () => {
     const parsed = parseCurl('curl -X GET "https://api.example.com/users" -H "Authorization: Bearer TOKEN"');
     const code = generateCurlCode(parsed, "go");

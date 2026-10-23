@@ -1,11 +1,14 @@
 import { XMLParser, XMLBuilder } from "fast-xml-parser";
 import type { FormatAdapter } from "./types";
+import { inferCell } from "./csvParser";
 import { xmlDocument, type JsonValue } from "@/lib/json/core";
 
 const parser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: "@_",
-  parseTagValue: true,
+  // Numbers and booleans only when they print back identically, so "49.00" and "007" stay strings.
+  parseTagValue: false,
+  tagValueProcessor: (_name: string, value: string) => inferCell(value),
   trimValues: true,
   ignoreDeclaration: true,
   ignorePiTags: true,

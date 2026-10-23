@@ -49,6 +49,19 @@ function nestedJson(s: string, pad: string): string {
   return prettyJson(s).split("\n").join(`\n${pad}`);
 }
 
+const PY_LITERALS: Record<string, string> = { true: "True", false: "False", null: "None" };
+
+/** JSON text as a Python literal (4-space indent, True/False/None), or null when it doesn't parse. */
+function pythonLiteral(s: string): string | null {
+  let value: unknown;
+  try {
+    value = JSON.parse(s);
+  } catch {
+    return null;
+  }
+  return JSON.stringify(value, null, 4).replace(/"(?:\\.|[^"\\])*"|\b(?:true|false|null)\b/g, (t) => PY_LITERALS[t] ?? t);
+}
+
 function headerLines(headers: Record<string, string>): string[] {
   return Object.entries(headers).map(([k, v]) => `${k}: ${v}`);
 }
@@ -143,17 +156,9 @@ export function generateCurlCode(parsed: CurlParsed, target: CurlTargetId): stri
         lines.push("    },");
       }
       if (hasBody) {
-        if (looksLikeJson(body)) {
-          const jsonLines = prettyJson(body).split("\n");
-          if (jsonLines.length === 1) {
-            lines.push(`    json=${jsonLines[0]},`);
-          } else {
-            lines.push(`    json=${jsonLines[0]}`);
-            for (let i = 1; i < jsonLines.length; i++) {
-              lines.push(`        ${jsonLines[i]}`);
-            }
-            lines.push("    },");
-          }
+        const py = looksLikeJson(body) ? pythonLiteral(body) : null;
+        if (py !== null) {
+          lines.push(`    json=${py.split("\n").join("\n    ")},`);
         } else {
           lines.push(`    data=${JSON.stringify(body)},`);
         }
