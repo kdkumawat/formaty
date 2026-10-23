@@ -6,7 +6,7 @@ import { selectFieldAll, type UtilToolState } from "@/components/utils/state";
 import { TOOL_META, detectReadings, looksEncoded, toolReadings, type Dir, type Reading } from "@/components/utils/readings";
 import { Button, EmptyState, InputActions, PaneHeader, ResultActions, RowCopy, Segmented } from "@/components/kit";
 import { JwtView } from "@/components/utils/JwtView";
-import { editorClass } from "@/components/compare/shared";
+import { SplitHandle, editorClass, inputPaneClass, resultPaneClass, splitRowClass, splitStyle } from "@/components/compare/shared";
 
 interface Props {
   tool: UtilTab;
@@ -15,13 +15,16 @@ interface Props {
   onOpen: (tool: UtilTab, input: string) => void;
   isDark?: boolean;
   fontSize: number;
+  split: number;
+  onResizeStart?: () => void;
+  onNudgeSplit?: (delta: number) => void;
 }
 
 const label = (id: UtilTab) => UTIL_TABS.find((t) => t.id === id)?.label ?? id;
 /** Readings of these kinds make generic encoding readings noise, so Auto-detect hides the hash too. */
 const SPECIFIC = new Set<UtilTab>(["jwt", "cron", "color", "clean"]);
 
-export function ValueTool({ tool, state, patch, onOpen }: Props) {
+export function ValueTool({ tool, state, patch, onOpen, split, onResizeStart, onNudgeSplit }: Props) {
   const meta = TOOL_META[tool];
   const input = state.input;
   const twoWay = !!meta.dirLabels;
@@ -62,11 +65,11 @@ export function ValueTool({ tool, state, patch, onOpen }: Props) {
 
   const copyText = primary?.value ?? "";
 
-  if (tool === "jwt") return <JwtView state={state} patch={patch} />;
+  if (tool === "jwt") return <JwtView state={state} patch={patch} split={split} onResizeStart={onResizeStart} onNudgeSplit={onNudgeSplit} />;
 
   return (
-    <div className="grid min-h-0 flex-1 grid-cols-1 min-[901px]:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-      <section className="flex min-w-0 flex-col border-b border-[var(--workspace-border)] min-[901px]:min-h-0 min-[901px]:border-b-0 min-[901px]:border-r" aria-label="Input">
+    <div className={splitRowClass}>
+      <section className={inputPaneClass} style={splitStyle(split)} aria-label="Input">
         <PaneHeader
           title="Input"
           left={
@@ -106,8 +109,9 @@ export function ValueTool({ tool, state, patch, onOpen }: Props) {
           spellCheck={false}
         />
       </section>
+      <SplitHandle onResizeStart={onResizeStart} onNudge={onNudgeSplit} value={split} />
 
-      <section className="flex min-h-0 min-w-0 flex-col" aria-label="Result" aria-live="polite">
+      <section className={resultPaneClass} aria-label="Result" aria-live="polite">
         <PaneHeader
           title="Result"
           left={rows.length > 0 && <span className="text-[12px] tabular-nums text-[var(--workspace-text-muted)]">{rows.length} {rows.length === 1 ? "reading" : "readings"}</span>}

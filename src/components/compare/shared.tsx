@@ -1,7 +1,6 @@
 "use client";
 
-import { createPortal } from "react-dom";
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { CheckIcon, ChevronDownIcon, MagnifyingGlassIcon } from "@heroicons/react/16/solid";
 import {
   Button,
@@ -23,6 +22,7 @@ import {
   type InputActionsProps,
 } from "@/components/kit";
 import { cn } from "@/lib/utils";
+import { MAX_SPLIT, MIN_SPLIT } from "@/hooks/workspace/useSplitResize";
 import {
   LIST_EXPORT_FORMATS,
   detectListDelimiter,
@@ -30,11 +30,33 @@ import {
   listExportExample,
   listExportExtension,
   listExportFormatLabel,
+  shortName,
   type ListDelimiter,
   type ListExportFormat,
+  type ListBucket,
   type ListItem,
   type ListSortMode,
 } from "@/lib/json/listCompare";
+
+/** Where a bucket's items come from; the info line of a result tab. */
+export const BUCKET_SOURCE: Partial<Record<ListBucket, string>> = {
+  common: "from A and B",
+  union: "from A and B",
+  leftOnly: "from A only",
+  rightOnly: "from B only",
+  leftDupes: "repeated in A",
+  rightDupes: "repeated in B",
+  changed: "same key, different row",
+};
+
+/** BUCKET_SOURCE with the sides' own names. */
+export function bucketSource(names: { left?: string; right?: string } = {}): Partial<Record<ListBucket, string>> {
+  const a = names.left?.trim() || "A";
+  const b = names.right?.trim() || "B";
+  return { ...BUCKET_SOURCE, common: `from ${a} and ${b}`, union: `from ${a} and ${b}`, leftOnly: `from ${a} only`, rightOnly: `from ${b} only`, leftDupes: `repeated in ${a}`, rightDupes: `repeated in ${b}` };
+}
+
+export { shortName };
 
 /** Rows rendered at a time. Copy and Download always use every item. */
 const PAGE = 300;
@@ -227,10 +249,14 @@ export function CheckChip({ on, onToggle, children }: { on: boolean; onToggle: (
 export interface ResultTab<T extends string = string> {
   value: T;
   label: string;
+  /** Full text for the tooltip when the label is shortened. */
+  title?: string;
   /** Omit for a view that is not a set of items (Summary). */
   count?: number;
   /** Colour dot class for a side. */
   dot?: string;
+  /** Fold order when the row is too narrow: lower folds into More first. Omit to keep the tab until the others are gone. */
+  fold?: number;
 }
 
 /**
@@ -238,6 +264,42 @@ export interface ResultTab<T extends string = string> {
  * "More" menu (which wears the selection when one of its items is active).
  */
 export function ResultTabs<T extends string>({ tabs, more = [], value, onChange, label = "Which items" }: { tabs: ResultTab<T>[]; more?: ResultTab<T>[]; value: T; onChange: (v: T) => void; label?: string }) {
+  // Fold tabs into More until the row stops overflowing: lowest `fold` first, then unranked ones from the
+  // right. The selected tab never folds. Start from none folded and step up again whenever width or labels change.
+  const ref = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(0);
+  const [folded, setFolded] = useState(0);
+  const moreCount = more.length; // read before `more` is reassigned below
+  const sig = tabs.map((t) => `${t.label}${t.title ?? ""}${t.count ?? ""}${t.fold ?? ""}`).join("|") + value;
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setWidth(Math.round(e.contentRect.width)));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  // One effect: when width or labels change, start over from none folded; otherwise fold one more while the
+  // row overflows. (Two separate effects batched "reset to 0" with "+1" and could leave the old count in place.)
+  const key = `${width}|${sig}|${moreCount}`;
+  const lastKey = useRef(key);
+  useLayoutEffect(() => {
+    if (lastKey.current !== key) {
+      lastKey.current = key;
+      if (folded !== 0) return setFolded(0);
+    }
+    const el = ref.current;
+    if (el && el.scrollWidth > el.clientWidth) setFolded(folded + 1);
+  }, [key, folded]);
+  const order = tabs
+    .filter((t) => t.value !== value)
+    .map((t, i) => [t, i] as const)
+    .sort(([a, i], [b, j]) => (a.fold ?? 99) - (b.fold ?? 99) || j - i)
+    .map(([t]) => t.value);
+  if (folded > 0) {
+    const out = new Set(order.slice(0, folded));
+    more = [...tabs.filter((t) => out.has(t.value)), ...more];
+    tabs = tabs.filter((t) => !out.has(t.value));
+  }
   const inMore = more.find((t) => t.value === value);
   const body = (t: ResultTab<T>) => (
     <>
@@ -247,9 +309,9 @@ export function ResultTabs<T extends string>({ tabs, more = [], value, onChange,
     </>
   );
   return (
-    <div role="group" aria-label={label} className="flex min-w-0 items-center gap-1 overflow-x-auto [scrollbar-width:none]">
+    <div ref={ref} role="group" aria-label={label} className="flex min-w-0 items-center gap-1 overflow-x-auto [scrollbar-width:none]">
       {tabs.map((t) => (
-        <Button key={t.value} variant={t.value === value ? "selected" : "ghost"} aria-pressed={t.value === value} onClick={() => onChange(t.value)} className="shrink-0 whitespace-nowrap">
+        <Button key={t.value} variant={t.value === value ? "selected" : "ghost"} aria-pressed={t.value === value} onClick={() => onChange(t.value)} title={t.title} className="shrink-0 whitespace-nowrap">
           {body(t)}
         </Button>
       ))}
@@ -273,46 +335,48 @@ export function ResultTabs<T extends string>({ tabs, more = [], value, onChange,
   );
 }
 
-/** One result tab (kept for the landing demo; the workspace uses ResultTabs). */
-export function Tile({ count, label, dot, on, onClick }: { count?: number; label: string; dot?: string; on: boolean; onClick: () => void }) {
-  return (
-    <Button variant={on ? "selected" : "ghost"} aria-pressed={on} onClick={onClick} className="shrink-0 whitespace-nowrap">
-      {dot && <span aria-hidden className={`size-1.5 shrink-0 rounded-full ${dot}`} />}
-      {label}
-      {count !== undefined && <span className={cn("font-mono text-[12px] tabular-nums", count === 0 ? "opacity-50" : "opacity-70")}>{num(count)}</span>}
-    </Button>
-  );
-}
-
-/** A group of Tiles; with a host element it renders there (the landing demo's toolbar). */
-export function TileRow({ label, host, children }: { label: string; host?: HTMLElement | null; children: ReactNode }) {
-  const track = (
-    <div role="group" aria-label={label} className="inline-flex max-w-full items-center gap-1 overflow-x-auto [scrollbar-width:none]">
-      {children}
-    </div>
-  );
-  return host ? createPortal(track, host) : <div className="flex shrink-0 px-3 py-2">{track}</div>;
-}
-
-/** Class and style for the input pane of a list tool: `split` percent wide on desktop, full width when stacked. */
-export const inputPaneClass =
-  "flex shrink-0 flex-col border-b border-[var(--workspace-border)] min-[901px]:min-h-0 min-[901px]:w-[var(--split)] min-[901px]:min-w-[260px] min-[901px]:border-b-0";
+/** The rounded bordered card every playground pane sits in (Transform's Input and Output, Compare, Utils). */
+export const paneCardClass = "flex min-w-0 flex-col overflow-hidden rounded-[10px] border border-[var(--workspace-border)] bg-[var(--workspace-panel)]";
+/** Input card of a split tool: `--split` percent wide on desktop (see `splitStyle`), full width when stacked. */
+export const inputPaneClass = `${paneCardClass} shrink-0 min-[901px]:min-h-0 min-[901px]:w-[var(--split)] min-[901px]:min-w-[200px]`;
+/** Result card beside it: takes the rest. */
+export const resultPaneClass = `${paneCardClass} flex-1 max-[900px]:min-h-[280px] min-[901px]:min-h-0`;
+/** Row holding the two cards: stacked with a gap on mobile, side by side (handle supplies the gap) on desktop. */
+export const splitRowClass = "flex min-h-0 flex-1 flex-col gap-2 overflow-auto min-[901px]:flex-row min-[901px]:gap-0 min-[901px]:overflow-hidden";
 export const splitStyle = (split: number) => ({ "--split": `${split}%` }) as CSSProperties;
 
-/** Draggable divider between input and result, the same one the Transform panes use. Desktop only. */
-export function SplitHandle({ onResizeStart, onNudge, value }: { onResizeStart?: () => void; onNudge?: (delta: number) => void; value?: number }) {
+/** Draggable divider between the input and result cards, the one Transform uses. Desktop only. */
+export function SplitHandle({
+  onResizeStart,
+  onNudge,
+  onReset,
+  value,
+  min = MIN_SPLIT,
+  max = MAX_SPLIT,
+  label = "Resize input and result",
+}: {
+  onResizeStart?: (e: ReactMouseEvent) => void;
+  onNudge?: (delta: number) => void;
+  /** Double-click: back to the default size. */
+  onReset?: () => void;
+  value?: number;
+  min?: number;
+  max?: number;
+  label?: string;
+}) {
   return (
     <div
       role="separator"
       aria-orientation="vertical"
-      aria-label="Resize input and result"
+      aria-label={label}
       aria-valuenow={value}
-      aria-valuemin={25}
-      aria-valuemax={60}
+      aria-valuemin={min}
+      aria-valuemax={max}
       tabIndex={onNudge ? 0 : undefined}
       className="group relative hidden shrink-0 cursor-col-resize items-stretch justify-center outline-none min-[901px]:flex"
-      style={{ width: 9, marginLeft: -4, marginRight: -4, zIndex: 10 }}
+      style={{ width: 8, zIndex: 10 }}
       onMouseDown={onResizeStart}
+      onDoubleClick={onReset}
       onKeyDown={(e) => {
         if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
           e.preventDefault();
@@ -320,7 +384,48 @@ export function SplitHandle({ onResizeStart, onNudge, value }: { onResizeStart?:
         }
       }}
     >
-      <div className="pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-[var(--workspace-border)] transition-colors group-hover:bg-brand group-focus-visible:w-0.5 group-focus-visible:bg-[var(--focus)] group-active:bg-brand" />
+      <div className="pointer-events-none absolute inset-y-2 left-1/2 w-0.5 -translate-x-1/2 rounded-full bg-transparent transition-colors group-hover:bg-[var(--workspace-text-muted)] group-focus-visible:bg-[var(--focus)] group-active:bg-[var(--workspace-text)]" />
+    </div>
+  );
+}
+
+/** Info row under a result header: the count sentence, any extra controls, Find and Sort. Shared by every result tab and Summary. */
+export function FindSortRow({
+  info,
+  find,
+  onFind,
+  sort,
+  onSort,
+  items,
+  children,
+}: {
+  info: string;
+  find: string;
+  onFind: (q: string) => void;
+  sort: ListSortMode;
+  onSort: (s: ListSortMode) => void;
+  /** Items being sorted; "Most repeated" is offered only when their counts differ. */
+  items: ListItem[];
+  children?: ReactNode;
+}) {
+  const sortOptions = useMemo(() => {
+    const counted = items.some((i) => i.count > 1);
+    return SORT_OPTIONS.filter((o) => o.value !== "frequency" || counted || sort === "frequency");
+  }, [items, sort]);
+  return (
+    <div className="flex min-h-7 shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-[var(--workspace-border)] px-3 py-0.5 text-[12px] text-[var(--workspace-text-muted)]">
+      <span className="min-w-[10rem] flex-1 tabular-nums">{info}</span>
+      {children}
+      <TextField
+        aria-label="Find in result"
+        placeholder="Find in result"
+        icon={<MagnifyingGlassIcon />}
+        value={find}
+        onChange={(e) => onFind(e.target.value)}
+        onClear={() => onFind("")}
+        wrapperClassName="w-40"
+      />
+      <Select<ListSortMode> aria-label="Sort" label="Sort" width={160} options={sortOptions} value={sort} onChange={onSort} />
     </div>
   );
 }
@@ -339,6 +444,8 @@ export function ResultView({
   tabs,
   info,
   sides,
+  find: findProp,
+  onFind,
 }: {
   items: ListItem[];
   format: ListExportFormat;
@@ -357,8 +464,13 @@ export function ResultView({
   info?: string;
   /** Keys present in A and in B: each row gets a dot per side in the gutter. */
   sides?: { a: Set<string>; b: Set<string> };
+  /** Pass both to keep the Find text across tabs; otherwise this view keeps its own. */
+  find?: string;
+  onFind?: (q: string) => void;
 }) {
-  const [find, setFind] = useState("");
+  const [ownFind, setOwnFind] = useState("");
+  const find = findProp ?? ownFind;
+  const setFind = onFind ?? setOwnFind;
   const [shown, setShown] = useState(PAGE);
 
   useEffect(() => setShown(PAGE), [items, find]);
@@ -367,11 +479,6 @@ export function ResultView({
     const q = find.trim().toLowerCase();
     return q ? items.filter((i) => i.value.toLowerCase().includes(q)) : items;
   }, [items, find]);
-  // "Most repeated" only means something when counts differ.
-  const sortOptions = useMemo(() => {
-    const counted = items.some((i) => i.count > 1);
-    return SORT_OPTIONS.filter((o) => o.value !== "frequency" || counted || sort === "frequency");
-  }, [items, sort]);
 
   const fullText = (f: ListExportFormat = format) => formatListItems(rows, f);
 
@@ -386,7 +493,7 @@ export function ResultView({
     <div className="flex min-h-0 flex-1 flex-col">
       <PaneHeader
         className="flex-nowrap max-[900px]:flex-wrap"
-        left={<div className="min-w-0 flex-1">{tabs}</div>}
+        left={<div className="min-w-0 flex-1 max-[900px]:basis-full">{tabs}</div>}
         right={
           <div className="flex shrink-0 flex-nowrap items-center gap-1">
             <ResultActions
@@ -403,19 +510,14 @@ export function ResultView({
           </div>
         }
       />
-      <div className="flex min-h-7 shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-[var(--workspace-border)] px-3 py-0.5 text-[12px] text-[var(--workspace-text-muted)]">
-        <span className="min-w-0 flex-1 tabular-nums">{filtered ? `${num(n)} matching` : info ?? `${num(n)} ${n === 1 ? "value" : "values"}`}</span>
-        <TextField
-          aria-label="Find in result"
-          placeholder="Find in result"
-          icon={<MagnifyingGlassIcon />}
-          value={find}
-          onChange={(e) => setFind(e.target.value)}
-          onClear={() => setFind("")}
-          wrapperClassName="w-40"
-        />
-        <Select<ListSortMode> aria-label="Sort" label="Sort" width={160} options={sortOptions} value={sort} onChange={onSort} />
-      </div>
+      <FindSortRow
+        info={filtered ? `${num(n)} matching` : info ?? `${num(n)} ${n === 1 ? "value" : "values"}`}
+        find={find}
+        onFind={setFind}
+        sort={sort}
+        onSort={onSort}
+        items={items}
+      />
 
       {n === 0 ? (
         <EmptyState title={filtered ? "Nothing matches your search" : emptyTitle} description={filtered ? undefined : empty} />

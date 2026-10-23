@@ -36,6 +36,7 @@ function Tab({ id, label, active, onClick }: DemoTab & { active: boolean; onClic
 
 const HEIGHT = {
   tall: "h-[560px] min-[901px]:h-[440px]",
+  grow: "min-h-[560px] min-[901px]:h-[440px]",
   short: "h-[520px] min-[901px]:h-[380px]",
 };
 
@@ -55,7 +56,7 @@ export function DemoWindow({
   active: string;
   onPick: (id: string) => void;
   /** Working height on desktop; "short" fits a static example. */
-  size?: "tall" | "short";
+  size?: "tall" | "short" | "grow";
   children: ReactNode;
 }) {
   // Until the visitor clicks into the demo, the wheel scrolls the page, not the panes under the pointer.
@@ -89,11 +90,11 @@ export function DemoWindow({
             asChild
             variant="secondary"
             icon={<MagnifyingGlassIcon />}
-            className="mb-px w-[200px] justify-start max-[1000px]:w-9 max-[1000px]:px-0 max-[1000px]:[&>:not(:first-child)]:hidden max-sm:hidden"
+            className="mb-px w-[200px] justify-start max-[1000px]:w-9 max-[1000px]:px-0 max-sm:hidden"
           >
-            <Link href="/tools" aria-label="Search every tool">
-              <span className="min-w-0 flex-1 truncate text-left font-normal text-[var(--workspace-text-muted)]">Search every tool</span>
-              <Kbd keys="⌘K" />
+            <Link href="/tools">
+              <span className="min-w-0 flex-1 truncate text-left font-normal text-[var(--workspace-text-muted)] max-[1000px]:sr-only">Search every tool</span>
+              <Kbd keys="⌘K" className="max-[1000px]:hidden" />
             </Link>
           </Button>
         </div>

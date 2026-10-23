@@ -3,18 +3,19 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowsRightLeftIcon } from "@heroicons/react/16/solid";
 import { createPortal } from "react-dom";
-import { Button, EmptyState, PaneHeader, Select } from "@/components/kit";
+import { Button, EmptyState, IconButton, Select } from "@/components/kit";
 import { toast } from "@/components/Toast";
 import { ListEditor } from "@/components/compare/ListEditor";
-import { SummaryView } from "@/components/compare/SummaryView";
+import { SUMMARY_EXTENSION, SummaryView } from "@/components/compare/SummaryView";
 import { uuidLists } from "@/components/compare/samples";
-import { InputFooter, ListPaneHeader, ResultView, SplitBySelect, ResultTab, ResultTabs, SplitHandle, inputPaneClass, num, splitStyle, useExportFormat } from "@/components/compare/shared";
+import { bucketSource, shortName, InputFooter, ListPaneHeader, ResultView, SplitBySelect, ResultTab, ResultTabs, SplitHandle, inputPaneClass, num, resultPaneClass, splitRowClass, splitStyle, useExportFormat } from "@/components/compare/shared";
 import {
   DEFAULT_LIST_PARSE_OPTIONS,
   buildListSummary,
   cleanListInput,
   compareLists,
   formatListItems,
+  formatListSummary,
   getBucketItems,
   listExportExtension,
   needsListTidy,
@@ -22,6 +23,7 @@ import {
   type ListBucket,
   type ListParseOptions,
   type ListSortMode,
+  type ListSummaryFormat,
 } from "@/lib/json/listCompare";
 import {
   compareCsvByColumn,
@@ -86,17 +88,6 @@ function loadStoredSort(): ListSortMode {
   return "asc";
 }
 
-const BUCKET_SOURCE: Partial<Record<ListBucket, string>> = {
-  common: "from A and B",
-  union: "from A and B",
-  leftOnly: "from A only",
-  rightOnly: "from B only",
-  symmetric: "from A or B, not both",
-  leftDupes: "repeated in A",
-  rightDupes: "repeated in B",
-  changed: "same key, different row",
-};
-
 const SAMPLES: Array<{ id: string; label: string; left: string; right: string }> = [
   {
     id: "uuids",
@@ -157,6 +148,9 @@ export function ListComparePanel({
   const [csvColumn, setCsvColumn] = useState<string | null>(null);
   // Summary groups the user collapsed; kept here so the choice survives switching result tabs.
   const [closedGroups, setClosedGroups] = useState<string[]>([]);
+  // Find text and the Summary copy format, also kept across result tabs (like Sort).
+  const [find, setFind] = useState("");
+  const [summaryFormat, setSummaryFormat] = useState<ListSummaryFormat>("text");
 
   useEffect(() => {
     try {
@@ -205,8 +199,8 @@ export function ListComparePanel({
   const isSummary = activeBucket === "summary";
   const bucketItems = useMemo(() => getBucketItems(result, activeBucket), [result, activeBucket]);
   const summary = useMemo(
-    () => (isSummary ? buildListSummary(result, { includeChanged: !!csvColumn, showCountDeltas: true }) : null),
-    [isSummary, result, csvColumn],
+    () => (isSummary ? buildListSummary(result, { names: { left: leftLabel, right: rightLabel }, includeChanged: !!csvColumn, showCountDeltas: true, sort: resultSort }) : null),
+    [isSummary, result, csvColumn, resultSort, leftLabel, rightLabel],
   );
 
   const sortedItems = useMemo(() => (isSummary ? [] : sortListItems(bucketItems, resultSort)), [bucketItems, resultSort, isSummary]);
@@ -219,16 +213,16 @@ export function ListComparePanel({
     }
     onExportChange({
       get text() {
-        return isSummary ? summary?.text ?? "" : formatListItems(sortedItems, exportFormat);
+        return isSummary ? formatListSummary(summary?.sections ?? [], summaryFormat) : formatListItems(sortedItems, exportFormat);
       },
       get items() {
         return sortedItems.map((i) => i.value);
       },
-      filename: isSummary ? "formaty-list-summary.txt" : `formaty-list-${activeBucket}.${listExportExtension(exportFormat)}`,
+      filename: isSummary ? `formaty-list-summary.${SUMMARY_EXTENSION[summaryFormat]}` : `formaty-list-${activeBucket}.${listExportExtension(exportFormat)}`,
       bucket: activeBucket,
       count: isSummary ? summary?.sections.reduce((n, s) => n + s.count, 0) ?? 0 : sortedItems.length,
     });
-  }, [activeBucket, sortedItems, exportFormat, onExportChange, isSummary, summary]);
+  }, [activeBucket, sortedItems, exportFormat, onExportChange, isSummary, summary, summaryFormat]);
   useEffect(() => () => onExportChange?.(null), [onExportChange]);
 
   const st = result.stats;
@@ -249,7 +243,7 @@ export function ListComparePanel({
   const swap = () => {
     onLeftChange(right);
     onRightChange(left);
-    toast({ message: "Swapped A and B", type: "info" });
+    toast({ message: `Swapped ${leftLabel?.trim() || "A"} and ${rightLabel?.trim() || "B"}`, type: "info" });
   };
   const loadSample = (id: string) => {
     const sample = SAMPLES.find((x) => x.id === id);
@@ -315,17 +309,26 @@ export function ListComparePanel({
   );
 
   const [mainTabs, moreTabs] = useMemo(() => {
-    const t = (value: ListBucket, label: string, n?: number): ResultTab<ListBucket> => ({ value, label, count: n });
+    const t = (value: ListBucket, label: string, n?: number, fold?: number): ResultTab<ListBucket> => ({ value, label, count: n, fold });
+    const a = leftLabel?.trim() || "A";
+    const b = rightLabel?.trim() || "B";
+    // Side tabs: the name is shortened in the label, the full text sits in the tooltip.
+    const side = (value: ListBucket, verb: string, name: string, n: number, fold?: number): ResultTab<ListBucket> => ({ ...t(value, `${verb} ${shortName(name)}`, n, fold), title: `${verb} ${name}` });
     return [
-      [t("common", "In both", st.common), t("leftOnly", "Only in A", st.leftOnly), t("rightOnly", "Only in B", st.rightOnly), t("union", "All merged", st.union), t("symmetric", "In one only", st.symmetric)],
       [
-        t("leftDupes", "Repeated in A", st.leftDupes),
-        t("rightDupes", "Repeated in B", st.rightDupes),
-        ...(csvColumn || st.changed > 0 ? [t("changed", "Changed", st.changed)] : []),
+        t("common", "In both", st.common),
+        side("leftOnly", "Only in", a, st.leftOnly, 4),
+        side("rightOnly", "Only in", b, st.rightOnly, 3),
+        t("union", "All merged", st.union, 1),
         t("summary", "Summary"),
       ],
+      [
+        side("leftDupes", "Repeated in", a, st.leftDupes),
+        side("rightDupes", "Repeated in", b, st.rightDupes),
+        ...(csvColumn || st.changed > 0 ? [t("changed", "Changed", st.changed)] : []),
+      ],
     ];
-  }, [st, csvColumn]);
+  }, [st, csvColumn, leftLabel, rightLabel]);
   const tabs = <ResultTabs tabs={mainTabs} more={moreTabs} value={activeBucket} onChange={setActiveBucket} />;
   const sides = useMemo(() => ({ a: new Set(result.left.items.map((i) => i.key)), b: new Set(result.right.items.map((i) => i.key)) }), [result]);
 
@@ -334,12 +337,12 @@ export function ListComparePanel({
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
       {toolbarHost &&
         createPortal(
-          <Button variant="ghost" icon={<ArrowsRightLeftIcon />} onClick={swap}>
-            Swap A and B
-          </Button>,
+          <IconButton label="Swap A and B" onClick={swap}>
+            <ArrowsRightLeftIcon />
+          </IconButton>,
           toolbarHost,
         )}
-      <div className="flex min-h-0 flex-1 flex-col overflow-auto min-[901px]:flex-row min-[901px]:overflow-hidden">
+      <div className={splitRowClass}>
         {/* Inputs */}
         <div className={inputPaneClass} style={splitStyle(split)}>
           {listPane("left", left, onLeftChange, "bg-side-a", leftLabel ?? "List A", result.left.rawCount, "Paste the first list")}
@@ -355,7 +358,7 @@ export function ListComparePanel({
         <SplitHandle onResizeStart={onResizeStart} onNudge={onNudgeSplit} value={split} />
 
         {/* Result */}
-        <section aria-label="Result" className="flex min-w-0 flex-1 flex-col bg-[var(--workspace-panel)] min-[901px]:min-h-0 min-[901px]:overflow-hidden">
+        <section aria-label="Result" className={resultPaneClass}>
           {!hasText ? (
             <div className="flex min-h-[240px] flex-1 items-center justify-center">
               <EmptyState
@@ -374,7 +377,6 @@ export function ListComparePanel({
             </div>
           ) : (
             <>
-            {isSummary && <PaneHeader left={tabs} />}
             {csvColumns && (
               <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-[var(--workspace-border)] px-3 py-1">
                 {(
@@ -392,11 +394,22 @@ export function ListComparePanel({
             )}
 
             {isSummary ? (
-              <SummaryView summary={summary!} closed={closedGroups} onClosedChange={setClosedGroups} />
+              <SummaryView
+                summary={summary!}
+                closed={closedGroups}
+                onClosedChange={setClosedGroups}
+                tabs={tabs}
+                find={find}
+                onFind={setFind}
+                sort={resultSort}
+                onSort={setResultSort}
+                format={summaryFormat}
+                onFormat={setSummaryFormat}
+              />
             ) : (
               <ResultView
                 tabs={tabs}
-                info={`${num(sortedItems.length)} of ${num(st.union)} unique values · ${BUCKET_SOURCE[activeBucket] ?? "from A and B"}`}
+                info={`${num(sortedItems.length)} of ${num(st.union)} unique values · ${bucketSource({ left: leftLabel, right: rightLabel })[activeBucket] ?? "from A and B"}`}
                 sides={sides}
                 items={sortedItems}
                 format={exportFormat}
@@ -404,6 +417,8 @@ export function ListComparePanel({
                 sort={resultSort}
                 onSort={setResultSort}
                 fileBase={`formaty-list-${activeBucket}`}
+                find={find}
+                onFind={setFind}
                 showCounts={dupeActive}
                 emptyTitle={dupeActive ? "Nothing repeats" : "No items here"}
                 empty={dupeActive ? "Every item appears once in this list." : "Nothing falls in this group for the current lists."}

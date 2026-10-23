@@ -89,6 +89,31 @@ export function JsonEditor({
     () => typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform),
     [],
   );
+  /** Texts this editor sent through onChange that the parent has not echoed back yet. The
+   *  library syncs `value` in a passive effect, so an echo can land a keystroke late; writing
+   *  it back reverted the text for a frame and threw the caret to the end (fast Enter). */
+  const emittedRef = React.useRef<string[]>([]);
+  const syncingRef = React.useRef(false);
+  const valueRef = React.useRef(value);
+  valueRef.current = value;
+
+  React.useEffect(() => {
+    const ed = editorRef.current;
+    if (!ed) return;
+    const i = emittedRef.current.indexOf(value);
+    if (i >= 0) {
+      emittedRef.current = emittedRef.current.slice(i + 1);
+      return;
+    }
+    if (value === ed.getValue()) return;
+    syncingRef.current = true;
+    if (readOnly) ed.setValue(value);
+    else {
+      ed.executeEdits("", [{ range: ed.getModel()!.getFullModelRange(), text: value, forceMoveMarkers: true }]);
+      ed.pushUndoStop();
+    }
+    syncingRef.current = false;
+  }, [value, readOnly]);
 
   return (
     <div
@@ -101,7 +126,7 @@ export function JsonEditor({
         loading={null}
         defaultLanguage={language}
         theme={resolvedTheme}
-        value={value}
+        defaultValue={value}
         language={language}
         beforeMount={(monaco) => {
           defineFormatyThemes(monaco);
@@ -168,9 +193,21 @@ export function JsonEditor({
             : {}),
           ...hugeOptions,
         }}
-        onChange={(next) => onChange(next ?? "")}
+        onChange={(next = "") => {
+          if (syncingRef.current) return;
+          // Capped so a parent that never echoes cannot grow it without bound.
+          emittedRef.current = [...emittedRef.current.slice(-49), next];
+          onChange(next);
+        }}
         onMount={(editor, monaco) => {
           editorRef.current = editor;
+          // Models default to CRLF on Windows, so values read back (Copy, Download, hashes) would differ by OS.
+          // Guarded: the EOL change is a content event the parent must not see as an edit.
+          syncingRef.current = true;
+          editor.getModel()?.setEOL(monaco.editor.EndOfLineSequence.LF);
+          syncingRef.current = false;
+          // A value that changed between create and mount missed the sync effect.
+          if (editor.getValue() !== valueRef.current) editor.setValue(valueRef.current);
           if (huge) {
             applyLargeFileOptions(editor, monaco);
           }

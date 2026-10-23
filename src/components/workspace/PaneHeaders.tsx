@@ -286,6 +286,8 @@ export function OutputHeader(p: OutputHeaderProps) {
   const [roomy, setRoomy] = useState(false);
   // Under ~640px the chips and the view control each fold into one dropdown, so the header stays on one row.
   const [narrow, setNarrow] = useState(false);
+  // Under ~800px the chips still fit but the view control no longer does beside them (non-JSON input adds chips), so it becomes a dropdown first.
+  const [tight, setTight] = useState(false);
   useEffect(() => {
     const el = rootRef.current;
     if (!el) return;
@@ -293,6 +295,7 @@ export function OutputHeader(p: OutputHeaderProps) {
       setCompact(entry.contentRect.width < 860);
       setRoomy(entry.contentRect.width >= 1180);
       setNarrow(entry.contentRect.width < 640);
+      setTight(entry.contentRect.width < 800);
     });
     ro.observe(el);
     return () => ro.disconnect();
@@ -377,7 +380,7 @@ export function OutputHeader(p: OutputHeaderProps) {
   return (
     <div ref={rootRef}>
       <PaneHeader
-        className={narrow ? "flex-nowrap [&>div:last-child]:flex-nowrap" : undefined}
+        className={tight ? "flex-nowrap [&>div:last-child]:flex-nowrap" : undefined}
         left={
           <>
             <OutputPicker selected={p.selected} learned={p.learned} onSelect={p.onSelect} curl={p.curl} compact={compact} collapsed={narrow} />
@@ -412,7 +415,7 @@ export function OutputHeader(p: OutputHeaderProps) {
               </>
             }
           >
-            {p.isData && narrow && (
+            {p.isData && tight && (
               <span data-tour="view-switcher" className="shrink-0">
                 <Select
                   aria-label="Output view"
@@ -423,7 +426,7 @@ export function OutputHeader(p: OutputHeaderProps) {
                 />
               </span>
             )}
-            {p.isData && !narrow && (
+            {p.isData && !tight && (
               <span data-tour="view-switcher">
                 <Segmented aria-label="Output view" value={p.view} onChange={p.onView} options={VIEWS.map((v) => ({
                     value: v.value,

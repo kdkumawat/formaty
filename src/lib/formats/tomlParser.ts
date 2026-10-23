@@ -14,6 +14,11 @@ const tomlValueToJson = (obj: unknown): JsonValue => {
   return result;
 };
 
+// @iarna/toml writes 460078 as 460_078 with no opt-out; strip the separators outside of strings.
+const DIGIT_SEPARATORS = /("""[\s\S]*?"""|'''[\s\S]*?'''|"(?:[^"\\\n]|\\.)*"|'[^'\n]*')|(?<![\w.])-?\d{1,3}(?:_\d{3})+(?!\w)/g;
+const stripDigitSeparators = (toml: string) =>
+  toml.replace(DIGIT_SEPARATORS, (m, str) => str ?? m.replaceAll("_", ""));
+
 export const tomlAdapter: FormatAdapter = {
   kind: "toml",
   parse(input: string): JsonValue {
@@ -23,7 +28,7 @@ export const tomlAdapter: FormatAdapter = {
   stringify(data: JsonValue, options?: Parameters<FormatAdapter["stringify"]>[1]): string {
     const obj = Array.isArray(data) ? { data } : (data as Record<string, unknown>);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let out = TOML.stringify(obj as any);
+    let out = stripDigitSeparators(TOML.stringify(obj as any));
     if (options?.minify) {
       out = out.replace(/\n{2,}/g, "\n").trim();
     }

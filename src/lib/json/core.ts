@@ -380,9 +380,24 @@ export function toYaml(input: JsonValue): string {
   return yaml.dump(input);
 }
 
+/** Document object for XMLBuilder: a lone object/primitive key becomes the document element, anything else gets a synthetic `root`. */
+export function xmlDocument(input: JsonValue): object {
+  if (typeof input === "object" && input !== null && !Array.isArray(input)) {
+    const keys = Object.keys(input);
+    const v = input[keys[0]];
+    if (keys.length === 1 && /^[A-Za-z_][\w.-]*$/.test(keys[0]) && !Array.isArray(v)) return input;
+  }
+  return { root: input };
+}
+
 export function toXml(input: JsonValue): string {
   const builder = new XMLBuilder({ format: true });
-  return builder.build({ root: input as object });
+  return builder.build(xmlDocument(input));
+}
+
+/** RFC 4180 minimal quoting. */
+function csvField(s: string, delimiter: string): string {
+  return s.includes(delimiter) || /["\r\n]/.test(s) || s !== s.trim() ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
 export function toCsv(input: JsonValue, delimiter = ","): string {
@@ -395,7 +410,7 @@ export function toCsv(input: JsonValue, delimiter = ","): string {
     new Set(rows.flatMap((item) => Object.keys(item as Record<string, JsonValue>))),
   );
   const lines = [
-    headers.join(delimiter),
+    headers.map((h) => csvField(h, delimiter)).join(delimiter),
     ...rows.map((row) =>
       headers
         .map((header) => {
@@ -406,7 +421,7 @@ export function toCsv(input: JsonValue, delimiter = ","): string {
               : typeof value === "object"
                 ? JSON.stringify(value)
                 : String(value);
-          return `"${serialized.replace(/"/g, '""')}"`;
+          return csvField(serialized, delimiter);
         })
         .join(delimiter),
     ),

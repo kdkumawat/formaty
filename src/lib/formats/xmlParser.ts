@@ -1,12 +1,14 @@
 import { XMLParser, XMLBuilder } from "fast-xml-parser";
 import type { FormatAdapter } from "./types";
-import type { JsonValue } from "@/lib/json/core";
+import { xmlDocument, type JsonValue } from "@/lib/json/core";
 
 const parser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: "@_",
   parseTagValue: true,
   trimValues: true,
+  ignoreDeclaration: true,
+  ignorePiTags: true,
 });
 
 function createXmlBuilder(indent = 2, minify = false) {
@@ -18,13 +20,9 @@ function createXmlBuilder(indent = 2, minify = false) {
   });
 }
 
-function unwrapRoot(obj: Record<string, unknown>): JsonValue {
-  const keys = Object.keys(obj);
-  if (keys.length === 1) {
-    const value = obj[keys[0]];
-    return value as JsonValue;
-  }
-  return obj as JsonValue;
+/** The leading `<?xml …?>` declaration of `text` (after optional BOM/whitespace), or undefined. */
+export function xmlDeclarationOf(text: string): string | undefined {
+  return /^[﻿\s]*(<\?xml\s[^>]*?\?>)/.exec(text)?.[1];
 }
 
 export const xmlAdapter: FormatAdapter = {
@@ -32,16 +30,13 @@ export const xmlAdapter: FormatAdapter = {
   parse(input: string): JsonValue {
     if (!input.includes("<")) throw new Error("No XML elements found");
     const parsed = parser.parse(input);
-    if (!parsed || typeof parsed !== "object") return parsed as JsonValue;
-    return unwrapRoot(parsed) as JsonValue;
+    return parsed as JsonValue;
   },
   stringify(data: JsonValue, options?: Parameters<FormatAdapter["stringify"]>[1]): string {
     const indent = options?.indentation ?? 2;
     const minify = options?.minify ?? false;
     const b = createXmlBuilder(indent, minify);
-    const wrapped = typeof data === "object" && data !== null && !Array.isArray(data)
-      ? { root: data }
-      : { root: data };
-    return b.build(wrapped as object);
+    const body = b.build(xmlDocument(data));
+    return options?.xmlDeclaration ? options.xmlDeclaration + (minify ? "" : "\n") + body : body;
   },
 };

@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-const MIN_SPLIT = 25;
-const MAX_SPLIT = 60;
+export const MIN_SPLIT = 15;
+export const MAX_SPLIT = 85;
 
 export const clampSplit = (value: number) => Math.max(MIN_SPLIT, Math.min(MAX_SPLIT, value));
 
@@ -15,14 +15,19 @@ export function useSplitResize(initial = 41) {
 
   /** Clamps, so restored sessions and shared links can pass raw numbers. */
   const setSplit = useCallback((value: number) => setSplitRaw(clampSplit(value)), []);
-  const startResize = useCallback(() => setIsResizing(true), []);
+  // The row being dragged across: the divider's parent, so a pane that sits beside a sidebar still tracks the pointer.
+  const rootRef = useRef<Element | null>(null);
+  const startResize = useCallback((e?: { currentTarget: Element }) => {
+    rootRef.current = e?.currentTarget.parentElement ?? null;
+    setIsResizing(true);
+  }, []);
   const nudgeSplit = useCallback((delta: number) => setSplitRaw((s) => clampSplit(s + delta)), []);
 
   useEffect(() => {
     if (!isResizing) return;
 
     const onMouseMove = (event: MouseEvent) => {
-      const section = splitContainerRef.current;
+      const section = rootRef.current ?? splitContainerRef.current;
       if (!section) return;
       const rect = section.getBoundingClientRect();
       const nextSplit = ((event.clientX - rect.left) / rect.width) * 100;

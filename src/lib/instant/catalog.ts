@@ -497,8 +497,43 @@ export function searchZoneAbbreviations(query: string, limit = 6): IanaSearchRes
   return out;
 }
 
+/** Legacy / backward-link IANA ids mapped to their modern canonical id. */
+const ZONE_ALIASES: Record<string, string> = {
+  "Asia/Calcutta": "Asia/Kolkata",
+  "Asia/Saigon": "Asia/Ho_Chi_Minh",
+  "Asia/Katmandu": "Asia/Kathmandu",
+  "Asia/Rangoon": "Asia/Yangon",
+  "Europe/Kiev": "Europe/Kyiv",
+  "America/Buenos_Aires": "America/Argentina/Buenos_Aires",
+  "Asia/Dacca": "Asia/Dhaka",
+  "Asia/Thimbu": "Asia/Thimphu",
+  "Pacific/Truk": "Pacific/Chuuk",
+  "Pacific/Ponape": "Pacific/Pohnpei",
+  "Pacific/Enderbury": "Pacific/Kanton",
+  "Atlantic/Faeroe": "Atlantic/Faroe",
+  "America/Godthab": "America/Nuuk",
+  "Asia/Ulan_Bator": "Asia/Ulaanbaatar",
+  "Asia/Macao": "Asia/Macau",
+  "Asia/Istanbul": "Europe/Istanbul",
+  "America/Indianapolis": "America/Indiana/Indianapolis",
+  "America/Louisville": "America/Kentucky/Louisville",
+  "US/Eastern": "America/New_York",
+  "US/Central": "America/Chicago",
+  "US/Mountain": "America/Denver",
+  "US/Pacific": "America/Los_Angeles",
+  "US/Alaska": "America/Anchorage",
+  "US/Hawaii": "Pacific/Honolulu",
+  "US/Arizona": "America/Phoenix",
+};
+const ZONE_ALIASES_LC = new Map(Object.entries(ZONE_ALIASES).map(([k, v]) => [k.toLowerCase(), v]));
+
+/** Single entry point for zone ids: maps legacy aliases to the modern id. */
+export function canonicalZone(id: string): string {
+  return ZONE_ALIASES_LC.get(id.trim().toLowerCase()) ?? id;
+}
+
 export function resolveZoneToken(token: string): string | null {
-  const t = token.trim();
+  const t = canonicalZone(token.trim());
   if (!t) return null;
   if (t.toUpperCase() === "UTC" || t.toUpperCase() === "GMT") return "UTC";
   if (ABBR_TO_IANA[t.toUpperCase()]) return ABBR_TO_IANA[t.toUpperCase()];
@@ -520,7 +555,7 @@ export function resolveZoneToken(token: string): string | null {
 
 export function detectLocalIana(): string {
   try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+    return canonicalZone(Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
   } catch {
     return "UTC";
   }
@@ -528,9 +563,9 @@ export function detectLocalIana(): string {
 
 export function listIanaZones(): string[] {
   try {
-    const supported = Intl.supportedValuesOf?.("timeZone");
+    const supported = Intl.supportedValuesOf?.("timeZone")?.map(canonicalZone);
     // supportedValuesOf omits "UTC" on some runtimes; it must always be selectable.
-    if (supported?.length) return supported.includes("UTC") ? [...supported] : ["UTC", ...supported];
+    if (supported?.length) return [...new Set(supported.includes("UTC") ? supported : ["UTC", ...supported])];
   } catch {
     /* ignore */
   }

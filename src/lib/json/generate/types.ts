@@ -1,5 +1,6 @@
 import type { JsonValue } from "../core";
 import { generateSql } from "./sql";
+import { mergeSamples } from "./schema";
 
 export type TypeTargetLanguage =
   | "typescript"
@@ -15,17 +16,23 @@ export type TypeTargetLanguage =
   | "rust"
   | "sql";
 
-function inferTypeName(value: JsonValue): string {
+function inferTypeName(value: JsonValue, ints = false): string {
   if (Array.isArray(value)) {
     if (!value.length) return "unknown[]";
-    return `${inferTypeName(value[0])}[]`;
+    return `${inferTypeName(mergeSamples(value), ints)}[]`;
   }
   if (value === null) return "null";
   if (typeof value === "object") return "Record<string, unknown>";
+  if (ints && typeof value === "number" && Number.isInteger(value)) return "integer";
   return typeof value;
 }
 
 export function generateTypeScript(input: JsonValue, rootName = "JsonData"): string {
+  return tsInterfaces(input, rootName, false);
+}
+
+/** `ints` keeps whole numbers as a distinct "integer" kind for the typed-language mappers. */
+function tsInterfaces(input: JsonValue, rootName: string, ints: boolean): string {
   const lines: string[] = [];
   const emitted = new Set<string>();
   const usedTypeNames = new Set<string>([rootName]);
@@ -57,10 +64,10 @@ export function generateTypeScript(input: JsonValue, rootName = "JsonData"): str
         fieldLines.push(`  ${fieldName}: ${childName};`);
       } else if (Array.isArray(nested) && nested[0] && typeof nested[0] === "object") {
         const childName = typeNameFromKey(key);
-        walk(nested[0], childName);
+        walk(mergeSamples(nested), childName);
         fieldLines.push(`  ${fieldName}: ${childName}[];`);
       } else {
-        fieldLines.push(`  ${fieldName}: ${inferTypeName(nested)};`);
+        fieldLines.push(`  ${fieldName}: ${inferTypeName(nested, ints)};`);
       }
     });
 
@@ -74,7 +81,8 @@ export function generateTypeScript(input: JsonValue, rootName = "JsonData"): str
   };
 
   // A root array of records (an API list response) is typed by its first record, like nested arrays.
-  const root = Array.isArray(input) && input[0] && typeof input[0] === "object" ? input[0] : input;
+  const root =
+    Array.isArray(input) && input[0] && typeof input[0] === "object" ? mergeSamples(input) : input;
   walk(root, rootName);
   return lines.join("\n").trim();
 }
@@ -88,7 +96,7 @@ export function generateTypes(
     return generateTypeScript(input, rootName);
   }
 
-  const lines = generateTypeScript(input, rootName).split("\n");
+  const lines = tsInterfaces(input, rootName, true).split("\n");
   const interfaces: Record<string, Array<{ name: string; type: string }>> = {};
   let current: string | null = null;
 
@@ -115,6 +123,7 @@ export function generateTypes(
       if (type.endsWith("[]")) return `z.array(${mapType(type.slice(0, -2))})`;
       if (type === "string") return "z.string()";
       if (type === "number") return "z.number()";
+      if (type === "integer") return "z.number().int()";
       if (type === "boolean") return "z.boolean()";
       if (type === "null") return "z.null()";
       if (type === "Record<string, unknown>") return "z.record(z.string(), z.unknown())";
@@ -125,6 +134,7 @@ export function generateTypes(
       if (type.endsWith("[]")) return `list[${mapType(type.slice(0, -2))}]`;
       if (type === "string") return "str";
       if (type === "number") return "float";
+      if (type === "integer") return "int";
       if (type === "boolean") return "bool";
       if (type === "null") return "None";
       if (type === "Record<string, unknown>") return "dict[str, Any]";
@@ -135,6 +145,7 @@ export function generateTypes(
       if (type.endsWith("[]")) return `list[${mapType(type.slice(0, -2))}]`;
       if (type === "string") return "str";
       if (type === "number") return "float";
+      if (type === "integer") return "int";
       if (type === "boolean") return "bool";
       if (type === "null") return "None";
       return type;
@@ -143,6 +154,7 @@ export function generateTypes(
       if (type.endsWith("[]")) return `List<${mapType(type.slice(0, -2))}>`;
       if (type === "string") return "String";
       if (type === "number") return "double";
+      if (type === "integer") return "long";
       if (type === "boolean") return "boolean";
       if (type === "null") return "Object";
       return type;
@@ -151,6 +163,7 @@ export function generateTypes(
       if (type.endsWith("[]")) return `List<${mapType(type.slice(0, -2))}>`;
       if (type === "string") return "string";
       if (type === "number") return "double";
+      if (type === "integer") return "long";
       if (type === "boolean") return "bool";
       if (type === "null") return "object?";
       return type;
@@ -159,6 +172,7 @@ export function generateTypes(
       if (type.endsWith("[]")) return `[]${mapType(type.slice(0, -2))}`;
       if (type === "string") return "string";
       if (type === "number") return "float64";
+      if (type === "integer") return "int64";
       if (type === "boolean") return "bool";
       if (type === "null") return "any";
       return type;
@@ -167,6 +181,7 @@ export function generateTypes(
       if (type.endsWith("[]")) return `repeated ${mapType(type.slice(0, -2))}`;
       if (type === "string") return "string";
       if (type === "number") return "double";
+      if (type === "integer") return "int64";
       if (type === "boolean") return "bool";
       if (type === "null") return "string";
       return type;
@@ -175,6 +190,7 @@ export function generateTypes(
       if (type.endsWith("[]")) return `List<${mapType(type.slice(0, -2))}>`;
       if (type === "string") return "String";
       if (type === "number") return "Double";
+      if (type === "integer") return "Long";
       if (type === "boolean") return "Boolean";
       if (type === "null") return "Any?";
       return type;
@@ -183,6 +199,7 @@ export function generateTypes(
       if (type.endsWith("[]")) return `[${mapType(type.slice(0, -2))}]`;
       if (type === "string") return "String";
       if (type === "number") return "Double";
+      if (type === "integer") return "Int";
       if (type === "boolean") return "Bool";
       if (type === "null") return "String?";
       return type;
@@ -191,6 +208,7 @@ export function generateTypes(
       if (type.endsWith("[]")) return `Vec<${mapType(type.slice(0, -2))}>`;
       if (type === "string") return "String";
       if (type === "number") return "f64";
+      if (type === "integer") return "i64";
       if (type === "boolean") return "bool";
       if (type === "null") return "Option<String>";
       return type;

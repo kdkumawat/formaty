@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { CopyButton, EmptyState, InputActions, PaneHeader, StatusText, TextField } from "@/components/kit";
 import { Highlighted } from "@/components/Highlighted";
-import { editorClass } from "@/components/compare/shared";
+import { focusRing } from "@/components/kit/styles";
+import { SplitHandle, editorClass, inputPaneClass, resultPaneClass, splitRowClass, splitStyle } from "@/components/compare/shared";
 import { decodeJwt, prettyJson, utilPlaceholder } from "@/lib/utils/devtools";
 import { selectFieldAll, type UtilToolState } from "@/components/utils/state";
 import { HMAC, verifyHmac } from "@/components/utils/jwtVerify";
@@ -29,16 +30,16 @@ const show = (v: unknown) => (typeof v === "string" ? v : JSON.stringify(v));
 type Verdict = "none" | "ok" | "bad" | "unsupported";
 
 /** Numbered, token-coloured JSON. */
-function JsonPane({ label, text, children }: { label: string; text: string; children?: React.ReactNode }) {
+function JsonPane({ label, text, compact, children }: { label: string; text: string; compact?: boolean; children?: React.ReactNode }) {
   const lines = text.split("\n");
   return (
-    <section aria-label={label} className="flex min-h-0 min-w-0 flex-1 flex-col bg-sunk border-[var(--workspace-border)] max-[900px]:min-h-[200px] min-[901px]:[&:not(:first-child)]:border-l">
+    <section aria-label={label} className={`flex min-h-0 min-w-0 flex-col bg-sunk border-[var(--workspace-border)] [&:not(:first-child)]:border-t ${compact ? "flex-none" : "flex-1 max-[900px]:min-h-[200px]"}`}>
       <PaneHeader
         title={label}
         left={<span className="inline-flex h-[22px] items-center gap-1.5 rounded-sm border border-input px-[7px] font-mono text-[11.5px]"><span className="text-[var(--workspace-text-muted)]">{"{}"}</span>JSON</span>}
         right={<CopyButton variant="secondary" label={`Copy ${label.toLowerCase()}`} getText={() => text} disabled={!text} />}
       />
-      <div className="flex max-h-[60%] min-h-0 flex-none overflow-auto bg-sunk py-2 font-mono text-[13px] leading-[1.6]">
+      <div role="region" tabIndex={0} aria-label={`${label} JSON`} className={`flex ${compact ? "max-h-40" : "max-h-[60%]"} min-h-0 flex-none overflow-auto bg-sunk py-2 font-mono text-[13px] leading-[1.6] ${focusRing}`}>
         <div aria-hidden className="w-10 shrink-0 select-none pr-3 text-right text-faint">
           {lines.map((_, i) => (
             <div key={i}>{i + 1}</div>
@@ -53,7 +54,19 @@ function JsonPane({ label, text, children }: { label: string; text: string; chil
   );
 }
 
-export function JwtView({ state, patch }: { state: UtilToolState; patch: (p: Partial<UtilToolState>) => void }) {
+export function JwtView({
+  state,
+  patch,
+  split,
+  onResizeStart,
+  onNudgeSplit,
+}: {
+  state: UtilToolState;
+  patch: (p: Partial<UtilToolState>) => void;
+  split: number;
+  onResizeStart?: () => void;
+  onNudgeSplit?: (delta: number) => void;
+}) {
   const input = state.input;
   const [secret, setSecret] = useState("");
   const [verdict, setVerdict] = useState<Verdict>("none");
@@ -84,8 +97,8 @@ export function JwtView({ state, patch }: { state: UtilToolState; patch: (p: Par
   const parts = input.trim().split(".");
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-auto min-[901px]:overflow-hidden">
-      <section aria-label="Token" className="flex shrink-0 flex-col border-b border-[var(--workspace-border)]">
+    <div className={splitRowClass}>
+      <section aria-label="Token" className={inputPaneClass} style={splitStyle(split)}>
         <PaneHeader
           title="Token"
           right={
@@ -99,7 +112,7 @@ export function JwtView({ state, patch }: { state: UtilToolState; patch: (p: Par
         />
         <textarea
           aria-label="JWT token"
-          className={`${editorClass} h-24 min-h-24 flex-none break-all`}
+          className={`${editorClass} h-32 break-all min-[901px]:h-auto`}
           value={input}
           onChange={(e) => patch({ input: e.target.value })}
           onKeyDown={selectFieldAll}
@@ -107,7 +120,7 @@ export function JwtView({ state, patch }: { state: UtilToolState; patch: (p: Par
           spellCheck={false}
         />
         {jwt && (
-          <div className="flex flex-wrap gap-x-5 gap-y-1 border-t border-[var(--workspace-border)] px-3 py-1.5 text-[12px] text-[var(--workspace-text-muted)]">
+          <div className="flex shrink-0 flex-wrap gap-x-5 gap-y-1 border-t border-[var(--workspace-border)] px-3 py-1.5 text-[12px] text-[var(--workspace-text-muted)]">
             {(["Header", "Payload", "Signature"] as const).map((name, i) => (
               <span key={name} className="inline-flex items-center gap-2">
                 <span
@@ -121,19 +134,45 @@ export function JwtView({ state, patch }: { state: UtilToolState; patch: (p: Par
             ))}
           </div>
         )}
+        {jwt && (
+          <section aria-label="Signature" className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-t border-[var(--workspace-border)] px-3 py-1.5">
+            <h2 className="text-[14px] font-semibold">Signature</h2>
+            {alg && <span className="font-mono text-[12px] text-[var(--workspace-text-muted)]">{alg}</span>}
+            <label htmlFor="jwt-secret" className="text-[12px] text-[var(--workspace-text-muted)]">Secret to verify</label>
+            <TextField
+              id="jwt-secret"
+              type="password"
+              autoComplete="off"
+              placeholder="Paste the HMAC secret"
+              value={secret}
+              onChange={(e) => setSecret(e.target.value)}
+              wrapperClassName="w-full"
+            />
+            <StatusText tone={verdict === "ok" ? "ok" : verdict === "bad" ? "bad" : "muted"}>
+              {verdict === "ok"
+                ? "Signature verified"
+                : verdict === "bad"
+                  ? "Signature does not match"
+                  : verdict === "unsupported"
+                    ? `${alg || "This algorithm"} cannot be checked here`
+                    : "Not verified"}
+            </StatusText>
+          </section>
+        )}
       </section>
+      <SplitHandle onResizeStart={onResizeStart} onNudge={onNudgeSplit} value={split} />
 
+      <section className={resultPaneClass} aria-label="Decoded" aria-live="polite">
       {!input.trim() ? (
         <EmptyState title="Nothing to read yet" description="Paste a token above, or use Sample." />
       ) : !jwt ? (
         <p className="px-3 py-3 text-[13px] text-bad">{state.error ?? "This is not a valid JWT."}</p>
       ) : (
-        <>
-          <div className="flex min-h-0 flex-1 flex-col min-[901px]:flex-row">
-            <JsonPane label="Header" text={prettyJson(jwt.header)} />
+        <div className="flex min-h-0 flex-1 flex-col overflow-auto">
+            <JsonPane label="Header" text={prettyJson(jwt.header)} compact />
             <JsonPane label="Payload" text={prettyJson(jwt.payload)}>
               {claims.length > 0 && (
-                <div className="max-h-[45%] shrink-0 overflow-auto border-t border-[var(--workspace-border)]">
+                <div role="region" tabIndex={0} aria-label="Payload claims" className={`max-h-[45%] shrink-0 overflow-auto border-t border-[var(--workspace-border)] ${focusRing}`}>
                   <table className="w-full border-collapse text-left text-[13px]">
                     <thead className="sticky top-0 bg-[var(--workspace-panel)] text-[12px] text-[var(--workspace-text-muted)]">
                       <tr>
@@ -158,32 +197,9 @@ export function JwtView({ state, patch }: { state: UtilToolState; patch: (p: Par
                 </div>
               )}
             </JsonPane>
-          </div>
-          <section aria-label="Signature" className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-t border-[var(--workspace-border)] px-3 py-1.5">
-            <h2 className="text-[14px] font-semibold">Signature</h2>
-            {alg && <span className="font-mono text-[12px] text-[var(--workspace-text-muted)]">{alg}</span>}
-            <label htmlFor="jwt-secret" className="text-[12px] text-[var(--workspace-text-muted)]">Secret to verify</label>
-            <TextField
-              id="jwt-secret"
-              type="password"
-              autoComplete="off"
-              placeholder="Paste the HMAC secret"
-              value={secret}
-              onChange={(e) => setSecret(e.target.value)}
-              wrapperClassName="w-64"
-            />
-            <StatusText tone={verdict === "ok" ? "ok" : verdict === "bad" ? "bad" : "muted"}>
-              {verdict === "ok"
-                ? "Signature verified"
-                : verdict === "bad"
-                  ? "Signature does not match"
-                  : verdict === "unsupported"
-                    ? `${alg || "This algorithm"} cannot be checked here`
-                    : "Not verified"}
-            </StatusText>
-          </section>
-        </>
+        </div>
       )}
+      </section>
     </div>
   );
 }

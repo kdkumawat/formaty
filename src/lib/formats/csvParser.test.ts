@@ -7,8 +7,8 @@ describe("csvAdapter.parse", () => {
     const text = "a,b,c\n1,2,3\n4,5,6\n";
     const out = csvAdapter.parse(text) as Array<Record<string, string>>;
     expect(out).toEqual([
-      { a: "1", b: "2", c: "3" },
-      { a: "4", b: "5", c: "6" },
+      { a: 1, b: 2, c: 3 },
+      { a: 4, b: 5, c: 6 },
     ]);
   });
 
@@ -16,8 +16,8 @@ describe("csvAdapter.parse", () => {
     const text = "a,b\n1,2\n\n3,4\n\n";
     const out = csvAdapter.parse(text) as Array<Record<string, string>>;
     expect(out).toEqual([
-      { a: "1", b: "2" },
-      { a: "3", b: "4" },
+      { a: 1, b: 2 },
+      { a: 3, b: 4 },
     ]);
   });
 
@@ -62,15 +62,15 @@ describe("csvAdapter.parse errors", () => {
   });
 
   it("reads a single column without complaining about the delimiter", () => {
-    expect(csvAdapter.parse("a\n1\n2\n")).toEqual([{ a: "1" }, { a: "2" }]);
+    expect(csvAdapter.parse("a\n1\n2\n")).toEqual([{ a: 1 }, { a: 2 }]);
   });
 });
 
 describe("csvAdapter.stringify", () => {
   it("round-trips through parse", () => {
     const data = [
-      { a: "1", b: "2" },
-      { a: "3", b: "4" },
+      { a: 1, b: 2 },
+      { a: 3, b: 4 },
     ];
     const text = csvAdapter.stringify(data);
     const back = csvAdapter.parse(text);

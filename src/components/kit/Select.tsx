@@ -21,7 +21,7 @@ export interface SelectProps<T extends string = string> {
   options: SelectOption<T>[];
   value: T;
   onChange: (value: T) => void;
-  /** Optional muted prefix inside the trigger, e.g. "Indent". Also the accessible name unless `aria-label` is set. */
+  /** Optional muted prefix inside the trigger, e.g. "Indent". Part of the accessible name (label + value). */
   label?: string;
   /** Fixed trigger width (px number or CSS length). Omit to size to the longest label (up to 40 options). */
   width?: number | string;
@@ -76,7 +76,9 @@ export function Select<T extends string = string>({
           variant={variant}
           size={size}
           disabled={disabled}
-          aria-label={ariaLabel ?? label}
+          // WCAG 2.5.3: the name must contain the visible text. With a visible label, let the name compute from label + value;
+          // with only the value visible, lead with it and append the field name.
+          aria-label={label || !ariaLabel ? undefined : `${current ? current.display ?? current.label : placeholder}, ${ariaLabel}`}
           iconRight={<ChevronDownIcon />}
           style={width !== undefined ? { width } : undefined}
           className={cn(width !== undefined && "justify-between", className)}

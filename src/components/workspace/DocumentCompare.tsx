@@ -109,7 +109,7 @@ function DocumentControls(p: DocumentHeaderProps & { status: string }) {
       />
       {p.hasContent && (
         <div className="min-w-0 flex-[1_1_6rem] text-[12px] tabular-nums text-[var(--workspace-text-muted)]">
-          <TruncatedText>{p.status || "No differences"}</TruncatedText>
+          <TruncatedText>{p.status || (p.stats || p.structural ? "No differences" : "Comparing…")}</TruncatedText>
         </div>
       )}
       <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-1">

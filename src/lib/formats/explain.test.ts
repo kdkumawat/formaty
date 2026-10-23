@@ -42,9 +42,27 @@ describe("forced format that does not match the content", () => {
 describe("JSON", () => {
   it("trailing comma", () => {
     const p = explain('{"a":1,}', "anything", "json");
-    expect(p.message).toBe('Unexpected "}" at line 1, column 8. Remove the comma before it.');
+    expect(p.message).toBe('Unexpected "}" at line 1, column 8. Remove the trailing comma.');
     expect(p.line).toBe(1);
     expect(p.actions).toEqual([]);
+  });
+
+  it("doubled comma", () => {
+    expect(explain('{"a": 1,, "b": 2}', "x", "json").message).toBe('Unexpected "," at line 1, column 9. Remove the extra comma.');
+    expect(explain("[1,,2]", "x", "json").message).toBe('Unexpected "," at line 1, column 4. Remove the extra comma.');
+  });
+
+  it("trailing comma in an array", () => {
+    expect(explain("[1,2,]", "x", "json").message).toBe('Unexpected "]" at line 1, column 6. Remove the trailing comma.');
+  });
+
+  it("missing value after a colon", () => {
+    expect(explain('{"a": }', "x", "json").message).toBe('Unexpected "}" at line 1, column 7. A value is missing after the colon.');
+    expect(explain('{"a":,"b":1}', "x", "json").message).toBe('Unexpected "," at line 1, column 6. A value is missing after the colon.');
+  });
+
+  it("unquoted property name", () => {
+    expect(explain("{a: 1}", "x", "json").message).toBe('Unexpected "a" at line 1, column 2. Property names must be in double quotes.');
   });
 
   it("missing comma on a later line", () => {
@@ -83,7 +101,7 @@ describe("JSON", () => {
 
   it("offers Back to Auto when JSON is forced and broken", () => {
     const p = explain('{"a":1,}', "anything", "json", "json");
-    expect(p.message).toBe('Unexpected "}" at line 1, column 8. Remove the comma before it.');
+    expect(p.message).toBe('Unexpected "}" at line 1, column 8. Remove the trailing comma.');
     expect(p.actions).toEqual([BACK_TO_AUTO]);
   });
 });

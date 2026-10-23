@@ -131,11 +131,15 @@ function jsonProblem(input: string): Pick<InputProblem, "message" | "line"> | nu
   const ch = input[err.at];
   const { line, column } = locate(input, err.at);
   const prev = input.slice(0, err.at).trimEnd().slice(-1);
-  const afterComma = prev === "," && (ch === "}" || ch === "]");
+  const afterComma = prev === ",";
   const hint =
-    afterComma
-      ? "Remove the comma before it."
-      : ch === "'"
+    afterComma && (ch === "}" || ch === "]")
+      ? "Remove the trailing comma."
+      : afterComma && ch === ","
+        ? "Remove the extra comma."
+        : prev === ":" && (err.expected === "value")
+          ? "A value is missing after the colon."
+          : ch === "'"
         ? "Property names and strings need double quotes."
         : err.expected === "name"
           ? "Property names must be in double quotes."

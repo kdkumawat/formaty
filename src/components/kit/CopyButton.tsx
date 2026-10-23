@@ -125,6 +125,8 @@ export function CopyButton({
           <ClipboardDocumentIcon className="size-4" />
           <span>
             {label}
+            {/* Visually nothing (the margin spaces it); keeps the accessible name "Copy 5", not "Copy5". */}
+            {count !== undefined && <span className="sr-only"> </span>}
             {count !== undefined && <span className="ml-1.5 font-medium tabular-nums opacity-70">{count.toLocaleString()}</span>}
           </span>
         </Layer>
@@ -232,13 +234,14 @@ export function RowCopy({ text, onCopy, disabled, className, children }: RowCopy
       disabled={disabled}
       onClick={() => void copy()}
       className={cn(
-        "group/row flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] text-[var(--workspace-text)] transition-colors hover:bg-control focus-visible:bg-control active:bg-control-hover active:translate-y-[0.5px] disabled:cursor-not-allowed disabled:opacity-45 max-[900px]:h-9",
+        "group/row relative flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] text-[var(--workspace-text)] transition-colors hover:bg-control focus-visible:bg-control active:bg-control-hover active:translate-y-[0.5px] disabled:cursor-not-allowed disabled:opacity-45 max-[900px]:h-9",
         focusRing,
         className,
       )}
     >
+      <span className="sr-only">Copy </span>
       <span className="min-w-0 flex-1 truncate">{children}</span>
-      <span className={cn("grid shrink-0 font-sans text-[12px] font-medium", mutedText)}>
+      <span aria-hidden className={cn("grid shrink-0 font-sans text-[12px] font-medium max-[900px]:absolute max-[900px]:right-2 max-[900px]:rounded max-[900px]:pl-1", state !== "idle" && "max-[900px]:bg-control", mutedText)}>
         <span
           className={cn(
             "col-start-1 row-start-1 text-right transition-opacity",
@@ -254,6 +257,9 @@ export function RowCopy({ text, onCopy, disabled, className, children }: RowCopy
         <span className={cn("col-start-1 row-start-1 inline-flex items-center justify-end gap-1 text-bad", state !== "fail" && "opacity-0")}>
           Failed
         </span>
+      </span>
+      <span className="sr-only" role="status">
+        {state === "ok" ? "Copied" : state === "fail" ? "Copy failed" : ""}
       </span>
     </button>
   );

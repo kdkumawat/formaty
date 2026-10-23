@@ -98,7 +98,7 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
         intro={config.intro}
       />
 
-      <main id="main" className={`${WRAP} grid gap-x-16 py-[clamp(28px,4vw,56px)] lg:grid-cols-[200px_minmax(0,1fr)]`}>
+      <main id="main" className={`${WRAP} grid gap-x-16 py-[clamp(28px,4vw,56px)] grid-cols-[minmax(0,1fr)] lg:grid-cols-[200px_minmax(0,1fr)]`}>
         <nav aria-label="On this page" className="hidden lg:block">
           <ol className="sticky top-24 flex flex-col text-[15px]">
             {config.steps.map((step) => (

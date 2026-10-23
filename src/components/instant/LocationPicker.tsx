@@ -13,6 +13,7 @@ import {
   type CountryEntry,
 } from "@/lib/instant/catalog";
 import { Button, Segmented, TextField } from "@/components/kit";
+import { modEnterProps } from "@/hooks/modEnter";
 import { projectInstant } from "@/lib/instant/engine";
 import { locationFromCity, locationFromCustom } from "@/lib/instant/locations";
 import type { Location } from "@/lib/instant/types";
@@ -582,6 +583,7 @@ export function LocationPicker({ open, anchor, onClose, onPick, atInstant }: Loc
         ) : (
           <form
             className="flex flex-col gap-3 px-4 py-4"
+            {...modEnterProps(submitCustom)}
             onSubmit={(e) => {
               e.preventDefault();
               submitCustom();

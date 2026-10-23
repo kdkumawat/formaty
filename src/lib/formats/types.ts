@@ -11,6 +11,8 @@ export interface FormatStringifyOptions {
   sortKeys?: boolean;
   minify?: boolean;
   csvDelimiter?: string;
+  /** XML only: declaration to emit as the first line (see xmlDeclarationOf; parse drops it). */
+  xmlDeclaration?: string;
 }
 
 export interface FormatAdapter {

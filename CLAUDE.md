@@ -17,6 +17,7 @@ bun run build            # static export to out/ (Next.js `output: "export"`)
 bun run lint             # eslint (flat config, eslint.config.mjs)
 bun run test             # run all vitest tests once
 bun run test -- <path>   # run a single test file, e.g. bun run test -- src/lib/json/core.test.ts
+bun run smoke          # route-wide smoke check of out/ in headless Chromium (status, console/page errors, failed requests, overflow, axe serious/critical; no screenshots); requires `bun run build` first, runs in CI after build (runs under node)
 node scripts/gen-og.mjs  # regenerate OG share cards (real browser screenshots of each route; requires `bun run build` first), public/og.png (the home page hero, same way) and PNG favicons from SVG sources. Runs under Node or Bun; on Windows use Node (Bun 1.3.14 times out launching Playwright's Chromium).
 ```
 
@@ -52,7 +53,7 @@ The worker is a thin dispatcher — the actual logic is pure functions in **`src
 
 `src/lib/json/` holds the compare subsystem, separate from the JSON core:
 
-- `listCompare.ts` — parse two lists, compute set operations (common/left-only/right-only/union/symmetric/duplicates), and format exports (`sql-in`, `sql-not-in`, `sql-values`, `sql-array`, JSON/CSV/Markdown/Go slice, etc.).
+- `listCompare.ts` — parse two lists, compute set operations (common/left-only/right-only/union/duplicates), and format exports (`sql-in`, `sql-not-in`, `sql-values`, `sql-array`, JSON/CSV/Markdown/Go slice, etc.).
 - `csvCompare.ts` — CSV comparison by key column.
 - `diff.ts` — document diff (order-insensitive array comparison).
 

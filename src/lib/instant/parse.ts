@@ -5,6 +5,8 @@ import { resolveLocalDateTime } from "./engine";
 export interface ParseContext {
   defaultTimeZone: string;
   defaultDate: { year: number; month: number; day: number };
+  /** Epoch ms used for now/today/tomorrow/yesterday. Defaults to Date.now(). */
+  now?: number;
 }
 
 export type ParseResult =
@@ -23,14 +25,17 @@ const ISO_RE =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})$/i;
 const DATE_PREFIX_RE = /^(\d{4}-\d{2}-\d{2})\s+/;
 const TIME_RE =
-  /^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?$/i;
+  /^(\d{1,2})(?::(\d{2})(?::(\d{2}))?)?\s*(AM|PM)?$/i;
+const DAY_WORD_RE = /^(now|today|tomorrow|yesterday)(?=\s|$)/i;
+const DAY_OFFSET: Record<string, number> = { now: 0, today: 0, tomorrow: 1, yesterday: -1 };
 const OFFSET_RE = /^(?:UTC|GMT)?([+-])(\d{1,2})(?::?(\d{2}))$/i;
 
 function parseClock(raw: string): { hour: number; minute: number; second: number } | null {
   const m = raw.trim().match(TIME_RE);
-  if (!m) return null;
+  // A bare number ("10") is not a time; "9am" and "9:30" are.
+  if (!m || (!m[2] && !m[4])) return null;
   let hour = Number(m[1]);
-  const minute = Number(m[2]);
+  const minute = m[2] ? Number(m[2]) : 0;
   const second = m[3] ? Number(m[3]) : 0;
   const ap = m[4]?.toUpperCase();
   if (minute > 59 || second > 59) return null;
@@ -115,8 +120,13 @@ export function parseInstantInput(raw: string, ctx: ParseContext): ParseResult {
 
   let rest = text;
   let date = ctx.defaultDate;
-  const dateMatch = rest.match(DATE_PREFIX_RE);
-  if (dateMatch) {
+  let dayOffset: number | null = null;
+  const dayWord = rest.match(DAY_WORD_RE);
+  const dateMatch = dayWord ? null : rest.match(DATE_PREFIX_RE);
+  if (dayWord) {
+    dayOffset = DAY_OFFSET[dayWord[1].toLowerCase()];
+    rest = " " + rest.slice(dayWord[0].length).trim();
+  } else if (dateMatch) {
     const [y, mo, d] = dateMatch[1].split("-").map(Number);
     date = { year: y, month: mo, day: d };
     rest = rest.slice(dateMatch[0].length);
@@ -137,7 +147,7 @@ export function parseInstantInput(raw: string, ctx: ParseContext): ParseResult {
   }
 
   const offsetIdx = rest.search(/\s+(?:UTC|GMT)?[+-]\d/i);
-  const zoneIdx = rest.search(/\s+[A-Za-z][A-Za-z/_+-]*$/);
+  const zoneIdx = rest.search(/\s+(?!(?:AM|PM)$)[A-Za-z][A-Za-z/_+-]*$/);
   let zoneRaw = "";
   let timeRaw = rest;
   if (offsetIdx >= 0) {
@@ -148,32 +158,39 @@ export function parseInstantInput(raw: string, ctx: ParseContext): ParseResult {
     zoneRaw = rest.slice(zoneIdx).trim();
   }
 
-  const clock = parseClock(timeRaw);
-  if (!clock) {
-    return { status: "invalid", message: "Enter a valid date, time, or timestamp." };
-  }
-
   let timeZone = ctx.defaultTimeZone;
+  let offsetZone: string | null = null;
   if (zoneRaw) {
-    const offsetZone = parseOffsetZone(zoneRaw.replace(/^UTC/i, "UTC").replace(/^GMT/i, "GMT"));
-    if (offsetZone) {
-      // Temporal accepts +05:30 as an offset timezone via Instant arithmetic
-      const sign = offsetZone[3] === "-" ? -1 : 1;
-      const hh = Number(offsetZone.slice(4, 6));
-      const mm = Number(offsetZone.slice(7, 9));
-      const offsetMin = sign * (hh * 60 + mm);
-      const asUtc = Date.UTC(date.year, date.month - 1, date.day, clock.hour, clock.minute, clock.second);
-      return { status: "ok", epochMs: asUtc - offsetMin * 60 * 1000 };
-    }
-    if (/^(UTC|GMT)$/i.test(zoneRaw)) {
-      timeZone = "UTC";
-    } else {
+    offsetZone = parseOffsetZone(zoneRaw.replace(/^UTC/i, "UTC").replace(/^GMT/i, "GMT"));
+    if (!offsetZone && /^(UTC|GMT)$/i.test(zoneRaw)) timeZone = "UTC";
+    else if (!offsetZone) {
       const resolved = resolveZoneToken(zoneRaw);
       if (!resolved) {
         return { status: "invalid", message: `We couldn't identify "${zoneRaw}". Choose a location.` };
       }
       timeZone = resolved;
     }
+  }
+
+  // Day words are relative to the real current date in the target zone (like bare "10:30").
+  // With no clock ("tomorrow", "now"), keep the current time of day: "same time tomorrow".
+  let clock = timeRaw.trim() ? parseClock(timeRaw) : null;
+  if (dayOffset != null) {
+    const nowMs = ctx.now ?? Date.now();
+    const wallZone = offsetZone ? `${offsetZone[3]}${offsetZone.slice(4)}` : timeZone;
+    const wall = Temporal.Instant.fromEpochMilliseconds(nowMs).toZonedDateTimeISO(wallZone).add({ days: dayOffset });
+    date = { year: wall.year, month: wall.month, day: wall.day };
+    if (!timeRaw.trim()) clock = { hour: wall.hour, minute: wall.minute, second: wall.second };
+  }
+  if (!clock) {
+    return { status: "invalid", message: "Enter a valid date, time, or timestamp." };
+  }
+
+  if (offsetZone) {
+    const sign = offsetZone[3] === "-" ? -1 : 1;
+    const offsetMin = sign * (Number(offsetZone.slice(4, 6)) * 60 + Number(offsetZone.slice(7, 9)));
+    const asUtc = Date.UTC(date.year, date.month - 1, date.day, clock.hour, clock.minute, clock.second);
+    return { status: "ok", epochMs: asUtc - offsetMin * 60 * 1000 };
   }
 
   return applyWall(ctx, date, clock, timeZone);

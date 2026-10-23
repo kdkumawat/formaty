@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { focusRing } from "@/components/kit/styles";
 
 /** One docs section: anchor, display heading, then prose. */
 export function Section({ id, title, children }: { id: string; title: string; children: ReactNode }) {
@@ -51,7 +52,7 @@ export function Steps({ children }: { children: ReactNode[] }) {
     <ol className="flex flex-col gap-3">
       {children.map((c, i) => (
         <li key={i} className="grid grid-cols-[2rem_minmax(0,1fr)] text-[16px] leading-[1.65] sm:text-[17px]">
-          <span className="font-display font-extrabold text-brand dark:text-[var(--workspace-text)]">{i + 1}.</span>
+          <span className="font-display font-extrabold text-[var(--workspace-text)]">{i + 1}.</span>
           <span>{c}</span>
         </li>
       ))}
@@ -61,7 +62,8 @@ export function Steps({ children }: { children: ReactNode[] }) {
 
 export function Table({ head, rows }: { head: string[]; rows: ReactNode[][] }) {
   return (
-    <div className="overflow-x-auto">
+    // Scrolls sideways on narrow screens, so it needs focus and a name.
+    <div role="region" tabIndex={0} aria-label={`Table: ${head.join(", ")}`} className={`overflow-x-auto ${focusRing}`}>
       <table className="w-full min-w-[480px] border-collapse text-left text-[16px]">
         <thead>
           <tr>

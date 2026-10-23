@@ -1,6 +1,6 @@
 import type { FormatAdapter, FormatKind, FormatStringifyOptions, InputFormatKind } from "./types";
 import { jsonAdapter } from "./jsonParser";
-import { xmlAdapter } from "./xmlParser";
+import { xmlAdapter, xmlDeclarationOf } from "./xmlParser";
 import { yamlAdapter } from "./yamlParser";
 import { tomlAdapter } from "./tomlParser";
 import { csvAdapter } from "./csvParser";
@@ -16,7 +16,7 @@ const adapters: Record<FormatKind, FormatAdapter> = {
 
 export type { FormatAdapter, FormatKind, FormatStringifyOptions, InputFormatKind };
 export { FORMAT_LABELS, INPUT_FORMAT_LABELS, getInputFormatLabel } from "./types";
-export { detectFormat };
+export { detectFormat, xmlDeclarationOf };
 
 export function getAdapter(kind: FormatKind): FormatAdapter {
   return adapters[kind];

@@ -59,4 +59,45 @@ describe("parseInstantInput", () => {
     const r = parseInstantInput("not a time", CONTEXT);
     expect(r.status).toBe("invalid");
   });
+
+  describe("day words", () => {
+    // 2026-08-23 20:00 UTC = 2026-08-24 01:30 in Kolkata, so "today" differs by zone.
+    const now = Date.parse("2026-08-23T20:00:00Z");
+    const ctx = { ...CONTEXT, now };
+    const ms = (iso: string) => Date.parse(iso);
+    const ok = (input: string) => {
+      const r = parseInstantInput(input, ctx);
+      expect(r.status).toBe("ok");
+      return r.status === "ok" ? r.epochMs : NaN;
+    };
+
+    it("tomorrow 9am is next day in the home zone", () => {
+      expect(ok("tomorrow 9am")).toBe(ms("2026-08-25T03:30:00Z"));
+    });
+    it("today 17:30 uses real today in home zone", () => {
+      expect(ok("today 17:30")).toBe(ms("2026-08-24T12:00:00Z"));
+    });
+    it("yesterday with a zone token uses that zone's date", () => {
+      expect(ok("yesterday 10:30 Asia/Tokyo")).toBe(ms("2026-08-23T01:30:00Z"));
+    });
+    it("handles 'tomorrow 9 pm' and UTC offsets", () => {
+      expect(ok("tomorrow 9 pm UTC")).toBe(ms("2026-08-24T21:00:00Z"));
+      expect(ok("today 10:00 UTC+05:30")).toBe(ms("2026-08-24T04:30:00Z"));
+    });
+    it("now is the current instant; bare tomorrow keeps time of day", () => {
+      expect(ok("now")).toBe(now);
+      expect(ok("tomorrow")).toBe(now + 24 * 3600e3);
+      expect(ok("yesterday UTC")).toBe(now - 24 * 3600e3);
+    });
+    it("still rejects junk", () => {
+      expect(parseInstantInput("tomorrow banana", ctx).status).toBe("invalid");
+    });
+  });
+
+  it("accepts 10:30 PM and 9am without mistaking am/pm for a zone", () => {
+    const pm = parseInstantInput("10:30 PM UTC", CONTEXT);
+    expect(pm.status === "ok" && pm.epochMs).toBe(Date.parse("2026-08-23T22:30:00Z"));
+    const am = parseInstantInput("9am", CONTEXT);
+    expect(am.status === "ok" && am.epochMs).toBe(Date.parse("2026-08-23T03:30:00Z"));
+  });
 });

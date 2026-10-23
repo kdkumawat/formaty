@@ -229,7 +229,7 @@ export const COUNTRY_CATALOG: CountryEntry[] = [
   { name: "Hong Kong", code: "HK", capital: "Hong Kong", iana: "Asia/Hong_Kong" },
   { name: "Macau", code: "MO", capital: "Macau", iana: "Asia/Macau" },
   { name: "Puerto Rico", code: "PR", capital: "San Juan", iana: "America/Puerto_Rico" },
-  { name: "Greenland", code: "GL", capital: "Nuuk", iana: "America/Godthab" },
+  { name: "Greenland", code: "GL", capital: "Nuuk", iana: "America/Nuuk" },
   { name: "Guam", code: "GU", capital: "Hagåtña", iana: "Pacific/Guam" },
   { name: "French Polynesia", code: "PF", capital: "Papeete", iana: "Pacific/Tahiti" },
   { name: "New Caledonia", code: "NC", capital: "Nouméa", iana: "Pacific/Noumea" },

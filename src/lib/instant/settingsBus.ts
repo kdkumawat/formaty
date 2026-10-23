@@ -18,9 +18,9 @@ export interface InstantSettings {
   showSeconds: boolean;
 }
 
-const DEFAULT: InstantSettings = { spanHours: 24, timeFormat: "12h", showSeconds: false };
+export const DEFAULT_INSTANT_SETTINGS: InstantSettings = { spanHours: 24, timeFormat: "12h", showSeconds: false };
 
-let state: InstantSettings = DEFAULT;
+let state: InstantSettings = DEFAULT_INSTANT_SETTINGS;
 const listeners = new Set<(s: InstantSettings) => void>();
 
 export function getInstantSettings(): InstantSettings {

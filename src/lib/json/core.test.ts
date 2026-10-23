@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { generateOpenApiSpec, generateTypes, searchJson, toHtmlTable, toMarkdownTable } from "./core";
+import { generateOpenApiSpec, generateTypes, generateTypeScript, inferJsonSchema, searchJson, toHtmlTable, toMarkdownTable } from "./core";
 
 describe("toMarkdownTable", () => {
   it("renders an array of objects", () => {
@@ -116,5 +116,45 @@ describe("generateTypes", () => {
     ];
     expect(generateTypes(list, "typescript", "User")).toBe("export interface User {\n  id: number;\n  email: string;\n}");
     expect(generateTypes(list, "go", "User")).toContain("type User struct {");
+  });
+});
+
+describe("integer inference", () => {
+  const sample = { id: 460078, ratio: 1.5, owner: { id: 14985020 }, tags: [1, 2, 3], mixed: [1, 2.5], items: [{ n: 1 }, { n: 2 }] };
+  const field = (code: string, re: RegExp) => expect(code).toMatch(re);
+
+  it("maps whole numbers to 64-bit integer types and fractions to floats", () => {
+    field(generateTypes(sample, "java"), /public long id;/);
+    field(generateTypes(sample, "java"), /public double ratio;/);
+    field(generateTypes(sample, "csharp"), /public long Id \{/);
+    field(generateTypes(sample, "python"), /id: int\n/);
+    field(generateTypes(sample, "python"), /ratio: float/);
+    field(generateTypes(sample, "pydantic"), /id: int\n/);
+    field(generateTypes(sample, "go"), /Id int64/);
+    field(generateTypes(sample, "protobuf"), /int64 id = 1;/);
+    field(generateTypes(sample, "kotlin"), /val id: Long/);
+    field(generateTypes(sample, "swift"), /let id: Int\n/);
+    field(generateTypes(sample, "rust"), /id: i64,/);
+    field(generateTypes(sample, "zod"), /id: z\.number\(\)\.int\(\),/);
+    field(generateTypes(sample, "zod"), /ratio: z\.number\(\),/);
+  });
+
+  it("treats arrays by every element: all ints stay int, any fraction goes float", () => {
+    field(generateTypes(sample, "java"), /List<long> tags;/);
+    field(generateTypes(sample, "java"), /List<double> mixed;/);
+    field(generateTypes({ rows: [{ n: 1 }, { n: 2.5 }] }, "go"), /N float64/);
+    field(generateTypes({ rows: [{ n: 1 }, { n: 2 }, { extra: 3 }] }, "go"), /Extra int64/);
+  });
+
+  it("keeps TypeScript as number", () => {
+    expect(generateTypeScript(sample)).toContain("id: number;");
+  });
+
+  it("emits integer in JSON Schema only when every sample is whole", () => {
+    const schema = inferJsonSchema(sample) as { properties: Record<string, { type: string; items?: { type: string } }> };
+    expect(schema.properties.id.type).toBe("integer");
+    expect(schema.properties.ratio.type).toBe("number");
+    expect(schema.properties.tags.items?.type).toBe("integer");
+    expect(schema.properties.mixed.items?.type).toBe("number");
   });
 });

@@ -10,8 +10,10 @@ import {
   DocumentArrowDownIcon,
   XMarkIcon,
 } from "@heroicons/react/16/solid";
+import { modEnterProps, MOD_ENTER_SELECTOR } from "@/hooks/modEnter";
 import {
   Button,
+  Kbd,
   StatusText,
   IconButton,
   KitTooltipProvider,
@@ -25,6 +27,7 @@ import type { ComponentType, RefAttributes } from "react";
 import type { DiffNavState, JsonDiffEditorProps, JsonDiffEditorRef } from "@/components/JsonDiffEditor";
 import { ListComparePanel, type ListCompareExport } from "@/components/ListComparePanel";
 import { SingleListPanel } from "@/components/SingleListPanel";
+import { SplitHandle } from "@/components/compare/shared";
 import { DEFAULT_LIST_PARSE_OPTIONS, type ListBucket, type ListParseOptions } from "@/lib/json/listCompare";
 import {
   UtilsPanel,
@@ -76,6 +79,7 @@ const GuidedTour = dynamic(() => import("@/components/GuidedTour").then((m) => m
 import type { GraphViewRef, GraphViewProps } from "@/components/GraphView";
 import { getInstantActions } from "@/lib/instant/actionBus";
 import { clearAllTabSettings } from "@/lib/instant/persist";
+import { DEFAULT_INSTANT_SETTINGS, setInstantSettings } from "@/lib/instant/settingsBus";
 import type { TreeViewRef, TreeViewProps } from "@/components/TreeView";
 import { trackEvent } from "@/components/Analytics";
 import {
@@ -108,7 +112,7 @@ import {
 import { useJsonWorker } from "@/hooks/useJsonWorker";
 import { useDelayedReset } from "@/hooks/useDelayedReset";
 import { explainProblem } from "@/lib/formats/explain";
-import { detectFormat, FORMAT_LABELS, getInputFormatLabel, parseInput, type FormatKind, type InputFormatKind } from "@/lib/formats";
+import { detectFormat, FORMAT_LABELS, getInputFormatLabel, parseInput, xmlDeclarationOf, type FormatKind, type InputFormatKind } from "@/lib/formats";
 import { ALL_TOOL_ROUTES, TOOL_PAGES, TOOL_PRESETS, type ToolRoute } from "@/lib/seo";
 import { executeCurlDetailed, parseCurl, type CurlExecutionResult } from "@/lib/curl/parseCurl";
 import { CURL_TARGETS, generateCurlCode, getCurlTarget, type CurlTargetId } from "@/lib/curl/codegen";
@@ -231,7 +235,9 @@ export function WorkspaceContent({
   /** Query-view text, lifted for share links. */
   const [queryText, setQueryText] = useState("");
   /** Currently shown bucket in the per-bucket list-compare view (persisted in share links). */
-  const [activeBucket, setActiveBucket] = useState<ListBucket>("common");
+  const [activeBucket, setActiveBucketRaw] = useState<ListBucket>("common");
+  /** Old sessions and share links may carry the removed "symmetric" (In one only) bucket; show "common" instead. */
+  const setActiveBucket = useCallback((b: ListBucket) => setActiveBucketRaw((b as string) === "symmetric" ? "common" : b), []);
   /** Ref into TreeView search box (Cmd/Ctrl+F). */
   const treeViewRef = useRef<TreeViewRef | null>(null);
   /** Info about the last file dropped/imported (shown as a chip, cleared on demand). */
@@ -359,6 +365,14 @@ export function WorkspaceContent({
     return () => window.clearTimeout(id);
   }, [showFirstRunHint]);
   const [loadedToolPreset, setLoadedToolPreset] = useState<ToolRoute | null>(null);
+  // The preset bar only helps until the user starts working: hide it on the first edit of what the preset loaded.
+  const presetTextRef = useRef<string | null>(null);
+  useEffect(() => {
+    const now = [input, diffLeftInput, diffRightInput].join("\0");
+    if (!loadedToolPreset) presetTextRef.current = null;
+    else if (presetTextRef.current === null) presetTextRef.current = now;
+    else if (presetTextRef.current !== now) setLoadedToolPreset(null);
+  }, [loadedToolPreset, input, diffLeftInput, diffRightInput]);
   const [cursorPosition, setCursorPosition] = useState<{ line: number; column: number } | null>(null);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const historyLock = useRef(false);
@@ -620,6 +634,12 @@ export function WorkspaceContent({
     if (modalKind === "validate") return parseSchemaToObject(modalValue) !== null;
     return true;
   }, [modalKind, modalValue, parseSchemaToObject]);
+  const submitValidate = () => {
+    if (!isModalInputValid) return;
+    setSchemaInput(modalValue);
+    setModalKind(null);
+    executeOperation("validate", { schemaText: modalValue });
+  };
 
   const outputPanelClass = "border-[var(--workspace-border)] bg-[var(--workspace-panel)]";
   const canUndo = undoIndex > 0;
@@ -628,6 +648,8 @@ export function WorkspaceContent({
   const isDiffMode = activeOperation === "diff";
   const isUtilsMode = activeOperation === "utils";
   const hideInputPanel = isDiffMode || isUtilsMode;
+  // Compare lists and Utils draw their own Input/Result cards, so the output pane around them is not a card.
+  const ownsCards = isUtilsMode || (isDiffMode && diffKind !== "document");
   /** Input folded into a rail so the output gets the full width (persisted per tab as isOutputMaximized). */
   const inputCollapsed = isDesktopLayout && !hideInputPanel && isOutputMaximized;
   /** Short and narrow: one pane at a time behind an Input / Output switch. */
@@ -1178,7 +1200,7 @@ export function WorkspaceContent({
         inputFormat: snap.inputFormatOverride ?? detectFormat(snap.input.slice(0, 4000)),
       });
     });
-    const numbered = numberDuplicates(auto);
+    const numbered = numberDuplicates(auto, tabs.map((t) => t.num));
     return tabs.map((t, i) => ({
       id: t.id,
       name: t.renamed && t.label ? t.label : numbered[i],
@@ -1186,6 +1208,19 @@ export function WorkspaceContent({
       kind: tabKindOf(t.id === activeTabId ? activeOperation : (tabSnapshotsRef.current.get(t.id)?.activeOperation ?? null)),
     }));
   }, [tabs, activeTabId, activeOperation, convertToFormat, typeLanguage, diffKind, utilTab, inputFormatOverride, detectedInputFormat]);
+
+  /** Move a tab to another tab's position. Reorders the array only, so no tab remounts and the active tab stays. */
+  const reorderTab = useCallback((fromId: string, toId: string) => {
+    setTabs((prev) => {
+      const from = prev.findIndex((t) => t.id === fromId);
+      const to = prev.findIndex((t) => t.id === toId);
+      if (from < 0 || to < 0 || from === to) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+  }, []);
 
   /** Empty name returns the tab to its automatic name. */
   const renameTab = useCallback((id: string, name: string) => {
@@ -1403,8 +1438,10 @@ export function WorkspaceContent({
           setUndoIndex(0);
         }
         if (preset.inputFormatOverride) setInputFormatOverride(preset.inputFormatOverride);
-        if (preset.convertToFormat && FORMAT_KINDS.includes(preset.convertToFormat))
-          setConvertToFormat(preset.convertToFormat);
+        // Same-format formatters (xml-formatter, ...) have no target: output stays in the input's format.
+        const presetTarget = preset.convertToFormat ?? (preset.activeOperation === "format" ? preset.inputFormatOverride : undefined);
+        if (presetTarget && FORMAT_KINDS.includes(presetTarget as FormatKind))
+          setConvertToFormat(presetTarget as FormatKind);
         if (preset.viewMode) {
           setRightView(preset.viewMode);
         }
@@ -1777,23 +1814,33 @@ export function WorkspaceContent({
   }, [output, outputLanguage, isDiffMode, isUtilsMode, input]);
 
   // Auto-select Table once when a new array-of-objects lands on default Raw view
+  // and back to Raw when the data stops being tabular, but only if the rule (not the user) chose Table.
   const lastAutoTableKeyRef = useRef("");
+  const autoTableRef = useRef(false);
   useEffect(() => {
     if (isDiffMode || isUtilsMode || !parsedOutput) return;
-    if (rightView !== "raw") return; // respect explicit view choices
-    if (outputLanguage === "csv") return; // keep CSV output on Raw by default
-    if (activeOperation === "generateTypes") return; // generated text (types/SQL) stays on Raw
-    if (
+    if (rightView !== "table") autoTableRef.current = false; // any other view means the user took over
+    const tabular =
       Array.isArray(parsedOutput) &&
       parsedOutput.length > 0 &&
-      parsedOutput.every((x) => x !== null && typeof x === "object" && !Array.isArray(x))
-    ) {
-      const key = `${parsedOutput.length}:${Object.keys(parsedOutput[0] as object).slice(0, 8).join(",")}`;
+      parsedOutput.every((x) => x !== null && typeof x === "object" && !Array.isArray(x));
+    if (rightView === "table" && autoTableRef.current && !tabular) {
+      autoTableRef.current = false;
+      lastAutoTableKeyRef.current = "";
+      setRightView("raw");
+      return;
+    }
+    if (rightView !== "raw") return; // respect explicit view choices
+    if (outputLanguage === "csv" || convertToFormat === "csv") return; // keep CSV output on Raw by default
+    if (activeOperation === "generateTypes") return; // generated text (types/SQL) stays on Raw
+    if (tabular) {
+      const key = `${parsedOutput.length}:${Object.keys((parsedOutput as object[])[0]).slice(0, 8).join(",")}`;
       if (lastAutoTableKeyRef.current === key) return;
       lastAutoTableKeyRef.current = key;
+      autoTableRef.current = true;
       setRightView("table");
     }
-  }, [parsedOutput, rightView, isDiffMode, isUtilsMode, outputLanguage, activeOperation]);
+  }, [parsedOutput, rightView, isDiffMode, isUtilsMode, outputLanguage, convertToFormat, activeOperation]);
 
   useEffect(() => {
     if (!sessionRestoredRef.current || !input.trim() || !activeOperation) return;
@@ -1975,8 +2022,9 @@ export function WorkspaceContent({
       setOutputLanguage(lang ?? LANGUAGE_BY_TYPE_TARGET[target]);
       return;
     }
-    setOutputExt(EXT_BY_FORMAT[convertToFormat]);
-    setOutputLanguage(convertToFormat);
+    const fmt = (lang as FormatKind | undefined) ?? convertToFormat;
+    setOutputExt(EXT_BY_FORMAT[fmt]);
+    setOutputLanguage(fmt);
   }, [typeLanguage, convertToFormat]);
 
   const convertJsonToOutput = useCallback(async (
@@ -1986,6 +2034,7 @@ export function WorkspaceContent({
       indentation?: number;
       quoteStyle?: QuoteStyle;
       sortKeys?: boolean;
+      sourceText?: string;
     },
   ): Promise<string> => {
     const toFormat = opts?.toFormat ?? convertToFormat;
@@ -1993,6 +2042,7 @@ export function WorkspaceContent({
       indentation: opts?.indentation ?? formatOptions.indentation,
       quoteStyle: opts?.quoteStyle ?? formatOptions.quoteStyle,
       sortKeys: opts?.sortKeys ?? formatOptions.sortKeys,
+      xmlDeclaration: toFormat === "xml" ? xmlDeclarationOf(opts?.sourceText ?? inputRef.current) : undefined,
     };
 
     if (toFormat === "json") {
@@ -2173,6 +2223,10 @@ export function WorkspaceContent({
   ) => {
     // Snapshot before the action so "Actions → None" can restore the previous output.
     prevActionStateRef.current = { output, parsedOutput };
+    // Operations whose result is inherently JSON drop any earlier conversion target, so a stale
+    // TOML/XML pick can't leak into a later Format. Format/Beautify/types keep the target.
+    const keepsTarget = action === "format" || action === "beautify" || action === "generateTypes";
+    if (!keepsTarget) setConvertToFormat("json");
     setBusy(true);
     setError(null);
     void (async () => {
@@ -2195,8 +2249,8 @@ export function WorkspaceContent({
             json: left,
             schema,
           });
-          const out = await convertJsonToOutput(result as JsonValue);
-          setOutputData(out, action);
+          const out = await convertJsonToOutput(result as JsonValue, { toFormat: "json" });
+          setOutputData(out, action, "json");
           setParsedOutput(result as JsonValue);
           return;
         }
@@ -2218,15 +2272,15 @@ export function WorkspaceContent({
           const result = await run<JsonValue>("schema", { json: left });
           const schemaText = JSON.stringify(result, null, 2);
           setSchemaInput(schemaText);
-          const out = await convertJsonToOutput(result);
-          setOutputData(out, action);
+          const out = await convertJsonToOutput(result, { toFormat: "json" });
+          setOutputData(out, action, "json");
           setParsedOutput(result);
           return;
         }
 
         if (action === "openapi") {
           const spec = generateOpenApiSpec(left);
-          setOutputData(spec, action);
+          setOutputData(spec, action, "json");
           return;
         }
 
@@ -2237,35 +2291,28 @@ export function WorkspaceContent({
           let preparedJson = left;
           if (formatConfig.removeEmpty) preparedJson = await run<JsonValue>("removeEmpty", { json: preparedJson });
           if (formatConfig.sortKeys) preparedJson = await run<JsonValue>("sort", { json: preparedJson });
+          // No explicit target (JSON): format in the input's own format, so XML stays XML.
+          const target: FormatKind = convertToFormat !== "json" || resolvedInputFormat === "curl" ? convertToFormat : resolvedInputFormat;
           const out = await convertJsonToOutput(preparedJson, {
+            toFormat: target,
             indentation: formatConfig.indentation,
             quoteStyle: formatConfig.quoteStyle,
             sortKeys: formatConfig.sortKeys,
           });
-          setOutputData(out, action);
+          setOutputData(out, action, target);
           setParsedOutput(preparedJson);
           return;
         }
 
-        if (action === "minify" && convertToFormat !== "json") {
-          const out = await run<string>("convert", {
-            json: left,
-            toFormat: convertToFormat,
-            formatOptions: { minify: true },
-          });
-          setOutputData(out, action);
-          setParsedOutput(left);
-          return;
-        }
         const result = await run<unknown>(action as never, { json: left });
-        if (action === "minify" && typeof result === "string" && convertToFormat === "json") {
-          setOutputData(result, action);
+        if (action === "minify" && typeof result === "string") {
+          setOutputData(result, action, "json");
           setParsedOutput(JSON.parse(result) as JsonValue);
           return;
         }
         const jsonResult = (typeof result === "string" ? JSON.parse(result) : result) as JsonValue;
-        const out = await convertJsonToOutput(jsonResult);
-        setOutputData(out, action);
+        const out = await convertJsonToOutput(jsonResult, { toFormat: "json" });
+        setOutputData(out, action, "json");
         setParsedOutput(jsonResult);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Operation failed.");
@@ -2273,7 +2320,7 @@ export function WorkspaceContent({
         setBusy(false);
       }
     })();
-  }, [getParsedInput, parseSchemaToObject, run, convertJsonToOutput, setOutputData, schemaInput, typeLanguage, formatOptions, convertToFormat, sqlDialect, typeName, sqlTable, output, parsedOutput]);
+  }, [getParsedInput, parseSchemaToObject, run, convertJsonToOutput, setOutputData, schemaInput, typeLanguage, formatOptions, convertToFormat, resolvedInputFormat, sqlDialect, typeName, sqlTable, output, parsedOutput]);
 
   const runConvert = useCallback((toFormat: FormatKind, inputText?: string) => {
     trackEvent("convert", { to_format: toFormat, mode: "transform" });
@@ -2933,6 +2980,7 @@ export function WorkspaceContent({
     pathname,
     searchParams,
     router,
+    setActiveBucket,
   ]);
 
 
@@ -3026,7 +3074,7 @@ export function WorkspaceContent({
       if (autoFormatOnPaste && text.trim() && fmt !== "curl") {
         try {
           const json = await run<JsonValue>("parseFormat", { input: text, format: fmt });
-          finalText = await convertJsonToOutput(json, { toFormat: fmt as FormatKind });
+          finalText = await convertJsonToOutput(json, { toFormat: fmt as FormatKind, sourceText: text });
         } catch {
           finalText = text;
         }
@@ -3102,6 +3150,8 @@ export function WorkspaceContent({
         return;
       }
       if (event.key === "Enter") {
+        // A surface with its own primary action (modEnterProps) handles the chord itself.
+        if ((event.target as Element | null)?.closest?.(MOD_ENTER_SELECTOR)) return;
         // Run parse for every Ctrl/Cmd+Enter. Inside a Monaco editor the editor's
         // own keybinding (JsonEditor onCtrlEnter) also fires and swallows the chord
         // so no newline is inserted; parseOnly dedupes the duplicate call (Monaco
@@ -3347,50 +3397,19 @@ export function WorkspaceContent({
     }
   };
 
-  /** Restore every workspace setting to its default - across ALL tabs (each tab's
-   *  view/format/types/diff prefs are reset too; inputs, outputs, and history stay). */
+  /** Restore only what the Settings panel shows: theme, font size, wrap, live transform,
+   *  format on paste, indent, and the Instant group while it is displayed. Tools, per-tool
+   *  options, inputs, tab names, and history are working state and stay untouched. */
   const resetSettingsToDefault = useCallback(() => {
-    setFormatOptions(DEFAULT_FORMAT_OPTIONS);
-    setConvertToFormat("json");
-    setRightView("raw");
+    setThemeMode("system");
     setEditorFontSize(13);
     setLineWrap(true);
+    setLiveTransform(true);
     setAutoFormatOnPaste(true);
-    setSqlDialect("sqlite");
-    const perTabDefaults: Partial<TabSnapshot> = {
-      convertToFormat: "json",
-      rightView: "raw",
-      typeLanguage: "typescript",
-      diffKind: "document",
-      diffSideBySide: true,
-      diffIgnoreWhitespace: false,
-      diffShowPaths: false,
-      isOutputMaximized: false,
-      utilTab: "uuid",
-      graphCopyFormat: "png",
-    };
-    tabSnapshotsRef.current.forEach((snap, id) => {
-      tabSnapshotsRef.current.set(id, { ...snap, ...perTabDefaults });
-    });
-    // Reset the live (current-tab) mirrors too, so the persistence effect re-snapshots cleanly.
-    setTypeLanguage("typescript");
-    setDiffKind("document");
-    setDiffSideBySide(true);
-    setDiffIgnoreWhitespace(false);
-    setDiffShowPaths(false);
-    setIsOutputMaximized(false);
-    setUtilTab("uuid");
-    setGraphCopyFormat("png");
-    // Settings reset also drops pane renames (Left/Right/list labels) everywhere.
-    setTabs((prev) =>
-      prev.map((t) =>
-        t.leftLabel || t.rightLabel
-          ? { ...t, leftLabel: undefined, rightLabel: undefined, renamed: t.renamed && !!t.label }
-          : t,
-      ),
-    );
-    toast({ message: "Settings reset to default across all tabs" });
-  }, [setSqlDialect]);
+    setFormatOptions((o) => ({ ...o, indentation: DEFAULT_FORMAT_OPTIONS.indentation }));
+    if (isUtilsMode && utilTab === "instant") setInstantSettings(DEFAULT_INSTANT_SETTINGS);
+    toast({ message: "Settings reset to default" });
+  }, [setThemeMode, isUtilsMode, utilTab]);
 
   /**
    * Wipe all local app state (localStorage + service-worker caches) and load fresh.
@@ -4081,6 +4100,7 @@ export function WorkspaceContent({
           activeTabId={activeTabId}
           onSwitchTab={switchToTab}
           onCloseTab={closeTab}
+          onReorderTab={reorderTab}
           onRenameTab={renameTab}
           onNewTab={openNewTab}
           onReopenTab={reopenTab}
@@ -4125,7 +4145,6 @@ export function WorkspaceContent({
       {loadedToolPreset && (
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--workspace-border)] bg-[var(--workspace-panel)] px-3 py-1">
           <div className="flex items-center gap-2.5 min-w-0">
-            <span className="h-4 w-0.5 shrink-0 rounded-full bg-primary/70" aria-hidden />
             <span className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-0.5">
               <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" aria-hidden />
               <span className="text-[13px] font-semibold text-primary">
@@ -4208,7 +4227,7 @@ export function WorkspaceContent({
         {showInputPane && (
         <div
           className={`flex min-w-0 flex-col overflow-hidden rounded-[10px] border border-[var(--workspace-border)] bg-[var(--workspace-panel)] ${isDesktopLayout ? "shrink-0" : "min-h-[280px] flex-1"}`}
-          style={isDesktopLayout ? { width: `${split}%`, minWidth: 240 } : undefined}
+          style={isDesktopLayout ? { width: `${split}%`, minWidth: 200 } : undefined}
         >
           <input
             id="import-json-file"
@@ -4292,29 +4311,10 @@ export function WorkspaceContent({
         </div>
         )}
         {isDesktopLayout && showInputPane && (
-          <div
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="Resize input and output"
-            aria-valuenow={split}
-            aria-valuemin={25}
-            aria-valuemax={60}
-            tabIndex={0}
-            className="group relative flex shrink-0 cursor-col-resize items-stretch justify-center outline-none"
-            style={{ width: 8, zIndex: 10 }}
-            onMouseDown={startResize}
-            onKeyDown={(e) => {
-              if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
-                e.preventDefault();
-                nudgeSplit((e.key === "ArrowLeft" ? -1 : 1) * (e.shiftKey ? 10 : 2));
-              }
-            }}
-          >
-            <div className="pointer-events-none absolute inset-y-2 left-1/2 w-0.5 -translate-x-1/2 rounded-full bg-transparent transition-colors group-hover:bg-[var(--workspace-text-muted)] group-focus-visible:bg-[var(--focus)] group-active:bg-[var(--workspace-text)]" />
-          </div>
+          <SplitHandle onResizeStart={startResize} onNudge={nudgeSplit} value={split} label="Resize input and output" />
         )}
                 {showOutputPane && (
-        <div className={`flex min-w-0 flex-1 flex-col overflow-hidden rounded-[10px] border border-[var(--workspace-border)] bg-[var(--workspace-panel)] ${isDesktopLayout ? "" : "min-h-[320px]"}`}>
+        <div className={`flex min-w-0 flex-1 flex-col overflow-hidden ${ownsCards ? "" : "rounded-[10px] border border-[var(--workspace-border)] bg-[var(--workspace-panel)]"} ${isDesktopLayout ? "" : ownsCards ? "min-h-[560px]" : "min-h-[320px]"}`}>
           {!hideInputPanel && outputHeader}
           <div data-tour="output-pane" className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
             <div
@@ -4331,7 +4331,9 @@ export function WorkspaceContent({
               <UtilsPanel
                 headerActions={actionRow}
                 linkBtnClass=""
-                panelClass={outputPanelClass}
+                split={split}
+                onResizeStart={startResize}
+                onNudgeSplit={nudgeSplit}
                 isDark={isDark}
                 activeTab={utilTab}
                 onActiveTabChange={(t) => {
@@ -4759,7 +4761,7 @@ export function WorkspaceContent({
             if (!open) setModalKind(null);
           }}
         >
-          <DialogContent className="max-w-3xl">
+          <DialogContent className="max-w-3xl" {...modEnterProps(submitValidate, !isModalInputValid)}>
             <DialogHeader>
               <DialogTitle className="text-sm">Validate against a schema</DialogTitle>
               <DialogDescription className="text-[13px] leading-relaxed">
@@ -4779,16 +4781,8 @@ export function WorkspaceContent({
               <Button variant="secondary" onClick={() => setModalKind(null)}>
                 Cancel
               </Button>
-              <Button
-                variant="primary"
-                disabled={!isModalInputValid}
-                onClick={() => {
-                  if (!isModalInputValid) return;
-                  setSchemaInput(modalValue);
-                  setModalKind(null);
-                  executeOperation("validate", { schemaText: modalValue });
-                }}
-              >
+              <Kbd keys="⌘↵" className="self-center max-sm:hidden" />
+              <Button variant="primary" disabled={!isModalInputValid} onClick={submitValidate}>
                 Validate
               </Button>
             </DialogFooter>
@@ -4796,7 +4790,7 @@ export function WorkspaceContent({
         </Dialog>
 
         <Dialog open={showPastePrompt} onOpenChange={setShowPastePrompt}>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-md" {...modEnterProps(() => void allowPasteRetry())}>
             <DialogHeader>
               <DialogTitle className="text-sm">Allow paste</DialogTitle>
               <DialogDescription className="text-[13px] leading-relaxed">
@@ -4819,6 +4813,7 @@ export function WorkspaceContent({
               <Button variant="secondary" onClick={() => setShowPastePrompt(false)}>
                 Cancel
               </Button>
+              <Kbd keys="⌘↵" className="self-center max-sm:hidden" />
               <Button variant="primary" onClick={() => void allowPasteRetry()}>Allow paste</Button>
             </DialogFooter>
           </DialogContent>
@@ -4826,7 +4821,8 @@ export function WorkspaceContent({
 
 
         {showFirstRunHint && (
-          <div className="fixed bottom-6 left-1/2 z-50 flex max-w-[min(92vw,28rem)] -translate-x-1/2 items-start gap-3 rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-panel)]/95 px-3 py-2 text-[13px] shadow-xl backdrop-blur-md">
+          // Bottom right, just above the status bar, so it never sits on top of the result.
+          <div className="fixed bottom-9 right-3 z-50 flex max-w-[min(calc(100vw-1.5rem),24rem)] items-start gap-3 rounded-md border border-[var(--workspace-border)] bg-[var(--workspace-panel)]/95 px-3 py-2 text-[13px] shadow-xl backdrop-blur-md">
             <div className="min-w-0 flex-1">
               <p className="font-semibold text-[var(--workspace-text)]">Quick tip</p>
               <p className="mt-0.5 text-[var(--workspace-text-muted)]">{quickTip ?? QUICK_TIPS[0]}</p>
