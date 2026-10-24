@@ -7,7 +7,7 @@ const ROWS: [string, string, boolean?][] = [
   ["Open the site", "A request for the static files"],
   ["Click Share", "Your choice each time. A link that carries the data uploads nothing. A short link uploads that tab, and says so before you confirm."],
   ["Run an imported cURL request", "That request, from your browser to the API you named"],
-  ["Accept analytics", "Page views. Never editor content."],
+  ["Use the site", "Anonymous page views (Google Analytics). Never editor content. Turn it off in Settings."],
 ];
 
 const CELL = "border-b border-[var(--workspace-border)] py-2.5 align-top";
