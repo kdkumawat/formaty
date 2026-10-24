@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 import { MotionConfig } from "framer-motion";
 import { Archivo, Geist, JetBrains_Mono } from "next/font/google";
-import { ConsentBanner } from "@/components/ConsentBanner";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 import { UpdateToast } from "@/components/UpdateToast";
 import { DARK_THEME_CSS, LIGHT_THEME_CSS } from "@/lib/utils/themeTokens";
@@ -252,20 +251,16 @@ export default function RootLayout({
                 window.dataLayer = window.dataLayer || [];
                 function gtag(){dataLayer.push(arguments);}
                 gtag('js', new Date());
-                gtag('consent', 'default', {
-                  ad_storage: 'denied',
-                  analytics_storage: 'denied',
-                  personalization_storage: 'denied',
-                  functionality_storage: 'denied',
-                  security_storage: 'granted',
-                  wait_for_update: 500,
-                });
-                try {
-                  if (localStorage.getItem('formaty-ga-consent') === 'accepted') {
-                    gtag('consent', 'update', { analytics_storage: 'granted', functionality_storage: 'granted' });
-                    gtag('config', '${process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID}');
-                  }
-                } catch(e) {}
+                var choice = null;
+                try { choice = localStorage.getItem('formaty-ga-consent'); } catch(e) {}
+                var base = { ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied', personalization_storage: 'denied', functionality_storage: 'denied', security_storage: 'granted' };
+                // EEA, UK and Switzerland: cookieless until the visitor turns analytics on in Settings.
+                gtag('consent', 'default', Object.assign({}, base, { analytics_storage: 'denied', region: ['AT','BE','BG','HR','CY','CZ','DK','EE','FI','FR','DE','GR','HU','IE','IT','LV','LT','LU','MT','NL','PL','PT','RO','SK','SI','ES','SE','IS','LI','NO','GB','CH'] }));
+                // Everywhere else analytics is on until turned off in Settings.
+                gtag('consent', 'default', Object.assign({}, base, { analytics_storage: choice === 'declined' ? 'denied' : 'granted' }));
+                if (choice === 'accepted') gtag('consent', 'update', { analytics_storage: 'granted' });
+                if (choice === 'declined') window['ga-disable-${process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID}'] = true;
+                else gtag('config', '${process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID}');
               `}
             </Script>
           </>
@@ -275,7 +270,6 @@ export default function RootLayout({
         </MotionConfig>
         <ServiceWorkerRegister />
         <UpdateToast />
-        <ConsentBanner />
       </body>
     </html>
   );

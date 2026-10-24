@@ -277,7 +277,7 @@ export default function DocsPage() {
                   ["Create a Short link", "The tab or tabs you chose, uploaded to Formaty. Delete from server removes them."],
                   ["Press Send request on a cURL input", "That request, from your browser to the URL you typed. The target server decides whether to allow it."],
                   ["Send Feedback", "What you write, an optional email, and the items listed in the dialog, which you can remove first."],
-                  ["Press Accept on the analytics notice", "Anonymous usage events such as which operation ran. Never editor content. Before you accept, Formaty sends no events. If you decline, nothing changes."],
+                  ["Use the site", <>Anonymous page views and usage events such as which operation ran, sent to Google Analytics. Never editor content. Turn it off in <Ui>Settings</Ui> under Usage analytics. In the EU, UK and Switzerland no analytics cookie is set unless you turn it on.</>],
                 ]}
               />
               <P>

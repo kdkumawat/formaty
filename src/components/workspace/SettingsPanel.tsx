@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button, NumberField, PanelGroup, PanelRow, Segmented, Switch } from "@/components/kit";
 import { getInstantSettings, setInstantSettings, useInstantSettings } from "@/lib/instant/settingsBus";
+import { GA_ENABLED, getGaConsent, setGaConsent } from "@/components/Analytics";
 
 type ThemeMode = "system" | "dark" | "light";
 
@@ -59,6 +60,25 @@ function InstantRows() {
   );
 }
 
+function AnalyticsRow() {
+  const [on, setOn] = useState(() => getGaConsent() !== "declined");
+  return (
+    <>
+      <PanelRow label="Usage analytics">
+        <Switch
+          aria-label="Usage analytics"
+          checked={on}
+          onCheckedChange={(v) => {
+            setGaConsent(v ? "accepted" : "declined");
+            setOn(v);
+          }}
+        />
+      </PanelRow>
+      <p className="pt-1 text-[12px] text-[var(--workspace-text-muted)]">Anonymous page views and which tools ran. Never what you paste.</p>
+    </>
+  );
+}
+
 /** Body of the Settings side panel. */
 export function SettingsPanel(p: SettingsPanelProps) {
   const [confirmClear, setConfirmClear] = useState(false);
@@ -101,6 +121,12 @@ export function SettingsPanel(p: SettingsPanelProps) {
       </PanelGroup>
 
       {p.showInstant && <InstantRows />}
+
+      {GA_ENABLED && (
+        <PanelGroup title="Privacy">
+          <AnalyticsRow />
+        </PanelGroup>
+      )}
 
       <PanelGroup title="Data on this device">
         <div className="flex flex-wrap items-center gap-2 pt-1">
